@@ -6,7 +6,7 @@ name: CI/CD
 # `.hanzo/workflows`, NOT `.github/workflows`, on BOTH sides of the `uses:`. The
 # forge collects workflows from the first of WORKFLOW_DIRS present in the commit
 # and resolves a reusable through the same allowlist, and github.com has no
-# self-hosted runners for this org — so a job asking for hanzo-build-linux-amd64
+# self-hosted runners for this org — so a job asking for linux-amd64
 # there is never claimed, and an unclaimable job does not fail, it waits out the
 # 24h timeout while the next push queues behind it.
 

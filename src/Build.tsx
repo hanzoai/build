@@ -34,6 +34,7 @@ import { Refusal, run } from '~/run'
 import { say } from '~/say'
 import { useStarred } from '~/stars'
 import { Take } from '~/copy'
+import { Pitch } from '~/pitch'
 import { Tabs } from '~/tabs'
 
 /**
@@ -1327,6 +1328,10 @@ export function Build() {
             </YStack>
           )}
         </YStack>
+
+        {/* THE LANDING, and only for a visitor: a signed-in reader came here to
+            build, not to be told what building is. */}
+        {user ? null : <Pitch />}
       </YStack>
     </YStack>
   )
