@@ -1,0 +1,30 @@
+name: CI/CD
+
+# The caller, and deliberately nothing else: triggers plus the import. All real
+# config is the repo-root hanzo.yml, which platform.hanzo.ai reads too.
+#
+# `.github/workflows`, because this repository lives on github.com and nowhere
+# else — git.hanzo.ai has no copy of it, so a workflow filed under `.hanzo` is
+# collected by nobody and the repo simply never builds. That is what it did.
+#
+# The runner is ours regardless. A queued job here reaches the GitHub App, which
+# mints a registration for exactly that job and asks platform to launch it, so
+# `linux-amd64` is answered by the same fleet the forge lane uses. No job runs
+# on a builder we do not own.
+
+on:
+  push:
+    branches: [main]
+    # A `v*` tag is a RELEASE and publishes an image named after it, verbatim.
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cicd:
+    uses: hanzoai/ci/.github/workflows/build.yml@v2
+    secrets: inherit
