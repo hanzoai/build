@@ -1,0 +1,49 @@
+# What may run its own install script. Vite's bundler is the only one, and a
+# placeholder here is an install that stops to ask.
+allowBuilds:
+  esbuild: true
+
+# One version of a package in the tree, whatever asked for it. Two copies of a
+# React runtime are two contexts, and a component then looks for the one it was
+# not rendered under. @hanzo/ui pins the gui runtime a minor below @hanzo/gui,
+# and each pins its own dependencies exactly, so without these a second copy of
+# the runtime resolves beside the first and every themed component throws
+# "Missing theme."
+overrides:
+  '@hanzo/gui': 8.3.5
+  '@hanzogui/animations-css': 8.3.5
+  '@hanzogui/config': 8.3.5
+  '@hanzogui/core': 8.3.5
+  '@hanzogui/lucide-icons-2': 8.3.5
+  '@hanzogui/next-theme': 8.3.5
+  '@hanzogui/telemetry': 8.3.5
+  '@hanzogui/toast': 8.3.5
+  '@hanzogui/web': 8.3.5
+  '@react-native/normalize-colors': 0.87.1
+  react-is: 19.2.8
+
+# Latest of everything. An age gate holds this app behind its own release train,
+# which publishes hours before it is consumed.
+minimumReleaseAge: 0
+
+catalog:
+  '@hanzo/ai': 0.6.16
+  '@hanzo/font': 1.9.3
+  '@hanzo/gui': 8.3.5
+  '@hanzo/iam': 0.21.18
+  '@hanzo/ui': 8.27.12
+  '@hanzo/vite': 0.1.4
+  '@hanzogui/next-theme': 8.3.5
+  '@types/node': 26.5.0
+  '@types/react': 19.2.18
+  '@types/react-dom': 19.2.7
+  '@vitejs/plugin-react': ^6.1.1
+  lucide-react: ^1.42.0
+  next-themes: ^0.4.6
+  react: 19.2.8
+  react-dom: 19.2.8
+  react-hook-form: ^7.87.0
+  react-native-web: ^0.21.2
+  react-router: ^8.3.1
+  typescript: 7.0.2
+  vite: ^8.2.2

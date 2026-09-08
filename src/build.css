@@ -1,0 +1,82 @@
+/* This app's own rules — the ones no package ships, because they are its layout
+   rather than a library's components.
+
+   Everything else comes from packages. `@hanzo/ui/theme.css` is the design
+   tokens, the reset and the glass material; `@hanzo/ui/styles/motion.css` is the
+   rules its components assume; `src/gui.css` is the gui atomic sheet, generated
+   from the config `<Hanzo>` mounts. Nothing here restates a token and nothing
+   here is a utility — a rule belongs in this file only if it addresses a class
+   this app writes. Three do. */
+
+/* THE COLUMN BESIDE THE PANE, and the one piece of layout that is not a gui
+   prop: the frame renders an empty element and the pane portals into it, so
+   the width, the edge and the stacking are stated here rather than by whatever
+   happens to be inside it.
+
+   Below the breakpoint there is no room to spare and the column is not offered
+   at all — a 380px panel on a phone eats the surface it is meant to sit beside.
+   The pane is complete without it: what goes in here is a preview of a project
+   the pane can also open full-width. */
+.aside {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 380px;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+}
+
+@media (max-width: 1100px) {
+  .aside {
+    display: none;
+  }
+}
+
+/* THE COMPOSER'S PANEL. `.hz-composer` is @hanzo/ui's published shape — the
+   ring at `::before`, the halo at `::after`, both masked to a rim — and the
+   package leaves the MATERIAL inside that rim to the host. This is the
+   material. `-webkit-` because Safari still needs the prefix, and a prefix
+   belongs in a stylesheet rather than in an inline style a component has to
+   remember to write. */
+.chrome {
+  background: var(--panel, rgb(255 255 255 / 0.05));
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* THE COMPOSER'S SEND CONTROL. A circle whose diameter is the composer's own
+   `--hz-composer-control`, so the surface moves the control by moving one
+   variable and this rule never restates the number.
+
+   `aspect-ratio` rather than a second width: the button carries a glyph and no
+   word, so a width from padding settles at a capsule, and a round corner is not
+   yet a circle. Taking the width from the height already stated is what makes
+   the two one shape. */
+.hz-round {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--hz-composer-control, 30px);
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full, 9999px);
+  background-color: var(--neutral-800, rgb(255 255 255 / 0.1));
+  color: var(--ink, #fafafa);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-in-out, ease-in-out),
+    color var(--duration-fast, 150ms) var(--ease-in-out, ease-in-out);
+}
+
+.hz-round:hover {
+  background-color: var(--primary, #fafafa);
+  color: var(--primary-foreground, #0a0a0a);
+}
+
+.hz-round:disabled {
+  opacity: 0.4;
+}

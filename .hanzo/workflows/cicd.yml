@@ -1,0 +1,28 @@
+name: CI/CD
+
+# The caller, and deliberately nothing else: triggers plus the import. All real
+# config is the repo-root hanzo.yml, which platform.hanzo.ai reads too.
+#
+# `.hanzo/workflows`, NOT `.github/workflows`, on BOTH sides of the `uses:`. The
+# forge collects workflows from the first of WORKFLOW_DIRS present in the commit
+# and resolves a reusable through the same allowlist, and github.com has no
+# self-hosted runners for this org — so a job asking for hanzo-build-linux-amd64
+# there is never claimed, and an unclaimable job does not fail, it waits out the
+# 24h timeout while the next push queues behind it.
+
+on:
+  push:
+    branches: [main]
+    # A `v*` tag is a RELEASE and publishes an image named after it, verbatim.
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cicd:
+    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
+    secrets: inherit

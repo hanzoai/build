@@ -1,0 +1,23 @@
+Hanzo Build
+Copyright (c) 2026 Hanzo AI, Inc.
+
+Licensed under either of Apache License, Version 2.0 (LICENSE-APACHE) or
+MIT license (LICENSE-MIT) at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in this work by you, as defined in the Apache-2.0
+licence, shall be dual licensed as above, without any additional terms or
+conditions.
+
+The builder in this repository was extracted from the Hanzo workspace
+(github.com/hanzoai/app).
+
+Bundled at build time, under their own licences:
+  @hanzo/ui, @hanzo/gui       MIT      github.com/hanzoai/ui
+  @hanzo/ai                   MIT      github.com/hanzoai/ai
+  @hanzo/iam                  MIT      github.com/hanzoai/iam
+  @hanzo/font                 MIT      github.com/hanzoai/font
+  lucide-react                ISC      github.com/lucide-icons/lucide
+  react, react-dom            MIT      github.com/facebook/react
+  react-router                MIT      github.com/remix-run/react-router
+  next-themes                 MIT      github.com/pacocoursey/next-themes

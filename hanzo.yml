@@ -1,0 +1,32 @@
+# Hanzo CI/CD — build. All real config is here; .hanzo/workflows/cicd.yml is
+# triggers and an import of hanzoai/ci.
+
+test:
+  # Frozen, so the gate resolves the same tree the Dockerfile does. The lockfile
+  # ships, and a stale one fails here rather than silently building something
+  # else.
+  - name: install
+    run: |
+      set -e
+      corepack enable
+      pnpm install --frozen-lockfile
+
+  # Verbatim the build line the image runs, run before there is an image, so a
+  # break arrives in a minute instead of after a full layer stack. `pnpm build`
+  # is `tsc --noEmit` then `vite build`. A vite build that emits nothing still
+  # exits 0, hence the file tests.
+  - name: build
+    run: |
+      set -e
+      pnpm build
+      test -s dist/index.html
+      test -d dist/assets
+
+images:
+  - name: build
+    context: .
+    dockerfile: Dockerfile
+    repo: ghcr.io/hanzoai/build
+    platforms: [linux/amd64]
+    # No build_secrets, and none belong here. Every credential that names a
+    # person is minted by hanzo.id at sign-in and never built in.

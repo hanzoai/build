@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Hanzo Build</title>
+    <meta
+      name="description"
+      content="Say what you want. Hanzo writes it, runs it, and puts it on a live URL."
+    />
+    <style>
+      /* The two things only the host document can answer: how tall the app is,
+         and that its one child is a flex item. @hanzo/ui's stylesheet resets and
+         paints everything else. Without this the builder grows to fit its
+         content instead of filling the window, and every pane that scrolls
+         inside it scrolls the page instead. */
+      #root {
+        display: flex;
+        height: 100dvh;
+      }
+    </style>
+    <script>
+      /* Keep gui's theme class in step with next-themes'. One decision, two
+         names: next-themes writes `light` on <html> and gui reads `t_light` /
+         `t_dark`, so without this the account's choice moves one of them and the
+         page stays painted the other way.
+
+         `was` is not an optimisation — a `classList.toggle` that changes nothing
+         still writes the attribute, and an observer reacting to its own write is
+         a loop. Comparing first makes the callback a no-op unless the theme
+         moved. Inline and in <head>, because the first paint happens before any
+         module runs. */
+      ;(function () {
+        var e = document.documentElement, was
+        function s() {
+          var l = e.classList.contains('light')
+          if (l === was) return
+          was = l
+          e.classList.toggle('t_light', l)
+          e.classList.toggle('t_dark', !l)
+        }
+        s()
+        new MutationObserver(s).observe(e, { attributes: true, attributeFilter: ['class'] })
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

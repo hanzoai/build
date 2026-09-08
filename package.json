@@ -1,0 +1,42 @@
+{
+  "name": "@hanzo/build",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0 OR MIT",
+  "description": "Hanzo Build \u2014 say what you want, watch it built, deployed and running.",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@hanzo/ai": "catalog:",
+    "@hanzo/font": "catalog:",
+    "@hanzo/gui": "catalog:",
+    "@hanzo/iam": "catalog:",
+    "@hanzo/ui": "catalog:",
+    "@hanzogui/next-theme": "catalog:",
+    "lucide-react": "catalog:",
+    "next-themes": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-hook-form": "catalog:",
+    "react-native-web": "catalog:",
+    "react-router": "catalog:"
+  },
+  "devDependencies": {
+    "@hanzo/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}
