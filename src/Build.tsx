@@ -50,9 +50,6 @@ interface Template {
   framework: string
   /** The repository the starter is cut from. */
   source: string
-  /** Where the catalog publishes this template's screenshot. Empty for a row
-   *  that has none, and the shelf then draws the name alone. */
-  preview?: string
 }
 
 interface Project {
@@ -85,6 +82,11 @@ type Mode = 'build' | 'plan'
 /** Where the whole catalog lives, laid out to be browsed rather than pushed
  *  along. The shelf here is the ten you can see; this is the rest. */
 const GALLERY = 'https://gallery.hanzo.ai'
+
+/** Where a template's capture is published, named once. Absolute, because this
+ *  page is meant to be run and forked anywhere and a path resolved against a
+ *  fork's own origin answers 404 for every card. */
+const SHOTS = 'https://hanzo.ai/templates'
 
 const MODES: { id: Mode; label: string; icon: typeof Hammer; asks: string }[] = [
   { id: 'build', label: 'Build', icon: Hammer, asks: 'Ask Hanzo to build…' },
@@ -319,42 +321,51 @@ function Files({ project }: { project: Project }) {
 }
 
 /**
- * A template's picture, at the address the CATALOG publishes for it.
+ * A template's picture, named by the row's own slug.
  *
- * The row carries `preview`, so the shelf asks the one owner of that address
- * rather than composing a path against its own origin — which would be a
- * picture this app has to ship a copy of, and a 404 everywhere it had not.
+ * ONE ADDRESS. Every row in the catalog has a capture under `SHOTS`, so the
+ * slug is the whole of the request and there is no second field to disagree
+ * with it.
  *
- * THE NAME IS THE CARD UNTIL A PICTURE ARRIVES, rather than the other way
- * round. An address that answers something other than an image leaves an `img`
- * drawing an empty box, and a card that is blank reads as one that failed to
- * load. Revealed on `load`, the schematic stands until there is really a
- * picture to put over it, and a row with no `preview` makes no request at all.
+ * THE NAME IS THE CARD UNDER THE PICTURE, not instead of it. The schematic is
+ * laid out and the picture sits over it, so a slow load shows the name, a
+ * painted one covers it, and an address that answers something other than an
+ * image drops back to it on `error` rather than leaving an empty box.
+ *
+ * A LAZY IMAGE HAS TO BE DISPLAYED. `loading="lazy"` defers the fetch until the
+ * image is near the viewport and one hidden with `display: none` never is, so
+ * the picture stacks over the schematic instead of taking its place.
  */
-function Shot({ src, slug }: { src?: string; slug?: string }) {
-  const [drawn, setDrawn] = useState(false)
+function Shot({ slug }: { slug?: string }) {
+  const [gone, setGone] = useState(false)
 
   return (
-    <YStack height={150} bg="$hover" overflow="hidden" items="center" justify="center">
-      {drawn ? null : (
-        <YStack items="center" justify="center" gap="$2" opacity={0.6}>
-          <Boxes size={28} color="var(--soft)" />
-          <Text fontSize="$1" color="$soft" textTransform="uppercase" letterSpacing={1}>
-            {slug}
-          </Text>
-        </YStack>
-      )}
-      {src ? (
+    <YStack
+      height={150}
+      bg="$hover"
+      overflow="hidden"
+      items="center"
+      justify="center"
+      position="relative"
+    >
+      <YStack items="center" justify="center" gap="$2" opacity={0.6}>
+        <Boxes size={28} color="var(--soft)" />
+        <Text fontSize="$1" color="$soft" textTransform="uppercase" letterSpacing={1}>
+          {slug}
+        </Text>
+      </YStack>
+      {slug && !gone ? (
         <img
-          src={src}
+          src={`${SHOTS}/${slug}.webp`}
           alt=""
           loading="lazy"
-          onLoad={() => setDrawn(true)}
+          onError={() => setGone(true)}
           style={{
+            position: 'absolute',
+            inset: 0,
             width: '100%',
             height: 150,
             objectFit: 'cover',
-            display: drawn ? 'block' : 'none',
           }}
         />
       ) : null}
@@ -1246,7 +1257,7 @@ export function Build() {
                       {/* `alt` is empty because the name is printed directly
                           under it — a reader would otherwise hear the template
                           twice. */}
-                      <Shot src={t.preview} slug={t.slug} />
+                      <Shot slug={t.slug} />
                       <YStack gap="$0.5" p="$3" items="flex-start">
                         <Text fontSize="$3" color="$ink">
                           {t.title}

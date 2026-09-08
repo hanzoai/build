@@ -3,10 +3,10 @@
 
    Everything else comes from packages. `@hanzo/ui/theme.css` is the design
    tokens, the reset and the glass material; `@hanzo/ui/styles/motion.css` is the
-   rules its components assume; `src/gui.css` is the gui atomic sheet, generated
-   from the config `<Hanzo>` mounts. Nothing here restates a token and nothing
-   here is a utility — a rule belongs in this file only if it addresses a class
-   this app writes. Three do. */
+   rules its components assume; gui inserts the atomic rules for this app's own
+   props at first render. Nothing here restates a token and nothing here is a
+   utility — a rule belongs in this file only if it addresses a class this app
+   writes. Three do. */
 
 /* THE COLUMN BESIDE THE PANE, and the one piece of layout that is not a gui
    prop: the frame renders an empty element and the pane portals into it, so
