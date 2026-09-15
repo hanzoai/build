@@ -13,6 +13,18 @@ pnpm install
 pnpm dev            # http://localhost:3200
 ```
 
+The port is not a preference. `vite.config.ts` pins 3200 for both `dev` and
+`preview`, and IAM lists `http://localhost:3200/auth/callback` among this
+client's redirects — sign in from any other port and the authorize call is
+refused, because an unlisted redirect is the one thing OAuth must never accept.
+
+`/v1` is proxied to `api.hanzo.ai` from the dev server AND from the preview of a
+build. The gateway admits an origin by allowlist and by an https, portless DNS
+proof, and a localhost port satisfies neither — so a credentialed read to the
+absolute address fails its preflight and the builder draws as though the catalog
+and the org were empty. Same statement for both servers, so the built output is
+exercised against real data before it ships.
+
 ## What is on the screen
 
 **The ask.** `Build` asks for the thing, `Plan` asks what building it would
