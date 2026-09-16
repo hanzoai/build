@@ -22,11 +22,12 @@ test:
       test -s dist/index.html
       test -d dist/assets
 
-images:
-  - name: build
-    context: .
-    dockerfile: Dockerfile
-    repo: ghcr.io/hanzoai/build
-    platforms: [linux/amd64]
-    # No build_secrets, and none belong here. Every credential that names a
-    # person is minted by hanzo.id at sign-in and never built in.
+# hanzo.build is bytes, not a process: the export is the whole product and its
+# API is api.hanzo.ai on another origin. It publishes to the Sites plane, where
+# the edge serves the prefix straight from S3 — no image, no pod, no replicas.
+# dist/404.html, written by vite.config.ts, is what boots the router on an
+# address that has no file of its own.
+site:
+  slug: build
+  dir: dist
+  on: [main]
