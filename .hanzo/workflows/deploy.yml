@@ -1,0 +1,68 @@
+name: deploy
+
+# hanzo.build ships on the Sites plane: the bundle is the whole product and its
+# API is api.hanzo.ai on another origin, so the export serves from an S3 prefix
+# with no pod behind it.
+#
+#   pnpm build -> dist
+#     -> site
+#
+# The publish mechanics are bin/site in hanzoai/ci, reached through its action —
+# ensure-project, enqueue, presigned per-file upload, complete. Every static
+# surface in the fleet calls that one script.
+#
+# The deploy key is in KMS and the action reads it there, so this file names no
+# token, only the client identity that opens it. Both credentials are set on
+# git.hanzo.ai, which is what reads .hanzo/workflows.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  site:
+    # This file lives under .hanzo/workflows, which only git.hanzo.ai reads, and
+    # its fleet advertises this label. An unmatched label is silence rather than
+    # an error: the job queues until the timeout and nothing says so.
+    runs-on: [linux-amd64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: build the static export
+        run: |
+          set -euo pipefail
+          # Frozen, and the lockfile ships: the export gets the tree the gate
+          # passed against. Same two commands the Dockerfile runs, so the image
+          # and the site carry the same bytes.
+          pnpm install --frozen-lockfile
+          pnpm build
+          test -s dist/index.html || { echo "::error::vite build produced no dist/index.html"; exit 1; }
+          # vite.config.ts writes 404.html from index.html. A client-routed
+          # address has no file of its own, and the static plane answers the
+          # site's own 404 document for a key it cannot resolve — which is what
+          # boots the router on a deep link.
+          test -s dist/404.html || { echo "::error::no dist/404.html — every deep link would land on the plane's own 404"; exit 1; }
+          echo "exported $(find dist -type f | wc -l) files"
+
+      # ONE credential. The 202 carries a prefix-scoped, 30-minute presigned POST
+      # grant, so nothing here holds a bucket key.
+      - name: Publish to the Sites plane
+        uses: hanzoai/ci/.github/actions/site@v1
+        with:
+          slug: build
+          dir: dist
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
