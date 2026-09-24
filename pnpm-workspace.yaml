@@ -30,7 +30,7 @@ catalog:
   '@hanzo/font': 1.9.3
   '@hanzo/gui': 8.3.5
   '@hanzo/iam': 0.21.18
-  '@hanzo/ui': 8.27.12
+  '@hanzo/ui': 8.27.16
   '@hanzo/vite': 0.1.4
   '@hanzo/voice': 0.1.8
   '@hanzogui/lucide-icons-2': 8.3.5
