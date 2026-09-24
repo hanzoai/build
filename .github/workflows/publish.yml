@@ -29,7 +29,15 @@ jobs:
           set -euo pipefail
           NAME=$(jq -r .name package.json)
           NEW=$(jq -r .version package.json)
-          OLD=$(curl -sf "https://registry.npmjs.org/${NAME}" | jq -r '."dist-tags".latest // "0.0.0"' || echo 0.0.0)
+          # The version itself first: the full packument lags a fresh publish by
+          # minutes (it 404s), and reading that as "never published" re-publishes
+          # into a 403. The abbreviated document is what installs read.
+          if curl -sf -o /dev/null "https://registry.npmjs.org/${NAME}/${NEW}"; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "$NAME $NEW is already on npm; nothing to publish"
+            exit 0
+          fi
+          OLD=$(curl -sf -H 'Accept: application/vnd.npm.install-v1+json' "https://registry.npmjs.org/${NAME}" | jq -r '."dist-tags".latest // "0.0.0"' || echo 0.0.0)
           TOP=$(printf '%s\n%s\n' "$OLD" "$NEW" | sort -V | tail -1)
           if [ "$OLD" != "$NEW" ] && [ "$TOP" = "$NEW" ]; then
             echo "release=true" >> "$GITHUB_OUTPUT"
