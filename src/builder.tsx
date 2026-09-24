@@ -16,6 +16,7 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Blocks, BookOpen, Cpu, LayoutTemplate, Menu, Puzzle } from '@hanzogui/lucide-icons-2'
+import { Button } from '@hanzo/ui'
 import { SessionRail, type RailLink, type RailSession, type SessionStatus } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useMemo, useState } from 'react'
@@ -105,20 +106,11 @@ function Shell() {
       />
       <YStack flex={1} minW={0} minH={0} position="relative">
         {/* Below md the rail is a drawer; this is the one control that opens it. */}
-        <XStack position="absolute" t="$2" l="$2" z={1} $md={{ display: 'none' }}>
-          <XStack
-            render="button"
-            onPress={() => setDrawer(true)}
-            aria-label="Open runs"
-            width={36}
-            height={36}
-            items="center"
-            justify="center"
-            rounded="$3"
-            hoverStyle={{ bg: '$hover' }}
-          >
+        {/* Its own row, in flow: laid over the pane it covered the heading's mark. */}
+        <XStack height={44} px="$2" items="center" shrink={0} $md={{ display: 'none' }}>
+          <Button variant="ghost" size="icon-sm" onPress={() => setDrawer(true)} aria-label="Open runs">
             <Menu size={18} />
-          </XStack>
+          </Button>
         </XStack>
         {r.kind === 'run' ? (
           <Run key={r.id} id={r.id} />

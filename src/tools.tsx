@@ -56,6 +56,10 @@ export function Attach({ files, onFiles, onNote }: { files: Attached[]; onFiles:
         type="file"
         multiple
         hidden
+        // `hidden` alone loses to a reset that sets `display` on inputs.
+        style={{ display: 'none' }}
+        tabIndex={-1}
+        aria-hidden
         onChange={(e) => {
           const input = e.currentTarget
           if (!input.files) return
