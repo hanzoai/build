@@ -14,59 +14,23 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { ExternalLink, GitPullRequest } from '@hanzogui/lucide-icons-2'
 import { Transcript, fold, type Turn } from '@hanzo/ui/agents'
 import { Composer } from '@hanzo/ui/chat'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 
-import { Refusal } from './api/call.ts'
-import { get, message, stop, watch, type Detail, type Event } from './api/sessions.ts'
-import { merge, outcome, said } from './api/turn.ts'
-import { useRead } from './data.ts'
+import { message, stop } from './api/sessions.ts'
+import { outcome, said, who } from './api/turn.ts'
+import { useRun } from './data.ts'
 import { useTarget } from './host.tsx'
+import { Out } from './out.tsx'
 
 const LIVE = new Set(['running', 'paused', ''])
 
-/** The actor, short enough to label a block: `hanzo/2d4d67ab`. */
-const who = (actor: string): string => {
-  const [org = '', rest = ''] = actor.split('/')
-  const head = rest.split('-')[0] ?? ''
-  return head ? `${org}/${head}` : actor
-}
-
 export function Run({ id }: { id: string }) {
   const t = useTarget()
-  const detail = useRead<Detail | null>(() => get(t, id), null, [t, id])
-  const [live, setLive] = useState<Event[]>([])
-  const [status, setStatus] = useState('')
+  const { detail, events, status, refused } = useRun(t, id)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
-  const reload = useRef(detail.reload)
-  reload.current = detail.reload
 
-  useEffect(() => {
-    setLive([])
-    const ctl = new AbortController()
-    void watch(
-      t,
-      id,
-      {
-        event: (e) => {
-          if (e.sessionId === id) setLive((prev) => [...prev, e])
-        },
-        session: (s) => {
-          if (s.id === id) setStatus(s.status)
-        },
-        open: (n) => {
-          if (n > 0) reload.current()
-        },
-      },
-      ctl.signal,
-    ).catch((e: unknown) => {
-      if (e instanceof Refusal) setNote(e.message)
-    })
-    return () => ctl.abort()
-  }, [t, id])
-
-  const events = useMemo(() => merge(detail.value?.recent ?? [], live), [detail.value, live])
   const blocks = useMemo(
     () =>
       fold(
@@ -77,7 +41,7 @@ export function Run({ id }: { id: string }) {
     [events],
   )
   const end = outcome(events)
-  const state = status || end.status || detail.value?.status || ''
+  const state = status || end.status
   const running = LIVE.has(state) && !detail.error
 
   const send = async () => {
@@ -120,29 +84,16 @@ export function Run({ id }: { id: string }) {
             </SizableText>
           </YStack>
           {end.pr ? (
-            <XStack
-              render="a"
-              // A platform-issued https address (turn.ts refuses anything else),
-              // opened away from this page and with no handle back to it.
-              href={end.pr}
-              target="_blank"
-              rel="noopener noreferrer"
-              items="center"
-              gap="$1.5"
-              px="$2.5"
-              py="$1.5"
-              rounded="$3"
-              borderWidth={1}
-              borderColor="$borderColor"
-              hoverStyle={{ bg: '$hover' }}
-              aria-label={`Open pull request ${end.label}`.trim()}
-            >
-              <GitPullRequest size={14} />
-              <SizableText size="$2" color="$ink">
-                {end.label || 'Pull request'}
-              </SizableText>
-              <ExternalLink size={12} opacity={0.6} />
-            </XStack>
+            // A platform-issued https address; turn.ts refuses anything else.
+            <Out href={end.pr} label={`Open pull request ${end.label}`.trim()}>
+              <XStack items="center" gap="$1.5" px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
+                <GitPullRequest size={14} />
+                <SizableText size="$2" color="$ink">
+                  {end.label || 'Pull request'}
+                </SizableText>
+                <ExternalLink size={12} opacity={0.6} />
+              </XStack>
+            </Out>
           ) : null}
         </XStack>
 
@@ -161,12 +112,13 @@ export function Run({ id }: { id: string }) {
               The branch is pushed; the pull request could not be opened: {end.problem}
             </SizableText>
           ) : null}
-          {note ? (
+          {note || refused ? (
             <SizableText size="$1" color="$soft" role="status">
-              {note}
+              {note || refused}
             </SizableText>
           ) : null}
           <Composer
+            inline
             value={draft}
             onChange={setDraft}
             onSend={() => void send()}

@@ -107,3 +107,11 @@ describe('turns', () => {
     expect(merge(a, b).map((e) => e.seq)).toEqual([1, 2, 3])
   })
 })
+
+describe('who', () => {
+  it('shortens a subject to its org and first block', async () => {
+    const { who } = await import('./turn.ts')
+    expect(who('hanzo/2d4d67ab-30f1-474e-b81f-f60461852259')).toBe('hanzo/2d4d67ab')
+    expect(who('agent')).toBe('agent')
+  })
+})

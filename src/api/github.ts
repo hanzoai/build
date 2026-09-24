@@ -1,15 +1,20 @@
 /**
  * GitHub, as the platform's GitHub App sees it for the signed-in person.
  *
- *   GET    /v1/provider/github/repos?q=&owner=&limit=&after=
- *   GET    /v1/provider/github/repos/{owner}/{repo}/branches?q=&limit=&after=
- *   GET    /v1/provider/github/user            the person's own connection
- *   POST   /v1/provider/github/user/connect    → {url} to authorize at GitHub
- *   DELETE /v1/provider/github/user            disconnect
+ *   GET  /v1/provider/github/repos?q=&owner=&limit=&after=           most recently pushed first
+ *   GET  /v1/provider/github/repos/{owner}/{repo}/branches?q=&limit=&after=   default first
+ *   GET  /v1/provider/github/user              the person's own connection
+ *   POST /v1/provider/github/user/connect      → {authorizeUrl}
+ *   POST /v1/provider/github/user/disconnect
  *
  * Paged by an opaque `after` cursor; `next` is the cursor for the page after
- * this one, or empty when there is none. Rows are read defensively: a field the
+ * this one, or empty on the last. Rows are read defensively: a field the
  * platform left out is an empty value here, never `undefined` in a label.
+ *
+ * `connected` false with repositories is an org admin seeing the org's
+ * installations; false with none is the cue to connect. GitHub returns a
+ * connecting person to the console's /connectors?complete=github&grant=<id>,
+ * which completes it.
  */
 import { call, query, seg, type Target } from './call.ts'
 
@@ -29,27 +34,30 @@ export interface Repo {
 export interface Repos {
   repos: Repo[]
   next: string
-  /** Every repository the grant reaches, when the platform counted them. */
+  /** How many repositories match, across every page. */
   total: number
-  /** How many of those this page could not list (unreadable installations). */
-  unread: number
-  /** Whether the person has a GitHub connection at all. */
+  /** The installations that could not be read: a short list is then not the whole one. */
+  unread: string[]
+  /** Whether this answer is the person's OWN GitHub. */
   connected: boolean
 }
 
 export interface Branch {
   name: string
-  protected: boolean
-  /** The tip, or ''. */
-  sha: string
+  /** The sha it points at, or ''. */
+  commit: string
+  default: boolean
 }
 
 export interface Branches {
   branches: Branch[]
   next: string
+  total: number
 }
 
 export interface Connection {
+  /** Whether this deployment can connect anyone at all. */
+  configured: boolean
   connected: boolean
   /** The GitHub login, when connected. */
   login: string
@@ -77,7 +85,7 @@ export function repo(raw: unknown): Repo {
 
 export function branch(raw: unknown): Branch {
   const b = obj(raw)
-  return { name: str(b.name), protected: b.protected === true, sha: str(b.sha) }
+  return { name: str(b.name), commit: str(b.commit), default: b.default === true }
 }
 
 export interface RepoQuery {
@@ -101,8 +109,8 @@ export async function repos(t: Target, p: RepoQuery = {}, signal?: AbortSignal):
     repos: (Array.isArray(raw.repos) ? raw.repos : []).map(repo).filter((r) => r.name),
     next: str(raw.next),
     total: num(raw.total),
-    unread: num(raw.unread),
-    connected: raw.connected !== false,
+    unread: (Array.isArray(raw.unread) ? raw.unread : []).filter((x): x is string => typeof x === 'string'),
+    connected: raw.connected === true,
   }
 }
 
@@ -131,22 +139,23 @@ export async function branches(
   return {
     branches: (Array.isArray(raw.branches) ? raw.branches : []).map(branch).filter((b) => b.name),
     next: str(raw.next),
+    total: num(raw.total),
   }
 }
 
 export async function connection(t: Target): Promise<Connection> {
   const raw = obj(await call<unknown>(t, 'GET', '/v1/provider/github/user'))
-  return { connected: raw.connected === true, login: str(raw.login) }
+  return { configured: raw.configured === true, connected: raw.connected === true, login: str(raw.login) }
 }
 
-/** Where to send the person to authorize the platform at GitHub. */
-export async function connect(t: Target, back: string): Promise<string> {
-  const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/user/connect', { redirect: back }))
-  const url = str(raw.url)
+/** Where to send the person to authorize the platform's GitHub App — github.com only. */
+export async function connect(t: Target): Promise<string> {
+  const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/user/connect'))
+  const url = str(raw.authorizeUrl)
   if (!/^https:\/\/github\.com\//.test(url)) throw new Error('The platform did not name a GitHub address to connect at')
   return url
 }
 
 export async function disconnect(t: Target): Promise<void> {
-  await call<unknown>(t, 'DELETE', '/v1/provider/github/user')
+  await call<unknown>(t, 'POST', '/v1/provider/github/user/disconnect')
 }

@@ -6,12 +6,13 @@
  * signed in is not attempted — the platform would refuse it and the refusal
  * would read as an outage.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Target } from './api/call.ts'
 import { places, type Place } from './api/places.ts'
 import { projects, type Project } from './api/projects.ts'
-import { list, watch, type Session } from './api/sessions.ts'
+import { get, list, watch, type Detail, type Event, type Session } from './api/sessions.ts'
+import { merge } from './api/turn.ts'
 
 export interface Read<T> {
   value: T
@@ -131,4 +132,56 @@ export function useKept<T>(key: string, initial: T): [T, (v: T) => void] {
     [key],
   )
   return [value, set]
+}
+
+export interface RunState {
+  detail: Read<Detail | null>
+  /** Every turn, recorded and live, in order. */
+  events: Event[]
+  /** The run's status as last reported by the record or the feed. */
+  status: string
+  /** Why the feed stopped, when it was refused. */
+  refused: string
+}
+
+/**
+ * One run: the recorded detail, then the live feed added to it. A reconnect
+ * after a drop re-reads the detail — frames missed while dropped are only in
+ * the record. `id` null reads nothing.
+ */
+export function useRun(t: Target, id: string | null): RunState {
+  const detail = useRead<Detail | null>(id ? () => get(t, id) : null, null, [t, id])
+  const [live, setLive] = useState<Event[]>([])
+  const [status, setStatus] = useState('')
+  const [refused, setRefused] = useState('')
+  const reload = useRef(detail.reload)
+  reload.current = detail.reload
+
+  useEffect(() => {
+    setLive([])
+    setStatus('')
+    setRefused('')
+    if (!id) return
+    const ctl = new AbortController()
+    void watch(
+      t,
+      id,
+      {
+        event: (e) => {
+          if (e.sessionId === id) setLive((prev) => [...prev, e])
+        },
+        session: (s) => {
+          if (s.id === id) setStatus(s.status)
+        },
+        open: (n) => {
+          if (n > 0) reload.current()
+        },
+      },
+      ctl.signal,
+    ).catch((e: unknown) => setRefused(e instanceof Error ? e.message : 'The feed was refused'))
+    return () => ctl.abort()
+  }, [t, id])
+
+  const events = useMemo(() => merge(detail.value?.recent ?? [], live), [detail.value, live])
+  return { detail, events, status: status || detail.value?.status || '', refused }
 }

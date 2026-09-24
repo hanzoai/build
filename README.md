@@ -3,97 +3,118 @@
 Say what you want. Hanzo writes it, runs it, and puts it on a live URL — with
 the database, the sign-in and the storage already there.
 
-This is the builder as a page: one composer, the public template catalog, the
-projects an organization already has, and the live transcript of a run. It talks
-to the Hanzo platform over its public API and to Hanzo IAM for identity. There
-is nothing private in it — no internal host, no unpublished package.
+The builder is one component with two hosts: this page (hanzo.build), and the
+platform console at platform.hanzo.ai/dev. Both mount `<Builder host={…} />`
+from `@hanzo/build`; neither forks it.
 
 ```
 pnpm install
 pnpm dev            # http://localhost:3200
+pnpm test           # the transport contract and the address grammar
+pnpm build:lib      # lib/ — what npm ships
 ```
 
 The port is not a preference. `vite.config.ts` pins 3200 for both `dev` and
 `preview`, and IAM lists `http://localhost:3200/auth/callback` among this
 client's redirects — sign in from any other port and the authorize call is
-refused, because an unlisted redirect is the one thing OAuth must never accept.
+refused.
 
-`/v1` is proxied to `api.hanzo.ai` from the dev server AND from the preview of a
-build. The gateway admits an origin by allowlist and by an https, portless DNS
-proof, and a localhost port satisfies neither — so a credentialed read to the
-absolute address fails its preflight and the builder draws as though the catalog
-and the org were empty. Same statement for both servers, so the built output is
-exercised against real data before it ships.
+`/v1` is proxied to `api.hanzo.ai` from the dev server and from the preview of
+a build: the gateway admits an origin by allowlist and a localhost port is not
+on it.
+
+## Mounting it
+
+```tsx
+import { Builder, type Host } from '@hanzo/build'
+
+<Hanzo theme="dark">
+  <div style={{ height: '100dvh', display: 'flex' }}>
+    <Builder host={host} />
+  </div>
+</Hanzo>
+```
+
+`Host` is everything that differs between hosts: where the platform is
+(`api`), the bearer (`token()`, read at call time), the org (`org`), who is
+signed in (`person`), whether they administer the org (`admin`), the address
+under the mount (`path`) and how to move (`go`), and where to link out
+(`links`, `open`). Peers: `@hanzo/ui`, `@hanzo/gui`, `@hanzogui/lucide-icons-2`,
+`react`.
+
+## Addresses
+
+| path | screen |
+|---|---|
+| `''` | New — the empty state and the composer |
+| `sess_<32 hex>` | one run, live |
+| `-/artifacts` | what the org has built |
+| `-/templates` | the public starters |
+| `<slug>` | a project's workspace |
+
+A project slug holds no `_` and never starts with `-`, so the forms cannot
+collide.
 
 ## What is on the screen
 
-**The ask.** `Build` asks for the thing, `Plan` asks what building it would
-involve; the mode rides with the prompt. Sending starts a coding run
-(`POST /v1/agents/coding`) and opens its transcript in place.
+**The rail.** New, Artifacts, Customize (the platform's plugins), More
+(Templates, Machines, Docs), then the org's coding runs newest first with a
+live status dot, and the account. Collapse is an explicit toggle kept in this
+browser.
 
-**The run.** Turns as they arrive, folded into blocks, with Pause, Resume and
-Stop. Steering is a queue the agent drains between turns, so a press is
-confirmed as recorded and the status is left to the feed to correct.
+**New.** "What's up next?", and at the foot the composer: where the run runs
+(Default is the platform's sandbox; the org's machines follow), the repository
+and the branch — both searchable, paged popovers opening upward — then the
+ask. Under it: attach (files ride the prompt as text), dictate, Build or Plan,
+and the model and effort. A repository row can be added to a project.
 
-**The catalog.** `/v1/templates` is public, so the shelf is drawn whether or not
-you are signed in. Picking one takes a copy of that template's own repository
-rather than asking a model to reinvent a starter the platform already publishes.
+**A run.** The transcript as it streams, steering while it works, Stop, and
+the pull request once it pushes one.
 
-**A project.** Its deployed page, framed; the files the site is serving, edited
-in place; and every deployment attempt. The column on the right is the running
-page beside the thing that builds it.
+**A project.** The v2 workspace in the same window: its runs as a
+conversation with suggestions and a Build/Plan composer on the left; Preview,
+Files, Code and Layers on the right with desktop/mobile, reload, the page
+picker and open-in-tab; Share and Publish; the console dock under it.
 
-## Configuration
+## The contract
 
-Everything has a working default. Each is a Vite `VITE_` variable, read at build
-time.
-
-| | |
+| call | what |
 |---|---|
-| `VITE_HANZO_API` | The platform. Defaults to `https://api.hanzo.ai` on a `hanzo.ai` host and to this page's own origin anywhere else, which is what makes the dev proxy work. |
-| `VITE_HANZO_IAM` | The issuer. `https://hanzo.id`. |
-| `VITE_HANZO_CLIENT_ID` | This application's IAM client, `<org>-<app>`. `hanzo-build`. |
-| `VITE_PUBLISHABLE_KEY` | Optional. Records anonymous reads against the organization that published the page. It names an org and no person, so it is publishable by construction. |
+| `POST /v1/agent/coding` | start a run → 202 `{sessionId, …}` |
+| `GET /v1/agent/sessions?kind=coding` | Recents, and a project's runs |
+| `GET /v1/agent/sessions/{id}` · `GET /v1/agent/sessions/stream?root=` | a run, and its live feed (SSE over fetch) |
+| `POST /v1/agent/sessions/{id}/message` · `/stop` | steer, stop |
+| `GET /v1/agent/targets` | the org's machines |
+| `GET /v1/provider/github/repos` · `…/{owner}/{repo}/branches` | the chips' pagers |
+| `POST /v1/provider/github/user/connect` | connect a person's GitHub |
+| `GET /v1/projects` · `POST /v1/projects/fork` · `GET /v1/templates` | artifacts, templates |
+| `GET /v1/git/repos/{name}/tree` · `/blob` | Files and Code |
+| `POST /v1/platform/apps` · `GET /v1/platform/builds` | Add to project, Publish |
+| `GET /v1/models` · `POST /v1/event` | the model list, a verdict |
 
-**Sign-in needs an IAM application.** `hanzo-build` must exist in Hanzo IAM with
-this deployment's `/auth/callback` among its redirect URIs. Until it is seeded,
-hanzo.id answers "cannot read the sign-in configuration for this application"
-and only the public half of the surface — the ask and the catalog — works. Point
-`VITE_HANZO_CLIENT_ID` at an application that does exist to run against it.
-
-## The two things worth knowing before editing
-
-**The room is a flex column, and says so.** `@hanzo/ui`'s `Box` renders
-`display: block`, and a block parent makes `flex: 1` inert on everything below
-it — the frame then sizes to its own bar and the whole builder measures zero
-high under a header that looks perfectly fine. `src/app.tsx` uses `YStack`.
-
-**There is no CSS pipeline, and none is needed.** `<Hanzo>` imports the
-stylesheet `@hanzo/ui` generates at ITS publish time, and gui inserts the rules
-for props a package could not have known about — this app's own `px="$4"`,
-`width={720}` — at first render, into `<style id="_hanzogui-styles">`, before
-paint. Measured on this app: emptying a pre-generated sheet changes no geometry
-and no pixel. So there is no generator to run, nothing to commit, and
-`src/build.css` holds the three rules no package ships.
+`mode`, `model` and `effort` are sent with a run as asked; the platform
+honours them where it does and nothing here simulates them.
 
 ## Layout
 
 ```
 src/
-  main.tsx      the mount: faces, sheets, <Hanzo>
-  app.tsx       the room
-  routes.tsx    two addresses: the builder, and the return from the issuer
-  root.tsx      identity, and the client that speaks for it
-  frame.tsx     the bar, the pane, and the column beside it
-  Build.tsx     the ask, the catalog, a project
-  Session.tsx   an open run
-  run.ts        POST /v1/agents/coding
-  ai.tsx        the platform client
-  api.ts        where the platform is
-  token.ts      where the session is kept
-  open.ts       what is open, and the address that carries it
+  index.ts      the library surface
+  builder.tsx   the rail and the pane the address names
+  landing.tsx   New
+  run.tsx       one run
+  project.tsx   a project's workspace
+  shelf.tsx     Artifacts and Templates
+  publish.tsx   Add to project / Publish
+  account.tsx   the account and find-a-run dialogs
+  data.ts       reads as hooks
+  host.tsx      what a host provides
+  route.ts      the address grammar
+  api/          one typed client per surface, over one call()
+  app/          this page's host: IAM, the router, the mount
 ```
 
 ## Licence
 
-Apache-2.0 OR MIT, at your option. See `NOTICE`.
+Apache-2.0 OR MIT, at your option. See `NOTICE` — the project workspace is a
+port of the v2 editor, derived from OSW Studio and DeepSite (MIT).

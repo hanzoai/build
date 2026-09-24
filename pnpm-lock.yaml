@@ -6,9 +6,6 @@ settings:
 
 catalogs:
   default:
-    '@hanzo/ai':
-      specifier: 0.6.16
-      version: 0.6.16
     '@hanzo/font':
       specifier: 1.9.3
       version: 1.9.3
@@ -33,9 +30,6 @@ catalogs:
     '@vitejs/plugin-react':
       specifier: ^6.1.1
       version: 6.1.1
-    lucide-react:
-      specifier: ^1.42.0
-      version: 1.43.0
     next-themes:
       specifier: ^0.4.6
       version: 0.4.6
@@ -80,10 +74,7 @@ overrides:
 importers:
 
   .:
-    dependencies:
-      '@hanzo/ai':
-        specifier: 'catalog:'
-        version: 0.6.16(react@19.2.8)
+    devDependencies:
       '@hanzo/font':
         specifier: 'catalog:'
         version: 1.9.3(next@16.3.4(@babel/core@7.29.7(supports-color@8.1.1))(@types/node@26.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
@@ -96,12 +87,27 @@ importers:
       '@hanzo/ui':
         specifier: 'catalog:'
         version: 8.27.12(d472dd43e9076e25e350e015862ee38b)
+      '@hanzo/vite':
+        specifier: 'catalog:'
+        version: 0.1.4(react@19.2.8)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(terser@5.51.2))
+      '@hanzogui/lucide-icons-2':
+        specifier: 8.3.5
+        version: 8.3.5(react-dom@19.2.8(react@19.2.8))(react-native-svg@15.15.5(react-native@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8))(react@19.2.8)
       '@hanzogui/next-theme':
         specifier: 8.3.5
         version: 8.3.5(next@16.3.4(@babel/core@7.29.7(supports-color@8.1.1))(@types/node@26.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
-      lucide-react:
+      '@types/node':
         specifier: 'catalog:'
-        version: 1.43.0(react@19.2.8)
+        version: 26.5.0
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.7(@types/react@19.2.18)
+      '@vitejs/plugin-react':
+        specifier: 'catalog:'
+        version: 6.1.1(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(terser@5.51.2))
       next-themes:
         specifier: 'catalog:'
         version: 0.4.6(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -120,22 +126,6 @@ importers:
       react-router:
         specifier: 'catalog:'
         version: 8.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-    devDependencies:
-      '@hanzo/vite':
-        specifier: 'catalog:'
-        version: 0.1.4(react@19.2.8)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(terser@5.51.2))
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.5.0
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 'catalog:'
-        version: 19.2.7(@types/react@19.2.18)
-      '@vitejs/plugin-react':
-        specifier: 'catalog:'
-        version: 6.1.1(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(terser@5.51.2))
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -658,15 +648,6 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
-
-  '@hanzo/ai@0.6.16':
-    resolution: {integrity: sha512-MgnRooi4D+3n1YnJ9BDmYBB15noscN+nhRerYrGm/zpI5jC002Il1jj53uNIRhVX736/fOxFJjErlpnKjy4C1w==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      react: '>=18'
-    peerDependenciesMeta:
-      react:
-        optional: true
 
   '@hanzo/appearance@0.2.2':
     resolution: {integrity: sha512-HsH2wT82EbjHF1zY/TWubUQv7N5tBolVyBtXuQD8I+3E7xQ+Qoy7u79Xz1lw0EVkBESM2dr6VMaPWWThnytzZg==}
@@ -2552,11 +2533,6 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
-  lucide-react@1.43.0:
-    resolution: {integrity: sha512-ubtnda1fVK5ky0PNEpOmB0wiwhpZUyJiol4K14KCm+QKvuCkfUu54Et/rIjyupJpwiJ5Hg+BLQE86/GEsS+IgQ==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
@@ -3842,10 +3818,6 @@ snapshots:
       react-native: 0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1)
 
   '@floating-ui/utils@0.2.12': {}
-
-  '@hanzo/ai@0.6.16(react@19.2.8)':
-    optionalDependencies:
-      react: 19.2.8
 
   '@hanzo/appearance@0.2.2(react@19.2.8)':
     dependencies:
@@ -6209,10 +6181,6 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
-
-  lucide-react@1.43.0(react@19.2.8):
-    dependencies:
-      react: 19.2.8
 
   magic-string@0.30.21:
     dependencies:

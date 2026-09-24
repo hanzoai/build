@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react'
 
 import { builds, declare, label, type Declared } from './api/platform.ts'
 import { useHost, useTarget } from './host.tsx'
+import { Out } from './out.tsx'
 
 export interface Source {
   /** The https clone URL. */
@@ -135,12 +136,12 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
                 : `Build ${out.build?.id ?? ''}: ${status || 'building'}`}
             </SizableText>
             {out.review ? (
-              <XStack render="a" href={out.review} target="_blank" rel="noopener noreferrer" items="center" gap="$1.5">
+              <Out href={out.review}>
                 <SizableText size="$2" color="$ink" textDecorationLine="underline">
                   Open the review
                 </SizableText>
                 <ExternalLink size={12} opacity={0.6} />
-              </XStack>
+              </Out>
             ) : null}
           </YStack>
         ) : null}

@@ -8,8 +8,9 @@
  * kept in this browser, per org, so the next New starts where the last one did.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ChevronDown, Cloud, Code2, GitBranch, Mic, MicOff, Monitor, Paperclip, Plus, X } from '@hanzogui/lucide-icons-2'
+import { ChevronDown, Cloud, Mic, MicOff, Monitor, Paperclip, Plus, X } from '@hanzogui/lucide-icons-2'
 import { ModeSelect } from '@hanzo/ui/agents'
+import { Button } from '@hanzo/ui'
 import { Composer, EmptyPrompt } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -196,7 +197,15 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
               render="button"
               onPress={async () => {
                 try {
-                  window.location.assign(await connect(t, window.location.href))
+                  const to = await connect(t)
+                  // The console completes the connection at /connectors and
+                  // brings the person back here; a path, never an origin.
+                  try {
+                    window.sessionStorage.setItem('hanzo.return', window.location.pathname + window.location.search)
+                  } catch {
+                    /* they land on the connectors page and come back themselves */
+                  }
+                  window.location.assign(to)
                 } catch (e) {
                   setNote(e instanceof Error ? e.message : 'Could not start the GitHub connection')
                 }
@@ -266,21 +275,17 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       </XStack>
       <input ref={picker} type="file" multiple hidden onChange={(e) => void attach(e.currentTarget.files).then(() => (e.currentTarget.value = ''))} />
       <XStack items="center">
-        <XStack
-          render="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           aria-label={voice.on ? 'Stop dictation' : 'Dictate'}
           aria-pressed={voice.on}
           disabled={!voice.able}
           onPress={voice.toggle}
           title={voice.able ? undefined : 'Dictation is not available in this browser'}
-          hitSlop={8}
-          p="$1"
-          rounded="$2"
-          opacity={voice.able ? 1 : 0.4}
-          hoverStyle={{ bg: '$hover' }}
         >
           {voice.on ? <MicOff size={14} /> : <Mic size={14} />}
-        </XStack>
+        </Button>
         <ChipSelect
           quiet
           label="Dictation language"

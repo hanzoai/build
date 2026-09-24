@@ -74,7 +74,7 @@ describe('call', () => {
 
   it('names the status when the refusal says nothing', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>', { status: 502 })))
-    const err = await call(T, 'GET', '/v1/agent/sessions?limit=1').catch((e) => e)
+    const err = (await call(T, "GET", "/v1/agent/sessions?limit=1").catch((e: unknown) => e)) as Error
     expect(err).toBeInstanceOf(Refusal)
     expect(err.message).toBe('GET /v1/agent/sessions answered 502')
   })
@@ -91,7 +91,7 @@ describe('github', () => {
       repos: [{ owner: 'hanzo-inc', name: 'cloud', full_name: 'hanzo-inc/cloud', private: true, default_branch: 'main', pushed_at: '2026-09-24T00:00:00Z', installation_id: 7 }],
       next: 'c2',
       total: 180,
-      unread: 1,
+      unread: ['hanzo-labs'],
       connected: true,
     })
     const page = await github.repos(T, { q: ' clo ', after: 'c1' })
@@ -100,7 +100,7 @@ describe('github', () => {
       repos: [{ owner: 'hanzo-inc', name: 'cloud', full_name: 'hanzo-inc/cloud', private: true, default_branch: 'main', pushed_at: '2026-09-24T00:00:00Z', installation_id: 7 }],
       next: 'c2',
       total: 180,
-      unread: 1,
+      unread: ['hanzo-labs'],
       connected: true,
     })
   })
@@ -109,30 +109,32 @@ describe('github', () => {
     answer(200, { repos: [{ owner: 'a', name: 'b' }, { owner: 'x' }], connected: false })
     const page = await github.repos(T)
     expect(page.repos).toEqual([{ owner: 'a', name: 'b', full_name: 'a/b', private: false, default_branch: '', pushed_at: '', installation_id: 0 }])
-    expect(page).toMatchObject({ next: '', total: 0, unread: 0, connected: false })
+    expect(page).toMatchObject({ next: '', total: 0, unread: [], connected: false })
   })
 
   it('escapes owner and name in the branches address', async () => {
-    const seen = answer(200, { branches: [{ name: 'main', protected: true, sha: 'abc' }, { name: '' }], next: '' })
+    const seen = answer(200, { branches: [{ name: 'main', commit: '9f2c1e7a', default: true }, { name: '' }], next: '', total: 1 })
     const page = await github.branches(T, 'hanzo inc', 'cl/oud', { q: 'fe', limit: 20 })
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/provider/github/repos/hanzo%20inc/cl%2Foud/branches?q=fe&limit=20')
-    expect(page.branches).toEqual([{ name: 'main', protected: true, sha: 'abc' }])
+    expect(page).toEqual({ branches: [{ name: 'main', commit: '9f2c1e7a', default: true }], next: '', total: 1 })
   })
 
   it('connects only through a GitHub address', async () => {
-    const seen = answer(200, { url: 'https://github.com/login/oauth/authorize?x=1' })
-    expect(await github.connect(T, 'https://platform.hanzo.ai/dev')).toBe('https://github.com/login/oauth/authorize?x=1')
-    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/github/user/connect', body: { redirect: 'https://platform.hanzo.ai/dev' } })
-    answer(200, { url: 'javascript:alert(1)' })
-    await expect(github.connect(T, 'x')).rejects.toThrow('did not name a GitHub address')
+    const seen = answer(200, { authorizeUrl: 'https://github.com/login/oauth/authorize?client_id=x&state=y' })
+    expect(await github.connect(T)).toBe('https://github.com/login/oauth/authorize?client_id=x&state=y')
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/github/user/connect', body: undefined })
+    answer(200, { authorizeUrl: 'javascript:alert(1)' })
+    await expect(github.connect(T)).rejects.toThrow('did not name a GitHub address')
+    answer(200, { authorizeUrl: 'https://github.com.evil.example/x' })
+    await expect(github.connect(T)).rejects.toThrow('did not name a GitHub address')
   })
 
   it('reads the connection and disconnects', async () => {
-    answer(200, { connected: true, login: 'zeekay' })
-    expect(await github.connection(T)).toEqual({ connected: true, login: 'zeekay' })
-    const seen = answer(204, undefined)
+    answer(200, { configured: true, connected: true, login: 'zeekay', connectedAt: '2026-09-24T12:00:00Z' })
+    expect(await github.connection(T)).toEqual({ configured: true, connected: true, login: 'zeekay' })
+    const seen = answer(200, { disconnected: true })
     await github.disconnect(T)
-    expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/provider/github/user' })
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/github/user/disconnect' })
   })
 })
 
@@ -272,7 +274,6 @@ describe('models', () => {
   it('lists the catalog with the router first and batch lanes dropped', async () => {
     const seen = answer(200, { data: [{ id: 'zen5-coder' }, { id: 'anthropic/claude-opus-5.5' }, { id: 'anthropic/claude-opus-5.5:batch' }, { id: 'enso' }] })
     const { models } = await import('./models.ts')
-    expect(seen).toHaveLength(0)
     const list = await models(T)
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/models')
     expect(list).toEqual([
@@ -280,5 +281,20 @@ describe('models', () => {
       { id: 'zen5-coder', label: 'Zen5 Coder' },
       { id: 'anthropic/claude-opus-5.5', label: 'Claude Opus 5.5' },
     ])
+  })
+})
+
+describe('verdict', () => {
+  it('records a verdict on the event bus and says when it did not land', async () => {
+    const seen = answer(200, { accepted: 1, dropped: 0 })
+    const { verdict } = await import('./verdict.ts')
+    await verdict(T, 'sess_1', 'shop', 'up')
+    expect(seen[0]).toMatchObject({
+      method: 'POST',
+      url: 'https://api.hanzo.ai/v1/event',
+      body: { type: 'track', event: 'build.verdict', sessionId: 'sess_1', properties: { verdict: 'up', project: 'shop' } },
+    })
+    answer(200, { accepted: 0, dropped: 1 })
+    await expect(verdict(T, 'sess_1', 'shop', 'down')).rejects.toThrow('not recorded')
   })
 })

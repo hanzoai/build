@@ -118,3 +118,10 @@ export function merge<T extends Pick<Event, 'id' | 'seq'>>(...lists: T[][]): T[]
   for (const list of lists) for (const e of list) seen.set(e.seq ? `s${e.seq}` : `i${e.id}`, e)
   return [...seen.values()].sort((a, b) => a.seq - b.seq)
 }
+
+/** The actor, short enough to label a block: `hanzo/2d4d67ab`, not the whole subject. */
+export function who(actor: string): string {
+  const [org = '', rest = ''] = actor.split('/')
+  const head = rest.split('-')[0] ?? ''
+  return head ? `${org}/${head}` : actor
+}

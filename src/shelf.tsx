@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { fork, templates, type Project, type Template } from './api/projects.ts'
 import { useProjects, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { Out } from './out.tsx'
 
 const SHOTS = 'https://hanzo.ai/templates'
 
@@ -188,20 +189,14 @@ export function Templates() {
             ))}
           </XStack>
         )}
-        <XStack
-          render="a"
-          href="https://gallery.hanzo.ai"
-          target="_blank"
-          rel="noopener noreferrer"
-          items="center"
-          gap="$1.5"
-          pt="$5"
-        >
-          <SizableText size="$2" color="$soft">
-            The whole catalog
-          </SizableText>
-          <ExternalLink size={12} opacity={0.6} />
-        </XStack>
+        <YStack pt="$5">
+          <Out href="https://gallery.hanzo.ai">
+            <SizableText size="$2" color="$soft">
+              The whole catalog
+            </SizableText>
+            <ExternalLink size={12} opacity={0.6} />
+          </Out>
+        </YStack>
       </YStack>
     </YStack>
   )
