@@ -86,7 +86,11 @@ export function said(e: Pick<Event, 'kind' | 'payload'>): string {
 export interface Outcome {
   /** The last lifecycle status the run narrated, or ''. */
   status: string
-  /** Why the pull request could not be opened, as narrated, or ''. */
+  /**
+   * That the pull request could not be opened, as narrated, or ''. Shown as a
+   * fact only — its text comes from an event any member can write, so it is
+   * never put on screen as the reason.
+   */
   problem: string
 }
 
@@ -123,11 +127,14 @@ export function who(actor: string): string {
 
 /**
  * A pull request address the builder will draw as a link: https, on GitHub or
- * the platform's own git, and shaped like a pull request. Anything else is ''.
- * Read from the run's RECORD, which the coding service writes — never from an
- * event, which any member of the org can append.
+ * the platform's own git, shaped like a pull request, and IN THE RUN'S OWN
+ * REPOSITORY (`repo`, `owner/name`). Anything else is ''. Read from the run's
+ * record, which the coding service writes — never from an event, which any
+ * member of the org can append — and bound to the repository, because a record
+ * can be moved into a project it did not work on.
  */
-export function pull(url: string): { href: string; label: string } {
-  const m = /^https:\/\/(github\.com|git\.hanzo\.ai)\/[\w.-]+\/[\w.-]+\/pulls?\/(\d+)\/?$/.exec(url)
-  return m ? { href: url, label: `#${m[2]}` } : { href: '', label: '' }
+export function pull(url: string, repo: string): { href: string; label: string } {
+  const m = /^https:\/\/(?:github\.com|git\.hanzo\.ai)\/([\w.-]+)\/([\w.-]+)\/pulls?\/(\d+)\/?$/.exec(url)
+  if (!m || !repo || `${m[1]}/${m[2]}`.toLowerCase() !== repo.toLowerCase()) return { href: '', label: '' }
+  return { href: url, label: `#${m[3]}` }
 }

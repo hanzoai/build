@@ -173,11 +173,12 @@ export function useRun(t: Target, id: string | null): RunState {
       t,
       id,
       {
+        // A frame from a stream this run has already left is not this run's.
         event: (e) => {
-          if (e.sessionId === id) setLive((prev) => [...prev, e])
+          if (!ctl.signal.aborted && e.sessionId === id) setLive((prev) => [...prev, e])
         },
         session: (s) => {
-          if (s.id === id) setPushed(s)
+          if (!ctl.signal.aborted && s.id === id) setPushed(s)
         },
         open: (n) => {
           if (n > 0) reload.current()
@@ -188,10 +189,16 @@ export function useRun(t: Target, id: string | null): RunState {
     return () => ctl.abort()
   }, [t, id])
 
-  const events = useMemo(() => merge(detail.value?.recent ?? [], live), [detail.value, live])
+  // The read and the frames describe THIS run or nothing: a read kept from the
+  // run before (it stays until the next one lands, or forever if it fails) must
+  // not lend this run its pull request.
+  const read = detail.value && detail.value.id === id ? detail.value : null
+  const frame = pushed && pushed.id === id ? pushed : null
+  const events = useMemo(() => merge(read?.recent ?? [], live), [read, live])
   // A frame newer than the read wins; the read fills what a frame left empty.
   const record = useMemo((): Session | null => {
-    const base = detail.value
+    const base = read
+    const pushed = frame
     if (!pushed) return base
     if (!base) return pushed
     return {
@@ -201,6 +208,6 @@ export function useRun(t: Target, id: string | null): RunState {
       branch: pushed.branch || base.branch,
       pr: pushed.pr || base.pr,
     }
-  }, [detail.value, pushed])
+  }, [read, frame])
   return { detail, record, events, status: record?.status ?? '', refused }
 }

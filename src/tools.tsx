@@ -1,7 +1,7 @@
 /**
  * The composer's quiet controls, once, for every composer the builder draws:
  * attach files (which ride the prompt as text — nothing is uploaded anywhere
- * else) and dictate (the browser's own recognizer, with its language).
+ * else) and dictate (recorded here, transcribed by the platform).
  */
 import { SizableText, XStack } from '@hanzo/gui'
 import { ChevronDown, Mic, MicOff, Paperclip, Plus, X } from '@hanzogui/lucide-icons-2'
@@ -9,6 +9,7 @@ import { ComposerTool } from '@hanzo/ui/chat'
 import { ChipSelect } from '@hanzo/ui/product'
 import { useRef } from 'react'
 
+import { useTarget } from './host.tsx'
 import { useDictation } from './voice.ts'
 
 export interface Attached {
@@ -91,15 +92,15 @@ export function Files({ files, onFiles }: { files: Attached[]; onFiles: (f: Atta
   )
 }
 
-export function Dictate({ onText }: { onText: (text: string) => void }) {
-  const voice = useDictation(onText)
+export function Dictate({ onText, onNote }: { onText: (text: string) => void; onNote: (note: string) => void }) {
+  const voice = useDictation(useTarget(), onText, onNote)
   return (
     <XStack items="center">
       <ComposerTool
-        label={voice.able ? (voice.on ? 'Stop dictation' : 'Dictate') : 'Dictation is not available in this browser'}
+        label={!voice.able ? 'Dictation needs a microphone this page can record' : voice.on ? 'Stop and transcribe' : voice.busy ? 'Transcribing…' : 'Dictate'}
         icon={voice.on ? <MicOff size={14} /> : <Mic size={14} />}
-        onPress={voice.toggle}
-        disabled={!voice.able}
+        onPress={() => void voice.toggle()}
+        disabled={!voice.able || voice.busy}
         aria-pressed={voice.on}
       />
       <ChipSelect

@@ -108,3 +108,21 @@ export async function templates(t: Target): Promise<Template[]> {
 export async function fork(t: Target, slug: string): Promise<Project> {
   return project(await call<unknown>(t, 'POST', '/v1/projects/fork', { slug }))
 }
+
+/** `owner/name` from a clone URL — its last two path segments, without `.git`. */
+export function address(clone: string): string {
+  const parts = clone.replace(/\.git$/, '').replace(/\/+$/, '').split('/')
+  return parts.length >= 2 ? `${parts[parts.length - 2]}/${parts[parts.length - 1]}` : ''
+}
+
+/**
+ * Whether a run worked on this project's repository. A run's record can be
+ * moved into any project of the org, so a project shows only the runs on its
+ * own code — their branch is what Files, Code and Publish read.
+ */
+export function ours(runRepo: string, projectClone: string): boolean {
+  if (!projectClone) return true
+  const want = address(projectClone).toLowerCase()
+  const have = runRepo.toLowerCase()
+  return have === want || (!have.includes('/') && have === want.split('/')[1])
+}

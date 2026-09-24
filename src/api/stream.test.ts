@@ -117,11 +117,19 @@ describe('who', () => {
 })
 
 describe('pull', () => {
-  it('draws a pull request on GitHub or the platform git, and nothing else', async () => {
+  it('draws a pull request in the same repository as the run, on GitHub or the platform git, and nothing else', async () => {
     const { pull } = await import('./turn.ts')
-    expect(pull('https://github.com/hanzo-inc/cloud/pull/42')).toEqual({ href: 'https://github.com/hanzo-inc/cloud/pull/42', label: '#42' })
-    expect(pull('https://git.hanzo.ai/hanzo/site/pulls/7')).toEqual({ href: 'https://git.hanzo.ai/hanzo/site/pulls/7', label: '#7' })
-    for (const bad of ['https://github.com.evil.example/a/b/pull/1', 'https://evil.example/a/b/pull/1', 'javascript:alert(1)', 'https://github.com/a/b/issues/1', 'http://github.com/a/b/pull/1'])
-      expect(pull(bad)).toEqual({ href: '', label: '' })
+    expect(pull('https://github.com/hanzo-inc/cloud/pull/42', 'hanzo-inc/cloud')).toEqual({ href: 'https://github.com/hanzo-inc/cloud/pull/42', label: '#42' })
+    expect(pull('https://git.hanzo.ai/hanzo/site/pulls/7', 'Hanzo/Site')).toEqual({ href: 'https://git.hanzo.ai/hanzo/site/pulls/7', label: '#7' })
+    for (const [bad, repo] of [
+      ['https://github.com/mallory/cloud/pull/1', 'hanzo-inc/cloud'],
+      ['https://github.com/hanzo-inc/cloud/pull/1', ''],
+      ['https://github.com.evil.example/a/b/pull/1', 'a/b'],
+      ['https://evil.example/a/b/pull/1', 'a/b'],
+      ['javascript:alert(1)', 'a/b'],
+      ['https://github.com/a/b/issues/1', 'a/b'],
+      ['http://github.com/a/b/pull/1', 'a/b'],
+    ])
+      expect(pull(bad, repo)).toEqual({ href: '', label: '' })
   })
 })

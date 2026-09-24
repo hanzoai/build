@@ -42,7 +42,7 @@ export function Run({ id }: { id: string }) {
   )
   const end = outcome(events)
   const state = status || end.status
-  const pr = pull(record?.pr ?? '')
+  const pr = pull(record?.pr ?? '', record?.repo ?? '')
   const running = LIVE.has(state) && !detail.error
 
   const send = async () => {
@@ -110,7 +110,7 @@ export function Run({ id }: { id: string }) {
         <YStack pb="$4" pt="$2" gap="$2">
           {end.problem ? (
             <SizableText size="$1" color="$soft">
-              The branch is pushed; the pull request could not be opened: {end.problem}
+              The branch is pushed, and the pull request could not be opened.
             </SizableText>
           ) : null}
           {note || refused ? (

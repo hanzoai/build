@@ -59,7 +59,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
-import { name as repoName, type Project as Row } from './api/projects.ts'
+import { name as repoName, ours, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
 import { outcome, pull, said, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
@@ -138,13 +138,16 @@ export function Project({ slug }: { slug: string }) {
   const all = useProjects(t, signed)
   const project: Row | null = all.value.find((p) => p.slug === slug) ?? null
 
-  const runs = useRead(signed ? () => list(t, { kind: 'coding', project: slug, limit: 50 }) : null, [] as Session[], [t, signed, slug])
-  const ordered = useMemo(() => [...runs.value].reverse(), [runs.value])
+  const listed = useRead(signed ? () => list(t, { kind: 'coding', project: slug, limit: 50 }) : null, [] as Session[], [t, signed, slug])
+  // Only the runs on this project's own repository: a record can be moved into
+  // any project, and a run's branch is what Files, Code and Publish read.
+  const runs = { ...listed, value: listed.value.filter((r) => ours(r.repo, project?.repo ?? '')) }
+  const ordered = useMemo(() => [...runs.value].reverse(), [listed.value, project?.repo])
   const [chosen, setChosen] = useState<string | null>(null)
   const current = chosen ?? runs.value[0]?.id ?? null
   const run = useRun(t, current)
   const end = outcome(run.events)
-  const pr = pull(run.record?.pr ?? '')
+  const pr = pull(run.record?.pr ?? '', run.record?.repo ?? '')
   const running = LIVE.has(run.status || end.status)
 
   const [view, setView] = useKept<ViewId>(`hanzo.build.view.${slug}`, 'preview')
@@ -224,12 +227,20 @@ export function Project({ slug }: { slug: string }) {
   )
 
   const onBridge = (e: FrameEvent) => {
-    if (e.type === 'preview:ready') setBridge(true)
+    if (e.type === 'preview:ready') {
+      setBridge(true)
+      // A new document starts closed to picking; open it again if the person had.
+      if (editing) frame.current?.post({ type: 'preview:editable', active: true })
+    }
     else if (e.type === 'preview:select')
       // The whole selector, as it will ride the next ask — never a shortened name
       // that hides what the page sent.
       setPicked([{ id: e.info.selector, kind: 'element', label: e.info.selector }])
-    else if (e.type === 'preview:navigate') setPage(e.path)
+    else if (e.type === 'preview:navigate' && project?.live) {
+      // Resolved on the live site's own origin, and kept as its path and query.
+      const to = new URL(e.path, project.live)
+      if (to.origin === new URL(project.live).origin) setPage(`${to.pathname}${to.search}`)
+    }
     else if (e.type === 'preview:console')
       setPageLines((was) => [...was.slice(-400), { id: `p${was.length}-${Date.now()}`, level: e.level, text: e.text, source: 'page' }])
   }
@@ -241,7 +252,12 @@ export function Project({ slug }: { slug: string }) {
     setBusy(true)
     setNote('')
     try {
-      const context = picked.length ? `\n\nAbout the element ${picked.map((p) => p.id).join(', ')} on ${page}.` : ''
+      // The page's own strings ride as quoted data, never as prose, and the page
+      // is named only when the person chose it from the picker.
+      const where = pages.find((p) => p.id === page)?.label
+      const context = picked.length
+        ? `\n\nThe person picked an element in the preview${where ? ` of the ${where} page` : ''}. Its CSS selector, as data: ${JSON.stringify(picked[0]!.id)}`
+        : ''
       const gh = project ? github(project.repo) : ''
       const next = await start(t, {
         prompt: compose(`${ask}${context}`, attached),
@@ -368,7 +384,7 @@ export function Project({ slug }: { slug: string }) {
           <Attach files={attached} onFiles={setAttached} onNote={setNote} />
           <XStack flex={1} />
           <ModeSelect modes={MODES} value={mode} onChange={(m) => setMode(m as Mode)} self="center" />
-          <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} />
+          <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} onNote={setNote} />
         </Composer>
       </YStack>
     </YStack>

@@ -307,3 +307,15 @@ describe('verdict', () => {
     await expect(verdict(T, 'sess_1', 'shop', 'down')).rejects.toThrow('not recorded')
   })
 })
+
+describe('ours', () => {
+  it('keeps a project to the runs on its own repository', async () => {
+    const { address, ours } = await import('./projects.ts')
+    expect(address('https://github.com/hanzo-inc/Cloud.git')).toBe('hanzo-inc/Cloud')
+    expect(address('http://hanzo-git.hanzo.svc/hanzoai/font')).toBe('hanzoai/font')
+    expect(ours('hanzo-inc/cloud', 'https://github.com/hanzo-inc/Cloud.git')).toBe(true)
+    expect(ours('font', 'http://hanzo-git.hanzo.svc/hanzoai/font')).toBe(true)
+    expect(ours('mallory/cloud', 'https://github.com/hanzo-inc/cloud.git')).toBe(false)
+    expect(ours('anything', '')).toBe(true)
+  })
+})

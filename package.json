@@ -23,6 +23,7 @@
     "@hanzo/iam": "catalog:",
     "@hanzo/ui": "catalog:",
     "@hanzo/vite": "catalog:",
+    "@hanzo/voice": "catalog:",
     "@hanzogui/lucide-icons-2": "catalog:",
     "@hanzogui/next-theme": "catalog:",
     "@types/node": "catalog:",
@@ -65,6 +66,7 @@
     "@hanzo/gui": ">=8.3.5",
     "@hanzo/ui": ">=8.27.16",
     "@hanzogui/lucide-icons-2": ">=8.3.5",
-    "react": ">=19.2.8"
+    "react": ">=19.2.8",
+    "@hanzo/voice": ">=0.1.8"
   }
 }

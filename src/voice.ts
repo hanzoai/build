@@ -1,83 +1,89 @@
 /**
- * Dictation into the draft, through the browser's own speech recognition.
+ * Dictation into the draft, heard by the platform.
  *
- * Where the browser has none, `able` is false and the control says so rather
- * than recording into nothing. Nothing is sent anywhere by this module; the
- * browser's recognizer is the one that listens.
+ * The microphone is recorded in this browser and the recording is transcribed
+ * by `POST /v1/audio/transcriptions` on the platform, through `@hanzo/voice` —
+ * never by a browser's built-in recognizer, which ships the audio to its
+ * vendor. Press to record, press again to stop; the words land in the draft.
+ * Where there is no microphone or no recorder, `able` is false and the control
+ * says so rather than recording into nothing.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { speech } from '@hanzo/voice'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-interface Recognizer {
-  lang: string
-  continuous: boolean
-  interimResults: boolean
-  onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null
-  onend: (() => void) | null
-  onerror: (() => void) | null
-  start: () => void
-  stop: () => void
-}
-
-type Maker = new () => Recognizer
-
-function maker(): Maker | null {
-  if (typeof window === 'undefined') return null
-  const w = window as unknown as { SpeechRecognition?: Maker; webkitSpeechRecognition?: Maker }
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
-}
+import type { Target } from './api/call.ts'
 
 export const LANGUAGES = [
-  { id: 'en-US', label: 'English (US)' },
-  { id: 'en-GB', label: 'English (UK)' },
-  { id: 'es-ES', label: 'Español' },
-  { id: 'fr-FR', label: 'Français' },
-  { id: 'de-DE', label: 'Deutsch' },
-  { id: 'ja-JP', label: '日本語' },
-  { id: 'zh-CN', label: '中文' },
+  { id: 'en', label: 'English' },
+  { id: 'es', label: 'Español' },
+  { id: 'fr', label: 'Français' },
+  { id: 'de', label: 'Deutsch' },
+  { id: 'ja', label: '日本語' },
+  { id: 'zh', label: '中文' },
 ]
 
-export function useDictation(onText: (text: string) => void) {
+/** Whether this browser can record the microphone at all. */
+function recordable(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  return typeof window.MediaRecorder === 'function' && Boolean(navigator.mediaDevices?.getUserMedia)
+}
+
+export function useDictation(t: Target, onText: (text: string) => void, onNote: (note: string) => void) {
   const [on, setOn] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [able, setAble] = useState(false)
-  const [language, setLanguage] = useState(() => (typeof navigator !== 'undefined' && navigator.language) || 'en-US')
-  const rec = useRef<Recognizer | null>(null)
+  const [language, setLanguage] = useState(() => {
+    const nav = typeof navigator !== 'undefined' ? navigator.language.split('-')[0] : 'en'
+    return LANGUAGES.some((l) => l.id === nav) ? nav! : 'en'
+  })
+  const rec = useRef<MediaRecorder | null>(null)
   const said = useRef(onText)
   said.current = onText
+  const note = useRef(onNote)
+  note.current = onNote
+  const ear = useMemo(() => speech({ baseUrl: t.api, token: t.token, ear: 'whisper' }), [t])
 
-  useEffect(() => setAble(Boolean(maker())), [])
+  useEffect(() => setAble(recordable()), [])
 
-  const toggle = useCallback(() => {
+  const toggle = useCallback(async () => {
     if (rec.current) {
       rec.current.stop()
       return
     }
-    const Make = maker()
-    if (!Make) return
-    const r = new Make()
-    r.lang = language
-    r.continuous = true
-    r.interimResults = false
-    r.onresult = (e) => {
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const res = e.results[i]
-        if (res?.isFinal) {
-          const text = res[0].transcript.trim()
-          if (text) said.current(text)
-        }
-      }
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+    } catch {
+      note.current('The microphone is not available to this page.')
+      return
     }
-    r.onend = () => {
+    const chunks: Blob[] = []
+    const r = new MediaRecorder(stream)
+    r.ondataavailable = (e) => {
+      if (e.data.size) chunks.push(e.data)
+    }
+    r.onstop = () => {
       rec.current = null
       setOn(false)
+      for (const track of stream.getTracks()) track.stop()
+      const audio = new Blob(chunks, { type: r.mimeType || 'audio/webm' })
+      if (!audio.size) return
+      setBusy(true)
+      ear
+        .transcribe(audio, { language })
+        .then((text) => {
+          const words = text.trim()
+          if (words) said.current(words)
+        })
+        .catch((e: unknown) => note.current(e instanceof Error ? e.message : 'The platform could not transcribe that.'))
+        .finally(() => setBusy(false))
     }
-    r.onerror = () => r.stop()
     rec.current = r
     r.start()
     setOn(true)
-  }, [language])
+  }, [ear, language])
 
   useEffect(() => () => rec.current?.stop(), [])
 
-  const languages = LANGUAGES.some((l) => l.id === language) ? LANGUAGES : [{ id: language, label: language }, ...LANGUAGES]
-  return { on, able, toggle, language, setLanguage, languages }
+  return { on, busy, able, toggle, language, setLanguage, languages: LANGUAGES }
 }

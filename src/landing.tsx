@@ -199,7 +199,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     // Wraps at phone width rather than clipping: every control stays reachable.
     <XStack flex={1} items="center" gap="$2" flexWrap="wrap" rowGap="$1">
       <Attach files={files} onFiles={setFiles} onNote={setNote} />
-      <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} />
+      <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} onNote={setNote} />
       <ModeSelect
         modes={MODES}
         value={kept.mode}
