@@ -48,8 +48,7 @@ function Card({ onPress, label, children }: { onPress: () => void; label: string
       overflow="hidden"
       cursor="pointer"
       hoverStyle={{ borderColor: '$edge', bg: '$hover' }}
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$ring' }}
-      text="left"
+      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
     >
       {children}
     </YStack>

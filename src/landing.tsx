@@ -155,7 +155,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   const placeItems = useMemo(
     () =>
-      places.value.map((p) => ({
+      (places.value.length ? places.value : [SANDBOX]).map((p) => ({
         id: p.id || 'sandbox',
         label: p.label,
         hint: p.id ? [p.status, p.capacity].filter(Boolean).join(' · ') : 'The platform’s own sandbox',
@@ -170,11 +170,11 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const head = (
     <XStack gap={6} items="center" flexWrap="wrap">
       <ChipSelect
-        label="Where the run runs"
+        name="Where the run runs"
         icon={place.id ? <Monitor size={13} /> : <Cloud size={13} />}
-        name={place.id ? place.label : 'Default'}
+        label={place.id ? place.label : 'Default'}
         chosen={placeItems.find((i) => i.place.id === place.id) ?? null}
-        items={placeItems.length ? placeItems : [{ id: 'sandbox', label: SANDBOX.label, place: SANDBOX }]}
+        items={placeItems}
         onChange={(i) => set({ place: i.place.id })}
         placeholder="Search machines…"
         loading={places.loading}
@@ -261,7 +261,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   )
 
   const foot = (
-    <XStack items="center" gap="$2" px="$2">
+    <XStack flex={1} items="center" gap="$2">
       <XStack
         render="button"
         aria-label="Attach files"
@@ -288,21 +288,21 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         </Button>
         <ChipSelect
           quiet
-          label="Dictation language"
+          name="Dictation language"
           icon={<ChevronDown size={12} />}
-          name=""
+          label=""
           chosen={voice.languages.find((l) => l.id === voice.language) ?? null}
           items={voice.languages}
           onChange={(l) => voice.setLanguage(l.id)}
           placeholder="Search languages…"
         />
       </XStack>
-      <ModeSelect modes={MODES} value={kept.mode} onChange={(m) => set({ mode: m as Mode })} />
+      <ModeSelect modes={MODES} value={kept.mode} onChange={(m) => set({ mode: m as Mode })} bg="transparent" minH={24} px="$1.5" self="center" />
       <XStack flex={1} />
       <ChipSelect
         quiet
-        label="Model"
-        name={catalog.value.find((m) => m.id === kept.model)?.label ?? 'Enso'}
+        name="Model"
+        label={catalog.value.find((m) => m.id === kept.model)?.label ?? 'Enso'}
         chosen={catalog.value.find((m) => m.id === kept.model) ?? null}
         items={catalog.value}
         onChange={(m) => set({ model: m.id })}
@@ -313,8 +313,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       />
       <ChipSelect
         quiet
-        label="Effort"
-        name={EFFORTS.find((e) => e.id === kept.effort)?.label ?? 'Medium'}
+        name="Effort"
+        label={EFFORTS.find((e) => e.id === kept.effort)?.label ?? 'Medium'}
         chosen={EFFORTS.find((e) => e.id === kept.effort) ?? null}
         items={EFFORTS}
         onChange={(e) => set({ effort: e.id })}

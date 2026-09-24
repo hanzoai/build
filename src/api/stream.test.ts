@@ -113,5 +113,6 @@ describe('who', () => {
     const { who } = await import('./turn.ts')
     expect(who('hanzo/2d4d67ab-30f1-474e-b81f-f60461852259')).toBe('hanzo/2d4d67ab')
     expect(who('agent')).toBe('agent')
+    expect(who('2d4d67ab-30f1-474e-b81f-f60461852259')).toBe('2d4d67ab')
   })
 })

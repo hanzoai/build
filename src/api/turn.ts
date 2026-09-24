@@ -121,7 +121,8 @@ export function merge<T extends Pick<Event, 'id' | 'seq'>>(...lists: T[][]): T[]
 
 /** The actor, short enough to label a block: `hanzo/2d4d67ab`, not the whole subject. */
 export function who(actor: string): string {
-  const [org = '', rest = ''] = actor.split('/')
-  const head = rest.split('-')[0] ?? ''
-  return head ? `${org}/${head}` : actor
+  const cut = actor.indexOf('/')
+  if (cut === -1) return actor.split('-')[0] || actor
+  const head = actor.slice(cut + 1).split('-')[0] ?? ''
+  return head ? `${actor.slice(0, cut)}/${head}` : actor
 }
