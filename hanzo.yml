@@ -30,4 +30,6 @@ test:
 site:
   slug: build
   dir: dist
+  # The publish job is a fresh checkout: without a build line it has no dist.
+  build: corepack enable && pnpm install --frozen-lockfile && pnpm build
   on: [main]
