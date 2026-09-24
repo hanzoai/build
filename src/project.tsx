@@ -68,6 +68,7 @@ import { useHost, useTarget } from './host.tsx'
 import { MODES } from './landing.tsx'
 import { Out } from './out.tsx'
 import { Publish, type Source } from './publish.tsx'
+import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
 
 type ViewId = 'preview' | 'files' | 'code' | 'layers'
 
@@ -157,6 +158,7 @@ export function Project({ slug }: { slug: string }) {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [picked, setPicked] = useState<Attachment[]>([])
+  const [attached, setAttached] = useState<Attached[]>([])
   const [bridge, setBridge] = useState(false)
   const [editing, setEditing] = useState(false)
   const [pageLines, setPageLines] = useState<Line[]>([])
@@ -239,7 +241,7 @@ export function Project({ slug }: { slug: string }) {
       const context = picked.length ? `\n\nAbout the element ${picked.map((p) => p.id).join(', ')} on ${page}.` : ''
       const gh = project ? github(project.repo) : ''
       const next = await start(t, {
-        prompt: `${ask}${context}`,
+        prompt: compose(`${ask}${context}`, attached),
         project: slug,
         repo: gh || undefined,
         base: gh ? project?.branch || undefined : undefined,
@@ -248,6 +250,7 @@ export function Project({ slug }: { slug: string }) {
       })
       setDraft('')
       setPicked([])
+      setAttached([])
       setChosen(next.session)
       runs.reload()
     } catch (e) {
@@ -344,6 +347,11 @@ export function Project({ slug }: { slug: string }) {
           </SizableText>
         ) : null}
         {picked.length ? <Attachments items={picked} onRemove={() => setPicked([])} /> : null}
+        {attached.length ? (
+          <XStack gap={6} flexWrap="wrap">
+            <Files files={attached} onFiles={setAttached} />
+          </XStack>
+        ) : null}
         <Composer
           value={draft}
           onChange={setDraft}
@@ -354,7 +362,10 @@ export function Project({ slug }: { slug: string }) {
           placeholder={running ? 'Steer this run' : 'Ask Hanzo for edits'}
           label="Ask Hanzo for edits"
         >
-          <ModeSelect modes={MODES} value={mode} onChange={(m) => setMode(m as Mode)} />
+          <Attach files={attached} onFiles={setAttached} onNote={setNote} />
+          <XStack flex={1} />
+          <ModeSelect modes={MODES} value={mode} onChange={(m) => setMode(m as Mode)} self="center" />
+          <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} />
         </Composer>
       </YStack>
     </YStack>

@@ -8,12 +8,12 @@
  * kept in this browser, per org, so the next New starts where the last one did.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ChevronDown, Cloud, Mic, MicOff, Monitor, Paperclip, Plus, X } from '@hanzogui/lucide-icons-2'
-import { ModeSelect } from '@hanzo/ui/agents'
+import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
+import { ModeSelect } from '@hanzo/ui/agents'
 import { Composer, EmptyPrompt } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { start, type Mode } from './api/coding.ts'
 import { branches, connect, repos } from './api/github.ts'
@@ -23,8 +23,9 @@ import { clone } from './api/platform.ts'
 import { useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { Publish, type Source } from './publish.tsx'
-import { useDictation } from './voice.ts'
+import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
 
+/** One vocabulary for the mode, on New and in a workspace. */
 export const MODES = [
   { id: 'build', label: 'Build', hint: 'Edits, commits and pushes a branch' },
   { id: 'plan', label: 'Plan', hint: 'Plans the change and writes nothing' },
@@ -48,21 +49,6 @@ interface Kept {
 
 const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', model: ENSO, effort: 'medium' }
 
-/** Attached files ride the prompt as text; nothing is uploaded anywhere else. */
-interface Attached {
-  name: string
-  text: string
-}
-
-const EACH = 100_000
-const ALL = 200_000
-
-function compose(prompt: string, files: Attached[]): string {
-  if (!files.length) return prompt
-  const blocks = files.map((f) => `\n\n\`${f.name}\`:\n\`\`\`\n${f.text}\n\`\`\``).join('')
-  return `${prompt}${blocks}`
-}
-
 const COLUMN = 768
 
 export function Landing({ onStarted }: { onStarted: (session: string) => void }) {
@@ -78,13 +64,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [note, setNote] = useState('')
   const [connected, setConnected] = useState(true)
   const [adding, setAdding] = useState<Source | null>(null)
-  const picker = useRef<HTMLInputElement | null>(null)
 
   const places = usePlaces(t, signed)
   const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
   const place: Place = places.value.find((p) => p.id === kept.place) ?? SANDBOX
-
-  const voice = useDictation((said) => setDraft((d) => (d ? `${d} ${said}` : said)))
 
   const loadRepos = useCallback(
     async (q: string, after?: string | null) => {
@@ -104,24 +87,20 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     [t, kept.repo],
   )
 
-  const attach = async (list: FileList | null) => {
-    if (!list) return
-    const next = [...files]
-    let total = next.reduce((n, f) => n + f.text.length, 0)
-    for (const file of Array.from(list)) {
-      if (file.size > EACH) {
-        setNote(`${file.name} is over 100 KB; attach a smaller file or point the run at the repository.`)
-        continue
+  const link = async () => {
+    try {
+      const to = await connect(t)
+      // The console completes the connection at /connectors and brings the
+      // person back here: a path, never an origin.
+      try {
+        window.sessionStorage.setItem('hanzo.return', window.location.pathname + window.location.search)
+      } catch {
+        /* they land on the connectors page and come back themselves */
       }
-      const text = await file.text()
-      if (total + text.length > ALL) {
-        setNote('Attachments are capped at 200 KB in all.')
-        break
-      }
-      total += text.length
-      next.push({ name: file.name, text })
+      window.location.assign(to)
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Could not start the GitHub connection')
     }
-    setFiles(next)
   }
 
   const send = async () => {
@@ -193,36 +172,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         note="Not all repositories are shown. Type to search."
         connect={
           !connected && !host.admin ? (
-            <XStack
-              render="button"
-              onPress={async () => {
-                try {
-                  const to = await connect(t)
-                  // The console completes the connection at /connectors and
-                  // brings the person back here; a path, never an origin.
-                  try {
-                    window.sessionStorage.setItem('hanzo.return', window.location.pathname + window.location.search)
-                  } catch {
-                    /* they land on the connectors page and come back themselves */
-                  }
-                  window.location.assign(to)
-                } catch (e) {
-                  setNote(e instanceof Error ? e.message : 'Could not start the GitHub connection')
-                }
-              }}
-              items="center"
-              justify="center"
-              gap="$1.5"
-              px="$3"
-              py="$2"
-              rounded="$3"
-              bg="$color"
-              hoverStyle={{ opacity: 0.9 }}
-            >
-              <SizableText size="$2" color="$background">
-                Connect GitHub
-              </SizableText>
-            </XStack>
+            <Button size="sm" onPress={() => void link()}>
+              Connect GitHub
+            </Button>
           ) : undefined
         }
         action={{
@@ -238,66 +190,24 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         placeholder="Repository"
         disabled={!signed}
       />
-      {kept.repo ? (
-        <BranchSelect value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} />
-      ) : null}
-      {files.map((f) => (
-        <XStack key={f.name} items="center" gap="$1" px="$2" height={24} rounded="$2" bg="$raised">
-          <Paperclip size={12} />
-          <SizableText size="$1" color="$ink" numberOfLines={1} maxW={140}>
-            {f.name}
-          </SizableText>
-          <XStack
-            render="button"
-            aria-label={`Remove ${f.name}`}
-            onPress={() => setFiles(files.filter((x) => x !== f))}
-            hitSlop={10}
-          >
-            <X size={12} />
-          </XStack>
-        </XStack>
-      ))}
+      {kept.repo ? <BranchSelect value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} /> : null}
+      <Files files={files} onFiles={setFiles} />
     </XStack>
   )
 
   const foot = (
     <XStack flex={1} items="center" gap="$2">
-      <XStack
-        render="button"
-        aria-label="Attach files"
-        onPress={() => picker.current?.click()}
-        hitSlop={8}
-        p="$1"
-        rounded="$2"
-        hoverStyle={{ bg: '$hover' }}
-      >
-        <Plus size={14} />
-      </XStack>
-      <input ref={picker} type="file" multiple hidden onChange={(e) => void attach(e.currentTarget.files).then(() => (e.currentTarget.value = ''))} />
-      <XStack items="center">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={voice.on ? 'Stop dictation' : 'Dictate'}
-          aria-pressed={voice.on}
-          disabled={!voice.able}
-          onPress={voice.toggle}
-          title={voice.able ? undefined : 'Dictation is not available in this browser'}
-        >
-          {voice.on ? <MicOff size={14} /> : <Mic size={14} />}
-        </Button>
-        <ChipSelect
-          quiet
-          name="Dictation language"
-          icon={<ChevronDown size={12} />}
-          label=""
-          chosen={voice.languages.find((l) => l.id === voice.language) ?? null}
-          items={voice.languages}
-          onChange={(l) => voice.setLanguage(l.id)}
-          placeholder="Search languages…"
-        />
-      </XStack>
-      <ModeSelect modes={MODES} value={kept.mode} onChange={(m) => set({ mode: m as Mode })} bg="transparent" minH={24} px="$1.5" self="center" />
+      <Attach files={files} onFiles={setFiles} onNote={setNote} />
+      <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} />
+      <ModeSelect
+        modes={MODES}
+        value={kept.mode}
+        onChange={(m) => set({ mode: m as Mode })}
+        bg="transparent"
+        minH={24}
+        px="$1.5"
+        self="center"
+      />
       <XStack flex={1} />
       <ChipSelect
         quiet
