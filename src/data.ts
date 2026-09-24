@@ -136,6 +136,12 @@ export function useKept<T>(key: string, initial: T): [T, (v: T) => void] {
 
 export interface RunState {
   detail: Read<Detail | null>
+  /**
+   * The run's record, as last read or pushed: status, branch, pull request.
+   * The coding service writes it; events are the narration, and any member of
+   * the org can append one, so a link or a branch is never taken from them.
+   */
+  record: Session | null
   /** Every turn, recorded and live, in order. */
   events: Event[]
   /** The run's status as last reported by the record or the feed. */
@@ -152,14 +158,14 @@ export interface RunState {
 export function useRun(t: Target, id: string | null): RunState {
   const detail = useRead<Detail | null>(id ? () => get(t, id) : null, null, [t, id])
   const [live, setLive] = useState<Event[]>([])
-  const [status, setStatus] = useState('')
+  const [pushed, setPushed] = useState<Session | null>(null)
   const [refused, setRefused] = useState('')
   const reload = useRef(detail.reload)
   reload.current = detail.reload
 
   useEffect(() => {
     setLive([])
-    setStatus('')
+    setPushed(null)
     setRefused('')
     if (!id) return
     const ctl = new AbortController()
@@ -171,7 +177,7 @@ export function useRun(t: Target, id: string | null): RunState {
           if (e.sessionId === id) setLive((prev) => [...prev, e])
         },
         session: (s) => {
-          if (s.id === id) setStatus(s.status)
+          if (s.id === id) setPushed(s)
         },
         open: (n) => {
           if (n > 0) reload.current()
@@ -183,5 +189,18 @@ export function useRun(t: Target, id: string | null): RunState {
   }, [t, id])
 
   const events = useMemo(() => merge(detail.value?.recent ?? [], live), [detail.value, live])
-  return { detail, events, status: status || detail.value?.status || '', refused }
+  // A frame newer than the read wins; the read fills what a frame left empty.
+  const record = useMemo((): Session | null => {
+    const base = detail.value
+    if (!pushed) return base
+    if (!base) return pushed
+    return {
+      ...base,
+      ...pushed,
+      title: pushed.title || base.title,
+      branch: pushed.branch || base.branch,
+      pr: pushed.pr || base.pr,
+    }
+  }, [detail.value, pushed])
+  return { detail, record, events, status: record?.status ?? '', refused }
 }

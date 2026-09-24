@@ -140,11 +140,11 @@ describe('github', () => {
 
 describe('coding', () => {
   it('sends only what was asked', () => {
-    expect(coding.body({ prompt: ' fix it ', repo: 'hanzo-inc/cloud', base: 'main', targetId: '', mode: 'plan' })).toEqual({
+    expect(coding.body({ prompt: ' fix it ', repo: 'hanzo-inc/cloud', base: 'main', targetId: '', mode: 'build' })).toEqual({
       prompt: 'fix it',
       repo: 'hanzo-inc/cloud',
       base: 'main',
-      mode: 'plan',
+      mode: 'build',
     })
   })
 
@@ -153,6 +153,14 @@ describe('coding', () => {
     const run = await coding.start(T, { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main' })
     expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/coding', body: { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main' } })
     expect(run).toEqual({ session: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', project: 'cloud', routed: false, target: '' })
+  })
+
+  it('refuses a plan ask the platform would run as a build, before sending', async () => {
+    const seen = answer(202, { sessionId: 'sess_1' })
+    await expect(coding.start(T, { prompt: 'what would it take', mode: 'plan' })).rejects.toMatchObject({ status: 400 })
+    expect(seen).toHaveLength(0)
+    expect(coding.unhonoured('build')).toBe('')
+    expect(coding.unhonoured(undefined)).toBe('')
   })
 
   it('refuses an admitted run with no session, and an empty ask before sending', async () => {
@@ -199,7 +207,8 @@ describe('places, projects, git, platform', () => {
 
   it('frames only an https (or loopback) address', () => {
     expect(safe('https://chat2.hanzo.app')).toBe('https://chat2.hanzo.app/')
-    expect(safe('http://localhost:3000/x')).toBe('http://localhost:3000/x')
+    expect(safe('http://localhost:3000/x', true)).toBe('http://localhost:3000/x')
+    expect(safe('http://localhost:3000/x', false)).toBe('')
     expect(safe('javascript:alert(1)')).toBe('')
     expect(safe('http://evil.example')).toBe('')
     expect(project({ slug: 'a', liveUrl: 'data:text/html,x', repo: { url: 'http://hanzo-git.hanzo.svc/hanzoai/font.git', branch: 'main' } })).toMatchObject({ live: '', repo: 'http://hanzo-git.hanzo.svc/hanzoai/font.git', branch: 'main' })

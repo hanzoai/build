@@ -92,13 +92,12 @@ describe('turns', () => {
     expect(said({ kind: 'log', payload: { host: 'box', cwd: '/secret' } })).toBe('')
   })
 
-  it('reads the pull request off the last status, https only', () => {
+  it('reads how the run ended off its narration, and never a link or a branch', () => {
     const o = outcome([
-      { seq: 2, kind: 'status', payload: { status: 'done', branch: 'agent/sess_1', pr: '#42', url: 'https://github.com/hanzo-inc/cloud/pull/42' } },
+      { seq: 2, kind: 'status', payload: { status: 'done', branch: 'attacker', url: 'https://evil.example/pr', prError: 'no token' } },
       { seq: 1, kind: 'status', payload: { status: 'started', branch: 'agent/sess_1' } },
     ])
-    expect(o).toEqual({ status: 'done', branch: 'agent/sess_1', pr: 'https://github.com/hanzo-inc/cloud/pull/42', label: '#42', problem: '' })
-    expect(outcome([{ seq: 1, kind: 'status', payload: { status: 'done', url: 'javascript:alert(1)' } }]).pr).toBe('')
+    expect(o).toEqual({ status: 'done', problem: 'no token' })
   })
 
   it('merges a read and a feed without doubling a turn', () => {
@@ -114,5 +113,15 @@ describe('who', () => {
     expect(who('hanzo/2d4d67ab-30f1-474e-b81f-f60461852259')).toBe('hanzo/2d4d67ab')
     expect(who('agent')).toBe('agent')
     expect(who('2d4d67ab-30f1-474e-b81f-f60461852259')).toBe('2d4d67ab')
+  })
+})
+
+describe('pull', () => {
+  it('draws a pull request on GitHub or the platform git, and nothing else', async () => {
+    const { pull } = await import('./turn.ts')
+    expect(pull('https://github.com/hanzo-inc/cloud/pull/42')).toEqual({ href: 'https://github.com/hanzo-inc/cloud/pull/42', label: '#42' })
+    expect(pull('https://git.hanzo.ai/hanzo/site/pulls/7')).toEqual({ href: 'https://git.hanzo.ai/hanzo/site/pulls/7', label: '#7' })
+    for (const bad of ['https://github.com.evil.example/a/b/pull/1', 'https://evil.example/a/b/pull/1', 'javascript:alert(1)', 'https://github.com/a/b/issues/1', 'http://github.com/a/b/pull/1'])
+      expect(pull(bad)).toEqual({ href: '', label: '' })
   })
 })

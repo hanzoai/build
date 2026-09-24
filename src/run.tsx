@@ -17,7 +17,7 @@ import { Composer } from '@hanzo/ui/chat'
 import { useMemo, useState } from 'react'
 
 import { message, stop } from './api/sessions.ts'
-import { outcome, said, who } from './api/turn.ts'
+import { outcome, pull, said, who } from './api/turn.ts'
 import { useRun } from './data.ts'
 import { useTarget } from './host.tsx'
 import { Out } from './out.tsx'
@@ -26,7 +26,7 @@ const LIVE = new Set(['running', 'paused', ''])
 
 export function Run({ id }: { id: string }) {
   const t = useTarget()
-  const { detail, events, status, refused } = useRun(t, id)
+  const { detail, record, events, status, refused } = useRun(t, id)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -42,6 +42,7 @@ export function Run({ id }: { id: string }) {
   )
   const end = outcome(events)
   const state = status || end.status
+  const pr = pull(record?.pr ?? '')
   const running = LIVE.has(state) && !detail.error
 
   const send = async () => {
@@ -80,16 +81,16 @@ export function Run({ id }: { id: string }) {
               {title}
             </SizableText>
             <SizableText size="$1" color="$soft" numberOfLines={1}>
-              {[state || (detail.loading ? 'reading' : ''), detail.value?.repo, end.branch].filter(Boolean).join(' · ')}
+              {[state || (detail.loading ? 'reading' : ''), record?.repo, record?.branch].filter(Boolean).join(' · ')}
             </SizableText>
           </YStack>
-          {end.pr ? (
-            // A platform-issued https address; turn.ts refuses anything else.
-            <Out href={end.pr} label={`Open pull request ${end.label}`.trim()}>
+          {pr.href ? (
+            // From the run's record, which the coding service writes; `pull` draws only a pull request address.
+            <Out href={pr.href} label={`Open pull request ${pr.label}`}>
               <XStack items="center" gap="$1.5" px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
                 <GitPullRequest size={14} />
                 <SizableText size="$2" color="$ink">
-                  {end.label || 'Pull request'}
+                  {pr.label}
                 </SizableText>
                 <ExternalLink size={12} opacity={0.6} />
               </XStack>

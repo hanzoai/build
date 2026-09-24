@@ -15,7 +15,7 @@ import { Composer, EmptyPrompt } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useCallback, useMemo, useState } from 'react'
 
-import { start, type Mode } from './api/coding.ts'
+import { start, unhonoured, type Mode } from './api/coding.ts'
 import { branches, connect, repos } from './api/github.ts'
 import { ENSO, models } from './api/models.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
@@ -241,9 +241,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         <EmptyPrompt title="What’s up next?" mark={<HanzoMark size={18} />} column={COLUMN} />
         <YStack flex={1} />
         <YStack pb="$2" gap="$2">
-          {note ? (
+          {note || unhonoured(kept.mode) ? (
             <SizableText size="$1" color="$soft" role="status">
-              {note}
+              {note || unhonoured(kept.mode)}
             </SizableText>
           ) : null}
           <Composer

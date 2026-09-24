@@ -23,12 +23,19 @@ export interface Project {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
-/** An address the preview may frame: https, or http on a loopback host for local work. */
-export function safe(url: string): string {
+const loopback = (host: string): boolean => host === 'localhost' || host === '127.0.0.1'
+
+/** Whether this page itself is served from loopback — local work. */
+const here = (): boolean => typeof window !== 'undefined' && loopback(window.location.hostname)
+
+/** An address the preview may frame: https, or http on loopback when the builder is local too. */
+export function safe(url: string, local = here()): string {
   try {
     const u = new URL(url)
     if (u.protocol === 'https:') return u.toString()
-    if (u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) return u.toString()
+    // Loopback only for a builder that is itself on loopback: a published row
+    // must not point colleagues' browsers at their own local services.
+    if (local && u.protocol === 'http:' && loopback(u.hostname)) return u.toString()
   } catch {
     /* not an address */
   }

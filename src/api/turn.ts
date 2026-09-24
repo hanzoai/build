@@ -84,29 +84,23 @@ export function said(e: Pick<Event, 'kind' | 'payload'>): string {
 }
 
 export interface Outcome {
-  /** The last lifecycle status the run reported, or ''. */
+  /** The last lifecycle status the run narrated, or ''. */
   status: string
-  branch: string
-  /** The pull request's https address, or ''. */
-  pr: string
-  /** The pull request's identifier ("#42", "hanzo/cloud#42"), or ''. */
-  label: string
-  /** Why the pull request could not be opened, or ''. */
+  /** Why the pull request could not be opened, as narrated, or ''. */
   problem: string
 }
 
-/** What the run has come to, read from its status events, latest winning. */
+/**
+ * What the run narrated about how it ended, latest winning. Status text only:
+ * the branch and the pull request are read from the run's record (`pull`).
+ */
 export function outcome(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): Outcome {
-  const out: Outcome = { status: '', branch: '', pr: '', label: '', problem: '' }
+  const out: Outcome = { status: '', problem: '' }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     if (e.kind !== 'status') continue
     const b = decode(e.payload)
     if (!b || typeof b === 'string') continue
     out.status = str(b.status) || out.status
-    out.branch = str(b.branch) || out.branch
-    const url = str(b.url)
-    if (/^https:\/\/[^\s]+$/.test(url)) out.pr = url
-    out.label = str(b.pr) || out.label
     out.problem = str(b.prError) || out.problem
   }
   return out
@@ -125,4 +119,15 @@ export function who(actor: string): string {
   if (cut === -1) return actor.split('-')[0] || actor
   const head = actor.slice(cut + 1).split('-')[0] ?? ''
   return head ? `${actor.slice(0, cut)}/${head}` : actor
+}
+
+/**
+ * A pull request address the builder will draw as a link: https, on GitHub or
+ * the platform's own git, and shaped like a pull request. Anything else is ''.
+ * Read from the run's RECORD, which the coding service writes — never from an
+ * event, which any member of the org can append.
+ */
+export function pull(url: string): { href: string; label: string } {
+  const m = /^https:\/\/(github\.com|git\.hanzo\.ai)\/[\w.-]+\/[\w.-]+\/pulls?\/(\d+)\/?$/.exec(url)
+  return m ? { href: url, label: `#${m[2]}` } : { href: '', label: '' }
 }

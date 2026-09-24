@@ -57,11 +57,11 @@ import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { start, type Mode } from './api/coding.ts'
+import { start, unhonoured, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
 import { name as repoName, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
-import { outcome, said, who } from './api/turn.ts'
+import { outcome, pull, said, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
@@ -144,6 +144,7 @@ export function Project({ slug }: { slug: string }) {
   const current = chosen ?? runs.value[0]?.id ?? null
   const run = useRun(t, current)
   const end = outcome(run.events)
+  const pr = pull(run.record?.pr ?? '')
   const running = LIVE.has(run.status || end.status)
 
   const [view, setView] = useKept<ViewId>(`hanzo.build.view.${slug}`, 'preview')
@@ -169,7 +170,7 @@ export function Project({ slug }: { slug: string }) {
 
   // Files and Code: native git, at the branch the open run pushed (or the project's own).
   const repo = project?.repo ? repoName(project.repo) : ''
-  const ref = end.branch || project?.branch || 'main'
+  const ref = run.record?.branch || project?.branch || 'main'
   const [files, setFiles] = useState<OpenFile[]>([])
   const [file, setFile] = useState<string | null>(null)
   useEffect(() => {
@@ -225,7 +226,9 @@ export function Project({ slug }: { slug: string }) {
   const onBridge = (e: FrameEvent) => {
     if (e.type === 'preview:ready') setBridge(true)
     else if (e.type === 'preview:select')
-      setPicked([{ id: e.info.selector, kind: 'element', label: `${e.info.tag}${e.info.id ? `#${e.info.id}` : ''}` }])
+      // The whole selector, as it will ride the next ask — never a shortened name
+      // that hides what the page sent.
+      setPicked([{ id: e.info.selector, kind: 'element', label: e.info.selector }])
     else if (e.type === 'preview:navigate') setPage(e.path)
     else if (e.type === 'preview:console')
       setPageLines((was) => [...was.slice(-400), { id: `p${was.length}-${Date.now()}`, level: e.level, text: e.text, source: 'page' }])
@@ -325,10 +328,10 @@ export function Project({ slug }: { slug: string }) {
                       {b.text}
                     </SizableText>
                   ))}
-                  {end.pr ? (
-                    <Out href={end.pr}>
+                  {pr.href ? (
+                    <Out href={pr.href} label={`Open pull request ${pr.label}`}>
                       <SizableText size="$1" color="$ink" textDecorationLine="underline">
-                        {end.label || 'Pull request'}
+                        Pull request {pr.label}
                       </SizableText>
                       <ExternalLink size={11} />
                     </Out>
@@ -341,9 +344,9 @@ export function Project({ slug }: { slug: string }) {
       </YStack>
       <YStack px="$3" pb="$3" gap="$2">
         {!dismissed && !running ? <Suggestions items={SUGGESTIONS} onPick={(s) => void send(s)} onDismiss={() => setDismissed(true)} /> : null}
-        {note ? (
+        {note || unhonoured(mode) ? (
           <SizableText size="$1" color="$soft" role="status">
-            {note}
+            {note || unhonoured(mode)}
           </SizableText>
         ) : null}
         {picked.length ? <Attachments items={picked} onRemove={() => setPicked([])} /> : null}

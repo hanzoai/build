@@ -25,6 +25,16 @@ export interface Session {
   repo: string
   project: string
   target: string
+  /** What sort of run: 'coding' for a coding run. */
+  kind: string
+  /** The branch the run started from, or ''. */
+  base: string
+  /** The branch the run pushes to — the only one it may write. */
+  branch: string
+  /** 'sandbox', or the id of the org's machine it runs on. */
+  environment: string
+  /** The pull request the run proposed, or ''. */
+  pr: string
   events: number
   createdAt: string
   updatedAt: string
@@ -61,6 +71,11 @@ export function session(raw: unknown): Session {
     repo: str(s.repo),
     project: str(s.project),
     target: str(s.target),
+    kind: str(s.kind),
+    base: str(s.base),
+    branch: str(s.branch),
+    environment: str(s.environment),
+    pr: str(s.pr),
     events: num(s.events),
     createdAt: str(s.createdAt),
     updatedAt: str(s.updatedAt),

@@ -19,6 +19,20 @@ import { call, Refusal, type Target } from './call.ts'
 
 export type Mode = 'build' | 'plan'
 
+/**
+ * The modes the platform honours today. `CodingStartIn` takes no `mode` yet, so
+ * a plan run would edit, commit and push like any other — on a machine, with
+ * that machine's credentials. Until the platform takes `plan`, a plan ask is
+ * refused here rather than sent to become a build.
+ */
+export const HONOURED: readonly Mode[] = ['build']
+
+/** Why a mode cannot be asked for yet, or '' when it can. */
+export const unhonoured = (mode: Mode | undefined): string =>
+  mode && !HONOURED.includes(mode)
+    ? 'Plan needs the platform’s plan mode, which the coding API does not take yet — this ask would build. Switch to Build, or wait for Plan.'
+    : ''
+
 export interface Ask {
   /** The task, in the words you would use with a colleague. */
   prompt: string
@@ -58,6 +72,8 @@ export function body(ask: Ask): Record<string, string> {
 
 export async function start(t: Target, ask: Ask): Promise<Run> {
   if (!ask.prompt.trim()) throw new Refusal(400, 'Say what the run should do')
+  const why = unhonoured(ask.mode)
+  if (why) throw new Refusal(400, why)
   const r = await call<Partial<Record<string, unknown>>>(t, 'POST', '/v1/agent/coding', body(ask))
   const s = (k: string) => (typeof r?.[k] === 'string' ? (r[k] as string) : '')
   if (!s('sessionId')) throw new Refusal(502, 'The run was admitted but named no session')
