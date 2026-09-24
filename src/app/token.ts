@@ -134,12 +134,16 @@ export function org(): string | null {
   }
 }
 
-/** The headers that scope a request to the signed-in person and their org. */
-export function scope(): Record<string, string> {
-  const h: Record<string, string> = {}
-  const t = bearer()
-  if (t) h.Authorization = `Bearer ${t}`
-  const o = org()
-  if (o) h['X-Org-Id'] = o
-  return h
+/**
+ * Whether the token says this person administers `o`. Org admin, read off the
+ * token's own `orgs` claim — never the reserved `admin` org, which is platform
+ * authority and not what a builder decides anything by. The platform enforces
+ * it again; this only decides which publish path is offered.
+ */
+export function administers(o: string | null): boolean {
+  if (!o) return false
+  const set = claims()?.orgs
+  return (Array.isArray(set) ? set : []).some(
+    (r) => (r as { org?: unknown; role?: unknown } | null)?.org === o && (r as { role?: unknown }).role === 'admin',
+  )
 }

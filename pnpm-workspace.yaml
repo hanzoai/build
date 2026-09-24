@@ -27,18 +27,17 @@ overrides:
 minimumReleaseAge: 0
 
 catalog:
-  '@hanzo/ai': 0.6.16
   '@hanzo/font': 1.9.3
   '@hanzo/gui': 8.3.5
   '@hanzo/iam': 0.21.18
   '@hanzo/ui': 8.27.12
   '@hanzo/vite': 0.1.4
+  '@hanzogui/lucide-icons-2': 8.3.5
   '@hanzogui/next-theme': 8.3.5
   '@types/node': 26.5.0
   '@types/react': 19.2.18
   '@types/react-dom': 19.2.7
   '@vitejs/plugin-react': ^6.1.1
-  lucide-react: ^1.42.0
   next-themes: ^0.4.6
   react: 19.2.8
   react-dom: 19.2.8
@@ -47,3 +46,4 @@ catalog:
   react-router: ^8.3.1
   typescript: 7.0.2
   vite: ^8.2.2
+  vitest: ^4.1.11

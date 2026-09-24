@@ -12,9 +12,7 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "paths": {
-      "~/*": ["./src/*"]
-    }
+    "allowImportingTsExtensions": true
   },
   "include": ["src", "vite.config.ts"]
 }

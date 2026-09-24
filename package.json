@@ -1,10 +1,9 @@
 {
   "name": "@hanzo/build",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
   "type": "module",
   "license": "Apache-2.0 OR MIT",
-  "description": "Hanzo Build \u2014 say what you want, watch it built, deployed and running.",
+  "description": "Hanzo Build — say what you want, watch it built, deployed and running. The builder as a page (hanzo.build) and as a component (platform.hanzo.ai/dev).",
   "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": ">=22.18"
@@ -12,31 +11,60 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:lib": "rm -rf lib && tsc -p tsconfig.lib.json",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "prepack": "pnpm run build:lib"
   },
-  "dependencies": {
-    "@hanzo/ai": "catalog:",
+  "devDependencies": {
     "@hanzo/font": "catalog:",
     "@hanzo/gui": "catalog:",
     "@hanzo/iam": "catalog:",
     "@hanzo/ui": "catalog:",
+    "@hanzo/vite": "catalog:",
+    "@hanzogui/lucide-icons-2": "catalog:",
     "@hanzogui/next-theme": "catalog:",
-    "lucide-react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
     "next-themes": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-hook-form": "catalog:",
     "react-native-web": "catalog:",
-    "react-router": "catalog:"
-  },
-  "devDependencies": {
-    "@hanzo/vite": "catalog:",
-    "@types/node": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "@vitejs/plugin-react": "catalog:",
+    "react-router": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "NOTICE"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hanzoai/build.git"
+  },
+  "peerDependencies": {
+    "@hanzo/gui": ">=8.3.5",
+    "@hanzo/ui": ">=8.27.16",
+    "@hanzogui/lucide-icons-2": ">=8.3.5",
+    "react": ">=19.2.8"
   }
 }
