@@ -70,6 +70,7 @@ hanzo.id token for `Host.admin`. One left column, never two.
 | `''` | New — the empty state and the composer |
 | `sess_<32 hex>` | one run, live |
 | `-/automations` | repeating work, read from `/v1/auto/flows` |
+| `-/mcp` | the fleet's native MCP servers, from `POST /v1/mcp` `tools/list` |
 | `-/codebases` | the forge's repositories |
 | `-/sync` | bring granted repositories onto the forge |
 | `-/projects` | the forge's boards |
@@ -84,10 +85,13 @@ collide.
 ## What is on the screen
 
 **The rail** (hanzo.build). New, then Automations, then the forge — Codebase, Projects, Issues —
-then Artifacts, Customize (the platform's plugins), More (Templates, Machines,
-Docs), then the org's coding runs newest first with a live status dot, and the
-account. Collapse is an explicit toggle kept in this browser. A host with its
-own rail draws `DevSection` there instead.
+then MCP, Artifacts, More (Templates, Machines, Docs), then the org's coding
+runs newest first with a live status dot, and the account. Collapse is an
+explicit toggle kept in this browser. A host with its own rail draws
+`DevSection` there instead.
+
+**MCP.** The native servers `POST /v1/mcp` lists, each with the operations it
+names. A run starts a server when it calls it, and the server stays up afterwards.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
 (Default is the platform's sandbox; the org's machines follow), the codebase
@@ -123,6 +127,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/projects` · `POST /v1/projects/fork` · `GET /v1/templates` | artifacts, templates |
 | `GET /v1/git/repos/{name}/tree` · `/blob` | Files and Code |
 | `POST /v1/platform/apps` · `GET /v1/platform/builds` | Add to project, Publish |
+| `POST /v1/mcp` | the native MCP servers, `tools/list` |
 | `GET /v1/models` · `POST /v1/event` | the model list, a verdict |
 
 `mode`, `model` and `effort` are sent with a run as asked; the platform

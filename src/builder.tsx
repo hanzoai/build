@@ -10,6 +10,7 @@
  *   /-/issues    the forge's issues
  *   /-/artifacts what this org has built
  *   /-/templates the public starters
+ *   /-/mcp       the fleet's native MCP servers
  *   /<slug>      a deployed project's workspace, in this same window
  *
  * The rail is the sessions rail every Hanzo surface shares: New, the builder's
@@ -83,7 +84,7 @@ function Shell() {
       active: screen === 'issues',
     },
     { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
-    { id: 'customize', label: 'Customize', icon: <Puzzle size={16} />, onPress: () => host.open(host.links.customize) },
+    { id: 'mcp', label: 'MCP', icon: <Puzzle size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'mcp' })), active: screen === 'mcp' },
   ]
   const more: RailLink[] = [
     { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'templates' })), active: screen === 'templates' },

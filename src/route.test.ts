@@ -17,6 +17,7 @@ describe('route', () => {
     ['-/issues', { kind: 'screen', screen: 'issues' }],
     ['-/automations', { kind: 'screen', screen: 'automations' }],
     ['-/sync', { kind: 'screen', screen: 'sync' }],
+    ['-/mcp', { kind: 'screen', screen: 'mcp' }],
     ['mega-shop', { kind: 'project', slug: 'mega-shop' }],
     ['artifacts', { kind: 'project', slug: 'artifacts' }],
   ])('%s', (p, r) => expect(route(p)).toEqual(r))
@@ -27,6 +28,6 @@ describe('route', () => {
   )
 
   it('inverts', () => {
-    for (const p of ['', ID, '-/artifacts', '-/codebases', '-/projects', '-/issues', '-/automations', '-/sync', 'mega-shop']) expect(path(route(p))).toBe(p)
+    for (const p of ['', ID, '-/artifacts', '-/codebases', '-/projects', '-/issues', '-/automations', '-/sync', '-/mcp', 'mega-shop']) expect(path(route(p))).toBe(p)
   })
 })

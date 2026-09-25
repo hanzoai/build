@@ -75,7 +75,7 @@ export function Mount() {
     go,
     links: {
       github: `${window.location.origin}/-/sync`,
-      customize: `${window.location.origin}/`,
+      customize: `${window.location.origin}/-/mcp`,
       settings: window.location.origin,
       home: window.location.origin,
     },
