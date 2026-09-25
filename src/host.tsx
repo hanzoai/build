@@ -25,6 +25,10 @@ export interface Host {
   token: () => string | null
   /** The org every call is scoped to. */
   org: string | null
+  /** The organizations this person belongs to. The switcher lists these and no others. */
+  memberships?: readonly string[]
+  /** Stay on this page and scope every read to `org`. */
+  chooseOrg?: (org: string) => void
   /** Who is signed in, or null. */
   person: Person | null
   /** Whether the person administers `org`: an admin publishes to main, anyone else opens a review. */

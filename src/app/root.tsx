@@ -13,7 +13,7 @@ import { Builder } from '../builder.tsx'
 import type { Host, Person } from '../host.tsx'
 import { enter } from './enter.ts'
 import { step } from './stay.ts'
-import { administers, bearer, org, own, subject } from './token.ts'
+import { administers, bearer, org, orgs, own, selectOrg, subject } from './token.ts'
 
 /**
  * WHERE THIS BROWSER SIGNS IN. The client is `hanzo-build` under the estate's
@@ -69,6 +69,11 @@ export function Mount() {
     api: api(),
     token: bearer,
     org: scoped,
+    memberships: orgs(),
+    chooseOrg: (next) => {
+      if (!selectOrg(next)) return
+      window.location.assign('/')
+    },
     person,
     admin: administers(scoped),
     path: where.pathname.replace(/^\/+/, ''),

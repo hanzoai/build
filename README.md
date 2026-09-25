@@ -84,11 +84,13 @@ collide.
 
 ## What is on the screen
 
-**The rail** (hanzo.build). New, then Automations, then the forge — Codebase, Projects, Issues —
-then MCP, Artifacts, More (Templates, Machines, Docs), then the org's coding
-runs newest first with a live status dot, and the account. Collapse is an
-explicit toggle kept in this browser. A host with its own rail draws
-`DevSection` there instead.
+**The rail** (hanzo.build). At the top, the mark. Signed in to an organization,
+that spot is the organization switcher: the org, and the projects under it.
+New, then Automations, then the forge — Codebase, Projects, Issues — then MCP,
+Artifacts, More (Templates, Machines, Docs), then the org's coding runs newest
+first with a live status dot. The account stays at the foot. Settings opens
+that account on this page. Collapse is an explicit toggle kept in this browser.
+A host with its own rail draws `DevSection` there instead.
 
 **MCP.** The native servers `POST /v1/mcp` lists, each with the operations it
 names. A run starts a server when it calls it, and the server stays up afterwards.

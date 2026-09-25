@@ -3,7 +3,7 @@
  * finding a run by name (the search icon).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { LogOut, Settings } from '@hanzogui/lucide-icons-2'
+import { LogOut } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
 import type { RailSession } from '@hanzo/ui/chat'
 import { useMemo, useState } from 'react'
@@ -22,16 +22,6 @@ export function onAccount(fn: () => void): () => void {
 
 export function revealAccount(): void {
   reveal?.()
-}
-
-/** A settings address on another host. This page's own account is the dialog itself. */
-function accountSettings(href: string): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return new URL(href, window.location.origin).origin !== window.location.origin
-  } catch {
-    return false
-  }
 }
 
 export function Account({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -57,11 +47,6 @@ export function Account({ open, onOpenChange }: { open: boolean; onOpenChange: (
           ) : null}
         </YStack>
         <XStack gap="$2" justify="flex-end" flexWrap="wrap">
-          {accountSettings(host.links.settings) ? (
-            <Button variant="outline" size="sm" onPress={() => host.open(host.links.settings)}>
-              <Settings size={14} /> Settings
-            </Button>
-          ) : null}
           {host.signOut ? (
             <Button variant="outline" size="sm" onPress={() => host.signOut?.()}>
               <LogOut size={14} /> Sign out

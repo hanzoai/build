@@ -126,5 +126,21 @@ export function org(): string | null {
   }
 }
 
+/**
+ * Scope this browser to one organization it already belongs to.
+ * The page reloads on its own origin so every read picks up the new org.
+ */
+export function selectOrg(next: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const mine = orgs()
+    if (!mine.includes(next)) return false
+    window.localStorage.setItem(`${PREFIX}current_org`, next)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Whether the stored token says this person administers `o`. */
 export const administers = (o: string | null): boolean => admins(bearer(), o)

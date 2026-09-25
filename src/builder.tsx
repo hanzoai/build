@@ -42,6 +42,7 @@ import { Run } from './run.tsx'
 import { DOTS } from './section.tsx'
 import { Artifacts, Templates } from './shelf.tsx'
 import { Account, Find, onAccount } from './account.tsx'
+import { Where } from './switch.tsx'
 
 type Order = 'newest' | 'running'
 
@@ -92,19 +93,7 @@ function Shell() {
       id: 'machines',
       label: 'Machines',
       icon: <Cpu size={16} />,
-      onPress: () => {
-        const home = host.links.home.replace(/\/+$/, '')
-        const computers = `${home}/platform/computers`
-        try {
-          if (new URL(computers, window.location.origin).origin === window.location.origin) {
-            host.go('')
-            return
-          }
-        } catch {
-          return
-        }
-        host.open(computers)
-      },
+      onPress: () => host.go(''),
     },
     { id: 'docs', label: 'Docs', icon: <BookOpen size={16} />, onPress: () => window.open('https://docs.hanzo.ai/docs/dev', '_blank', 'noopener,noreferrer') },
   ]
@@ -132,43 +121,25 @@ function Shell() {
             ? { name: host.person.email || host.person.name, onPress: () => setAccount(true) }
             : { name: 'Sign in', onPress: () => host.signIn?.() }
         }
-        onSettings={() => {
-          try {
-            if (new URL(host.links.settings, window.location.origin).origin === window.location.origin) {
-              setAccount(true)
-              return
-            }
-          } catch {
-            return
-          }
-          host.open(host.links.settings)
-        }}
+        onSettings={() => setAccount(true)}
         onSearch={() => setFinding(true)}
         collapsed={collapsed}
         onCollapse={setCollapsed}
         mark={<Brand org={host.org} />}
-        pt={collapsed ? undefined : 44}
+        pt={collapsed ? undefined : host.person && (host.org || (host.memberships?.length ?? 0) > 0) ? 80 : 40}
         open={drawer}
         onOpenChange={setDrawer}
         label="Runs"
       />
       {collapsed ? null : (
-        <XStack
-          position="absolute"
-          t={8}
-          l={8}
-          r={8}
-          z={2}
-          items="center"
-          gap="$2"
-          render="button"
-          aria-label={host.org ? `Organization ${host.org}` : 'Hanzo'}
-          onPress={() => go('')}
-        >
-          <Brand org={host.org} />
-          <SizableText size="$2" color="$ink" numberOfLines={1}>
-            {host.org || 'Hanzo'}
-          </SizableText>
+        <XStack position="absolute" t={8} l={8} r={8} z={2} items="center">
+          {host.person && (host.org || (host.memberships?.length ?? 0) > 0) ? (
+            <Where />
+          ) : (
+            <XStack render="button" aria-label="Hanzo" items="center" onPress={() => go('')}>
+              <HanzoMark size={18} />
+            </XStack>
+          )}
         </XStack>
       )}
       </YStack>

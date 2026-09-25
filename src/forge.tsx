@@ -349,17 +349,7 @@ function Codebases() {
             py="$1"
             rounded="$3"
             hoverStyle={{ bg: '$hover' }}
-            onPress={() => {
-              try {
-                if (new URL(host.links.settings, window.location.origin).origin === window.location.origin) {
-                  revealAccount()
-                  return
-                }
-              } catch {
-                return
-              }
-              host.open(host.links.settings)
-            }}
+            onPress={() => revealAccount()}
           >
             <Settings size={14} />
             <SizableText size="$2" color="$soft">
