@@ -12,6 +12,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router'
 import { Builder } from '../builder.tsx'
 import type { Host, Person } from '../host.tsx'
 import { enter } from './enter.ts'
+import { step } from './stay.ts'
 import { administers, bearer, org, own, subject } from './token.ts'
 
 /**
@@ -40,8 +41,6 @@ function api(): string {
   if (host === 'hanzo.ai' || host.endsWith('.hanzo.ai') || host === 'hanzo.build') return 'https://api.hanzo.ai'
   return window.location.origin
 }
-
-const PLATFORM = 'https://platform.hanzo.ai'
 
 export function Mount() {
   const door = useIam()
@@ -75,12 +74,16 @@ export function Mount() {
     path: where.pathname.replace(/^\/+/, ''),
     go,
     links: {
-      github: `${PLATFORM}/platform/integrations/github`,
-      customize: `${PLATFORM}/platform/plugins`,
-      settings: `${PLATFORM}/platform/settings`,
-      home: PLATFORM,
+      github: `${window.location.origin}/-/sync`,
+      customize: `${window.location.origin}/`,
+      settings: window.location.origin,
+      home: window.location.origin,
     },
-    open: (href) => window.location.assign(href),
+    open: (href) => {
+      const next = step(href, window.location.href)
+      if (next.kind === 'here') navigate(next.path)
+      else if (next.kind === 'away') window.location.assign(next.href)
+    },
     signIn: () => void enter(door),
     signOut: () => void logout(),
   }

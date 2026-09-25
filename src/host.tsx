@@ -33,18 +33,18 @@ export interface Host {
   path: string
   /** Move under the mount. */
   go: (path: string, how?: { replace?: boolean }) => void
-  /** Where the builder links out to. Same-window addresses on the host, or https. */
+  /** Where the builder links out. On hanzo.build these are addresses of this page. */
   links: {
-    /** Troubleshoot GitHub connection: the GitHub pane of the platform's plugins. */
+    /** GitHub for this page: bringing repositories onto the forge. */
     github: string
-    /** Customize: the platform's plugins (skills, MCP, connectors). */
+    /** Customize, an address of this host. */
     customize: string
-    /** Account settings. */
+    /** Account settings, an address of this host. */
     settings: string
-    /** The platform itself, where the mark leads. */
+    /** This host's home. On hanzo.build it is the page itself. */
     home: string
   }
-  /** Leave the builder for a host address, same window. */
+  /** Open a host address in this window. hanzo.build keeps the window on its own origin. */
   open: (href: string) => void
   signIn?: () => void
   signOut?: () => void

@@ -28,7 +28,7 @@ import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, Kanban, LayoutTemplate, M
 import { Button } from '@hanzo/ui'
 import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { pinBoard } from './choice.ts'
 import { useKept, useRecents } from './data.ts'
@@ -40,7 +40,7 @@ import { path, route } from './route.ts'
 import { Run } from './run.tsx'
 import { DOTS } from './section.tsx'
 import { Artifacts, Templates } from './shelf.tsx'
-import { Account, Find } from './account.tsx'
+import { Account, Find, onAccount } from './account.tsx'
 
 type Order = 'newest' | 'running'
 
@@ -54,6 +54,7 @@ function Shell() {
   const [order, setOrder] = useState<Order>('newest')
   const [account, setAccount] = useState(false)
   const [finding, setFinding] = useState(false)
+  useEffect(() => onAccount(() => setAccount(true)), [])
 
   const go = (p: string) => {
     setDrawer(false)
@@ -86,7 +87,24 @@ function Shell() {
   ]
   const more: RailLink[] = [
     { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'templates' })), active: screen === 'templates' },
-    { id: 'machines', label: 'Machines', icon: <Cpu size={16} />, onPress: () => host.open(`${host.links.home.replace(/\/+$/, '')}/platform/computers`) },
+    {
+      id: 'machines',
+      label: 'Machines',
+      icon: <Cpu size={16} />,
+      onPress: () => {
+        const home = host.links.home.replace(/\/+$/, '')
+        const computers = `${home}/platform/computers`
+        try {
+          if (new URL(computers, window.location.origin).origin === window.location.origin) {
+            host.go('')
+            return
+          }
+        } catch {
+          return
+        }
+        host.open(computers)
+      },
+    },
     { id: 'docs', label: 'Docs', icon: <BookOpen size={16} />, onPress: () => window.open('https://docs.hanzo.ai/docs/dev', '_blank', 'noopener,noreferrer') },
   ]
 
@@ -113,7 +131,17 @@ function Shell() {
             ? { name: host.person.email || host.person.name, onPress: () => setAccount(true) }
             : { name: 'Sign in', onPress: () => host.signIn?.() }
         }
-        onSettings={() => host.open(host.links.settings)}
+        onSettings={() => {
+          try {
+            if (new URL(host.links.settings, window.location.origin).origin === window.location.origin) {
+              setAccount(true)
+              return
+            }
+          } catch {
+            return
+          }
+          host.open(host.links.settings)
+        }}
         onSearch={() => setFinding(true)}
         collapsed={collapsed}
         onCollapse={setCollapsed}

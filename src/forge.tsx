@@ -10,6 +10,7 @@ import { ChevronDown, GitBranch, Plus, Settings, Workflow } from '@hanzogui/luci
 import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
 import { useEffect, useState, type ReactNode } from 'react'
 
+import { revealAccount } from './account.tsx'
 import { add, arm, flows, type Automation } from './api/auto.ts'
 import { codebases, create, type Codebase } from './api/codebases.ts'
 import { boards, issues, type Board, type Work } from './api/work.ts'
@@ -346,7 +347,17 @@ function Codebases() {
             py="$1"
             rounded="$3"
             hoverStyle={{ bg: '$hover' }}
-            onPress={() => host.open(host.links.settings)}
+            onPress={() => {
+              try {
+                if (new URL(host.links.settings, window.location.origin).origin === window.location.origin) {
+                  revealAccount()
+                  return
+                }
+              } catch {
+                return
+              }
+              host.open(host.links.settings)
+            }}
           >
             <Settings size={14} />
             <SizableText size="$2" color="$soft">

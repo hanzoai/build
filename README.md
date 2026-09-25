@@ -5,7 +5,9 @@ the database, the sign-in and the storage already there.
 
 The builder is one component, `<Builder host={…} />` from `@hanzo/build`, with
 three hosts: this page (hanzo.build), and the Dev section of the Hanzo app at
-hanzo.ai/dev and hanzo.app/dev. None of them forks it.
+hanzo.ai/dev and hanzo.app/dev. None of them forks it. hanzo.build is this
+frontend. A click stays on this origin — sign-in returns to `/auth/callback`
+here — and github.com is opened only for the repository grant.
 
 ```
 pnpm install

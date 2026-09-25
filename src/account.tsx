@@ -10,6 +10,30 @@ import { useMemo, useState } from 'react'
 
 import { useHost } from './host.tsx'
 
+let reveal: (() => void) | null = null
+
+/** The builder listens, so a settings control on this page opens the account dialog. */
+export function onAccount(fn: () => void): () => void {
+  reveal = fn
+  return () => {
+    if (reveal === fn) reveal = null
+  }
+}
+
+export function revealAccount(): void {
+  reveal?.()
+}
+
+/** A settings address on another host. This page's own account is the dialog itself. */
+function accountSettings(href: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return new URL(href, window.location.origin).origin !== window.location.origin
+  } catch {
+    return false
+  }
+}
+
 export function Account({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const host = useHost()
   const who = host.person
@@ -33,9 +57,11 @@ export function Account({ open, onOpenChange }: { open: boolean; onOpenChange: (
           ) : null}
         </YStack>
         <XStack gap="$2" justify="flex-end" flexWrap="wrap">
-          <Button variant="outline" size="sm" onPress={() => host.open(host.links.settings)}>
-            <Settings size={14} /> Settings
-          </Button>
+          {accountSettings(host.links.settings) ? (
+            <Button variant="outline" size="sm" onPress={() => host.open(host.links.settings)}>
+              <Settings size={14} /> Settings
+            </Button>
+          ) : null}
           {host.signOut ? (
             <Button variant="outline" size="sm" onPress={() => host.signOut?.()}>
               <LogOut size={14} /> Sign out
