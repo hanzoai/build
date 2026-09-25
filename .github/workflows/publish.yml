@@ -1,6 +1,6 @@
 # Publishes @hanzo/build to npm when package.json names a version npm does not
-# serve yet. The builder is one component with two hosts — this page, and the
-# platform console at platform.hanzo.ai/dev — and the console takes it from npm.
+# serve yet. The builder is one component with several hosts — this page, and
+# the Hanzo app's Dev section at hanzo.ai/dev — and the app takes it from npm.
 #
 # The question is asked of the registry, not of the diff: a version strictly
 # greater than npm's `latest` is a release, anything else is not, so re-running

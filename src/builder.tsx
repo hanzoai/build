@@ -13,11 +13,15 @@
  *
  * A project's workspace takes the whole window — it has its own chat column,
  * bar and panes — and its mark leads back here.
+ *
+ * A host with a rail of its own mounts `<Builder rail={false}>` and draws the
+ * builder's places and runs in that rail with `DevSection` (section.tsx): one
+ * left column, never two.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Blocks, BookOpen, Cpu, LayoutTemplate, Menu, Puzzle } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
-import { SessionRail, type RailLink, type RailSession, type SessionStatus } from '@hanzo/ui/chat'
+import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useMemo, useState } from 'react'
 
@@ -27,16 +31,9 @@ import { Landing } from './landing.tsx'
 import { Project } from './project.tsx'
 import { path, route } from './route.ts'
 import { Run } from './run.tsx'
+import { DOTS } from './section.tsx'
 import { Artifacts, Templates } from './shelf.tsx'
 import { Account, Find } from './account.tsx'
-
-const DOTS: Record<string, SessionStatus> = {
-  running: 'running',
-  paused: 'paused',
-  done: 'done',
-  stopped: 'stopped',
-  error: 'error',
-}
 
 type Order = 'newest' | 'running'
 
@@ -112,13 +109,7 @@ function Shell() {
             <Menu size={18} />
           </Button>
         </XStack>
-        {r.kind === 'run' ? (
-          <Run key={r.id} id={r.id} />
-        ) : r.kind === 'screen' ? (
-          r.screen === 'artifacts' ? <Artifacts /> : <Templates />
-        ) : (
-          <Landing onStarted={(id) => { recents.reload(); go(id) }} />
-        )}
+        <Pane onStarted={() => recents.reload()} />
       </YStack>
       <Account open={account} onOpenChange={setAccount} />
       <Find open={finding} onOpenChange={setFinding} recents={rows} onOpen={(id) => { setFinding(false); go(id) }} />
@@ -126,18 +117,40 @@ function Shell() {
   )
 }
 
-function Screens() {
+/** Whichever pane the address names, beside a rail — the builder's or the host's. */
+function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   const host = useHost()
   const r = route(host.path)
-  return r.kind === 'project' ? <Project key={r.slug} slug={r.slug} /> : <Shell />
+  if (r.kind === 'run') return <Run key={r.id} id={r.id} />
+  if (r.kind === 'screen') return r.screen === 'artifacts' ? <Artifacts /> : <Templates />
+  return (
+    <Landing
+      onStarted={(id) => {
+        onStarted?.(id)
+        host.go(id)
+      }}
+    />
+  )
 }
 
-/** The builder. Mount it under a gui root (`<Hanzo>`), in a box with a height. */
-export function Builder({ host }: { host: Host }) {
+function Screens({ rail }: { rail: boolean }) {
+  const host = useHost()
+  const r = route(host.path)
+  if (r.kind === 'project') return <Project key={r.slug} slug={r.slug} />
+  return rail ? <Shell /> : <Pane />
+}
+
+/**
+ * The builder. Mount it under a gui root (`<Hanzo>`), in a box with a height.
+ *
+ * `rail={false}` leaves the left column to the host, which lists the builder's
+ * places and runs in its own rail with `DevSection`.
+ */
+export function Builder({ host, rail = true }: { host: Host; rail?: boolean }) {
   return (
     <HostProvider host={host}>
-      <YStack flex={1} minH={0} minW={0} height="100%">
-        <Screens />
+      <YStack flex={1} minH={0} minW={0} height="100%" bg="$background">
+        <Screens rail={rail} />
       </YStack>
     </HostProvider>
   )

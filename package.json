@@ -1,9 +1,9 @@
 {
   "name": "@hanzo/build",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "license": "Apache-2.0 OR MIT",
-  "description": "Hanzo Build — say what you want, watch it built, deployed and running. The builder as a page (hanzo.build) and as a component (platform.hanzo.ai/dev).",
+  "description": "Hanzo Build — say what you want, watch it built, deployed and running. The builder as a page (hanzo.build) and as a component (hanzo.ai/dev).",
   "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": ">=22.18"

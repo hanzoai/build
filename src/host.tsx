@@ -1,11 +1,11 @@
 /**
  * What the builder needs from the page that mounts it.
  *
- * The builder is ONE component with two hosts: its own page (hanzo.build, which
- * signs in through Hanzo IAM and routes with react-router) and the platform
- * console (platform.hanzo.ai/dev, which already has a session and a router).
- * Everything that differs between them is here, as values, so neither host
- * forks the builder and the builder imports neither host.
+ * The builder is ONE component with several hosts: its own page (hanzo.build,
+ * which signs in through Hanzo IAM and routes with react-router) and the Hanzo
+ * app's Dev section (hanzo.ai/dev and hanzo.app/dev, which already have a
+ * session, a router and a rail). Everything that differs between them is here,
+ * as values, so no host forks the builder and the builder imports no host.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 

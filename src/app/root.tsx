@@ -1,6 +1,7 @@
 // The builder's own page: Hanzo IAM for who is here, react-router for where.
 //
-// This is one of the builder's two hosts; the platform console is the other.
+// One of the builder's hosts; the Hanzo app's Dev section (hanzo.ai/dev,
+// hanzo.app/dev) is the other, and draws the builder's runs in its own rail.
 // Everything the builder needs from a host is handed over as `Host` values here,
 // so the builder imports neither IAM nor a router.
 

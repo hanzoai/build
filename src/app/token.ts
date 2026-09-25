@@ -14,6 +14,8 @@
  * exception.
  */
 
+import { administers as admins, claims as read } from '../claims.ts'
+
 /** The SDK's own keys, `hanzo_iam_`-prefixed. The far side of a boundary. */
 const PREFIX = 'hanzo_iam_'
 const ACCESS = `${PREFIX}access_token`
@@ -40,17 +42,7 @@ export function bearer(): string | null {
 }
 
 /** The claims the stored token carries, or null. */
-function claims(): Record<string, unknown> | null {
-  const token = bearer()
-  if (!token) return null
-  try {
-    const part = token.split('.')[1]
-    if (!part) return null
-    return JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
+const claims = (): Record<string, unknown> | null => read(bearer())
 
 /**
  * The subject the stored access token names, or undefined.
@@ -134,16 +126,5 @@ export function org(): string | null {
   }
 }
 
-/**
- * Whether the token says this person administers `o`. Org admin, read off the
- * token's own `orgs` claim — never the reserved `admin` org, which is platform
- * authority and not what a builder decides anything by. The platform enforces
- * it again; this only decides which publish path is offered.
- */
-export function administers(o: string | null): boolean {
-  if (!o) return false
-  const set = claims()?.orgs
-  return (Array.isArray(set) ? set : []).some(
-    (r) => (r as { org?: unknown; role?: unknown } | null)?.org === o && (r as { role?: unknown }).role === 'admin',
-  )
-}
+/** Whether the stored token says this person administers `o`. */
+export const administers = (o: string | null): boolean => admins(bearer(), o)

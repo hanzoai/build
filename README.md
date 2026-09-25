@@ -3,9 +3,9 @@
 Say what you want. Hanzo writes it, runs it, and puts it on a live URL — with
 the database, the sign-in and the storage already there.
 
-The builder is one component with two hosts: this page (hanzo.build), and the
-platform console at platform.hanzo.ai/dev. Both mount `<Builder host={…} />`
-from `@hanzo/build`; neither forks it.
+The builder is one component, `<Builder host={…} />` from `@hanzo/build`, with
+three hosts: this page (hanzo.build), and the Dev section of the Hanzo app at
+hanzo.ai/dev and hanzo.app/dev. None of them forks it.
 
 ```
 pnpm install
@@ -42,6 +42,25 @@ under the mount (`path`) and how to move (`go`), and where to link out
 (`links`, `open`). Peers: `@hanzo/ui`, `@hanzo/gui`, `@hanzogui/lucide-icons-2`,
 `react`.
 
+### In a host that has its own rail
+
+The Hanzo app already has a left column, so it mounts `<Builder host={host}
+rail={false} />` in its pane and lists the builder in its own rail:
+
+```tsx
+import { Builder, DevSection } from '@hanzo/build'
+
+<Sidebar>            {/* the host's rail, @hanzo/ui/chat */}
+  <DevSection host={host} />   {/* New run, Artifacts, Templates, the runs */}
+</Sidebar>
+<Builder host={host} rail={false} />
+```
+
+`DevSection` is rows of `@hanzo/ui/chat`'s Sidebar; `useSessions(host)` is its
+data — the org's coding runs, kept live by the org's feed — for a host that
+draws the rows itself. `administers(token, org)` reads the org-admin bit off a
+hanzo.id token for `Host.admin`. One left column, never two.
+
 ## Addresses
 
 | path | screen |
@@ -57,10 +76,10 @@ collide.
 
 ## What is on the screen
 
-**The rail.** New, Artifacts, Customize (the platform's plugins), More
-(Templates, Machines, Docs), then the org's coding runs newest first with a
-live status dot, and the account. Collapse is an explicit toggle kept in this
-browser.
+**The rail** (hanzo.build). New, Artifacts, Customize (the platform's
+plugins), More (Templates, Machines, Docs), then the org's coding runs newest
+first with a live status dot, and the account. Collapse is an explicit toggle
+kept in this browser. A host with its own rail draws `DevSection` there instead.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
 (Default is the platform's sandbox; the org's machines follow), the repository
