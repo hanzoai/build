@@ -5,7 +5,8 @@
  *   GET  /v1/agent/sessions/{id}                            + the 50 most recent events
  *   POST /v1/agent/sessions/{id}/message {message}           steer a running run
  *   POST /v1/agent/sessions/{id}/stop    {message}           end it, work kept
- *   GET  /v1/agent/sessions/stream?root={id}                 SSE: `session` and `event` frames
+ *   GET  /v1/agent/sessions/stream?root={id}                 SSE: `session` and `event` frames,
+ *                                                            each wrapped: {"session":{…}}, {"event":{…}}
  *
  * The stream is best-effort by the platform's own statement: a subscriber that
  * falls 256 frames behind is dropped. So `watch` reconnects, and every
@@ -160,8 +161,8 @@ export async function watch(t: Target, root: string, on: Watch, signal: AbortSig
           } catch {
             return
           }
-          if (f.event === 'session') on.session?.(session(data))
-          else if (f.event === 'event') on.event?.(event(data))
+          if (f.event === 'session') on.session?.(session(obj(data).session))
+          else if (f.event === 'event') on.event?.(event(obj(data).event))
         },
         signal,
       )

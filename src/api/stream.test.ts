@@ -55,8 +55,8 @@ describe('watch', () => {
         urls.push(url)
         auth.push(new Headers(init.headers).get('authorization'))
         n += 1
-        if (n === 1) return new Response(body('event: session\ndata: {"id":"sess_1","status":"running"}\n\n'), { status: 200 })
-        if (n === 2) return new Response(body('event: event\ndata: {"id":"e1","seq":3,"kind":"log","payload":{"message":"go test"}}\n\n'), { status: 200 })
+        if (n === 1) return new Response(body('event: session\ndata: {"session":{"id":"sess_1","status":"running"}}\n\n'), { status: 200 })
+        if (n === 2) return new Response(body('event: event\ndata: {"event":{"id":"e1","sessionId":"sess_1","seq":3,"kind":"log","payload":{"message":"go test"}}}\n\n'), { status: 200 })
         ctl.abort()
         return new Response(null, { status: 200 })
       }),
@@ -69,8 +69,9 @@ describe('watch', () => {
     await done
     expect(urls[0]).toBe('https://api.hanzo.ai/v1/agent/sessions/stream?root=sess_1')
     expect(auth[0]).toBe('Bearer tok')
-    expect(sessions.map((s) => s.status)).toEqual(['running'])
-    expect(events.map((e) => e.seq)).toEqual([3])
+    // The platform wraps each frame by its kind; the bare record is inside.
+    expect(sessions.map((s) => [s.id, s.status])).toEqual([['sess_1', 'running']])
+    expect(events.map((e) => [e.sessionId, e.seq])).toEqual([['sess_1', 3]])
     expect(opens).toEqual([0, 1])
   })
 
