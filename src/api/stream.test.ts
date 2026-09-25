@@ -89,8 +89,12 @@ describe('turns', () => {
     expect(said({ kind: 'status', payload: '{"status":"done","changed":true,"branch":"agent/sess_1","pr":"#42"}' })).toBe('Pushed agent/sess_1 — #42')
     expect(said({ kind: 'status', payload: { status: 'done', changed: false } })).toBe('Done — nothing to change')
     // A plan's answer is its final status, read as text.
-    expect(said({ kind: 'status', payload: { status: 'done', mode: 'plan', changed: false, plan: '1. Read auth.go\n2. Add a test' } })).toBe('1. Read auth.go\n2. Add a test')
-    expect(said({ kind: 'status', payload: { status: 'done', mode: 'plan', changed: false } })).toBe('Planned — the run answered with no plan')
+    const planned = { kind: 'status', payload: { status: 'done', mode: 'plan', changed: false, plan: '1. Read auth.go\n2. Add a test' } }
+    expect(said(planned, 'plan')).toBe('1. Read auth.go\n2. Add a test')
+    expect(said({ kind: 'status', payload: { status: 'done', mode: 'plan', changed: false } }, 'plan')).toBe('Planned — the run answered with no plan')
+    // An event that SAYS plan on a run the record says built is not an answer.
+    expect(said(planned, 'build')).toBe('Done — nothing to change')
+    expect(said(planned)).toBe('Done — nothing to change')
     expect(said({ kind: 'status', payload: { status: 'error', error: 'clone failed' } })).toBe('clone failed')
     expect(said({ kind: 'event', payload: { type: 'done', changed: ['/home/runner/work/a.ts', '/tmp/b.ts'] } })).toBe('Done — changed a.ts, b.ts')
     expect(said({ kind: 'log', payload: { host: 'box', cwd: '/secret' } })).toBe('')

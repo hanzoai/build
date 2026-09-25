@@ -38,7 +38,7 @@ const base = (path: string): string => {
   return cut.slice(cut.lastIndexOf('/') + 1)
 }
 
-function status(b: Record<string, unknown>): string {
+function status(b: Record<string, unknown>, mode: string): string {
   const branch = str(b.branch)
   switch (str(b.status)) {
     case 'started':
@@ -47,7 +47,9 @@ function status(b: Record<string, unknown>): string {
       return 'Sent to a machine'
     case 'done': {
       // A plan's answer IS its final status: the run read and wrote nothing.
-      if (str(b.mode) === 'plan') return str(b.plan) || 'Planned — the run answered with no plan'
+      // Whether the run planned is the RECORD's word — any member of the org
+      // can append an event saying `mode: plan`, and its text is not an answer.
+      if (mode === 'plan') return str(b.plan) || 'Planned — the run answered with no plan'
       if (b.changed === false) return 'Done — nothing to change'
       const pr = str(b.pr)
       const tail = str(b.prError) ? ' — the pull request could not be opened' : pr ? ` — ${pr}` : ''
@@ -63,12 +65,15 @@ function status(b: Record<string, unknown>): string {
   return str(b.status)
 }
 
-/** One event's sentence, or '' when it says nothing a person needs. */
-export function said(e: Pick<Event, 'kind' | 'payload'>): string {
+/**
+ * One event's sentence, or '' when it says nothing a person needs. `mode` is
+ * the run's, from its record: a plan run's final status says the plan.
+ */
+export function said(e: Pick<Event, 'kind' | 'payload'>, mode = ''): string {
   const body = decode(e.payload)
   if (typeof body === 'string') return body
   if (!body) return ''
-  if (e.kind === 'status') return status(body)
+  if (e.kind === 'status') return status(body, mode)
   for (const key of ['message', 'text', 'content', 'result', 'command']) {
     const v = body[key]
     if (typeof v === 'string' && v) return v

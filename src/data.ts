@@ -207,6 +207,7 @@ export function useRun(t: Target, id: string | null): RunState {
       title: pushed.title || base.title,
       branch: pushed.branch || base.branch,
       pr: pushed.pr || base.pr,
+      mode: pushed.mode || base.mode,
     }
   }, [read, frame])
   return { detail, record, events, status: record?.status ?? '', refused }

@@ -34,6 +34,8 @@ export interface Session {
   branch: string
   /** 'sandbox', or the id of the org's machine it runs on. */
   environment: string
+  /** 'build' or 'plan', as the coding service recorded it; '' for other runs. */
+  mode: string
   /** The pull request the run proposed, or ''. */
   pr: string
   events: number
@@ -76,6 +78,7 @@ export function session(raw: unknown): Session {
     base: str(s.base),
     branch: str(s.branch),
     environment: str(s.environment),
+    mode: str(s.mode),
     pr: str(s.pr),
     events: num(s.events),
     createdAt: str(s.createdAt),

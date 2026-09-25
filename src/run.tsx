@@ -35,10 +35,10 @@ export function Run({ id }: { id: string }) {
     () =>
       fold(
         events
-          .map((e): Turn => ({ kind: e.kind, actor: who(e.actor), seq: e.seq, id: e.id, text: said(e) }))
+          .map((e): Turn => ({ kind: e.kind, actor: who(e.actor), seq: e.seq, id: e.id, text: said(e, record?.mode) }))
           .filter((b) => b.text),
       ),
-    [events],
+    [events, record?.mode],
   )
   const end = outcome(events)
   const state = status || end.status

@@ -216,14 +216,14 @@ export function Project({ slug }: { slug: string }) {
         .filter((e) => e.kind === 'log' || e.kind === 'tool-call' || e.kind === 'status')
         .map((e): Line => ({
           id: `r${e.seq || e.id}`,
-          level: e.kind === 'status' && /error/.test(said(e).toLowerCase()) ? 'error' : e.kind === 'tool-call' ? 'info' : 'log',
-          text: said(e),
+          level: e.kind === 'status' && /error/.test(said(e, run.record?.mode).toLowerCase()) ? 'error' : e.kind === 'tool-call' ? 'info' : 'log',
+          text: said(e, run.record?.mode),
           source: e.kind === 'status' ? 'run' : who(e.actor),
         }))
         .filter((l) => l.text),
       ...pageLines,
     ],
-    [run.events, pageLines],
+    [run.events, run.record?.mode, pageLines],
   )
 
   const onBridge = (e: FrameEvent) => {
@@ -339,7 +339,7 @@ export function Project({ slug }: { slug: string }) {
               <Turn run={r} open={r.id === current} onOpen={() => setChosen(r.id)} project={slug} />
               {r.id === current ? (
                 <YStack gap="$1" pl="$2" borderLeftWidth={1} borderColor="$borderColor">
-                  {fold(run.events.map((e) => ({ kind: e.kind, actor: who(e.actor), seq: e.seq, id: e.id, text: said(e) })).filter((b) => b.text)).map((b) => (
+                  {fold(run.events.map((e) => ({ kind: e.kind, actor: who(e.actor), seq: e.seq, id: e.id, text: said(e, run.record?.mode) })).filter((b) => b.text)).map((b) => (
                     <SizableText key={b.key} size="$1" color="$soft">
                       {b.text}
                     </SizableText>
