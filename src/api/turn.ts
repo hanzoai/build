@@ -46,6 +46,8 @@ function status(b: Record<string, unknown>): string {
     case 'routed':
       return 'Sent to a machine'
     case 'done': {
+      // A plan's answer IS its final status: the run read and wrote nothing.
+      if (str(b.mode) === 'plan') return str(b.plan) || 'Planned — the run answered with no plan'
       if (b.changed === false) return 'Done — nothing to change'
       const pr = str(b.pr)
       const tail = str(b.prError) ? ' — the pull request could not be opened' : pr ? ` — ${pr}` : ''

@@ -10,27 +10,23 @@
  * id routes it to one of the org's machines, and `routed` says whether it got
  * there.
  *
- * `mode`, `model` and `effort` are this surface's asks of the contract: `plan`
- * is a run that plans and writes nothing, `build` edits, commits and pushes.
- * They are sent as asked and never simulated here — a run the platform has not
- * been told how to plan is not made to look like one.
+ * `mode` is what the run may do: `build` edits, commits and pushes its branch;
+ * `plan` reads the repository with a credential that can only read and answers
+ * with a plan, as its final status. A plan runs in the platform's sandbox only —
+ * a claimed machine clones and pushes with its own credential — so a plan
+ * routed to one is refused, here before sending as on the platform.
+ *
+ * `model` and `effort` are taken by the dev harness the builder runs (and by
+ * codex); the builder names no other harness, so they are always honoured.
  */
 import { call, Refusal, type Target } from './call.ts'
 
 export type Mode = 'build' | 'plan'
 
-/**
- * The modes the platform honours today. `CodingStartIn` takes no `mode` yet, so
- * a plan run would edit, commit and push like any other — on a machine, with
- * that machine's credentials. Until the platform takes `plan`, a plan ask is
- * refused here rather than sent to become a build.
- */
-export const HONOURED: readonly Mode[] = ['build']
-
-/** Why a mode cannot be asked for yet, or '' when it can. */
-export const unhonoured = (mode: Mode | undefined): string =>
-  mode && !HONOURED.includes(mode)
-    ? 'Plan needs the platform’s plan mode, which the coding API does not take yet — this ask would build. Switch to Build, or wait for Plan.'
+/** Why this mode cannot run where it is sent, or '' when it can. */
+export const unhonoured = (mode: Mode | undefined, target?: string): string =>
+  mode === 'plan' && target?.trim()
+    ? 'A plan runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Default, or switch to Build.'
     : ''
 
 export interface Ask {
@@ -72,7 +68,7 @@ export function body(ask: Ask): Record<string, string> {
 
 export async function start(t: Target, ask: Ask): Promise<Run> {
   if (!ask.prompt.trim()) throw new Refusal(400, 'Say what the run should do')
-  const why = unhonoured(ask.mode)
+  const why = unhonoured(ask.mode, ask.targetId)
   if (why) throw new Refusal(400, why)
   const r = await call<Partial<Record<string, unknown>>>(t, 'POST', '/v1/agent/coding', body(ask))
   const s = (k: string) => (typeof r?.[k] === 'string' ? (r[k] as string) : '')

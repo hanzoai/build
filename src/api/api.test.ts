@@ -155,12 +155,20 @@ describe('coding', () => {
     expect(run).toEqual({ session: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', project: 'cloud', routed: false, target: '' })
   })
 
-  it('refuses a plan ask the platform would run as a build, before sending', async () => {
+  it('sends a plan to the sandbox with its model and effort', async () => {
     const seen = answer(202, { sessionId: 'sess_1' })
-    await expect(coding.start(T, { prompt: 'what would it take', mode: 'plan' })).rejects.toMatchObject({ status: 400 })
-    expect(seen).toHaveLength(0)
-    expect(coding.unhonoured('build')).toBe('')
+    await coding.start(T, { prompt: 'what would it take', mode: 'plan', model: 'zen6-coder', effort: 'high' })
+    expect(seen[0]).toMatchObject({ body: { prompt: 'what would it take', mode: 'plan', model: 'zen6-coder', effort: 'high' } })
+    expect(coding.unhonoured('plan')).toBe('')
+    expect(coding.unhonoured('build', 'tgt_1')).toBe('')
     expect(coding.unhonoured(undefined)).toBe('')
+  })
+
+  it('refuses a plan routed to a machine, before sending', async () => {
+    const seen = answer(202, { sessionId: 'sess_1' })
+    await expect(coding.start(T, { prompt: 'what would it take', mode: 'plan', targetId: 'tgt_1' })).rejects.toMatchObject({ status: 400 })
+    expect(seen).toHaveLength(0)
+    expect(coding.unhonoured('plan', 'tgt_1')).toMatch(/sandbox/)
   })
 
   it('refuses an admitted run with no session, and an empty ask before sending', async () => {

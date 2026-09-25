@@ -241,9 +241,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         <EmptyPrompt title="What’s up next?" mark={<HanzoMark size={18} />} column={COLUMN} />
         <YStack flex={1} />
         <YStack pb="$2" gap="$2">
-          {note || unhonoured(kept.mode) ? (
+          {note || unhonoured(kept.mode, place.id) ? (
             <SizableText size="$1" color="$soft" role="status">
-              {note || unhonoured(kept.mode)}
+              {note || unhonoured(kept.mode, place.id)}
             </SizableText>
           ) : null}
           <Composer

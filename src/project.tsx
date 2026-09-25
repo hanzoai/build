@@ -477,12 +477,14 @@ export function Project({ slug }: { slug: string }) {
     <>
       <Workspace
         start={
-          <XStack items="center" gap="$2">
-            <XStack render="button" aria-label="All runs" onPress={() => host.go('')} p="$1">
+          // Shrinks with the bar, so the project's name truncates rather than
+          // running under Publish on a phone.
+          <XStack items="center" gap="$2" minW={0} shrink={1}>
+            <XStack render="button" aria-label="All runs" onPress={() => host.go('')} p="$1" shrink={0}>
               <HanzoMark size={20} />
             </XStack>
             <ProjectChip name={project?.name ?? slug} onPress={() => setSwitcher(true)} />
-            <XStack render="button" aria-label="History" onPress={() => setHistory(true)} p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
+            <XStack render="button" aria-label="History" onPress={() => setHistory(true)} p="$1.5" rounded="$3" shrink={0} hoverStyle={{ bg: '$hover' }}>
               <Clock size={16} />
             </XStack>
             <XStack
@@ -492,6 +494,7 @@ export function Project({ slug }: { slug: string }) {
               onPress={() => setCollapsed(!collapsed)}
               p="$1.5"
               rounded="$3"
+              shrink={0}
               hoverStyle={{ bg: '$hover' }}
             >
               <PanelLeft size={16} />
@@ -517,9 +520,12 @@ export function Project({ slug }: { slug: string }) {
         }
         end={
           <XStack items="center" gap="$2">
-            <Button variant="outline" size="sm" onPress={() => void share()}>
-              <Share2 size={14} /> Share
-            </Button>
+            {/* Share gives way on a phone, where Publish is the one that matters. */}
+            <XStack display="none" $md={{ display: 'flex' }}>
+              <Button variant="outline" size="sm" onPress={() => void share()}>
+                <Share2 size={14} /> Share
+              </Button>
+            </XStack>
             <Button
               size="sm"
               disabled={!project?.repo}
