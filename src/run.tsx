@@ -11,14 +11,16 @@
  * RECORDED, and the status is left to the feed to correct.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ExternalLink, GitPullRequest } from '@hanzogui/lucide-icons-2'
+import { ExternalLink, GitPullRequest, PanelRight } from '@hanzogui/lucide-icons-2'
+import { Button } from '@hanzo/ui'
 import { Transcript, fold, type Turn } from '@hanzo/ui/agents'
 import { Composer } from '@hanzo/ui/chat'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { message, stop } from './api/sessions.ts'
-import { outcome, pull, said, who } from './api/turn.ts'
-import { useRun } from './data.ts'
+import { outcome, pull, said, steps, who } from './api/turn.ts'
+import { useKept, useRun } from './data.ts'
+import { Desk } from './desk.tsx'
 import { useTarget } from './host.tsx'
 import { Out } from './out.tsx'
 
@@ -30,6 +32,8 @@ export function Run({ id }: { id: string }) {
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  const [notify, setNotify] = useState(false)
+  const [desk, setDesk] = useKept('hanzo.build.desk', true)
 
   const blocks = useMemo(
     () =>
@@ -41,9 +45,33 @@ export function Run({ id }: { id: string }) {
     [events, record?.mode],
   )
   const end = outcome(events)
+  const plan = useMemo(() => steps(events), [events])
   const state = status || end.status
   const pr = pull(record?.pr ?? '', record?.repo ?? '')
   const running = LIVE.has(state) && !detail.error
+  const title = detail.value?.title || (detail.loading ? '' : 'Untitled run')
+
+  useEffect(() => {
+    if (!notify || running) return
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    const n = new Notification(title || 'Run finished', { body: 'This run has finished.' })
+    setNotify(false)
+    return () => n.close()
+  }, [notify, running, title])
+
+  const ask = async () => {
+    if (typeof Notification === 'undefined') {
+      setNote('This browser cannot send a notification.')
+      return
+    }
+    const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+    if (perm !== 'granted') {
+      setNote('Notifications stay off until this browser allows them.')
+      return
+    }
+    setNotify(true)
+    setNote('')
+  }
 
   const send = async () => {
     if (!draft.trim() || busy) return
@@ -70,11 +98,9 @@ export function Run({ id }: { id: string }) {
     }
   }
 
-  const title = detail.value?.title || (detail.loading ? '' : 'Untitled run')
-
   return (
-    <YStack flex={1} minH={0} minW={0} width="100%" items="center">
-      <YStack flex={1} minH={0} width="100%" maxW={816} px="$6">
+    <XStack flex={1} minH={0} minW={0} width="100%">
+      <YStack flex={1} minH={0} minW={0} width="100%" px="$6">
         <XStack pt="$3" pb="$2" gap="$3" items="center" minH={44}>
           <YStack flex={1} minW={0}>
             <SizableText render="h1" size="$5" color="$ink" numberOfLines={1}>
@@ -84,6 +110,11 @@ export function Run({ id }: { id: string }) {
               {[state || (detail.loading ? 'reading' : ''), record?.repo, record?.branch].filter(Boolean).join(' · ')}
             </SizableText>
           </YStack>
+          {desk ? null : (
+            <XStack render="button" aria-label="Show the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={() => setDesk(true)}>
+              <PanelRight size={16} />
+            </XStack>
+          )}
           {pr.href ? (
             // From the run's record, which the coding service writes; `pull` draws only a pull request address.
             <Out href={pr.href} label={`Open pull request ${pr.label}`}>
@@ -102,7 +133,7 @@ export function Run({ id }: { id: string }) {
           blocks={blocks}
           empty={
             <SizableText size="$2" color="$soft">
-              {detail.error ? detail.error.message : detail.loading ? 'Reading this run…' : 'Waiting for the run’s first step…'}
+              {detail.error ? detail.error.message : detail.loading ? 'Reading this run…' : running ? 'Setting up environment' : 'Waiting for the run’s first step…'}
             </SizableText>
           }
         />
@@ -118,6 +149,41 @@ export function Run({ id }: { id: string }) {
               {note || refused}
             </SizableText>
           ) : null}
+          {plan.length ? (
+            <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
+              <XStack px="$3" py="$2" justify="space-between" items="center">
+                <SizableText size="$2" color="$ink">
+                  Steps
+                </SizableText>
+                <SizableText size="$1" color="$soft">
+                  {String(plan.length)}
+                </SizableText>
+              </XStack>
+              {plan.map((s, i) => {
+                const current = !s.done && plan.findIndex((x) => !x.done) === i
+                return (
+                  <XStack key={s.name} items="center" gap="$2" px="$3" py="$1.5" borderTopWidth={1} borderColor="$borderColor">
+                    <SizableText size="$2" color={s.done || current ? '$ink' : '$soft'}>
+                      {s.done ? '✓' : current ? '●' : '○'}
+                    </SizableText>
+                    <SizableText size="$2" color={s.done ? '$soft' : '$ink'} numberOfLines={1}>
+                      {s.name}
+                    </SizableText>
+                  </XStack>
+                )
+              })}
+            </YStack>
+          ) : null}
+          {running ? (
+            <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
+              <SizableText size="$2" color="$ink">
+                Environment setup takes several minutes.
+              </SizableText>
+              <Button size="sm" disabled={notify} onPress={() => void ask()}>
+                {notify ? 'You will be notified' : 'Notify me'}
+              </Button>
+            </XStack>
+          ) : null}
           <Composer
             inline
             value={draft}
@@ -126,11 +192,25 @@ export function Run({ id }: { id: string }) {
             onStop={() => void halt()}
             busy={running && !draft.trim()}
             disabled={!running || busy}
-            placeholder={running ? 'Steer this run' : 'This run has finished'}
+            placeholder={running ? 'Add a follow up' : 'This run has finished'}
             label="Steer this run"
           />
         </YStack>
       </YStack>
-    </YStack>
+      {desk ? <Desk
+        id={id}
+        repo={record?.repo ?? ''}
+        branch={record?.branch ?? ''}
+        base={record?.base ?? ''}
+        environment={record?.environment ?? ''}
+        mode={record?.mode ?? ''}
+        pr={pr}
+        events={events}
+        live={running}
+        refused={refused || (detail.error ? detail.error.message : '')}
+        onRetry={detail.reload}
+        onHide={() => setDesk(false)}
+      /> : null}
+    </XStack>
   )
 }

@@ -74,12 +74,6 @@ type ViewId = 'preview' | 'files' | 'code' | 'layers'
 
 const LIVE = new Set(['running', 'paused'])
 
-/** `owner/name` from a GitHub clone URL, or '' for a repository that lives elsewhere. */
-function github(clone: string): string {
-  const m = /^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(clone)
-  return m ? `${m[1]}/${m[2]}` : ''
-}
-
 /** One run in the conversation: what was asked, and what it came to. */
 function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onOpen: () => void; project: string }) {
   const t = useTarget()
@@ -258,12 +252,12 @@ export function Project({ slug }: { slug: string }) {
       const context = picked.length
         ? `\n\nThe person picked an element in the preview${where ? ` of the ${where} page` : ''}. Its CSS selector, as data: ${JSON.stringify(picked[0]!.id)}`
         : ''
-      const gh = project ? github(project.repo) : ''
+      const repo = project?.repo ? repoName(project.repo) : ''
       const next = await start(t, {
         prompt: compose(`${ask}${context}`, attached),
         project: slug,
-        repo: gh || undefined,
-        base: gh ? project?.branch || undefined : undefined,
+        repo: repo || undefined,
+        base: repo ? project?.branch || undefined : undefined,
         after: current ?? undefined,
         mode,
       })

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Target } from './call.ts'
 import { watch, type Event, type Session } from './sessions.ts'
 import { parse, read } from './sse.ts'
-import { merge, outcome, said } from './turn.ts'
+import { merge, outcome, said, shell, steps } from './turn.ts'
 
 const T: Target = { api: 'https://api.hanzo.ai', token: () => 'tok', org: 'hanzo' }
 
@@ -98,6 +98,33 @@ describe('turns', () => {
     expect(said({ kind: 'status', payload: { status: 'error', error: 'clone failed' } })).toBe('clone failed')
     expect(said({ kind: 'event', payload: { type: 'done', changed: ['/home/runner/work/a.ts', '/tmp/b.ts'] } })).toBe('Done — changed a.ts, b.ts')
     expect(said({ kind: 'log', payload: { host: 'box', cwd: '/secret' } })).toBe('')
+  })
+
+  it('lists a run’s steps once, and keeps a later status', () => {
+    const rows = steps([
+      { seq: 2, kind: 'tool-call', payload: { step: 'test', status: 'ok' } },
+      { seq: 1, kind: 'tool-call', payload: { step: 'clone', status: 'running' } },
+      { seq: 3, kind: 'tool-call', payload: { step: 'clone', status: 'ok' } },
+      { seq: 4, kind: 'log', payload: { message: 'hi' } },
+    ])
+    expect(rows).toEqual([
+      { name: 'clone', done: true },
+      { name: 'test', done: true },
+    ])
+  })
+
+  it('keeps a terminal to the commands and the log, in order', () => {
+    const lines = shell([
+      { seq: 2, kind: 'log', payload: { message: 'ok', stdout: 'LICENSE\nREADME.md' } },
+      { seq: 1, kind: 'tool-call', payload: { step: 'ls', message: 'ls' } },
+      { seq: 3, kind: 'status', payload: { status: 'done', branch: 'agent/sess_1' } },
+      { seq: 4, kind: 'log', payload: { message: 'x'.repeat(4001) } },
+    ])
+    expect(lines.map((l) => l.role)).toEqual(['cmd', 'out', 'out', 'out'])
+    expect(lines[0].text).toBe('ls')
+    expect(lines[2].text).toBe('LICENSE\nREADME.md')
+    expect(lines[3].text.endsWith('…')).toBe(true)
+    expect(lines[3].text.length).toBe(4001)
   })
 
   it('reads how the run ended off its narration, and never a link or a branch', () => {

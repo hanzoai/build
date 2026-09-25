@@ -32,7 +32,7 @@ export const unhonoured = (mode: Mode | undefined, target?: string): string =>
 export interface Ask {
   /** The task, in the words you would use with a colleague. */
   prompt: string
-  /** `owner/name`. Omitted starts something new, in a repository named for it. */
+  /** The repository's name in the caller's org. A slash is not a name. Omitted starts something new. */
   repo?: string
   /** The branch to start from. Omitted takes the repository's default. */
   base?: string

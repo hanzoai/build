@@ -9,20 +9,20 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
-import { Button } from '@hanzo/ui'
 import { ModeSelect } from '@hanzo/ui/agents'
 import { Composer, EmptyPrompt } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
-import { branches, connect, repos } from './api/github.ts'
+import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
 import { ENSO, models } from './api/models.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
-import { clone } from './api/platform.ts'
+import { isForge } from './choice.ts'
 import { useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { Publish, type Source } from './publish.tsx'
+import { path } from './route.ts'
 import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
 
 /** One vocabulary for the mode, on New and in a workspace. */
@@ -39,15 +39,16 @@ const EFFORTS = [
 
 /** What a person chose last time, per org. */
 interface Kept {
-  repo: RowRepo | null
+  repo: (RowRepo & { forge?: boolean; clone?: string }) | null
   branch: string
   place: string
   mode: Mode
   model: string
   effort: string
+  ask: string
 }
 
-const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', model: ENSO, effort: 'medium' }
+const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', model: ENSO, effort: 'medium', ask: '' }
 
 const COLUMN = 768
 
@@ -58,50 +59,48 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [kept, keep] = useKept<Kept>(`hanzo.build.new.${host.org ?? 'none'}`, FIRST)
   const set = (patch: Partial<Kept>) => keep({ ...kept, ...patch })
 
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(kept.ask || '')
   const [files, setFiles] = useState<Attached[]>([])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
-  const [connected, setConnected] = useState(true)
   const [adding, setAdding] = useState<Source | null>(null)
+
+  // A codebase or an issue hands its words over once. Left in the kept choice,
+  // every later visit to New would put them back.
+  useEffect(() => {
+    if (kept.ask) set({ ask: '' })
+    // The handover is read on this mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const places = usePlaces(t, signed)
   const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
   const place: Place = places.value.find((p) => p.id === kept.place) ?? SANDBOX
 
+  const known = useRef(new Map<string, ForgeRepo>())
+
   const loadRepos = useCallback(
-    async (q: string, after?: string | null) => {
-      const page = await repos(t, { q, after: after ?? undefined })
-      setConnected(page.connected)
-      return { repos: page.repos, next: page.next || null }
+    async (q: string) => {
+      const page = await codebases(t, q)
+      const repos = page.map(asRepo)
+      for (const r of repos) known.current.set(r.name, r)
+      return { repos, next: null }
     },
     [t],
   )
 
   const loadBranches = useCallback(
-    async (q: string, after?: string | null) => {
+    async (q: string) => {
       if (!kept.repo) return { branches: [], next: null }
-      const page = await branches(t, kept.repo.owner, kept.repo.name, { q, after: after ?? undefined })
-      return { branches: page.branches.map((b) => ({ name: b.name })), next: page.next || null }
+      const found = await one(t, kept.repo.name)
+      const needle = q.trim().toLowerCase()
+      const names = (found?.branches ?? [kept.repo.default_branch || 'main']).filter(
+        (b) => !needle || b.toLowerCase().includes(needle),
+      )
+      return { branches: names.map((name) => ({ name })), next: null }
     },
     [t, kept.repo],
   )
-
-  const link = async () => {
-    try {
-      const to = await connect(t)
-      // The console completes the connection at /connectors and brings the
-      // person back here: a path, never an origin.
-      try {
-        window.sessionStorage.setItem('hanzo.return', window.location.pathname + window.location.search)
-      } catch {
-        /* they land on the connectors page and come back themselves */
-      }
-      window.location.assign(to)
-    } catch (e) {
-      setNote(e instanceof Error ? e.message : 'Could not start the GitHub connection')
-    }
-  }
 
   const send = async () => {
     const prompt = draft.trim()
@@ -110,13 +109,18 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       host.signIn?.()
       return
     }
+    if (!isForge(kept.repo)) {
+      setNote('Choose a codebase on the forge.')
+      return
+    }
     setBusy(true)
     setNote('')
     try {
       const run = await start(t, {
         prompt: compose(prompt, files),
-        repo: kept.repo ? `${kept.repo.owner}/${kept.repo.name}` : undefined,
-        base: kept.repo ? kept.branch || kept.repo.default_branch || undefined : undefined,
+        // The name alone. The org rides the request, and a slash is not a repo name.
+        repo: isForge(kept.repo) ? kept.repo.name : undefined,
+        base: isForge(kept.repo) ? kept.branch || kept.repo.default_branch || undefined : undefined,
         targetId: place.id || undefined,
         mode: kept.mode,
         model: kept.model === ENSO ? undefined : kept.model,
@@ -165,32 +169,33 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         }
       />
       <RepoSelect
-        value={kept.repo}
-        onChange={(r) => set({ repo: r, branch: r.default_branch || 'main' })}
+        value={isForge(kept.repo) ? kept.repo : null}
+        onChange={(r) => {
+          const row = known.current.get(r.name) ?? chosen(r)
+          set({ repo: row, branch: row.default_branch })
+        }}
         load={loadRepos}
-        troubleshoot={{ label: 'Troubleshoot GitHub connection', onPress: () => host.open(host.links.github) }}
-        note="Not all repositories are shown. Type to search."
-        connect={
-          !connected && !host.admin ? (
-            <Button size="sm" onPress={() => void link()}>
-              Connect GitHub
-            </Button>
-          ) : undefined
-        }
+        troubleshoot={{
+          label: 'Browse codebases',
+          onPress: () => host.go(path({ kind: 'screen', screen: 'codebases' })),
+        }}
+        note="Repositories on the forge. Type to search."
         action={{
           label: 'Add to project',
-          onPress: (r) =>
+          onPress: (r) => {
+            const row = known.current.get(r.name)
             setAdding({
-              repo: clone(`${r.owner}/${r.name}`),
-              title: `${r.owner}/${r.name}`,
+              repo: row?.clone || `${t.api}/v1/git/${r.owner}/${r.name}.git`,
+              title: row?.full_name || `${r.owner}/${r.name}`,
               ref: r.default_branch || 'main',
               name: r.name,
-            }),
+            })
+          },
         }}
-        placeholder="Repository"
+        placeholder="Codebase"
         disabled={!signed}
       />
-      {kept.repo ? <BranchSelect value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} /> : null}
+      {isForge(kept.repo) ? <BranchSelect value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} /> : null}
       <Files files={files} onFiles={setFiles} />
     </XStack>
   )

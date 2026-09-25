@@ -159,3 +159,81 @@ export async function connect(t: Target): Promise<string> {
 export async function disconnect(t: Target): Promise<void> {
   await call<unknown>(t, 'POST', '/v1/provider/github/user/disconnect')
 }
+
+/** One repository the GitHub connection grants this organization. */
+export interface Grant {
+  owner: string
+  name: string
+  /** `owner/name`, the selector the importer accepts. */
+  fullName: string
+  private: boolean
+  branch: string
+  /** Already mirrored onto the forge. */
+  imported: boolean
+  /** `synced`, `conflict`, or '' while it has not landed. */
+  status: string
+}
+
+export interface Grants {
+  repos: Grant[]
+  /** Accounts the connection could not read. */
+  unread: string[]
+}
+
+export interface Account {
+  name: string
+  count: number
+  /** Named as unread and carrying no repositories. */
+  blocked: boolean
+}
+
+export function grant(raw: unknown): Grant | null {
+  const r = obj(raw)
+  const name = str(r.name)
+  if (!name) return null
+  const full = str(r.fullName) || str(r.full_name)
+  const owner = str(r.owner) || (full.includes('/') ? full.slice(0, full.indexOf('/')) : '')
+  return {
+    owner,
+    name,
+    fullName: full || (owner ? `${owner}/${name}` : name),
+    private: r.private === true,
+    branch: str(r.defaultBranch) || str(r.default_branch) || 'main',
+    imported: r.imported === true,
+    status: str(r.syncStatus) || str(r.sync_status),
+  }
+}
+
+/** Accounts the grant names, plus any account that could not be read. */
+export function accounts(g: Grants): Account[] {
+  const counts = new Map<string, number>()
+  for (const r of g.repos) {
+    if (!r.owner) continue
+    counts.set(r.owner, (counts.get(r.owner) ?? 0) + 1)
+  }
+  const unread = new Set(g.unread.filter(Boolean))
+  const names = new Set<string>([...counts.keys(), ...unread])
+  return [...names]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => {
+      const count = counts.get(name) ?? 0
+      return { name, count, blocked: unread.has(name) && count === 0 }
+    })
+}
+
+/** Every repository the GitHub connection grants, with whether the forge already has it. */
+export async function grants(t: Target, signal?: AbortSignal): Promise<Grants> {
+  const raw = obj(await call<unknown>(t, 'GET', '/v1/provider/github/repos', undefined, { signal }))
+  return {
+    repos: (Array.isArray(raw.repos) ? raw.repos : []).map(grant).filter((r): r is Grant => r !== null),
+    unread: (Array.isArray(raw.unread) ? raw.unread : []).filter((x): x is string => typeof x === 'string' && x !== ''),
+  }
+}
+
+/** Queue a mirror of the named repositories onto the forge. The names are `owner/name`. */
+export async function bring(t: Target, repos: string[]): Promise<number> {
+  const names = repos.map((n) => n.trim()).filter(Boolean)
+  if (names.length === 0) throw new Error('Choose a repository first')
+  const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/repos/import', { repos: names }))
+  return num(raw.queued)
+}

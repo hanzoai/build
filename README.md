@@ -67,6 +67,11 @@ hanzo.id token for `Host.admin`. One left column, never two.
 |---|---|
 | `''` | New — the empty state and the composer |
 | `sess_<32 hex>` | one run, live |
+| `-/automations` | repeating work, read from `/v1/auto/flows` |
+| `-/codebases` | the forge's repositories |
+| `-/sync` | bring granted repositories onto the forge |
+| `-/projects` | the forge's boards |
+| `-/issues` | the forge's issues |
 | `-/artifacts` | what the org has built |
 | `-/templates` | the public starters |
 | `<slug>` | a project's workspace |
@@ -76,16 +81,19 @@ collide.
 
 ## What is on the screen
 
-**The rail** (hanzo.build). New, Artifacts, Customize (the platform's
-plugins), More (Templates, Machines, Docs), then the org's coding runs newest
-first with a live status dot, and the account. Collapse is an explicit toggle
-kept in this browser. A host with its own rail draws `DevSection` there instead.
+**The rail** (hanzo.build). New, then Automations, then the forge — Codebase, Projects, Issues —
+then Artifacts, Customize (the platform's plugins), More (Templates, Machines,
+Docs), then the org's coding runs newest first with a live status dot, and the
+account. Collapse is an explicit toggle kept in this browser. A host with its
+own rail draws `DevSection` there instead.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
-(Default is the platform's sandbox; the org's machines follow), the repository
-and the branch — both searchable, paged popovers opening upward — then the
+(Default is the platform's sandbox; the org's machines follow), the codebase
+and the branch — the forge's repositories, filtered as you type — then the
 ask. Under it: attach (files ride the prompt as text), dictate, Build or Plan,
-and the model and effort. A repository row can be added to a project.
+and the model and effort. A codebase can be added to a project. Opening a
+codebase or an issue from its own screen lands here with that choice already
+made.
 
 **A run.** The transcript as it streams, steering while it works, Stop, and
 the pull request once it pushes one.
@@ -104,7 +112,11 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/agent/sessions/{id}` · `GET /v1/agent/sessions/stream?root=` | a run, and its live feed (SSE over fetch) |
 | `POST /v1/agent/sessions/{id}/message` · `/stop` | steer, stop |
 | `GET /v1/agent/targets` | the org's machines |
-| `GET /v1/provider/github/repos` · `…/{owner}/{repo}/branches` | the chips' pagers |
+| `GET /v1/auto/flows` · `POST /v1/auto/flows` · `POST /v1/auto/flows/{id}/enable` | automations |
+| `GET /v1/provider/github/repos` · `POST /v1/provider/github/repos/import` | granted repositories, and bringing them onto the forge |
+| `GET /v1/git/repos` · `GET /v1/git/repos/{name}` | the codebase chip, and its branches |
+| `GET /v1/task/projects` · `GET /v1/task/board` · `GET /v1/task/projects/{key}/issues` | boards and issues, read from the forge |
+| `GET /v1/provider/github/repos` · `…/{owner}/{repo}/branches` | kept for a host that still asks GitHub |
 | `POST /v1/provider/github/user/connect` | connect a person's GitHub |
 | `GET /v1/projects` · `POST /v1/projects/fork` · `GET /v1/templates` | artifacts, templates |
 | `GET /v1/git/repos/{name}/tree` · `/blob` | Files and Code |
@@ -121,6 +133,7 @@ src/
   index.ts      the library surface
   builder.tsx   the rail and the pane the address names
   landing.tsx   New
+  forge.tsx     Codebase, Automations, Projects, Issues
   run.tsx       one run
   project.tsx   a project's workspace
   shelf.tsx     Artifacts and Templates

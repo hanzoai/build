@@ -12,6 +12,11 @@ describe('route', () => {
     [`/${ID}/`, { kind: 'run', id: ID }],
     ['-/artifacts', { kind: 'screen', screen: 'artifacts' }],
     ['-/templates', { kind: 'screen', screen: 'templates' }],
+    ['-/codebases', { kind: 'screen', screen: 'codebases' }],
+    ['-/projects', { kind: 'screen', screen: 'projects' }],
+    ['-/issues', { kind: 'screen', screen: 'issues' }],
+    ['-/automations', { kind: 'screen', screen: 'automations' }],
+    ['-/sync', { kind: 'screen', screen: 'sync' }],
     ['mega-shop', { kind: 'project', slug: 'mega-shop' }],
     ['artifacts', { kind: 'project', slug: 'artifacts' }],
   ])('%s', (p, r) => expect(route(p)).toEqual(r))
@@ -22,6 +27,6 @@ describe('route', () => {
   )
 
   it('inverts', () => {
-    for (const p of ['', ID, '-/artifacts', 'mega-shop']) expect(path(route(p))).toBe(p)
+    for (const p of ['', ID, '-/artifacts', '-/codebases', '-/projects', '-/issues', '-/automations', '-/sync', 'mega-shop']) expect(path(route(p))).toBe(p)
   })
 })

@@ -3,14 +3,14 @@
  *
  *   ''              the empty state: a new run
  *   sess_<32 hex>   one run
- *   -/<screen>      a builder screen (artifacts, templates)
+ *   -/<screen>      a builder screen
  *   <slug>          a project's workspace
  *
  * Unambiguous by construction: a project slug is `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`,
  * so it can hold neither the `_` a session id carries nor start with `-`.
  * Anything else is not an address here and reads as the empty state.
  */
-export type Screen = 'artifacts' | 'templates'
+export type Screen = 'artifacts' | 'templates' | 'codebases' | 'projects' | 'issues' | 'automations' | 'sync'
 
 export type Route =
   | { kind: 'new' }
@@ -20,7 +20,7 @@ export type Route =
 
 export const SESSION = /^sess_[0-9a-f]{32}$/
 export const SLUG = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/
-const SCREENS: readonly Screen[] = ['artifacts', 'templates']
+const SCREENS: readonly Screen[] = ['artifacts', 'templates', 'codebases', 'projects', 'issues', 'automations', 'sync']
 
 export function route(path: string): Route {
   const p = path.replace(/^\/+|\/+$/g, '')

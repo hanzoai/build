@@ -1,11 +1,16 @@
 /**
  * The builder: the rail, and whichever pane the address names.
  *
- *   /            New — the empty state, a composer over the repo it works on
+ *   /            New — the empty state, a composer over the codebase it works on
  *   /sess_…      one run, live
+ *   /-/automations repeating work
+   /-/codebases the forge's repositories
+ *   /-/sync      bring granted repositories onto the forge
+ *   /-/projects  the forge's boards
+ *   /-/issues    the forge's issues
  *   /-/artifacts what this org has built
  *   /-/templates the public starters
- *   /<slug>      a project's workspace, in this same window
+ *   /<slug>      a deployed project's workspace, in this same window
  *
  * The rail is the sessions rail every Hanzo surface shares: New, the builder's
  * places, the org's coding runs newest first with a live status dot, and the
@@ -19,13 +24,15 @@
  * left column, never two.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Blocks, BookOpen, Cpu, LayoutTemplate, Menu, Puzzle } from '@hanzogui/lucide-icons-2'
+import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, Kanban, LayoutTemplate, Menu, Puzzle, Workflow } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useMemo, useState } from 'react'
 
+import { pinBoard } from './choice.ts'
 import { useKept, useRecents } from './data.ts'
+import { Forge } from './forge.tsx'
 import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
 import { Landing } from './landing.tsx'
 import { Project } from './project.tsx'
@@ -61,6 +68,19 @@ function Shell() {
 
   const screen = r.kind === 'screen' ? r.screen : ''
   const links: RailLink[] = [
+    { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' },
+    { id: 'codebases', label: 'Codebase', icon: <FolderGit2 size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'codebases' })), active: screen === 'codebases' },
+    { id: 'projects', label: 'Projects', icon: <Kanban size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'projects' })), active: screen === 'projects' },
+    {
+      id: 'issues',
+      label: 'Issues',
+      icon: <CircleDot size={16} />,
+      onPress: () => {
+        pinBoard(host.org, '')
+        go(path({ kind: 'screen', screen: 'issues' }))
+      },
+      active: screen === 'issues',
+    },
     { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
     { id: 'customize', label: 'Customize', icon: <Puzzle size={16} />, onPress: () => host.open(host.links.customize) },
   ]
@@ -72,6 +92,7 @@ function Shell() {
 
   return (
     <XStack flex={1} minH={0} minW={0} bg="$background">
+      <YStack position="relative" shrink={0}>
       <SessionRail
         onNew={() => go('')}
         fresh={r.kind === 'new'}
@@ -96,11 +117,32 @@ function Shell() {
         onSearch={() => setFinding(true)}
         collapsed={collapsed}
         onCollapse={setCollapsed}
-        mark={<HanzoMark size={18} />}
+        mark={<Brand org={host.org} />}
+        pt={collapsed ? undefined : 44}
         open={drawer}
         onOpenChange={setDrawer}
         label="Runs"
       />
+      {collapsed ? null : (
+        <XStack
+          position="absolute"
+          t={8}
+          l={8}
+          r={8}
+          z={2}
+          items="center"
+          gap="$2"
+          render="button"
+          aria-label={host.org ? `Organization ${host.org}` : 'Hanzo'}
+          onPress={() => go('')}
+        >
+          <Brand org={host.org} />
+          <SizableText size="$2" color="$ink" numberOfLines={1}>
+            {host.org || 'Hanzo'}
+          </SizableText>
+        </XStack>
+      )}
+      </YStack>
       <YStack flex={1} minW={0} minH={0} position="relative">
         {/* Below md the rail is a drawer; this is the one control that opens it. */}
         {/* Its own row, in flow: laid over the pane it covered the heading's mark. */}
@@ -122,7 +164,11 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   const host = useHost()
   const r = route(host.path)
   if (r.kind === 'run') return <Run key={r.id} id={r.id} />
-  if (r.kind === 'screen') return r.screen === 'artifacts' ? <Artifacts /> : <Templates />
+  if (r.kind === 'screen') {
+    if (r.screen === 'artifacts') return <Artifacts />
+    if (r.screen === 'templates') return <Templates />
+    return <Forge key={r.screen} screen={r.screen} />
+  }
   return (
     <Landing
       onStarted={(id) => {
@@ -130,6 +176,19 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
         host.go(id)
       }}
     />
+  )
+}
+
+/** The Hanzo mark on a personal account. An organization shows its own initial. */
+function Brand({ org }: { org: string | null }) {
+  if (!org || org === 'hanzo') return <HanzoMark size={18} />
+  const letter = org.trim().charAt(0).toUpperCase() || 'H'
+  return (
+    <XStack width={18} height={18} rounded="$1" items="center" justify="center" bg="$raised" aria-hidden>
+      <SizableText size="$1" fontWeight="600" color="$ink">
+        {letter}
+      </SizableText>
+    </XStack>
   )
 }
 

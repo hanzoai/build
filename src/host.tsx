@@ -29,7 +29,7 @@ export interface Host {
   person: Person | null
   /** Whether the person administers `org`: an admin publishes to main, anyone else opens a review. */
   admin: boolean
-  /** The address under the mount: '' | a session id | a project slug | '-/<screen>'. */
+  /** The address under the mount: '' | a session id | a slug | '-/codebases' | '-/projects' | '-/issues' | '-/artifacts' | '-/templates'. */
   path: string
   /** Move under the mount. */
   go: (path: string, how?: { replace?: boolean }) => void

@@ -129,6 +129,38 @@ describe('github', () => {
     await expect(github.connect(T)).rejects.toThrow('did not name a GitHub address')
   })
 
+  it('reads a grant and the accounts it could not', async () => {
+    answer(200, {
+      repos: [
+        { name: 'cloud', fullName: 'hanzoai/cloud', private: true, defaultBranch: 'main', imported: true, syncStatus: 'synced' },
+        { name: 'ai', fullName: 'hanzo-apps/ai', imported: false },
+        { name: '' },
+      ],
+      unread: ['joehughesjr', ''],
+    })
+    const page = await github.grants(T)
+    expect(page.repos).toEqual([
+      { owner: 'hanzoai', name: 'cloud', fullName: 'hanzoai/cloud', private: true, branch: 'main', imported: true, status: 'synced' },
+      { owner: 'hanzo-apps', name: 'ai', fullName: 'hanzo-apps/ai', private: false, branch: 'main', imported: false, status: '' },
+    ])
+    expect(github.accounts(page)).toEqual([
+      { name: 'hanzo-apps', count: 1, blocked: false },
+      { name: 'hanzoai', count: 1, blocked: false },
+      { name: 'joehughesjr', count: 0, blocked: true },
+    ])
+  })
+
+  it('queues a mirror by owner and name', async () => {
+    const seen = answer(202, { queued: 2, repos: ['hanzoai/cloud', 'hanzoai/ai'] })
+    expect(await github.bring(T, ['hanzoai/cloud', ' hanzoai/ai '])).toBe(2)
+    expect(seen[0]).toMatchObject({
+      method: 'POST',
+      url: 'https://api.hanzo.ai/v1/provider/github/repos/import',
+      body: { repos: ['hanzoai/cloud', 'hanzoai/ai'] },
+    })
+    await expect(github.bring(T, ['  '])).rejects.toThrow('Choose a repository first')
+  })
+
   it('reads the connection and disconnects', async () => {
     answer(200, { configured: true, connected: true, login: 'zeekay', connectedAt: '2026-09-24T12:00:00Z' })
     expect(await github.connection(T)).toEqual({ configured: true, connected: true, login: 'zeekay' })
@@ -313,6 +345,87 @@ describe('verdict', () => {
     })
     answer(200, { accepted: 0, dropped: 1 })
     await expect(verdict(T, 'sess_1', 'shop', 'down')).rejects.toThrow('not recorded')
+  })
+})
+
+describe('forge', () => {
+  it('lists codebases and maps one onto the chip', async () => {
+    const seen = answer(200, {
+      data: [
+        { org: 'hanzo', name: 'cloud', defaultBranch: 'main', public: false, cloneUrl: 'https://api.hanzo.ai/v1/git/hanzo/cloud.git', description: 'the platform' },
+        { name: '' },
+      ],
+    })
+    const { asRepo, codebases } = await import('./codebases.ts')
+    const list = await codebases(T, 'clo')
+    expect(seen[0].url).toBe('https://api.hanzo.ai/v1/git/repos')
+    expect(list.map((c) => c.name)).toEqual(['cloud'])
+    expect(asRepo(list[0])).toMatchObject({ full_name: 'hanzo/cloud', forge: true, default_branch: 'main', private: true })
+  })
+
+  it('creates a repository by name and refuses a path', async () => {
+    const seen = answer(201, { name: 'notes', defaultBranch: 'main', org: 'hanzo' })
+    const { create } = await import('./codebases.ts')
+    const row = await create(T, 'notes', 'scratch')
+    expect(seen[0].url).toBe('https://api.hanzo.ai/v1/git/repos')
+    expect(seen[0].body).toEqual({ name: 'notes', description: 'scratch' })
+    expect(row.name).toBe('notes')
+    await expect(create(T, 'hanzo/notes')).rejects.toThrow(/name/)
+  })
+
+  it('reads a codebase with its branches', async () => {
+    answer(200, { name: 'cloud', defaultBranch: 'main', branches: ['main', 'agent/1'] })
+    const { one } = await import('./codebases.ts')
+    const got = await one(T, 'cloud')
+    expect(got?.branches).toEqual(['main', 'agent/1'])
+  })
+
+  it('lists boards and a board\'s issues from the forge', async () => {
+    const seen = answer(200, [{ key: 'cloud', name: 'cloud', id: 'hanzo/cloud' }])
+    const { boards, issues } = await import('./work.ts')
+    expect((await boards(T)).map((b) => b.key)).toEqual(['cloud'])
+    expect(seen[0].url).toBe('https://api.hanzo.ai/v1/task/projects')
+
+    const issuesSeen = answer(200, [{ projectKey: 'cloud', number: 4, title: 'Ship it', status: 'todo', identifier: 'cloud#4', repo: 'cloud' }])
+    const rows = await issues(T, 'cloud')
+    expect(issuesSeen[0].url).toBe('https://api.hanzo.ai/v1/task/projects/cloud/issues')
+    expect(rows[0]).toMatchObject({ identifier: 'cloud#4', repo: 'cloud', status: 'todo' })
+
+    const all = answer(200, [])
+    await issues(T)
+    expect(all[0].url).toBe('https://api.hanzo.ai/v1/task/board')
+  })
+})
+
+describe('automations', () => {
+  it('lists flows and reads each name from its version', async () => {
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        seen.push(url)
+        const body = url.endsWith('/flows')
+          ? { data: [{ id: 'flow_1', status: 'DISABLED', updated: 10 }] }
+          : { id: 'flow_1', status: 'DISABLED', updated: 10, version: { displayName: 'Nightly' } }
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+      }),
+    )
+    const { flows } = await import('./auto.ts')
+    const rows = await flows(T)
+    expect(seen[0]).toBe('https://api.hanzo.ai/v1/auto/flows')
+    expect(seen[1]).toBe('https://api.hanzo.ai/v1/auto/flows/flow_1')
+    expect(rows).toEqual([{ id: 'flow_1', name: 'Nightly', status: 'DISABLED', updated: 10 }])
+  })
+
+  it('creates a disabled draft and arms it by a separate call', async () => {
+    const seen = answer(201, { id: 'flow_2', status: 'DISABLED', version: { displayName: 'Nightly' } })
+    const { add, arm } = await import('./auto.ts')
+    expect((await add(T, 'Nightly')).name).toBe('Nightly')
+    expect(seen[0].method).toBe('POST')
+    expect(seen[0].body).toMatchObject({ displayName: 'Nightly', trigger: { strategy: 'MANUAL' } })
+    const armed = answer(200, { id: 'flow_2', status: 'ENABLED' })
+    await arm(T, 'flow_2', true)
+    expect(armed[0].url).toBe('https://api.hanzo.ai/v1/auto/flows/flow_2/enable')
   })
 })
 

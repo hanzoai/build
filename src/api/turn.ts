@@ -90,6 +90,69 @@ export function said(e: Pick<Event, 'kind' | 'payload'>, mode = ''): string {
   return str(body.step) || str(body.name)
 }
 
+/** One line of the shell: a command the run started, or output that followed it. */
+export interface ShellLine {
+  role: 'cmd' | 'out'
+  text: string
+}
+
+/**
+ * The shell beside the transcript. A tool call is the command; a log line, and
+ * any stdout or stderr the payload carried, is the output. Status stays in the
+ * transcript. Each line is capped so a payload that carried a file body cannot
+ * fill the pane.
+ */
+export function shell(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): ShellLine[] {
+  const cap = 4000
+  const clip = (s: string) => (s.length > cap ? `${s.slice(0, cap)}…` : s)
+  const out: ShellLine[] = []
+  const push = (role: ShellLine['role'], text: string) => {
+    const line = clip(text)
+    if (line) out.push({ role, text: line })
+  }
+  for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
+    if (e.kind !== 'log' && e.kind !== 'tool-call') continue
+    const body = decode(e.payload)
+    if (typeof body === 'string') {
+      push('out', body)
+      continue
+    }
+    if (!body) continue
+    const step = str(body.step)
+    const message = str(body.message) || str(body.text) || str(body.command)
+    const stdout = str(body.stdout)
+    const stderr = str(body.stderr)
+    if (e.kind === 'tool-call' && step) push('cmd', step)
+    if (message && message !== step) push('out', message)
+    if (stdout) push('out', stdout)
+    if (stderr) push('out', stderr)
+  }
+  return out.slice(-400)
+}
+
+/** A step the run named. Done is a step whose status has settled. */
+export interface StepLine {
+  name: string
+  done: boolean
+}
+
+/** Tool calls, in the order they were first named. A later status for the same step wins. */
+export function steps(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): StepLine[] {
+  const order: string[] = []
+  const done = new Map<string, boolean>()
+  for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
+    if (e.kind !== 'tool-call') continue
+    const body = decode(e.payload)
+    if (!body || typeof body === 'string') continue
+    const name = str(body.step)
+    if (!name) continue
+    if (!done.has(name)) order.push(name)
+    const status = str(body.status)
+    done.set(name, status === 'ok' || status === 'done' || status === 'error')
+  }
+  return order.map((name) => ({ name, done: done.get(name) === true }))
+}
+
 export interface Outcome {
   /** The last lifecycle status the run narrated, or ''. */
   status: string
