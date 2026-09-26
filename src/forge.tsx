@@ -109,7 +109,7 @@ function Automations() {
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6">
       <YStack width="100%" maxW={1040} mx="auto" gap="$4">
         <XStack justify="space-between" items="flex-start" gap="$4">
-          <YStack gap="$1">
+          <YStack gap="$1" flex={1} minW={0}>
             <SizableText size="$6" fontWeight="500" color="$ink">
               Automations
             </SizableText>
@@ -117,13 +117,13 @@ function Automations() {
               Repeating work for this organization. A new one starts off, so you can name it before it runs.
             </SizableText>
           </YStack>
-          <Button size="sm" disabled={!signed} onPress={() => setMaking(true)}>
+          <Button size="sm" shrink={0} disabled={!signed} onPress={() => setMaking(true)}>
             <Plus size={14} />
             New automation
           </Button>
         </XStack>
         <XStack justify="flex-end">
-          <YStack width={240}>
+          <YStack width={240} maxW="100%">
             <Input value={q} onChangeText={setQ} placeholder="Search…" aria-label="Search automations" disabled={!signed} />
           </YStack>
         </XStack>
@@ -332,7 +332,7 @@ function Codebases() {
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6">
       <YStack width="100%" maxW={1040} mx="auto" gap="$4">
         <XStack justify="space-between" items="flex-start" gap="$4">
-          <YStack gap="$1">
+          <YStack gap="$1" flex={1} minW={0}>
             <SizableText size="$6" fontWeight="500" color="$ink">
               {host.org || 'Forge'}
             </SizableText>
@@ -343,6 +343,7 @@ function Codebases() {
           <XStack
             render="button"
             aria-label="Settings"
+            shrink={0}
             items="center"
             gap="$1.5"
             px="$2"
@@ -358,13 +359,13 @@ function Codebases() {
           </XStack>
         </XStack>
         <XStack gap="$2" items="center">
-          <XStack px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor">
+          <XStack px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" shrink={0} $max-md={{ display: 'none' }}>
             <SizableText size="$2" color="$ink">
               All repos
             </SizableText>
           </XStack>
-          <YStack flex={1} />
-          <YStack width={240} minW={0}>
+          <YStack flex={1} $max-md={{ display: 'none' }} />
+          <YStack width={240} minW={0} shrink={1} $max-md={{ width: 'auto', flex: 1 }}>
             <Input value={q} onChangeText={setQ} placeholder="Find repo…" aria-label="Find a repository" disabled={!signed} />
           </YStack>
           <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'sync' }))}>

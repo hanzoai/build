@@ -27,6 +27,7 @@ overrides:
 minimumReleaseAge: 0
 
 catalog:
+  '@playwright/test': 1.63.0
   '@hanzo/font': 1.9.3
   '@hanzo/gui': 8.3.5
   '@hanzo/iam': 0.21.18

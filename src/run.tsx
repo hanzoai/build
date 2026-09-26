@@ -21,14 +21,17 @@ import { message, stop } from './api/sessions.ts'
 import { outcome, pull, said, steps, who } from './api/turn.ts'
 import { useKept, useRun } from './data.ts'
 import { Desk } from './desk.tsx'
-import { useTarget } from './host.tsx'
+import { useHost, useTarget } from './host.tsx'
 import { Out } from './out.tsx'
 
 const LIVE = new Set(['running', 'paused', ''])
 
 export function Run({ id }: { id: string }) {
+  const host = useHost()
   const t = useTarget()
-  const { detail, record, events, status, refused } = useRun(t, id)
+  // Signed out, there is nothing to read: the gateway answers a bare run with a refusal.
+  const signed = Boolean(host.person)
+  const { detail, record, events, status, refused } = useRun(t, signed ? id : null)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -48,7 +51,7 @@ export function Run({ id }: { id: string }) {
   const plan = useMemo(() => steps(events), [events])
   const state = status || end.status
   const pr = pull(record?.pr ?? '', record?.repo ?? '')
-  const running = LIVE.has(state) && !detail.error
+  const running = signed && LIVE.has(state) && !detail.error
   const title = detail.value?.title || (detail.loading ? '' : 'Untitled run')
 
   useEffect(() => {
@@ -132,9 +135,20 @@ export function Run({ id }: { id: string }) {
         <Transcript
           blocks={blocks}
           empty={
-            <SizableText size="$2" color="$soft">
-              {detail.error ? detail.error.message : detail.loading ? 'Reading this run…' : running ? 'Setting up environment' : 'Waiting for the run’s first step…'}
-            </SizableText>
+            signed ? (
+              <SizableText size="$2" color="$soft">
+                {detail.error ? detail.error.message : detail.loading ? 'Reading this run…' : running ? 'Setting up environment' : 'Waiting for the run’s first step…'}
+              </SizableText>
+            ) : (
+              <YStack gap="$3" items="flex-start">
+                <SizableText size="$2" color="$soft">
+                  Sign in to follow this run.
+                </SizableText>
+                <Button size="sm" onPress={() => host.signIn?.()}>
+                  Sign in
+                </Button>
+              </YStack>
+            )
           }
         />
 
@@ -144,7 +158,7 @@ export function Run({ id }: { id: string }) {
               The branch is pushed, and the pull request could not be opened.
             </SizableText>
           ) : null}
-          {note || refused ? (
+          {note || (signed && refused) ? (
             <SizableText size="$1" color="$soft" role="status">
               {note || refused}
             </SizableText>
@@ -192,7 +206,7 @@ export function Run({ id }: { id: string }) {
             onStop={() => void halt()}
             busy={running && !draft.trim()}
             disabled={!running || busy}
-            placeholder={running ? 'Add a follow up' : 'This run has finished'}
+            placeholder={!signed ? 'Sign in to follow up' : running ? 'Add a follow up' : 'This run has finished'}
             label="Steer this run"
           />
         </YStack>
@@ -207,8 +221,9 @@ export function Run({ id }: { id: string }) {
         pr={pr}
         events={events}
         live={running}
-        refused={refused || (detail.error ? detail.error.message : '')}
-        onRetry={detail.reload}
+        refused={signed ? refused || (detail.error ? detail.error.message : '') : 'Sign in to follow this run.'}
+        retry={signed ? 'Retry' : 'Sign in'}
+        onRetry={signed ? detail.reload : () => host.signIn?.()}
         onHide={() => setDesk(false)}
       /> : null}
     </XStack>

@@ -2,3 +2,4 @@ node_modules
 dist
 *.tsbuildinfo
 lib
+test-results

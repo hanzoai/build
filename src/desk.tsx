@@ -27,6 +27,7 @@ export function Desk({
   events,
   live,
   refused,
+  retry = 'Retry',
   onRetry,
   onHide,
 }: {
@@ -40,6 +41,8 @@ export function Desk({
   events: Event[]
   live: boolean
   refused: string
+  /** The refusal's one action: Retry, or Sign in when nobody is. */
+  retry?: string
   onRetry: () => void
   onHide?: () => void
 }) {
@@ -129,7 +132,7 @@ export function Desk({
           </YStack>
         ) : null}
         {tab === 'terminal' ? (
-          <Terminal lines={lines} live={live} refused={refused} onRetry={onRetry} />
+          <Terminal lines={lines} live={live} refused={refused} retry={retry} onRetry={onRetry} />
         ) : null}
         {tab === 'files' ? <Files repo={name} refName={ref} /> : null}
         {tab === 'subscriptions' ? (
@@ -182,11 +185,13 @@ function Terminal({
   lines,
   live,
   refused,
+  retry,
   onRetry,
 }: {
   lines: ShellLine[]
   live: boolean
   refused: string
+  retry: string
   onRetry: () => void
 }) {
   const prompt = 'workspace'
@@ -206,7 +211,7 @@ function Terminal({
             </SizableText>
             {refused ? (
               <Button size="sm" variant="outline" onPress={onRetry}>
-                Retry
+                {retry}
               </Button>
             ) : null}
           </YStack>

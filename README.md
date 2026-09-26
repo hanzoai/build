@@ -13,6 +13,8 @@ here — and github.com is opened only for the repository grant.
 pnpm install
 pnpm dev            # http://localhost:3200
 pnpm test           # the transport contract and the address grammar
+pnpm site           # every screen of https://hanzo.build in a browser (SITE= for another origin)
+pnpm e2e            # one live agent turn, projected the way a run draws it
 pnpm build:lib      # lib/ — what npm ships
 ```
 

@@ -70,6 +70,16 @@ function Shell() {
   }, [recents.value, order])
 
   const screen = r.kind === 'screen' ? r.screen : ''
+  // The top left: the organization switcher once there is an org to switch, the mark before.
+  // Beside the rail from md up, beside the drawer's button below it — one place at a time.
+  const switcher = Boolean(host.person && (host.org || (host.memberships?.length ?? 0) > 0))
+  const top = switcher ? (
+    <Where />
+  ) : (
+    <XStack render="button" aria-label="Hanzo" items="center" onPress={() => go('')}>
+      <HanzoMark size={18} />
+    </XStack>
+  )
   const links: RailLink[] = [
     { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' },
     { id: 'codebases', label: 'Codebase', icon: <FolderGit2 size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'codebases' })), active: screen === 'codebases' },
@@ -126,30 +136,25 @@ function Shell() {
         collapsed={collapsed}
         onCollapse={setCollapsed}
         mark={<Brand org={host.org} />}
-        pt={collapsed ? undefined : host.person && (host.org || (host.memberships?.length ?? 0) > 0) ? 80 : 40}
+        pt={collapsed ? undefined : switcher ? 80 : 40}
         open={drawer}
         onOpenChange={setDrawer}
         label="Runs"
       />
       {collapsed ? null : (
-        <XStack position="absolute" t={8} l={8} r={8} z={2} items="center">
-          {host.person && (host.org || (host.memberships?.length ?? 0) > 0) ? (
-            <Where />
-          ) : (
-            <XStack render="button" aria-label="Hanzo" items="center" onPress={() => go('')}>
-              <HanzoMark size={18} />
-            </XStack>
-          )}
+        <XStack position="absolute" t={8} l={8} r={8} z={2} items="center" $max-md={{ display: 'none' }}>
+          {top}
         </XStack>
       )}
       </YStack>
       <YStack flex={1} minW={0} minH={0} position="relative">
         {/* Below md the rail is a drawer; this is the one control that opens it. */}
         {/* Its own row, in flow: laid over the pane it covered the heading's mark. */}
-        <XStack height={44} px="$2" items="center" shrink={0} $md={{ display: 'none' }}>
+        <XStack height={44} px="$2" gap="$2" items="center" shrink={0} $md={{ display: 'none' }}>
           <Button variant="ghost" size="icon-sm" onPress={() => setDrawer(true)} aria-label="Open runs">
             <Menu size={18} />
           </Button>
+          {top}
         </XStack>
         <Pane onStarted={() => recents.reload()} />
       </YStack>
