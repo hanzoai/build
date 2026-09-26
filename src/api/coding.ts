@@ -18,15 +18,19 @@
  *
  * `model` and `effort` are taken by the dev harness the builder runs (and by
  * codex); the builder names no other harness, so they are always honoured.
+ *
+ * `setup` is a plan's shape put to one question: how this codebase is installed,
+ * started and checked. Its agent may install and run things in its sandbox, and
+ * its answer is kept as the codebase's proposed environment (environment.ts).
  */
 import { call, Refusal, type Target } from './call.ts'
 
-export type Mode = 'build' | 'plan'
+export type Mode = 'build' | 'plan' | 'setup'
 
 /** Why this mode cannot run where it is sent, or '' when it can. */
 export const unhonoured = (mode: Mode | undefined, target?: string): string =>
-  mode === 'plan' && target?.trim()
-    ? 'A plan runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Default, or switch to Build.'
+  (mode === 'plan' || mode === 'setup') && target?.trim()
+    ? `A ${mode} runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Default, or switch to Build.`
     : ''
 
 export interface Ask {

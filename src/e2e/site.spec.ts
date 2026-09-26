@@ -92,6 +92,14 @@ test('a run hides and shows its side pane', async ({ page }) => {
   await expect(page.getByText('Subscriptions', { exact: true })).toBeVisible()
 })
 
+test('a run shows its codebase’s environment beside it', async ({ page }, info) => {
+  await page.goto('/sess_0992f90537264a6b154ebff799f38e1c')
+  await page.getByLabel('Environment', { exact: true }).click()
+  await expect(page.getByText('Sign in to see this codebase’s environment.')).toBeVisible()
+  await expect(page.getByText('This run', { exact: true })).toBeVisible()
+  await page.screenshot({ path: info.outputPath('environment.png') })
+})
+
 /** Controls and text a phone would cut off at its right edge, or that sit on top of another control. */
 async function cramped(page: Page): Promise<string[]> {
   return page.evaluate(() => {

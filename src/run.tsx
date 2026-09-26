@@ -53,6 +53,9 @@ export function Run({ id }: { id: string }) {
   const pr = pull(record?.pr ?? '', record?.repo ?? '')
   const running = signed && LIVE.has(state) && !detail.error
   const title = detail.value?.title || (detail.loading ? '' : 'Untitled run')
+  // A setup run explores and installs before it answers, which takes minutes.
+  const setup = record?.mode === 'setup'
+  const [seen, setSeen] = useKept('hanzo.build.setup.seen', false)
 
   useEffect(() => {
     if (!notify || running) return
@@ -137,7 +140,15 @@ export function Run({ id }: { id: string }) {
           empty={
             signed ? (
               <SizableText size="$2" color="$soft">
-                {detail.error ? detail.error.message : detail.loading ? 'Reading this run…' : running ? 'Setting up environment' : 'Waiting for the run’s first step…'}
+                {detail.error
+                  ? detail.error.message
+                  : detail.loading
+                    ? 'Reading this run…'
+                    : running
+                      ? setup
+                        ? 'Setting up environment'
+                        : 'Starting…'
+                      : 'Waiting for the run’s first step…'}
               </SizableText>
             ) : (
               <YStack gap="$3" items="flex-start">
@@ -188,10 +199,11 @@ export function Run({ id }: { id: string }) {
               })}
             </YStack>
           ) : null}
+          {setup && running && !seen ? <Onboarding onDone={() => setSeen(true)} /> : null}
           {running ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
               <SizableText size="$2" color="$ink">
-                Environment setup takes several minutes.
+                {setup ? 'Environment setup takes several minutes.' : 'This run is still working.'}
               </SizableText>
               <Button size="sm" disabled={notify} onPress={() => void ask()}>
                 {notify ? 'You will be notified' : 'Notify me'}
@@ -206,7 +218,7 @@ export function Run({ id }: { id: string }) {
             onStop={() => void halt()}
             busy={running && !draft.trim()}
             disabled={!running || busy}
-            placeholder={!signed ? 'Sign in to follow up' : running ? 'Add a follow up' : 'This run has finished'}
+            placeholder={!signed ? 'Sign in to follow up' : running ? (setup ? 'Add a follow up for the setup agent' : 'Add a follow up') : 'This run has finished'}
             label="Steer this run"
           />
         </YStack>
@@ -227,5 +239,43 @@ export function Run({ id }: { id: string }) {
         onHide={() => setDesk(false)}
       /> : null}
     </XStack>
+  )
+}
+
+/** What a setup run does, said once per browser the first time one is watched. */
+function Onboarding({ onDone }: { onDone: () => void }) {
+  const steps = [
+    'Explore, install and check the codebase',
+    'Name the secrets it needs — you set their values',
+    'Propose the environment for you to review and save',
+  ]
+  return (
+    <YStack gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel">
+      <SizableText size="$4" color="$ink">
+        Set up a cloud environment
+      </SizableText>
+      <SizableText size="$2" color="$soft">
+        An environment lets every later run install, start, test and check its changes the way an engineer does. Setup
+        is agent-led and takes several minutes. The agent will:
+      </SizableText>
+      <YStack gap="$1.5">
+        {steps.map((s, i) => (
+          <XStack key={s} gap="$3">
+            <SizableText size="$2" color="$soft" width={12}>
+              {String(i + 1)}
+            </SizableText>
+            <SizableText size="$2" color="$ink">
+              {s}
+            </SizableText>
+          </XStack>
+        ))}
+      </YStack>
+      <SizableText size="$2" color="$soft">
+        Interrupt anytime to steer the agent or ask it questions.
+      </SizableText>
+      <Button size="sm" onPress={onDone}>
+        Got it
+      </Button>
+    </YStack>
   )
 }

@@ -13,6 +13,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { revealAccount } from './account.tsx'
 import { add, arm, flows, type Automation } from './api/auto.ts'
 import { codebases, create, type Codebase } from './api/codebases.ts'
+import { environments, type Environment } from './api/environment.ts'
 import { boards, issues, type Board, type Work } from './api/work.ts'
 import { boardKey, pinBoard, pinCodebase, readPending, writePending } from './choice.ts'
 import { useKept, useRead } from './data.ts'
@@ -266,6 +267,9 @@ function Codebases() {
     setPage(0)
   }, [q, sort])
   const list = useRead(signed ? () => codebases(t) : null, [] as Codebase[], [t, signed, making, landed])
+  // Which codebases have an environment. A codebase absent here has none.
+  const envs = useRead(signed ? () => environments(t) : null, [] as Environment[], [t, signed])
+  const envOf = new Map(envs.value.map((e) => [e.repo, e.state]))
   const needle = q.trim().toLowerCase()
   const pending = readPending(host.org)
   const pendingKey = pending.map((p) => p.fullName).join('\n')
@@ -400,6 +404,9 @@ function Codebases() {
                 </SizableText>
                 {sort === 'name' ? <ChevronDown size={12} /> : null}
               </XStack>
+              <SizableText size="$1" color="$soft" width={96} $max-md={{ display: 'none' }}>
+                Environment
+              </SizableText>
               <XStack
                 render="button"
                 aria-label="Sort by last updated"
@@ -433,6 +440,9 @@ function Codebases() {
                 <GitBranch size={14} />
                 <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
                   {c.name}
+                </SizableText>
+                <SizableText size="$1" color="$soft" width={96} $max-md={{ display: 'none' }}>
+                  {envOf.get(c.name) === 'ready' ? 'Ready' : envOf.get(c.name) === 'proposed' ? 'To review' : '—'}
                 </SizableText>
                 <SizableText size="$1" color="$soft" width={140} style={{ textAlign: 'right' }}>
                   {syncing.has(c.name) ? 'Syncing…' : when(c.updated)}

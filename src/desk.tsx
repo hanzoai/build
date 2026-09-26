@@ -11,6 +11,7 @@ import { blob, tree, type Entry } from './api/git.ts'
 import { shell, type ShellLine } from './api/turn.ts'
 import type { Event } from './api/sessions.ts'
 import { useRead } from './data.ts'
+import { Environment } from './environment.tsx'
 import { useTarget } from './host.tsx'
 import { Out } from './out.tsx'
 
@@ -46,7 +47,8 @@ export function Desk({
   onRetry: () => void
   onHide?: () => void
 }) {
-  const [tab, setTab] = useState<Tab>('terminal')
+  // A setup run's work IS the environment, so it opens there.
+  const [tab, setTab] = useState<Tab>(mode === 'setup' ? 'environment' : 'terminal')
   const [copied, setCopied] = useState(false)
   const name = repo.split('/').filter(Boolean).pop() || repo
   const ref = branch || base || 'main'
@@ -108,6 +110,10 @@ export function Desk({
       <YStack flex={1} minH={0} overflow={tab === 'terminal' ? 'hidden' : 'scroll'} p={tab === 'terminal' ? 0 : undefined} px={tab === 'terminal' ? 0 : '$3'} py={tab === 'terminal' ? 0 : '$3'}>
         {tab === 'environment' ? (
           <YStack gap="$2">
+            <Environment repo={name} busy={live && mode === 'setup'} />
+            <SizableText size="$2" color="$ink" pt="$4">
+              This run
+            </SizableText>
             <Fact label="Run" value={id} />
             <Fact label="Repository" value={name || '—'} />
             <Fact label="Branch" value={branch || '—'} />

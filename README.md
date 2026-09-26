@@ -106,7 +106,15 @@ codebase or an issue from its own screen lands here with that choice already
 made.
 
 **A run.** The transcript as it streams, steering while it works, Stop, and
-the pull request once it pushes one.
+the pull request once it pushes one. Beside it: Environment, Git, Terminal,
+Files and Subscriptions.
+
+**An environment.** What a sandbox run does to its codebase's checkout before
+the agent starts: the install script, the start command, and the secrets it
+exports. New offers to set one up when the chosen codebase has none: a run in
+mode `setup` explores, installs and checks the codebase, and its answer is kept
+as a proposal the Environment tab shows in its editors until an org admin saves
+it. Secret values are sealed in KMS and never shown again.
 
 **A project.** The v2 workspace in the same window: its runs as a
 conversation with suggestions and a Build/Plan composer on the left; Preview,
@@ -123,6 +131,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `POST /v1/agent/sessions/{id}/message` · `/stop` | steer, stop |
 | `GET /v1/agent/targets` | the org's machines |
 | `GET /v1/auto/flows` · `POST /v1/auto/flows` · `POST /v1/auto/flows/{id}/enable` | automations |
+| `GET /v1/environment` · `GET`/`PUT`/`DELETE /v1/environment/{repo}` · `PUT`/`DELETE …/secrets/{name}` | a codebase's environment |
 | `GET /v1/provider/github/repos` · `POST /v1/provider/github/repos/import` | granted repositories, and bringing them onto the forge |
 | `GET /v1/git/repos` · `GET /v1/git/repos/{name}` | the codebase chip, and its branches |
 | `GET /v1/task/projects` · `GET /v1/task/board` · `GET /v1/task/projects/{key}/issues` | boards and issues, read from the forge |
@@ -146,6 +155,8 @@ src/
   landing.tsx   New
   forge.tsx     Codebase, Automations, Projects, Issues
   run.tsx       one run
+  desk.tsx      the pane beside a run
+  environment.tsx a codebase's environment
   project.tsx   a project's workspace
   shelf.tsx     Artifacts and Templates
   publish.tsx   Add to project / Publish

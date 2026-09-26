@@ -9,6 +9,7 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
+import { Button } from '@hanzo/ui'
 import { ModeSelect } from '@hanzo/ui/agents'
 import { Composer, EmptyPrompt } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
@@ -16,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
+import { read, SETUP, type Environment } from './api/environment.ts'
 import { ENSO, models } from './api/models.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
 import { isForge } from './choice.ts'
@@ -75,6 +77,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   const places = usePlaces(t, signed)
   const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
+  // The chosen codebase's environment, so New can say when it has none yet.
+  const codebase = isForge(kept.repo) ? kept.repo.name : ''
+  const env = useRead(signed && codebase ? () => read(t, codebase) : null, null as Environment | null, [t, signed, codebase])
   const place: Place = places.value.find((p) => p.id === kept.place) ?? SANDBOX
 
   const known = useRef(new Map<string, ForgeRepo>())
@@ -131,6 +136,21 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       onStarted(run.session)
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'The run could not start')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Start the agent that finds this codebase's environment, and open it. */
+  const setup = async () => {
+    if (!codebase || busy) return
+    setBusy(true)
+    setNote('')
+    try {
+      const run = await start(t, { prompt: SETUP, repo: codebase, mode: 'setup' })
+      onStarted(run.session)
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'The setup run could not start')
     } finally {
       setBusy(false)
     }
@@ -246,6 +266,24 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         <EmptyPrompt title="What’s up next?" mark={<HanzoMark size={18} />} column={COLUMN} />
         <YStack flex={1} />
         <YStack pb="$2" gap="$2">
+          {env.value && env.value.state !== 'ready' && !place.id ? (
+            <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
+              <SizableText size="$2" color="$ink" flex={1} minW={0}>
+                {env.value.state === 'proposed'
+                  ? `A proposed environment for ${codebase} is waiting for review.`
+                  : `${codebase} has no environment yet, so every run starts it bare.`}
+              </SizableText>
+              {env.value.state === 'proposed' && env.value.session ? (
+                <Button size="sm" variant="outline" onPress={() => host.go(env.value!.session)}>
+                  Review
+                </Button>
+              ) : (
+                <Button size="sm" disabled={busy} onPress={() => void setup()}>
+                  Set up environment
+                </Button>
+              )}
+            </XStack>
+          ) : null}
           {note || unhonoured(kept.mode, place.id) ? (
             <SizableText size="$1" color="$soft" role="status">
               {note || unhonoured(kept.mode, place.id)}

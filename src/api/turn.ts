@@ -49,7 +49,9 @@ function status(b: Record<string, unknown>, mode: string): string {
       // A plan's answer IS its final status: the run read and wrote nothing.
       // Whether the run planned is the RECORD's word — any member of the org
       // can append an event saying `mode: plan`, and its text is not an answer.
+      // A setup is a plan put to one question, and answers the same way.
       if (mode === 'plan') return str(b.plan) || 'Planned — the run answered with no plan'
+      if (mode === 'setup') return str(b.plan) || 'Set up — the run answered with no environment'
       if (b.changed === false) return 'Done — nothing to change'
       const pr = str(b.pr)
       const tail = str(b.prError) ? ' — the pull request could not be opened' : pr ? ` — ${pr}` : ''
