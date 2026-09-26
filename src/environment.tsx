@@ -9,7 +9,7 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Plus, X } from '@hanzogui/lucide-icons-2'
-import { Button, Input, Textarea } from '@hanzo/ui'
+import { Button, Dialog, DialogContent, DialogTitle, Input, Textarea } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
 
 import { start } from './api/coding.ts'
@@ -237,6 +237,93 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
         </SizableText>
       ) : null}
     </YStack>
+  )
+}
+
+/**
+ * New's offer to set a codebase up. An agent onboards it, or an org admin saves
+ * it empty and writes the scripts by hand beside the next run.
+ */
+export function SetupDialog({
+  repo,
+  open,
+  onOpenChange,
+  onStart,
+  onSaved,
+}: {
+  repo: string
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onStart: () => Promise<void>
+  onSaved: () => void
+}) {
+  const host = useHost()
+  const t = useTarget()
+  const [working, setWorking] = useState(false)
+  const [note, setNote] = useState('')
+
+  const run = async (what: () => Promise<unknown>, done: () => void) => {
+    setWorking(true)
+    setNote('')
+    try {
+      await what()
+      done()
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'That did not work')
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent maxW={440} showCloseButton={false}>
+        <XStack items="center" justify="space-between" gap="$2">
+          <DialogTitle>Set up an environment</DialogTitle>
+          <XStack render="button" aria-label="Close" p="$1" onPress={() => onOpenChange(false)}>
+            <X size={16} />
+          </XStack>
+        </XStack>
+        <YStack gap="$3">
+          <YStack gap="$1.5">
+            <SizableText size="$2" color="$soft">
+              Repository
+            </SizableText>
+            <XStack px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor">
+              <SizableText size="$2" color="$ink" numberOfLines={1}>
+                {repo}
+              </SizableText>
+            </XStack>
+          </YStack>
+          <SizableText size="$2" color="$soft">
+            An agent onboards the codebase: it explores it, writes the install and start scripts, and names the secrets
+            it needs. It takes several minutes. Interrupt it anytime, or take over in the terminal.
+          </SizableText>
+          {note ? (
+            <SizableText size="$1" color="$soft" role="status">
+              {note}
+            </SizableText>
+          ) : null}
+          <XStack gap="$2" justify="space-between" items="center">
+            {host.admin ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={working}
+                onPress={() => void run(() => save(t, repo, { install: '', start: '' }), onSaved)}
+              >
+                Skip & save
+              </Button>
+            ) : (
+              <YStack />
+            )}
+            <Button size="sm" variant="primary" disabled={working} onPress={() => void run(onStart, () => onOpenChange(false))}>
+              Start agent
+            </Button>
+          </XStack>
+        </YStack>
+      </DialogContent>
+    </Dialog>
   )
 }
 

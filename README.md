@@ -111,10 +111,12 @@ Files and Subscriptions.
 
 **An environment.** What a sandbox run does to its codebase's checkout before
 the agent starts: the install script, the start command, and the secrets it
-exports. New offers to set one up when the chosen codebase has none: a run in
-mode `setup` explores, installs and checks the codebase, and its answer is kept
+exports. New offers to set one up when the chosen codebase has none. Start the
+agent, and a run in mode `setup`, titled by the prompt's first line and working
+through its steps, explores, installs and checks the codebase. Its answer is kept
 as a proposal the Environment tab shows in its editors until an org admin saves
-it. Secret values are sealed in KMS and never shown again.
+it. Or an org admin skips and saves it empty, and writes the scripts beside the
+next run. Secret values are sealed in KMS and never shown again.
 
 **A project.** The v2 workspace in the same window: its runs as a
 conversation with suggestions and a Build/Plan composer on the left; Preview,

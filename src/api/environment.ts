@@ -101,5 +101,16 @@ export async function removeSecret(t: Target, repo: string, name: string): Promi
   return environment(await call<unknown>(t, 'DELETE', `/v1/environment/${seg(repo)}/secrets/${seg(name)}`), repo)
 }
 
-/** What a setup run is asked. The platform puts its own instructions ahead of it. */
-export const SETUP = 'Set up this codebase’s environment: install it, start it, and check that it works end to end.'
+/**
+ * What a setup run is asked. The first line is the run's title, the steps are
+ * its checklist, and the platform puts its own instructions ahead of both.
+ */
+export const SETUP = [
+  'Set up the environment',
+  '',
+  '1. Understand the codebase: how it installs, builds, starts and tests.',
+  '2. Write the install script and the start command.',
+  '3. Run both in this fresh checkout.',
+  '4. Check that the build and the tests pass, and that the app answers if it is one.',
+  '5. Answer with what you checked and the environment.',
+].join('\n')

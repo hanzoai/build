@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { start, unhonoured, type Mode } from './api/coding.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
 import { read, SETUP, type Environment } from './api/environment.ts'
+import { SetupDialog } from './environment.tsx'
 import { ENSO, models } from './api/models.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
 import { isForge } from './choice.ts'
@@ -66,6 +67,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState<Source | null>(null)
+  const [offering, setOffering] = useState(false)
 
   // A codebase or an issue hands its words over once. Left in the kept choice,
   // every later visit to New would put them back.
@@ -141,19 +143,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     }
   }
 
-  /** Start the agent that finds this codebase's environment, and open it. */
+  /** Start the agent that finds this codebase's environment, and open it. A refusal is the dialog's to say. */
   const setup = async () => {
-    if (!codebase || busy) return
-    setBusy(true)
-    setNote('')
-    try {
-      const run = await start(t, { prompt: SETUP, repo: codebase, mode: 'setup' })
-      onStarted(run.session)
-    } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The setup run could not start')
-    } finally {
-      setBusy(false)
-    }
+    const run = await start(t, { prompt: SETUP, repo: codebase, mode: 'setup' })
+    onStarted(run.session)
   }
 
   const placeItems = useMemo(
@@ -278,7 +271,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                   Review
                 </Button>
               ) : (
-                <Button size="sm" disabled={busy} onPress={() => void setup()}>
+                <Button size="sm" onPress={() => setOffering(true)}>
                   Set up environment
                 </Button>
               )}
@@ -303,6 +296,18 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         </YStack>
       </YStack>
       <Publish source={adding} onClose={() => setAdding(null)} />
+      {codebase ? (
+        <SetupDialog
+          repo={codebase}
+          open={offering}
+          onOpenChange={setOffering}
+          onStart={setup}
+          onSaved={() => {
+            setOffering(false)
+            env.reload()
+          }}
+        />
+      ) : null}
     </YStack>
   )
 }
