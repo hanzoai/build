@@ -134,14 +134,14 @@ export async function rig(p: Page, shape: Partial<World> = {}, over: Answer = ()
   return { sent, world }
 }
 
-/** Keeps a matching call's answer back until `go` is called. */
-export async function hold(p: Page, match: (url: URL, method: string) => boolean) {
+/** Keeps a matching call's answer back until `go` is called. Called after `rig`, whose answers it holds. */
+export async function hold(p: Page, path: string, method = 'GET') {
   let go = () => {}
   const gate = new Promise<void>((r) => (go = r))
   await p.route(
-    (u) => match(u, ''),
+    (u) => u.pathname === path,
     async (r) => {
-      if (!match(new URL(r.request().url()), r.request().method())) return r.fallback()
+      if (r.request().method() !== method) return r.fallback()
       await gate
       await r.fallback()
     },

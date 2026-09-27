@@ -7,7 +7,7 @@
 import type { Page } from '@playwright/test'
 
 import { cramped, expect, test } from './fixture.ts'
-import { browser, ev, NEXT, ORG, rig, SESSION, to } from './cov-run.ts'
+import { browser, ev, finished, NEXT, ORG, PR, rig, SESSION, to } from './cov-run.ts'
 
 const transcript = (p: Page) => p.getByLabel('Transcript')
 
@@ -40,7 +40,7 @@ test('the ask opens the conversation as the person’s own message, once', async
 
 test('a reply is copied, and a verdict on it is recorded, taken back and changed', async ({ page: p }) => {
   await browser(p, { clipboard: 'keeps' })
-  const { sent } = await rig(p, { events: told(), record: { ...(await import('./cov-run.ts')).finished(), project: 'widgets' } })
+  const { sent } = await rig(p, { events: told(), record: { ...finished(), project: 'widgets' } })
   await p.goto(`/${SESSION}`)
   const reply = transcript(p).locator('[data-role="assistant"]').filter({ hasText: 'Added' })
   await reply.getByRole('button', { name: 'Copy reply' }).click()
@@ -69,7 +69,6 @@ test('a verdict that does not land is taken back and says why', async ({ page: p
 
 test('the title is the run’s menu, and Share opens its story and copies its link', async ({ page: p }, info) => {
   await browser(p, { clipboard: 'keeps' })
-  const { finished } = await import('./cov-run.ts')
   const { sent } = await rig(p, { events: told(), record: { ...finished(), project: 'widgets' } })
   await p.goto(`/${SESSION}`)
   const title = p.getByRole('button', { name: 'Manage this run' })
@@ -97,7 +96,6 @@ test('the title is the run’s menu, and Share opens its story and copies its li
 })
 
 test('the steps fold to one line that names the current one, and open when pressed', async ({ page: p }, info) => {
-  const { finished } = await import('./cov-run.ts')
   await rig(p, {
     record: { ...finished(), status: 'running' },
     events: [ev('tool-call', { step: 'clone', status: 'running' }), ev('tool-call', { step: 'install', status: 'running' })],
@@ -133,12 +131,25 @@ test('a follow-up starts with the model and effort the foot shows, and New keeps
   expect(await p.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), `hanzo.build.new.${ORG}`)).toMatchObject({ model: 'zen5-coder', effort: 'high' })
 })
 
-test('a run reads as a chat on a phone', async ({ page: p }, info) => {
-  await p.setViewportSize({ width: 390, height: 844 })
-  const { finished } = await import('./cov-run.ts')
-  await rig(p, { events: told(), record: { ...finished(), project: 'widgets', pr: 'https://git.hanzo.ai/hanzoai/universe/pulls/7' } })
-  await p.goto(`/${SESSION}`)
-  await expect(p.getByRole('button', { name: 'Share', exact: true })).toBeVisible()
-  expect(await cramped(p)).toEqual([])
-  await p.screenshot({ path: info.outputPath('phone.png') })
-})
+for (const [size, box] of Object.entries({
+  phone: { width: 390, height: 844 },
+  tablet: { width: 820, height: 1180 },
+  laptop: { width: 1366, height: 768 },
+  desktop: { width: 1920, height: 1080 },
+})) {
+  test(`the chat, its steps and its share menu fit a ${size}`, async ({ page: p }, info) => {
+    await p.setViewportSize(box)
+    await rig(p, { events: told(), record: { ...finished(), project: 'widgets', pr: PR } })
+    await p.goto(`/${SESSION}`)
+    await expect(p.getByRole('button', { name: 'Good result' })).toBeVisible()
+    expect(await cramped(p)).toEqual([])
+    await p.getByRole('button', { name: 'Steps · 1' }).click()
+    await expect(p.getByText('✓')).toBeVisible()
+    expect(await cramped(p)).toEqual([])
+    await p.screenshot({ path: info.outputPath(`${size}.png`) })
+    await p.getByRole('button', { name: 'Share', exact: true }).click()
+    await expect(p.getByRole('menuitem', { name: /Share publicly/ })).toBeVisible()
+    expect(await cramped(p)).toEqual([])
+    await p.screenshot({ path: info.outputPath(`${size}-share.png`) })
+  })
+}

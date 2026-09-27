@@ -45,6 +45,9 @@ import { Transcript } from './transcript.tsx'
 
 const LIVE = new Set(['running', 'paused', ''])
 
+// What this browser kept is read as it is found: a stored value that is not a string is none.
+const text = (v: unknown): string => (typeof v === 'string' ? v : '')
+
 type MenuItems = NonNullable<DropdownMenuProps['items']>
 
 export function Run({ id }: { id: string }) {
@@ -67,7 +70,7 @@ export function Run({ id }: { id: string }) {
   // The model and effort a run started here uses: New's choice, which a change here changes too.
   const { prefs } = usePrefs()
   const [chose, choose] = useKept<Record<string, unknown> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
-  const model = (chose?.model as string | undefined) || prefs.code?.model || ENSO
+  const model = text(chose?.model) || prefs.code?.model || ENSO
   const pace = EFFORTS.find((e) => e.id === chose?.effort) ?? EFFORTS.find((e) => e.id === prefs.code?.effort) ?? EFFORTS[1]
   const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
 
@@ -516,8 +519,8 @@ export function Run({ id }: { id: string }) {
             onChangeText={setName}
             aria-label="The run’s name"
             maxLength={512}
-            onKeyDown={(e: { key?: string; nativeEvent?: { key?: string } }) => {
-              if ((e.key ?? e.nativeEvent?.key) === 'Enter') save()
+            onKeyDown={(e: { key?: string }) => {
+              if (e.key === 'Enter') save()
             }}
           />
           <XStack gap="$2" justify="flex-end">

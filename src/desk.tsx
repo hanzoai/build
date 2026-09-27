@@ -32,9 +32,9 @@ export function Desk({
   sandbox,
   events,
   live,
-  menu = [],
+  menu,
   refused,
-  retry = 'Retry',
+  retry,
   onRetry,
   onHide,
 }: {
@@ -51,16 +51,18 @@ export function Desk({
   sandbox: string
   events: Event[]
   live: boolean
-  /** What can be done to the run — rename, share, copy its id — as its header's menu offers it. */
-  menu?: NonNullable<DropdownMenuProps['items']>
+  /** What can be done to the run — rename, share, copy its id — as its header offers it. */
+  menu: NonNullable<DropdownMenuProps['items']>
   refused: string
   /** The refusal's one action: Retry, or Sign in when nobody is. */
-  retry?: string
+  retry: string
   onRetry: () => void
-  onHide?: () => void
+  onHide: () => void
 }) {
-  // A setup run's work IS the environment, so it opens there.
-  const [tab, setTab] = useState<Tab>(mode === 'setup' ? 'environment' : 'terminal')
+  // Until a tab is picked it follows the run's mode, which is known once the run
+  // is read: a setup run's work IS the environment, so it opens there.
+  const [picked, setTab] = useState<Tab | null>(null)
+  const tab = picked ?? (mode === 'setup' ? 'environment' : 'terminal')
   const name = repo.split('/').filter(Boolean).pop() || repo
   const lines = shell(events)
   const bleed = BLEED.includes(tab)
@@ -99,11 +101,9 @@ export function Desk({
             Subscriptions
           </TabButton>
         </XStack>
-        {onHide ? (
-          <XStack render="button" aria-label="Hide the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={onHide}>
-            <PanelRightClose size={16} />
-          </XStack>
-        ) : null}
+        <XStack render="button" aria-label="Hide the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={onHide}>
+          <PanelRightClose size={16} />
+        </XStack>
         <DropdownMenu
           trigger={
             <XStack render="button" aria-label="Run actions" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>

@@ -43,7 +43,7 @@ export function Door({ which, sandbox, live, session }: { which: Which; sandbox:
       (e: unknown) => {
         if (gone) return
         setState('failed')
-        setWhy(e instanceof Error ? e.message : '')
+        setWhy((e as Error).message)
       },
     )
     return () => {
