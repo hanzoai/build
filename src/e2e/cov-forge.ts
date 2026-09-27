@@ -10,6 +10,8 @@ import type { Page } from '@playwright/test'
 import type { Given } from './cov-forge-host.tsx'
 import type { Reply, Sent } from './signed.ts'
 
+export type { Reply, Sent }
+
 /** What the platform answers to one call, now or later; undefined is the empty default. */
 export type Answer = (sent: Sent) => Reply | undefined | Promise<Reply | undefined>
 
@@ -31,6 +33,43 @@ export const token = (who: Who) => [b64({ alg: 'none', typ: 'JWT' }), b64({ sub:
 
 /** Held for `ms`, then answered. */
 export const later = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** A refusal in the platform's own words. */
+export const refused = (status: number, detail: string): Reply => ({ status, json: { status, title: 'Refused', detail } })
+
+/** What one answer holds back: a refusal, or a wait before answering. */
+export interface Hold {
+  status?: number
+  detail?: string
+  wait?: number
+}
+
+/** What a platform holds back, per `METHOD path`. A test changes these as it goes. */
+export interface Holds {
+  /** What the next calls get instead of the answer, one each, in order. */
+  holds: Record<string, Hold[]>
+  /**
+   * A refusal every such call gets while it is set. A read is refused this way
+   * rather than once: in development React mounts a screen twice, and the first
+   * mount's read is let go unanswered.
+   */
+  down: Record<string, string>
+  /** How long every such call waits while it is set. */
+  slow: Record<string, number>
+}
+
+/** `answer`, after what `h` holds back for the call. */
+export function held(h: Holds, answer: Answer): Answer {
+  return async (sent) => {
+    const key = `${sent.method} ${sent.path}`
+    const hold = h.holds[key]?.shift()
+    if (hold?.wait) await later(hold.wait)
+    if (h.slow[key]) await later(h.slow[key])
+    if (hold?.status) return refused(hold.status, hold.detail ?? 'The platform refused this')
+    if (h.down[key]) return refused(502, h.down[key])
+    return answer(sent)
+  }
+}
 
 /** Answers every /v1 call but IAM's with `answer`, in its own time; returns what the page sent. */
 export async function serve(page: Page, answer: Answer): Promise<Sent[]> {
@@ -56,6 +95,16 @@ export async function serve(page: Page, answer: Answer): Promise<Sent[]> {
     },
   )
   return sent
+}
+
+const MORE = ['Codebase', 'Issues', 'Templates', 'Machines', 'Docs']
+
+/** Moves to one of the rail's places, opening More when it is under it: no reload, so the page's coverage stays. */
+export async function via(page: Page, label: string) {
+  const rail = page.getByRole('navigation', { name: 'Runs' }).first()
+  const row = rail.getByText(label, { exact: true })
+  if (MORE.includes(label) && !(await row.isVisible())) await rail.getByText('More', { exact: true }).click()
+  await row.click()
 }
 
 /** Signs the page in as `who`, seeds `kept` into its storage, and answers for the platform; returns what the page sent. */

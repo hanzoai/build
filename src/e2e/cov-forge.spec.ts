@@ -10,22 +10,15 @@
  */
 import type { Page } from '@playwright/test'
 
-import { DAVE, enter, later, MEMBER, type Who } from './cov-forge.ts'
+import { DAVE, enter, held, MEMBER, via, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
-import { ORG, type Reply, type Sent } from './signed.ts'
+import { ORG } from './signed.ts'
 
 const MIN = 60_000
 const ago = (ms: number) => Date.now() - ms
 const iso = (ms: number) => new Date(ago(ms)).toISOString()
 
-/** What one answer holds back: a refusal, or a wait before answering. */
-interface Hold {
-  status?: number
-  detail?: string
-  wait?: number
-}
-
-interface World {
+interface World extends Holds {
   flows: Record<string, unknown>[]
   repos: Record<string, unknown>[]
   envs: Record<string, unknown>[]
@@ -33,33 +26,13 @@ interface World {
   unread: string[]
   boards: Record<string, unknown>[]
   issues: Record<string, unknown>[]
-  /** Per `METHOD path`, what the next calls get instead of the world: a refusal, or a wait. */
-  holds: Record<string, Hold[]>
-  /**
-   * Per `METHOD path`, a refusal every such call gets while it is set. A read is
-   * refused this way rather than once: in development React mounts a screen
-   * twice, and the first mount's read is let go unanswered.
-   */
-  down: Record<string, string>
-  /** Per `METHOD path`, how long every such call waits while it is set. */
-  slow: Record<string, number>
 }
 
-/**
- * The forge's platform, holding `world` and changing it on every write. A hold
- * for a call is taken once, in order, so a test can refuse the first and let
- * the second through.
- */
+/** The forge's platform, holding `world` and changing it on every write. */
 async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept: Record<string, unknown> = {}) {
   const world: World = { flows: [], repos: [], envs: [], grants: [], unread: [], boards: [], issues: [], holds: {}, down: {}, slow: {}, ...seed }
-  const answer = async ({ method, path, body }: Sent): Promise<Reply | undefined> => {
+  const answer = ({ method, path, body }: Sent): Reply | undefined => {
     const b = (body ?? {}) as Record<string, unknown>
-    const key = `${method} ${path}`
-    const hold = world.holds[key]?.shift()
-    if (hold?.wait) await later(hold.wait)
-    if (world.slow[key]) await later(world.slow[key])
-    if (hold?.status) return { status: hold.status, json: { status: hold.status, title: 'Refused', detail: hold.detail ?? 'The forge is down' } }
-    if (world.down[key]) return { status: 502, json: { status: 502, title: 'Bad Gateway', detail: world.down[key] } }
     const flow = path.match(/^\/v1\/auto\/flows\/([^/]+)(?:\/(enable|disable))?$/)
     if (path === '/v1/auto/flows' && method === 'POST') {
       const f = { id: `f${world.flows.length + 1}`, status: 'DISABLED', updated: Date.now(), version: { displayName: b.displayName } }
@@ -90,21 +63,11 @@ async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kep
     if (board) return { json: { data: world.issues.filter((i) => i.projectKey === board) } }
     return undefined
   }
-  const sent = await enter(page, answer, who, kept)
+  const sent = await enter(page, held(world, answer), who, kept)
   return { sent, world }
 }
 
 const posted = (sent: Sent[], path: string) => sent.filter((s) => s.method === 'POST' && s.path === path)
-
-const MORE = ['Codebase', 'Issues', 'Templates', 'Machines', 'Docs']
-
-/** Moves to one of the rail's places, opening More when it is under it. */
-async function via(page: Page, label: string) {
-  const rail = page.getByRole('navigation', { name: 'Runs' }).first()
-  const row = rail.getByText(label, { exact: true })
-  if (MORE.includes(label) && !(await row.isVisible())) await rail.getByText('More', { exact: true }).click()
-  await row.click()
-}
 
 /** A control of the pane — a real button — and not the rail's row of the same name. */
 const own = (page: Page, name: string) => page.locator('button').and(page.getByRole('button', { name, exact: true }))
