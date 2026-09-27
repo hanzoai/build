@@ -201,11 +201,11 @@ async function open(page: Page, at: string) {
 
 const sentTo = (sent: Sent[], method: string, path: string) => sent.filter((s) => s.method === method && s.path === path)
 
-test('the rail’s Customize opens Connectors, and the old MCP address lands on its Discover', async ({ page, baseURL }) => {
+test('the rail’s Customize opens Skills, and the old MCP address lands on Connectors’ Discover', async ({ page, baseURL }) => {
   await open(page, '/')
   await page.getByText('Customize', { exact: true }).first().click()
-  await expect(page).toHaveURL(new URL('/-/customize/connectors', baseURL).href)
-  await expect(page.getByRole('tab', { name: 'Connectors' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(new URL('/-/customize', baseURL).href)
+  await expect(page.getByRole('tab', { name: 'Skills' })).toHaveAttribute('aria-selected', 'true')
   await page.goto('/-/mcp')
   await expect(page.getByRole('button', { name: 'Discover', pressed: true })).toBeVisible()
   await expect(page.getByText('2 servers · 3 operations')).toBeVisible()
