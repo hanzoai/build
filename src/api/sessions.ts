@@ -198,8 +198,8 @@ export async function publish(t: Target, id: string, on: boolean): Promise<Sessi
   return session(await call<unknown>(t, 'PATCH', `/v1/agent/sessions/${seg(id)}`, { published: on }))
 }
 
-/** Where anyone can read a published run's story: the public build route, by org and project. */
-export const story = (t: Target, org: string, project: string): string =>
+/** Where anyone can read a published run's story: the public build route, by org and project. '' without both. */
+export const story = (t: Target, org: string | null, project: string): string =>
   org && project ? `${t.api}/v1/agent/builds/${seg(org)}/${seg(project)}` : ''
 
 export interface Watch {

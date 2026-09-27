@@ -243,7 +243,8 @@ describe('cards', () => {
   it('draws what the agent said once, and a person’s words as theirs', () => {
     const said = of('said')
     expect(said.filter((s) => s.who === 'agent').map((s) => s.text)).toEqual(['I will look at the code first.', 'Added **New**. See `widget.go`.'])
-    expect(said.filter((s) => s.who === 'person').map((s) => s.text)).toEqual(['use table tests'])
+    // The ask opens the transcript, then the person's steering.
+    expect(said.filter((s) => s.who === 'person').map((s) => s.text)).toEqual(['Add the widget', 'use table tests'])
     expect(of('note').map((n) => n.text)).toEqual(['Started on agent/ab12', 'Pushed agent/ab12'])
   })
 

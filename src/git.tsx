@@ -114,7 +114,7 @@ export function Git({ session, title, live }: { session: string; title: string; 
               c.pull.reviews.map((r, i) => (
                 <YStack key={i} gap="$1" pb="$2" borderBottomWidth={1} borderColor="$borderColor">
                   <SizableText size="$1" color="$soft">
-                    {`${r.author || 'Someone'} · ${verdict(r.state)}${r.at ? ` · ${when(r.at)}` : ''}`}
+                    {[r.author || 'Someone', verdict(r.state), when(r.at)].filter(Boolean).join(' · ')}
                   </SizableText>
                   {r.body ? (
                     <SizableText size="$2" color="$ink">

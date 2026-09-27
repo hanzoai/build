@@ -67,7 +67,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
       setNote(done)
       return true
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
       return false
     } finally {
       setWorking(false)
@@ -81,7 +81,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
       const run = await start(t, { prompt: SETUP, repo, mode: 'setup' })
       host.go(run.session)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The setup run did not start')
+      setNote((e as Error).message)
       setWorking(false)
     }
   }
@@ -269,7 +269,7 @@ export function SetupDialog({
       await what()
       done()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }

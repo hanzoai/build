@@ -105,7 +105,7 @@ test('a plan is approved into a build of it', async ({ page: p }, info) => {
   expect(body.prompt).toBe(`Add the widget\n\nCarry out this plan:\n\n${PLAN}`)
 })
 
-test('a run is renamed and shared from its menu', async ({ page: p }) => {
+test('a run is renamed from its title and shared from Share', async ({ page: p }) => {
   const sent = await platform(p, { project: 'widgets' })
   await p.goto(`/${SESSION}`)
   await p.getByRole('button', { name: 'Manage this run' }).click()
@@ -115,7 +115,7 @@ test('a run is renamed and shared from its menu', async ({ page: p }) => {
   await p.getByRole('dialog').getByRole('button', { name: 'Save' }).click()
   await expect(p.getByRole('dialog')).toHaveCount(0)
   expect(sent.find((s) => s.method === 'PATCH')?.body).toEqual({ title: 'Renamed run' })
-  await p.getByRole('button', { name: 'Manage this run' }).click()
+  await p.getByRole('button', { name: 'Share', exact: true }).click()
   await p.getByRole('menuitem', { name: /Share publicly/ }).click()
   await expect(p.getByText(/Shared — anyone with the link/)).toBeVisible()
   expect(sent.filter((s) => s.method === 'PATCH')[1]?.body).toEqual({ published: true })
@@ -127,6 +127,7 @@ test('a run that names no project offers no share', async ({ page: p }) => {
   await p.getByRole('button', { name: 'Manage this run' }).click()
   await expect(p.getByRole('menuitem', { name: 'Rename' })).toBeVisible()
   await expect(p.getByRole('menuitem', { name: /Share publicly/ })).toHaveCount(0)
+  await expect(p.getByRole('button', { name: 'Share', exact: true })).toHaveCount(0)
 })
 
 test('Find reads the org’s runs by status and pages back', async ({ page: p }, info) => {
