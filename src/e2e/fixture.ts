@@ -14,13 +14,34 @@ import { raw } from '../../cover/index.ts'
 const report = MCR(raw('browser'))
 const OURS = /^https?:\/\/[^/]+\/src\//
 
-/** Keeps what the page has run in the document it shows, and starts counting afresh. */
-async function keep(page: Page, again: boolean): Promise<void> {
-  // A page the test closed or crashed has nothing left to give.
-  const scripts = await page.coverage.stopJSCoverage().catch(() => [])
-  const ours = scripts.filter((s) => OURS.test(s.url))
-  if (ours.length) await report.add(ours)
-  if (again) await page.coverage.startJSCoverage({ resetOnNavigation: false })
+/**
+ * V8's counts for the page's own modules, taken over the page's DevTools
+ * session: only the builder's sources are read, and each take answers what ran
+ * since the last one, since V8 starts its counts over as it answers. Returns
+ * the take, which keeps what it answered.
+ */
+async function counted(page: Page): Promise<() => Promise<void>> {
+  const cdp = await page.context().newCDPSession(page)
+  const sources = new Map<string, Promise<{ url: string; source: string } | null>>()
+  cdp.on('Debugger.scriptParsed', ({ scriptId, url }) => {
+    if (!OURS.test(url)) return
+    const read = cdp.send('Debugger.getScriptSource', { scriptId }).then(({ scriptSource }) => ({ url, source: scriptSource }))
+    sources.set(scriptId, read.catch(() => null))
+  })
+  await cdp.send('Profiler.enable')
+  await cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: true })
+  await cdp.send('Debugger.enable')
+  await cdp.send('Debugger.setSkipAllPauses', { skip: true })
+  return async () => {
+    // A page the test closed or crashed has nothing left to give.
+    const taken = await cdp.send('Profiler.takePreciseCoverage').catch(() => null)
+    const ours = []
+    for (const script of taken?.result ?? []) {
+      const read = await sources.get(script.scriptId)
+      if (read) ours.push({ ...script, ...read })
+    }
+    if (ours.length) await report.add(ours)
+  }
 }
 
 /**
@@ -34,19 +55,18 @@ const MOVES = ['goto', 'reload', 'goBack', 'goForward'] as const
 
 export const test = base.extend({
   page: async ({ page }, use) => {
-    await page.coverage.startJSCoverage({ resetOnNavigation: false })
+    const keep = await counted(page)
     for (const name of MOVES) {
       const move = page[name].bind(page) as (...args: unknown[]) => Promise<unknown>
       Object.assign(page, {
         [name]: async (...args: unknown[]) => {
-          // The blank page a test starts on ran nothing.
-          if (page.url() !== 'about:blank') await keep(page, true)
+          await keep()
           return move(...args)
         },
       })
     }
     await use(page)
-    await keep(page, false)
+    await keep()
   },
 })
 
