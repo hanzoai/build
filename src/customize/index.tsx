@@ -20,6 +20,9 @@ import { Plugins } from './plugins.tsx'
 import { Skills } from './skills.tsx'
 import { Choice, type Pane, type View } from './ui.tsx'
 
+/** What every run in the org loads: an org admin's to add to, a member's to read. */
+const ORG_KIT: Tab[] = ['skills', 'connectors']
+
 const LABEL: Record<Tab, { title: string; add: string; find: string; icon: ReactNode }> = {
   skills: { title: 'Skills', add: 'New skill', find: 'Search skills', icon: <BookOpen size={15} /> },
   connectors: { title: 'Connectors', add: 'Add connector', find: 'Search connectors', icon: <Plug size={15} /> },
@@ -91,7 +94,7 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
         <XStack items="center" gap="$2">
           <Choice label="Show" value={view} options={VIEWS} onChange={setView} />
           <XStack flex={1} />
-          {host.person ? (
+          {host.person && (host.admin || !ORG_KIT.includes(tab)) ? (
             <Button size="sm" onPress={() => setAdding(true)}>
               <Plus size={14} /> {LABEL[tab].add}
             </Button>

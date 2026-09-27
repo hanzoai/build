@@ -59,10 +59,10 @@ const PRESETS = [
 ]
 
 /** A platform that keeps what it is sent. */
-function platform(page: Page) {
+function platform(page: Page, seed: Record<string, unknown>[] = []) {
   const on = new Set<string>(['skill_triage', 'skill_git_branches'])
   const skills = [{ id: 'triage', name: 'triage', description: 'How we triage an issue', content: '# Triage\n\nRead it first.', createdAt: 1790000000, org: 'acme' }]
-  const servers: Record<string, unknown>[] = []
+  const servers: Record<string, unknown>[] = [...seed]
   const plugins: Record<string, unknown>[] = [{ id: 'p0a1b2', name: 'weather', provider: '', source: 'export const weather = 1', createdAt: 1790000000 }]
   const agents: Record<string, unknown>[] = [
     { id: 'agent_1', name: 'helper', model: 'zen5.8', description: 'Answers questions about the codebase', instructions: 'Be terse.', tools: ['skill_triage'], status: 'ready', runs: 4, cap_micro_usd: 10_000_000, max_task_micro_usd: 1_000_000, consumed_micro_usd: 250_000, period: 'month' },
@@ -450,4 +450,28 @@ test('a phone gets every tab whole, with the cards in one column', async ({ page
   await page.getByRole('button', { name: 'New agent' }).first().click()
   await page.waitForTimeout(300)
   await page.screenshot({ path: info.outputPath('phone-agents-new.png') })
+})
+
+test('a member reads the org’s skills and connectors, and changes none of them', async ({ page }) => {
+  await catalogue(page)
+  await platform(page, [
+    { id: 'com-stripe', org: 'acme', name: 'Stripe', url: 'https://mcp.stripe.com', authHeader: 'Authorization', hasSecret: true, listing: 'com.stripe_mcp', source: 'catalog', createdAt: 1790000200 },
+  ])
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
+  const member = [b64({ alg: 'none' }), b64({ sub: 'acme/zed', email: 'zed@acme.test', orgs: [{ org: 'acme', role: 'member' }] }), 'x'].join('.')
+  await page.addInitScript((t) => localStorage.setItem('hanzo_iam_access_token', t), member)
+
+  await page.goto('/-/customize')
+  const mine = page.getByRole('list', { name: 'Your skills' })
+  await expect(mine.getByText('triage', { exact: true })).toBeVisible()
+  await expect(mine.getByRole('switch')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'New skill' })).toHaveCount(0)
+
+  await page.goto('/-/customize/connectors')
+  await expect(page.getByRole('button', { name: 'Add connector' })).toHaveCount(0)
+  await page.getByRole('list', { name: 'Your connectors' }).getByRole('button', { name: 'Stripe' }).click()
+  const detail = page.getByRole('dialog', { name: 'Stripe' })
+  await expect(detail.getByText('An org admin adds, switches and removes the organization’s connectors.')).toBeVisible()
+  await expect(detail.getByRole('switch')).toHaveCount(0)
+  await expect(detail.getByRole('button', { name: 'Remove connector' })).toHaveCount(0)
 })

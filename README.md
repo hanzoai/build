@@ -113,8 +113,9 @@ key, a new one shown once, rotated or revoked.
 
 **Customize.** What the agent brings to a run, a tab each — Skills, Connectors,
 Plugins, Agents — and in each, Yours (what the org has) and Discover (what it
-can add), one search and one Add. Any member of the org may change any of it;
-the platform gates none of it to admins.
+can add), one search and one Add. Skills and connectors ride into every run in
+the org, so they are an org admin's to add, switch and remove, and a member reads
+them; plugins and agents are any member's.
 
 - Skills: the org's own SKILL.md skills, written, revised and deleted here, and
   the brand's catalogue (`/.well-known/agent-skills/`) to read and add. Adding is

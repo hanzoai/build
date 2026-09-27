@@ -31,6 +31,8 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
+  // What every run in the org connects to is an org admin's to change; a member reads it.
+  const may = signed && host.admin
   const mine = useRead(signed ? () => servers(t) : null, [] as Server[], [t, signed])
   const [opened, setOpened] = useState<Server | null>(null)
   const [listing, setListing] = useState<Listing | null>(null)
@@ -58,7 +60,7 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
     <About
       listing={listing}
       added={mine.value.some((s) => s.listing === listing.id)}
-      signed={signed}
+      signed={may}
       onAdd={() => {
         setConnecting(listing)
         setListing(null)
@@ -74,6 +76,7 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
         <Shelf
           q={q}
           signed={signed}
+          may={may}
           added={new Set(mine.value.map((s) => s.listing).filter(Boolean))}
           onOpen={setListing}
           onAdd={setConnecting}
@@ -98,7 +101,7 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
         <Soft>Reading your connectors…</Soft>
       ) : !mine.value.length ? (
         <Soft action={<Button size="sm" variant="outline" onPress={() => onView('discover')}>Discover connectors</Button>}>
-          No connectors yet. Add an MCP server by its URL, or pick one off the shelf.
+          {may ? 'No connectors yet. Add an MCP server by its URL, or pick one off the shelf.' : 'No connectors yet. An org admin adds them.'}
         </Soft>
       ) : !shown.length ? (
         <Soft>No connector matches.</Soft>
@@ -119,6 +122,7 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
       {opened ? (
         <Detail
           server={opened}
+          may={may}
           onClose={() => setOpened(null)}
           onDeleted={() => {
             setNote(`${opened.name} is removed`)
@@ -133,7 +137,7 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
 }
 
 /** The shelf: featured first, then by name, a page at a time. The platform searches it. */
-function Shelf({ q, signed, added, onOpen, onAdd }: { q: string; signed: boolean; added: Set<string>; onOpen: (l: Listing) => void; onAdd: (l: Listing) => void }) {
+function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: boolean; may: boolean; added: Set<string>; onOpen: (l: Listing) => void; onAdd: (l: Listing) => void }) {
   const t = useTarget()
   const host = useHost()
   const text = useSettled(q.trim(), 300)
@@ -155,7 +159,7 @@ function Shelf({ q, signed, added, onOpen, onAdd }: { q: string; signed: boolean
   const hero = !text ? list.find((l) => l.featured) : undefined
   const rest = hero ? list.filter((l) => l !== hero) : list
   const action = (l: Listing) =>
-    ready(l) ? (
+    !may ? undefined : ready(l) ? (
       <Add name={titleOf(l)} added={added.has(l.id)} onPress={() => onAdd(l)} />
     ) : (
       <SizableText size="$1" color="$soft" shrink={0} pt="$1.5">
@@ -437,7 +441,7 @@ function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClo
 }
 
 /** One of the org's servers: where it is, its secret, its tools and their switches, and removing it. */
-function Detail({ server, onClose, onDeleted }: { server: Server; onClose: () => void; onDeleted: () => void }) {
+function Detail({ server, may, onClose, onDeleted }: { server: Server; may: boolean; onClose: () => void; onDeleted: () => void }) {
   const t = useTarget()
   const list = useRead(() => tools(t, { source: 'mcp' }), [] as Tool[], [t, server.id])
   const its = useMemo(() => list.value.filter((x) => owns(server, x.name)), [list.value, server])
@@ -476,7 +480,7 @@ function Detail({ server, onClose, onDeleted }: { server: Server; onClose: () =>
         <SizableText size="$3" color="$ink" flex={1}>
           Tools
         </SizableText>
-        {its.length ? (
+        {its.length && may ? (
           <Button size="sm" variant="outline" disabled={busy} onPress={() => void (off.length ? flip(off, []) : flip([], its.map((x) => x.name)))}>
             {off.length ? 'Turn all on' : 'Turn all off'}
           </Button>
@@ -504,18 +508,26 @@ function Detail({ server, onClose, onDeleted }: { server: Server; onClose: () =>
                     </SizableText>
                   ) : null}
                 </YStack>
-                <Switch checked={x.activated} disabled={busy} onCheckedChange={(v: boolean) => void flip(v ? [x.name] : [], v ? [] : [x.name])} aria-label={`${short} on`} />
+                {may ? (
+                  <Switch checked={x.activated} disabled={busy} onCheckedChange={(v: boolean) => void flip(v ? [x.name] : [], v ? [] : [x.name])} aria-label={`${short} on`} />
+                ) : (
+                  <SizableText size="$1" color="$soft">
+                    {x.activated ? 'On' : 'Off'}
+                  </SizableText>
+                )}
               </XStack>
             )
           })}
         </YStack>
       )}
-      <Line>{note}</Line>
-      <XStack justify="flex-start">
-        <Button size="sm" variant="ghost" onPress={() => setAsking(true)}>
-          Remove connector
-        </Button>
-      </XStack>
+      <Line>{note || (may ? '' : 'An org admin adds, switches and removes the organization’s connectors.')}</Line>
+      {may ? (
+        <XStack justify="flex-start">
+          <Button size="sm" variant="ghost" onPress={() => setAsking(true)}>
+            Remove connector
+          </Button>
+        </XStack>
+      ) : null}
       <Confirm
         what={server.name}
         says="Its tools leave your organization and every agent, and its sealed secret is destroyed."

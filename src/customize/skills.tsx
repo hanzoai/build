@@ -32,6 +32,8 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
+  // What every run in the org loads is an org admin's to change; a member reads it.
+  const may = signed && host.admin
   const own = useRead(signed ? () => authored(t) : null, [] as Skill[], [t, signed])
   const on = useRead(signed ? () => active(t) : null, [] as Tool[], [t, signed])
   const shelf = useRead(view === 'discover' ? () => brand(t) : null, null as Catalogue | null, [t.api, view])
@@ -63,7 +65,7 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
     <Reader
       skill={reading}
       added={lit.has(tool(reading.name))}
-      signed={signed}
+      signed={may}
       busy={busy === reading.name}
       onFlip={(next) => void flip(reading.name, next)}
       onClose={() => setReading(null)}
@@ -73,6 +75,7 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
     adding || editing ? (
       <Editor
         skill={editing}
+        may={may}
         onClose={() => {
           setEditing(null)
           onAdding(false)
@@ -120,7 +123,7 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
                   meta={e.product}
                   mark={<Mark name={e.name} icon={<BookOpen size={15} />} />}
                   onOpen={() => setReading(e)}
-                  action={signed ? <Add name={e.name} added={lit.has(tool(e.name))} busy={busy === e.name} onPress={() => void flip(e.name, true)} /> : undefined}
+                  action={may ? <Add name={e.name} added={lit.has(tool(e.name))} busy={busy === e.name} onPress={() => void flip(e.name, true)} /> : undefined}
                 />
               ))}
             </Grid>
@@ -170,12 +173,18 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
                     mark={<Mark name={s.name} />}
                     onOpen={() => setEditing(s)}
                     action={
-                      <Switch
-                        checked={lit.has(tool(s.name))}
-                        disabled={busy === s.name}
-                        onCheckedChange={(v: boolean) => void flip(s.name, v)}
-                        aria-label={`${s.name} on`}
-                      />
+                      may ? (
+                        <Switch
+                          checked={lit.has(tool(s.name))}
+                          disabled={busy === s.name}
+                          onCheckedChange={(v: boolean) => void flip(s.name, v)}
+                          aria-label={`${s.name} on`}
+                        />
+                      ) : (
+                        <SizableText size="$1" color="$soft">
+                          {lit.has(tool(s.name)) ? 'On' : 'Off'}
+                        </SizableText>
+                      )
                     }
                   />
                 ))}
@@ -199,9 +208,11 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
                       mark={<Mark name={name} icon={<BookOpen size={15} />} />}
                       onOpen={() => setReading({ name, description: x.description, product: '' })}
                       action={
-                        <Button size="sm" variant="ghost" disabled={busy === name} onPress={() => void flip(name, false)} aria-label={`Remove ${name}`}>
-                          Remove
-                        </Button>
+                        may ? (
+                          <Button size="sm" variant="ghost" disabled={busy === name} onPress={() => void flip(name, false)} aria-label={`Remove ${name}`}>
+                            Remove
+                          </Button>
+                        ) : undefined
                       }
                     />
                   )
@@ -276,11 +287,14 @@ function Reader({
 /** Write a skill, or revise one of the org's own. Its name is its id, so a saved skill keeps its name. */
 function Editor({
   skill,
+  may,
   onClose,
   onSaved,
   onDeleted,
 }: {
   skill: Skill | null
+  /** Whether this person may write and delete the org's skills: an org admin. */
+  may: boolean
   onClose: () => void
   onSaved: (s: Skill, fresh: boolean) => void
   onDeleted: (name: string) => void
@@ -324,20 +338,22 @@ function Editor({
       <Field label="SKILL.md" hint="Markdown: what the skill is for, when to use it, and the steps.">
         <Textarea value={content} onChangeText={setContent} placeholder={'# Triage\n\n1. Read the issue…'} aria-label="SKILL.md" rows={14} style={mono} />
       </Field>
-      <Line>{note}</Line>
+      <Line>{note || (may ? '' : 'An org admin writes and deletes the organization’s skills.')}</Line>
       <XStack gap="$2" items="center">
-        {skill ? (
+        {skill && may ? (
           <Button size="sm" variant="ghost" onPress={() => setAsking(true)}>
             Delete
           </Button>
         ) : null}
         <XStack flex={1} />
         <Button size="sm" variant="ghost" onPress={onClose}>
-          Cancel
+          {may ? 'Cancel' : 'Close'}
         </Button>
-        <Button size="sm" disabled={working} onPress={() => void save()}>
-          Save
-        </Button>
+        {may ? (
+          <Button size="sm" disabled={working} onPress={() => void save()}>
+            Save
+          </Button>
+        ) : null}
       </XStack>
       {skill ? (
         <Confirm
