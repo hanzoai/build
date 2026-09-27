@@ -67,9 +67,9 @@ test('the rail moves between screens without leaving the page', async ({ page, b
   expect([...seen.hosts]).not.toContain('platform.hanzo.ai')
 })
 
-test('one mark at the top left when signed out', async ({ page }) => {
+test('the name at the top left when signed out', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Hanzo', exact: true })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Hanzo Build', exact: true })).toHaveCount(1)
   await expect(page.getByText('Sign in', { exact: true }).first()).toBeVisible()
 })
 
