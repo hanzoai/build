@@ -92,11 +92,24 @@ collide.
 
 **The rail** (hanzo.build). At the top, the mark. Signed in to an organization,
 that spot is the organization switcher: the org, and the projects under it.
-New, then Automations, then the forge — Codebase, Projects, Issues — then
-Artifacts, Customize, More (Templates, Machines, Docs), then the org's coding runs newest
-first with a live status dot. The account stays at the foot. Settings opens
-that account on this page. Collapse is an explicit toggle kept in this browser.
-A host with its own rail draws `DevSection` there instead.
+New, Projects, Artifacts, Customize, Automations, then More (Codebase, Issues,
+Templates, Machines, Docs), then the org's coding runs newest first with a live
+status dot. At the foot, a card offering Hanzo in Slack (dismissed once, gone in
+this browser) and the account, whose menu holds the email, Settings, Usage, View
+all plans, Get help (the docs, in a new tab) and Log out. Collapse is an explicit
+toggle kept in this browser. A host with its own rail draws `DevSection` there
+instead.
+
+**Artifacts.** A few starters to make something new from, each copied into a
+project as Templates does, then every project under the month it was last
+edited, public or private, with rename, visibility and delete. A project belongs
+to the org and names no author, so there is no Yours or Shared with you.
+
+**Settings, Code.** Environments: every codebase that has one, opened in the
+same editor a run shows, forgotten by an org admin. Machines: `hanzo login` and
+`hanzo link` to link one, registering one by hand, and each machine's rename,
+drain, claim key (shown once) and removal. API keys: your secret and publishable
+key, a new one shown once, rotated or revoked.
 
 **Customize.** What the agent brings to a run, a tab each — Skills, Connectors,
 Plugins, Agents — and in each, Yours (what the org has) and Discover (what it
@@ -164,7 +177,8 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/agent/sessions?kind=coding` | Recents, and a project's runs |
 | `GET /v1/agent/sessions/{id}` · `GET /v1/agent/sessions/stream?root=` | a run, and its live feed (SSE over fetch) |
 | `POST /v1/agent/sessions/{id}/message` · `/stop` | steer, stop |
-| `GET /v1/agent/targets` | the org's machines |
+| `GET`/`POST /v1/agent/targets` · `PATCH`/`DELETE …/{id}` · `POST …/{id}/key` | the org's machines, and a machine's claim key |
+| `GET`/`POST`/`DELETE /v1/account/keys` | your API keys |
 | `GET /v1/auto/flows` · `POST /v1/auto/flows` · `POST /v1/auto/flows/{id}/enable` | automations |
 | `GET /v1/environment` · `GET`/`PUT`/`DELETE /v1/environment/{repo}` · `PUT`/`DELETE …/secrets/{name}` | a codebase's environment |
 | `GET /v1/agent/coding/{session}/changes` · `/tree` · `/blob` | what a run pushed, and its branch's files, from the forge |
@@ -175,7 +189,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/task/projects` · `GET /v1/task/board` · `GET /v1/task/projects/{key}/issues` | boards and issues, read from the forge |
 | `GET /v1/provider/github/repos` · `…/{owner}/{repo}/branches` | kept for a host that still asks GitHub |
 | `POST /v1/provider/github/user/connect` | connect a person's GitHub |
-| `GET /v1/projects` · `POST /v1/projects/fork` · `GET /v1/templates` | artifacts, templates |
+| `GET /v1/projects` · `PATCH`/`DELETE /v1/projects/{slug}` · `POST /v1/projects/fork` · `GET /v1/templates` | artifacts, templates |
 | `GET /v1/git/repos/{name}/tree` · `/blob` | Files and Code |
 | `POST /v1/platform/apps` · `GET /v1/platform/builds` | Add to project, Publish |
 | `POST /v1/mcp` | the native MCP servers, `tools/list` |
@@ -222,7 +236,10 @@ src/
   shelf.tsx     Artifacts and Templates
   customize/    Customize: the shell, then one file per tab
   publish.tsx   Add to project / Publish
-  account.tsx   the account and find-a-run dialogs
+  find.tsx      the find-a-run dialog
+  foot.tsx      the rail's foot: the Slack card and the account menu
+  ask.tsx       confirming an act, or naming something, in a dialog
+  settings/     Settings, one file per section
   data.ts       reads as hooks
   host.tsx      what a host provides
   route.ts      the address grammar

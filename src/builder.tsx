@@ -14,8 +14,10 @@
  *   /<slug>      a deployed project's workspace, in this same window
  *
  * The rail is the sessions rail every Hanzo surface shares: New, the builder's
- * places, the org's coding runs newest first with a live status dot, and the
- * account. Its collapse is an explicit toggle kept per browser.
+ * places with the rest under More, the org's coding runs newest first with a
+ * live status dot, and at the foot the offer of Hanzo in Slack and the account,
+ * whose menu opens Settings, Usage, the plans, help and logging out (foot.tsx).
+ * Its collapse is an explicit toggle kept per browser.
  *
  * A project's workspace takes the whole window — it has its own chat column,
  * bar and panes — and its mark leads back here.
@@ -45,6 +47,7 @@ import { Run } from './run.tsx'
 import { DOTS } from './section.tsx'
 import { Artifacts, Templates } from './shelf.tsx'
 import { Find } from './find.tsx'
+import { DOCS, Slack, Who } from './foot.tsx'
 import { Settings } from './settings/index.tsx'
 import { Where } from './switch.tsx'
 
@@ -59,6 +62,8 @@ function Shell() {
   const [drawer, setDrawer] = useState(false)
   const [order, setOrder] = useState<Order>('newest')
   const [finding, setFinding] = useState(false)
+  const [menu, setMenu] = useState(false)
+  const [slack, setSlack] = useKept('hanzo.build.slack', false)
 
   const go = (p: string) => {
     setDrawer(false)
@@ -83,9 +88,13 @@ function Shell() {
     </XStack>
   )
   const links: RailLink[] = [
-    { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' },
-    { id: 'codebases', label: 'Codebase', icon: <FolderGit2 size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'codebases' })), active: screen === 'codebases' },
     { id: 'projects', label: 'Projects', icon: <Kanban size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'projects' })), active: screen === 'projects' },
+    { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
+    { id: 'customize', label: 'Customize', icon: <SlidersHorizontal size={16} />, onPress: () => go(path({ kind: 'customize', tab: 'skills' })), active: r.kind === 'customize' || screen === 'mcp' },
+    { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' },
+  ]
+  const more: RailLink[] = [
+    { id: 'codebases', label: 'Codebase', icon: <FolderGit2 size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'codebases' })), active: screen === 'codebases' },
     {
       id: 'issues',
       label: 'Issues',
@@ -96,10 +105,6 @@ function Shell() {
       },
       active: screen === 'issues',
     },
-    { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
-    { id: 'mcp', label: 'Customize', icon: <SlidersHorizontal size={16} />, onPress: () => go(path({ kind: 'customize', tab: 'connectors' })), active: r.kind === 'customize' || screen === 'mcp' },
-  ]
-  const more: RailLink[] = [
     { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'templates' })), active: screen === 'templates' },
     {
       id: 'machines',
@@ -108,7 +113,7 @@ function Shell() {
       onPress: () => go(path({ kind: 'settings', section: 'machines' })),
       active: r.kind === 'settings' && r.section === 'machines',
     },
-    { id: 'docs', label: 'Docs', icon: <BookOpen size={16} />, onPress: () => window.open('https://docs.hanzo.ai/docs/dev', '_blank', 'noopener,noreferrer') },
+    { id: 'docs', label: 'Docs', icon: <BookOpen size={16} />, onPress: () => window.open(DOCS, '_blank', 'noopener,noreferrer') },
   ]
 
   return (
@@ -129,9 +134,20 @@ function Shell() {
             {!host.person ? 'Sign in to see your runs.' : recents.error ? recents.error.message : recents.loading ? 'Reading…' : 'No runs yet.'}
           </SizableText>
         }
+        notice={
+          host.person && !slack ? (
+            <Slack onOpen={() => go(path({ kind: 'settings', section: 'integrations' }))} onDismiss={() => setSlack(true)} />
+          ) : undefined
+        }
         account={
           host.person
-            ? { name: host.person.email || host.person.name, onPress: () => go(path({ kind: 'settings', section: 'account' })) }
+            ? {
+                name: host.person.email || host.person.name,
+                onPress: () => {
+                  setDrawer(false)
+                  setMenu(true)
+                },
+              }
             : { name: 'Sign in', onPress: () => host.signIn?.() }
         }
         onSettings={() => go(path({ kind: 'settings', section: 'general' }))}
@@ -149,6 +165,7 @@ function Shell() {
           {top}
         </XStack>
       )}
+      {host.person ? <Who open={menu} onOpenChange={setMenu} narrow={collapsed} /> : null}
       </YStack>
       <YStack flex={1} minW={0} minH={0} position="relative">
         {/* Below md the rail is a drawer; this is the one control that opens it. */}

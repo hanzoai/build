@@ -20,7 +20,7 @@ const SCREENS: [string, string, RegExp][] = [
   ['run', '/sess_0992f90537264a6b154ebff799f38e1c', /Sign in to follow this run/],
 ]
 
-const RAIL = ['New', 'Automations', 'Codebase', 'Projects', 'Issues', 'Artifacts', 'Customize']
+const RAIL = ['New', 'Projects', 'Artifacts', 'Customize', 'Automations', 'More']
 
 /** Everything the page asked for and every error it threw, for the whole test. */
 function watch(page: Page) {
@@ -49,16 +49,18 @@ test('the rail moves between screens without leaving the page', async ({ page, b
   const seen = watch(page)
   await page.goto('/')
   for (const [label, at] of [
-    ['Automations', '/-/automations'],
-    ['Codebase', '/-/codebases'],
     ['Projects', '/-/projects'],
-    ['Issues', '/-/issues'],
     ['Artifacts', '/-/artifacts'],
-    ['Customize', '/-/customize/connectors'],
+    ['Customize', '/-/customize'],
+    ['Automations', '/-/automations'],
+    ['More', ''],
+    ['Codebase', '/-/codebases'],
+    ['Issues', '/-/issues'],
+    ['Templates', '/-/templates'],
     ['New', '/'],
   ]) {
     await page.getByText(label, { exact: true }).first().click()
-    await expect(page).toHaveURL(new URL(at, baseURL).href)
+    if (at) await expect(page).toHaveURL(new URL(at, baseURL).href)
   }
   expect([...seen.hosts]).not.toContain('platform.hanzo.ai')
 })
@@ -138,7 +140,9 @@ test('a phone gets every screen whole, with the rail as a drawer', async ({ page
     await page.screenshot({ path: info.outputPath(`phone-${name}.png`) })
   }
   await page.getByLabel('Open runs').click()
-  await expect(page.getByRole('navigation', { name: 'Runs' }).getByText('Codebase', { exact: true })).toBeVisible()
+  const drawer = page.getByRole('navigation', { name: 'Runs' })
+  await drawer.getByText('More', { exact: true }).click()
+  await expect(drawer.getByText('Codebase', { exact: true })).toBeVisible()
 })
 
 test('a run asks a visitor to sign in, not for an API key', async ({ page }) => {
