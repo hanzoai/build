@@ -40,7 +40,7 @@ export function Privacy() {
     try {
       setShown(await setConsent(t, change))
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That was not saved')
+      setNote((e as Error).message)
     } finally {
       setBusy('')
     }
@@ -54,7 +54,7 @@ export function Privacy() {
       published.reload()
       setNote(`${saved.name} is ${saved.visibility || 'saved'}`)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That was not saved')
+      setNote((e as Error).message)
     } finally {
       setBusy('')
     }

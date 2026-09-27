@@ -60,7 +60,7 @@ export function Billing() {
       after()
       setNote(done)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }
@@ -212,20 +212,21 @@ export function Billing() {
           setNote(`${label(m)} is saved`)
         }}
       />
-      <Ending
-        plan={plan}
-        open={ending}
-        working={working}
-        onOpenChange={setEnding}
-        onConfirm={() => {
-          if (!plan) return
-          void act(() => cancel(t, plan.id), `Your plan ends on ${day(plan.ends)}`, () => {
-            setEnding(false)
-            subs.reload()
-          })
-        }}
-      />
-      <Bill invoice={open} onClose={() => setOpen(null)} />
+      {plan ? (
+        <Ending
+          plan={plan}
+          open={ending}
+          working={working}
+          onOpenChange={setEnding}
+          onConfirm={() =>
+            void act(() => cancel(t, plan.id), `Your plan ends on ${day(plan.ends)}`, () => {
+              setEnding(false)
+              subs.reload()
+            })
+          }
+        />
+      ) : null}
+      {open ? <Bill invoice={open} onClose={() => setOpen(null)} /> : null}
     </YStack>
   )
 }
@@ -245,7 +246,7 @@ function Ending({
   onOpenChange,
   onConfirm,
 }: {
-  plan: Subscription | null
+  plan: Subscription
   open: boolean
   working: boolean
   onOpenChange: (o: boolean) => void
@@ -257,9 +258,7 @@ function Ending({
         <DialogTitle>Cancel your plan?</DialogTitle>
         <YStack gap="$3">
           <SizableText size="$2" color="$soft">
-            {plan
-              ? `${plan.name} stays on until ${day(plan.ends) || 'the end of this period'}, and nothing is charged after that. You can keep it any time before then.`
-              : ''}
+            {`${plan.name} stays on until ${day(plan.ends) || 'the end of this period'}, and nothing is charged after that. You can keep it any time before then.`}
           </SizableText>
           <XStack gap="$2" justify="flex-end">
             <Button size="sm" variant="ghost" onPress={() => onOpenChange(false)}>
@@ -275,15 +274,13 @@ function Ending({
   )
 }
 
-/** One invoice, read in the page, with its PDF to keep. */
-function Bill({ invoice, onClose }: { invoice: Invoice | null; onClose: () => void }) {
+/** One invoice, read in the page, with its PDF to keep. Drawn while it is open, so each opens anew. */
+function Bill({ invoice: b, onClose }: { invoice: Invoice; onClose: () => void }) {
   const t = useTarget()
   const [note, setNote] = useState('')
   const [working, setWorking] = useState(false)
-  const b = invoice
 
   const keep = async () => {
-    if (!b) return
     setWorking(true)
     setNote('')
     try {
@@ -295,7 +292,7 @@ function Bill({ invoice, onClose }: { invoice: Invoice | null; onClose: () => vo
       a.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The PDF did not download')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }
@@ -307,44 +304,42 @@ function Bill({ invoice, onClose }: { invoice: Invoice | null; onClose: () => vo
         {what}
       </SizableText>
       <SizableText size="$2" color={strong ? '$ink' : '$soft'}>
-        {b ? money(cents, b.currency) : ''}
+        {money(cents, b.currency)}
       </SizableText>
     </XStack>
   )
 
   return (
-    <Dialog open={Boolean(b)} onOpenChange={(o) => (o ? undefined : onClose())}>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent maxW={480} showCloseButton={false}>
         <XStack items="center" justify="space-between" gap="$2">
-          <DialogTitle>{b?.number ? `Invoice ${b.number}` : 'Invoice'}</DialogTitle>
+          <DialogTitle>{b.number ? `Invoice ${b.number}` : 'Invoice'}</DialogTitle>
           <XStack render="button" aria-label="Close" p="$1" onPress={onClose}>
             <X size={16} />
           </XStack>
         </XStack>
-        {b ? (
-          <YStack gap="$3">
-            <SizableText size="$2" color="$soft">
-              {[day(b.date), word(b.status), b.start && b.end ? `for ${day(b.start)} – ${day(b.end)}` : ''].filter(Boolean).join(' · ')}
-            </SizableText>
-            <YStack gap="$1.5" borderTopWidth={1} borderColor="$borderColor" pt="$3">
-              {b.lines.length ? b.lines.map((l, i) => line(l.description || `Line ${i + 1}`, l.amount)) : line('Subtotal', b.subtotal)}
-            </YStack>
-            <YStack gap="$1.5" borderTopWidth={1} borderColor="$borderColor" pt="$3">
-              {b.discount ? line('Discount', -b.discount) : null}
-              {b.tax ? line('Tax', b.tax) : null}
-              {line('Total', b.total, true)}
-              {b.credit ? line('Credit applied', -b.credit) : null}
-              {line('Paid', b.paid)}
-              {b.due ? line('Due', b.due, true) : null}
-            </YStack>
-            <Note>{note}</Note>
-            <XStack justify="flex-end">
-              <Button size="sm" variant="outline" disabled={working} onPress={() => void keep()}>
-                <Download size={14} /> Download PDF
-              </Button>
-            </XStack>
+        <YStack gap="$3">
+          <SizableText size="$2" color="$soft">
+            {[day(b.date), word(b.status), b.start && b.end ? `for ${day(b.start)} – ${day(b.end)}` : ''].filter(Boolean).join(' · ')}
+          </SizableText>
+          <YStack gap="$1.5" borderTopWidth={1} borderColor="$borderColor" pt="$3">
+            {b.lines.length ? b.lines.map((l, i) => line(l.description || `Line ${i + 1}`, l.amount)) : line('Subtotal', b.subtotal)}
           </YStack>
-        ) : null}
+          <YStack gap="$1.5" borderTopWidth={1} borderColor="$borderColor" pt="$3">
+            {b.discount ? line('Discount', -b.discount) : null}
+            {b.tax ? line('Tax', b.tax) : null}
+            {line('Total', b.total, true)}
+            {b.credit ? line('Credit applied', -b.credit) : null}
+            {line('Paid', b.paid)}
+            {b.due ? line('Due', b.due, true) : null}
+          </YStack>
+          <Note>{note}</Note>
+          <XStack justify="flex-end">
+            <Button size="sm" variant="outline" disabled={working} onPress={() => void keep()}>
+              <Download size={14} /> Download PDF
+            </Button>
+          </XStack>
+        </YStack>
       </DialogContent>
     </Dialog>
   )

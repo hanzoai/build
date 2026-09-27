@@ -47,7 +47,7 @@ export function Memory() {
       setNote(done)
       return true
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
       return false
     } finally {
       setBusy('')

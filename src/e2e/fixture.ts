@@ -3,8 +3,8 @@
  *
  * `test` is Playwright's own, with the page's JavaScript coverage taken for the
  * builder's own modules — what the dev server serves under /src/ — and kept for
- * `pnpm cover` to merge with the unit tests' (cover/). Against a built site
- * there is no /src/, and nothing is kept.
+ * `pnpm cover` to merge with the unit tests' (cover/), once for every document
+ * the page shows. Against a built site there is no /src/, and nothing is kept.
  */
 import { test as base, expect, type Page } from '@playwright/test'
 import MCR from 'monocart-coverage-reports'
@@ -14,14 +14,59 @@ import { raw } from '../../cover/index.ts'
 const report = MCR(raw('browser'))
 const OURS = /^https?:\/\/[^/]+\/src\//
 
+/**
+ * V8's counts for the page's own modules, taken over the page's DevTools
+ * session: only the builder's sources are read, and each take answers what ran
+ * since the last one, since V8 starts its counts over as it answers. Returns
+ * the take, which keeps what it answered.
+ */
+async function counted(page: Page): Promise<() => Promise<void>> {
+  const cdp = await page.context().newCDPSession(page)
+  const sources = new Map<string, Promise<{ url: string; source: string } | null>>()
+  cdp.on('Debugger.scriptParsed', ({ scriptId, url }) => {
+    if (!OURS.test(url)) return
+    const read = cdp.send('Debugger.getScriptSource', { scriptId }).then(({ scriptSource }) => ({ url, source: scriptSource }))
+    sources.set(scriptId, read.catch(() => null))
+  })
+  await cdp.send('Profiler.enable')
+  await cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: true })
+  await cdp.send('Debugger.enable')
+  await cdp.send('Debugger.setSkipAllPauses', { skip: true })
+  return async () => {
+    // A page the test closed or crashed has nothing left to give.
+    const taken = await cdp.send('Profiler.takePreciseCoverage').catch(() => null)
+    const ours = []
+    for (const script of taken?.result ?? []) {
+      const read = await sources.get(script.scriptId)
+      if (read) ours.push({ ...script, ...read })
+    }
+    if (ours.length) await report.add(ours)
+  }
+}
+
+/**
+ * V8 forgets what a document ran once the page leaves it, so a test's own moves
+ * — a goto, a reload, back and forward — keep it first. A move the page makes
+ * itself (a link to another origin, `location.assign`) takes what that document
+ * ran with it: a spec answers such a request with a 204, which keeps the page
+ * where it is, and reads the request.
+ */
+const MOVES = ['goto', 'reload', 'goBack', 'goForward'] as const
+
 export const test = base.extend({
   page: async ({ page }, use) => {
-    await page.coverage.startJSCoverage({ resetOnNavigation: false })
+    const keep = await counted(page)
+    for (const name of MOVES) {
+      const move = page[name].bind(page) as (...args: unknown[]) => Promise<unknown>
+      Object.assign(page, {
+        [name]: async (...args: unknown[]) => {
+          await keep()
+          return move(...args)
+        },
+      })
+    }
     await use(page)
-    // A page the test closed or crashed has nothing left to give.
-    const scripts = await page.coverage.stopJSCoverage().catch(() => [])
-    const ours = scripts.filter((s) => OURS.test(s.url))
-    if (ours.length) await report.add(ours)
+    await keep()
   },
 })
 

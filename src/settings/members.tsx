@@ -53,7 +53,7 @@ export function Members() {
       after()
       setNote(done)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }
@@ -61,8 +61,9 @@ export function Members() {
 
   const send = () => {
     const address = email.trim()
+    // Invite is offered only once something is typed.
     if (!EMAIL.test(address)) {
-      setNote(`${address || 'That'} is not an email address`)
+      setNote(`${address} is not an email address`)
       return
     }
     void act(() => invite(t, org, address), `${address} is invited. IAM sends no email: share the code with them.`, () => {

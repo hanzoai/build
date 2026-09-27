@@ -46,12 +46,13 @@ export function General() {
 
   const keep = (patch: Patch) => {
     setNote('')
-    save(patch).catch((e: unknown) => setNote(e instanceof Error ? e.message : 'That was not saved'))
+    save(patch).catch((e: unknown) => setNote((e as Error).message))
   }
 
-  const theme = prefs.theme ?? host.theme ?? 'dark'
-  const text = prefs.text ?? 'medium'
-  const motion = prefs.motion ?? 'system'
+  // Each choice is one of its list: a saved one was read against it, and a host's theme is one of THEMES.
+  const theme = THEMES.find((x) => x.id === (prefs.theme ?? host.theme ?? 'dark'))!
+  const text = TEXTS.find((x) => x.id === (prefs.text ?? 'medium'))!
+  const motion = MOTIONS.find((x) => x.id === (prefs.motion ?? 'system'))!
   const language = LANGUAGES.find((l) => l.id === prefs.language) ?? LANGUAGES.find((l) => l.id === spoken())!
 
   return (
@@ -67,8 +68,8 @@ export function General() {
               trailing={
                 <ChipSelect
                   name="Theme"
-                  label={THEMES.find((x) => x.id === theme)!.label}
-                  chosen={THEMES.find((x) => x.id === theme) ?? null}
+                  label={theme.label}
+                  chosen={theme}
                   items={THEMES}
                   onChange={(x) => keep({ theme: x.id })}
                   placement="bottom-end"
@@ -84,8 +85,8 @@ export function General() {
             trailing={
               <ChipSelect
                 name="Text size"
-                label={TEXTS.find((x) => x.id === text)!.label}
-                chosen={TEXTS.find((x) => x.id === text) ?? null}
+                label={text.label}
+                chosen={text}
                 items={TEXTS}
                 onChange={(x) => keep({ text: x.id === 'medium' ? null : x.id })}
                 placement="bottom-end"
@@ -99,8 +100,8 @@ export function General() {
             trailing={
               <ChipSelect
                 name="Motion"
-                label={MOTIONS.find((x) => x.id === motion)!.label}
-                chosen={MOTIONS.find((x) => x.id === motion) ?? null}
+                label={motion.label}
+                chosen={motion}
                 items={MOTIONS}
                 onChange={(x) => keep({ motion: x.id === 'system' ? null : x.id })}
                 placement="bottom-end"
