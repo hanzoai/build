@@ -12,7 +12,7 @@ import { consent, consentOf, setConsent } from './consent.ts'
 import { forget, memories, remember } from './memory.ts'
 import { merge, prefs, read, save } from './pref.ts'
 import { photo, rename } from './profile.ts'
-import { setVisibility } from './projects.ts'
+import { change } from './projects.ts'
 
 const T: Target = { api: 'https://api.hanzo.ai', token: () => 'tok', org: 'hanzo' }
 
@@ -205,13 +205,13 @@ describe('memory', () => {
 describe('project visibility', () => {
   it('changes one project, escaped, and reads what was saved', async () => {
     const seen = answer(200, { slug: 'shop', name: 'Shop', visibility: 'private' })
-    expect(await setVisibility(T, 'shop', 'private')).toMatchObject({ slug: 'shop', visibility: 'private' })
+    expect(await change(T, 'shop', { visibility: 'private' })).toMatchObject({ slug: 'shop', visibility: 'private' })
     expect(seen[0]).toMatchObject({ method: 'PATCH', url: 'https://api.hanzo.ai/v1/projects/shop', body: { visibility: 'private' } })
   })
 
   it('passes on the refusal an unfunded org gets for private', async () => {
     const seen = answer(402, { detail: 'payment required' })
-    await expect(setVisibility(T, 'a b', 'private')).rejects.toMatchObject({ status: 402, message: 'payment required' })
+    await expect(change(T, 'a b', { visibility: 'private' })).rejects.toMatchObject({ status: 402, message: 'payment required' })
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/projects/a%20b')
   })
 })

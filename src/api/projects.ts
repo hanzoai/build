@@ -1,11 +1,15 @@
 /**
  * The org's projects: what it has built, and where each one is served.
  *
- *   GET   /v1/projects → Project[]
- *   PATCH /v1/projects/{slug}  {visibility}   public is free; private needs a funded org (402)
+ *   GET    /v1/projects         → Project[]
+ *   PATCH  /v1/projects/{slug}  rename it, or make it public or private
+ *   DELETE /v1/projects/{slug}  delete it and take its site down
  *
  * `slug` is the one key every surface shares — the address under /dev, the
- * site's name, the `project` a run is tagged with.
+ * site's name, the `project` a run is tagged with. A project belongs to the org,
+ * not to a person: the record names no author, so any member lists, changes and
+ * deletes it. Private is paid, and an unfunded org is refused rather than left
+ * public without being told.
  */
 import { call, seg, type Target } from './call.ts'
 
@@ -19,12 +23,17 @@ export interface Project {
   status: string
   /** The deployed address, or '' when nothing has shipped. */
   live: string
-  /** Who can see it and read its source: 'public', 'private', or '' when the platform did not say. */
-  visibility: '' | 'public' | 'private'
+  /** `public` or `private`, or '' when the platform did not say. */
+  visibility: '' | Visibility
+  /** Unix seconds; 0 when unknown. A deploy does not move `updated`. */
+  created: number
   updated: number
 }
 
+export type Visibility = 'public' | 'private'
+
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
 const loopback = (host: string): boolean => host === 'localhost' || host === '127.0.0.1'
 
@@ -56,7 +65,8 @@ export function project(raw: unknown): Project {
     status: str(p.status),
     live: safe(str(p.liveUrl)),
     visibility: p.visibility === 'public' || p.visibility === 'private' ? p.visibility : '',
-    updated: typeof p.updatedAt === 'number' ? p.updatedAt : 0,
+    created: num(p.createdAt),
+    updated: num(p.updatedAt),
   }
 }
 
@@ -69,9 +79,21 @@ export async function projects(t: Target): Promise<Project[]> {
     .sort((a, b) => b.updated - a.updated)
 }
 
-/** Make a project public or private, and answer it as saved. */
-export async function setVisibility(t: Target, slug: string, visibility: 'public' | 'private'): Promise<Project> {
-  return project(await call<unknown>(t, 'PATCH', `/v1/projects/${seg(slug)}`, { visibility }))
+/** Change a project's name or who can see it; what is not sent is left as it is. */
+export async function change(t: Target, slug: string, what: { name?: string; visibility?: Visibility }): Promise<Project> {
+  const body: { name?: string; visibility?: Visibility } = {}
+  if (what.name !== undefined) {
+    const n = what.name.trim()
+    if (!n) throw new Error('A project needs a name')
+    body.name = n
+  }
+  if (what.visibility !== undefined) body.visibility = what.visibility
+  return project(await call<unknown>(t, 'PATCH', `/v1/projects/${seg(slug)}`, body))
+}
+
+/** Delete a project. Its site stops answering and its slug is free again. */
+export async function remove(t: Target, slug: string): Promise<void> {
+  await call<unknown>(t, 'DELETE', `/v1/projects/${seg(slug)}`)
 }
 
 /** The repository name a project's clone URL names — the last path segment, without `.git`. */

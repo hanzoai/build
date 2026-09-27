@@ -9,7 +9,7 @@ import { Button, Switch } from '@hanzo/ui'
 import { useState } from 'react'
 
 import { consent, setConsent, type Consent } from '../api/consent.ts'
-import { projects, setVisibility, type Project } from '../api/projects.ts'
+import { change, projects, type Project } from '../api/projects.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Card, Group, Heading, Note, Row, Soft } from './ui.tsx'
@@ -50,7 +50,7 @@ export function Privacy() {
     setBusy(p.slug)
     setNote('')
     try {
-      const saved = await setVisibility(t, p.slug, p.visibility === 'private' ? 'public' : 'private')
+      const saved = await change(t, p.slug, { visibility: p.visibility === 'private' ? 'public' : 'private' })
       published.reload()
       setNote(`${saved.name} is ${saved.visibility || 'saved'}`)
     } catch (e) {

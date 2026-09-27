@@ -4,6 +4,7 @@
  * quiet lines for empty, loading and refused.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { CopyButton } from '@hanzo/ui/product'
 import type { ReactNode } from 'react'
 
 /** A section's title, what it is for, and its one action. */
@@ -127,6 +128,31 @@ export function Soft({ children }: { children: string }) {
 export function day(iso: string): string {
   const d = iso ? new Date(iso) : null
   return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
+}
+
+/** A credential the platform answers once: the value to copy, and what it is for. */
+export function Once({ value, label, children }: { value: string; label: string; children?: ReactNode }) {
+  return (
+    <YStack gap="$2" px="$3" py="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$raised">
+      <XStack items="center" gap="$2">
+        <SizableText
+          flex={1}
+          minW={0}
+          size="$2"
+          color="$ink"
+          aria-label={label}
+          style={{ fontFamily: 'var(--f-mono, ui-monospace, monospace)', wordBreak: 'break-all' }}
+        >
+          {value}
+        </SizableText>
+        <CopyButton value={value} label={`Copy ${label.toLowerCase()}`} />
+      </XStack>
+      <SizableText size="$1" color="$soft">
+        Copy it now. It is not shown again.
+      </SizableText>
+      {children}
+    </YStack>
+  )
 }
 
 /** What the last action did, said once, where it was done. */
