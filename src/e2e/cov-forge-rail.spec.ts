@@ -61,6 +61,12 @@ const stay = (page: Page, match: (u: URL) => boolean) =>
     (r) => (r.request().isNavigationRequest() ? r.fulfill({ status: 204 }) : r.fulfill({ json: {} })),
   )
 
+/** A token still in storage that IAM refuses: the rail, not the visitor's header, and no one signed in. */
+async function lapsed(page: Page) {
+  await page.addInitScript(() => localStorage.setItem('hanzo_iam_access_token', 'lapsed'))
+  await page.route('**/v1/iam/oauth/userinfo', (r) => r.fulfill({ status: 401, json: { error: 'invalid_token' } }))
+}
+
 test.describe('the rail', () => {
   test('lists the org’s runs, running first on request, and opens one; the name, Docs and the Slack card are at hand', async ({ page, baseURL }, info) => {
     await frame(page)
@@ -75,7 +81,7 @@ test.describe('the rail', () => {
     await rows(page).filter({ hasText: 'Queued thing' }).click()
     await expect(page).toHaveURL(new URL(`/${id('2')}`, baseURL).href)
     await expect(rows(page).filter({ hasText: 'Queued thing' })).toHaveAttribute('aria-current', 'page')
-    await page.getByRole('button', { name: 'Hanzo Build', exact: true }).first().click()
+    await page.getByRole('button', { name: 'Hanzo', exact: true }).first().click()
     await expect(page).toHaveURL(new URL('/', baseURL).href)
 
     await page.getByRole('button', { name: 'Set up Hanzo in Slack' }).click()
@@ -124,8 +130,9 @@ test.describe('the rail', () => {
     await expect(rail(page).getByText('No runs yet.')).toBeVisible()
   })
 
-  test('a visitor signs in from the rail', async ({ page }) => {
+  test('a person whose token IAM no longer honours signs in again from the rail', async ({ page }) => {
     await page.context().route('https://hanzo.id/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>Hanzo</title>Sign in' }))
+    await lapsed(page)
     await serve(page, () => ({ status: 401, json: { status: 401, detail: 'Sign in to use this.' } }))
     await page.goto('/')
     await expect(rail(page).getByText('Sign in to see your runs.')).toBeVisible()
@@ -262,7 +269,8 @@ test.describe('Find', () => {
     await expect(page.getByRole('dialog').getByText('Runs are resting')).toBeVisible()
   })
 
-  test('a visitor searches only what the rail holds', async ({ page }) => {
+  test('a lapsed session searches only what the rail holds', async ({ page }) => {
+    await lapsed(page)
     await serve(page, () => ({ status: 401, json: { status: 401, detail: 'Sign in to use this.' } }))
     await page.goto('/')
     await page.getByRole('button', { name: 'Search runs' }).first().click()
