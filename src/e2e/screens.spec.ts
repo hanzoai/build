@@ -115,8 +115,8 @@ const signedIn: State[] = [
   { name: 'new', path: '/', platform: stub.landing, says: /What.s up next\?/ },
   { name: 'new-place', path: '/', platform: stub.landing, says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Where the run runs: Cloud' }).click(), over: true },
   { name: 'new-setup', path: '/', platform: stub.setup, says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Set up environment' }).click(), over: true },
-  { name: 'find', path: '/', platform: (p) => stub.session(p), says: /What.s up next\?/, act: inRail('Search'), over: true },
-  { name: 'account-menu', path: '/', platform: rail, says: /What.s up next\?/, act: inRail('Account: dave@acme.test'), over: true },
+  { name: 'find', path: '/', platform: (p) => stub.session(p), says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Search runs' }).locator('visible=true').first().click(), over: true },
+  { name: 'account-menu', path: '/', platform: rail, says: /What.s up next\?/, act: inRail('Account: Dave · acme'), over: true },
   { name: 'rail', path: '/', platform: rail, says: /What.s up next\?/, act: async (p, size) => (size === 'phone' ? p.getByLabel('Open runs').click() : p.getByText('More', { exact: true }).click()), over: true },
   ...screens.map(([screen, [platform, says]]) => ({ name: screen, path: `/-/${screen}`, platform, says })),
   ...SECTIONS.map((section) => ({ name: `settings-${section}`, path: `/-/settings/${section}`, platform: HEADINGS[section][0], says: HEADINGS[section][1] })),
@@ -203,7 +203,7 @@ function tall(page: Page, height: number): Promise<number> {
 }
 
 /** The states a phone draws over the open rail drawer. */
-const DRAWN_OVER = ['find', 'rail']
+const DRAWN_OVER = ['rail']
 
 test.describe.configure({ mode: 'parallel' })
 
