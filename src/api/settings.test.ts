@@ -10,13 +10,16 @@ import * as billing from './billing.ts'
 import type { Target } from './call.ts'
 import { activate, toolOf, tools } from './capabilities.ts'
 import { consentOf } from './consent.ts'
+import { environment, environments } from './environment.ts'
 import * as github from './github.ts'
 import { keys, mint } from './keys.ts'
 import { machine, machines } from './machines.ts'
 import * as members from './members.ts'
 import { memories, memoryOf } from './memory.ts'
+import { models } from './models.ts'
 import { merge } from './pref.ts'
 import { photo, rename } from './profile.ts'
+import { address, project, projects, safe, templates } from './projects.ts'
 import * as provider from './provider.ts'
 import * as webhooks from './webhooks.ts'
 
@@ -243,6 +246,52 @@ describe('webhooks', () => {
     answer(200, {})
     expect(await webhooks.endpoints(T)).toEqual([])
     expect(await webhooks.deliveries(T, 'wh_1')).toEqual([])
+  })
+})
+
+describe('models', () => {
+  it('offers Enso alone when the catalog lists nothing it can read', async () => {
+    answer(200, {})
+    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }])
+    answer(200, { data: [null, 'zen5', { id: 7 }, { id: 'zen5:batch' }, { id: 'zen5' }] })
+    expect((await models(T)).map((m) => m.id)).toEqual(['enso', 'zen5'])
+  })
+})
+
+describe('environments', () => {
+  it('reads a row that is not one, and an answer with no list, as nothing', async () => {
+    expect(environment(null)).toMatchObject({ repo: '', state: 'none', proposal: null })
+    answer(200, {})
+    expect(await environments(T)).toEqual([])
+  })
+})
+
+describe('projects', () => {
+  it('reads a list sent bare, under data, or not at all, and a row that is not one', async () => {
+    answer(200, [{ slug: 'a', updatedAt: 1 }, null])
+    expect((await projects(T)).map((p) => p.slug)).toEqual(['a'])
+    answer(200, { data: [{ slug: 'b' }] })
+    expect((await projects(T)).map((p) => [p.slug, p.name])).toEqual([['b', 'b']])
+    answer(200, { projects: [{ slug: 'c' }] })
+    expect(await projects(T)).toEqual([])
+    expect(project(null)).toMatchObject({ slug: '', name: '', visibility: '' })
+  })
+
+  it('frames a local address only for a builder on loopback, by either loopback name', () => {
+    expect(safe('http://127.0.0.1:3000/', true)).toBe('http://127.0.0.1:3000/')
+    expect(safe('http://localhost:3000/', true)).toBe('http://localhost:3000/')
+    expect(safe('http://127.0.0.1:3000/', false)).toBe('')
+  })
+
+  it('titles a starter by its slug when it has no title, and skips rows that are not starters', async () => {
+    answer(200, { data: [{ slug: 'mint' }, 'folio', null] })
+    expect(await templates(T)).toEqual([{ slug: 'mint', title: 'mint', category: '', description: '', framework: '', source: '' }])
+    answer(200, {})
+    expect(await templates(T)).toEqual([])
+  })
+
+  it('reads no owner and name from an address with one segment', () => {
+    expect(address('site.git')).toBe('')
   })
 })
 
