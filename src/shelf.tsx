@@ -73,7 +73,7 @@ function useFork() {
       const made = await fork(t, slug)
       host.go(made.slug || slug)
     } catch (e) {
-      setFailed(e instanceof Error ? e.message : 'Could not copy this template')
+      setFailed((e as Error).message)
     } finally {
       setBusy('')
     }
@@ -126,7 +126,7 @@ export function Artifacts() {
       setNote(`${p.name} is ${visibility} now`)
       list.reload()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     }
   }
 
@@ -231,31 +231,33 @@ export function Artifacts() {
           </YStack>
         )}
       </YStack>
-      <Rename
-        open={renaming !== null}
-        onOpenChange={(o) => !o && setRenaming(null)}
-        title="Rename"
-        name={renaming?.name ?? ''}
-        run={async (name) => {
-          if (!renaming) return
-          await change(t, renaming.slug, { name })
-          setNote(`Renamed to ${name}`)
-          list.reload()
-        }}
-      />
-      <Confirm
-        open={deleting !== null}
-        onOpenChange={(o) => !o && setDeleting(null)}
-        title={`Delete ${deleting?.name ?? 'this project'}?`}
-        says="Its site stops answering, its releases are dropped, and its address is released. This cannot be undone."
-        act="Delete"
-        run={async () => {
-          if (!deleting) return
-          await remove(t, deleting.slug)
-          setNote(`${deleting.name} is deleted`)
-          list.reload()
-        }}
-      />
+      {renaming ? (
+        <Rename
+          open
+          onOpenChange={(o) => !o && setRenaming(null)}
+          title="Rename"
+          name={renaming.name}
+          run={async (name) => {
+            await change(t, renaming.slug, { name })
+            setNote(`Renamed to ${name}`)
+            list.reload()
+          }}
+        />
+      ) : null}
+      {deleting ? (
+        <Confirm
+          open
+          onOpenChange={(o) => !o && setDeleting(null)}
+          title={`Delete ${deleting.name}?`}
+          says="Its site stops answering, its releases are dropped, and its address is released. This cannot be undone."
+          act="Delete"
+          run={async () => {
+            await remove(t, deleting.slug)
+            setNote(`${deleting.name} is deleted`)
+            list.reload()
+          }}
+        />
+      ) : null}
     </YStack>
   )
 }

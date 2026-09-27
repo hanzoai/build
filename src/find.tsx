@@ -63,7 +63,7 @@ export function Find({
         setNext(p.next)
       })
       .catch((e: unknown) => {
-        if (mine === asked.current) setError(e instanceof Error ? e.message : 'The runs could not be read')
+        if (mine === asked.current) setError((e as Error).message)
       })
       .finally(() => {
         if (mine === asked.current) setLoading(false)
@@ -100,8 +100,8 @@ export function Find({
           onChangeText={setQ}
           placeholder="Search runs…"
           aria-label="Search runs"
-          onKeyDown={(e: { key?: string; nativeEvent?: { key?: string } }) => {
-            if ((e.key ?? e.nativeEvent?.key) === 'Enter' && hits[0]) onOpen(hits[0].id)
+          onKeyDown={(e: { key?: string }) => {
+            if (e.key === 'Enter' && hits[0]) onOpen(hits[0].id)
           }}
         />
         <XStack gap="$1" flexWrap="wrap" role="group" aria-label="Status">

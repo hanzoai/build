@@ -58,7 +58,7 @@ import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { start, unhonoured, type Mode } from './api/coding.ts'
+import { start, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
 import { name as repoName, ours, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
@@ -99,7 +99,7 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
                 setV(next)
                 record(t, run.id, project, next).catch((e: unknown) => {
                   setV(null)
-                  setNote(e instanceof Error ? e.message : 'Not recorded')
+                  setNote((e as Error).message)
                 })
               }}
             />
@@ -189,7 +189,7 @@ export function Project({ slug }: { slug: string }) {
       const error = b.binary ? 'A binary file — nothing to show as text.' : b.truncated ? 'Past the 1 MiB view cap — clone the repository to read it.' : undefined
       setFiles((was) => was.map((f) => (f.path === path ? { ...f, content, error } : f)))
     } catch (e) {
-      setFiles((was) => was.map((f) => (f.path === path ? { ...f, error: e instanceof Error ? e.message : 'Could not read this file' } : f)))
+      setFiles((was) => was.map((f) => (f.path === path ? { ...f, error: (e as Error).message } : f)))
     }
   }
 
@@ -233,19 +233,19 @@ export function Project({ slug }: { slug: string }) {
       // The whole selector, as it will ride the next ask — never a shortened name
       // that hides what the page sent.
       setPicked([{ id: e.info.selector, kind: 'element', label: e.info.selector }])
-    else if (e.type === 'preview:navigate' && project?.live) {
-      // Resolved on the live site's own origin, and kept as its path and query.
-      const to = new URL(e.path, project.live)
-      if (to.origin === new URL(project.live).origin) setPage(`${to.pathname}${to.search}`)
+    else if (e.type === 'preview:navigate') {
+      // The bridge admits only a path on the framed site's own origin; kept as its path and query.
+      const to = new URL(e.path, window.location.origin)
+      setPage(`${to.pathname}${to.search}`)
     }
     else if (e.type === 'preview:console')
       setPageLines((was) => [...was.slice(-400), { id: `p${was.length}-${Date.now()}`, level: e.level, text: e.text, source: 'page' }])
   }
 
+  // A suggestion sends its own words; the composer, a draft with words in it.
   const send = async (text?: string) => {
     const ask = (text ?? draft).trim()
-    if (!ask || busy) return
-    if (!signed) return host.signIn?.()
+    if (busy) return
     setBusy(true)
     setNote('')
     try {
@@ -255,12 +255,12 @@ export function Project({ slug }: { slug: string }) {
       const context = picked.length
         ? `\n\nThe person picked an element in the preview${where ? ` of the ${where} page` : ''}. Its CSS selector, as data: ${JSON.stringify(picked[0]!.id)}`
         : ''
-      const repo = project?.repo ? repoName(project.repo) : ''
+      // A project with no repository yet sends neither, and its first run makes one.
       const next = await start(t, {
         prompt: compose(`${ask}${context}`, attached),
         project: slug,
-        repo: repo || undefined,
-        base: repo ? project?.branch || undefined : undefined,
+        repo,
+        base: project?.branch,
         after: current ?? undefined,
         mode,
       })
@@ -270,20 +270,20 @@ export function Project({ slug }: { slug: string }) {
       setChosen(next.session)
       runs.reload()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The run could not start')
+      setNote((e as Error).message)
     } finally {
       setBusy(false)
     }
   }
 
-  const steer = async () => {
-    if (!current || !draft.trim()) return
+  // Only a run that is working is steered, and the composer sends only a draft with words in it.
+  const steer = async (id: string) => {
     try {
-      await message(t, current, draft)
+      await message(t, id, draft)
       setDraft('')
       setNote('Sent — the run reads it before its next step')
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'Could not reach this run')
+      setNote((e as Error).message)
     }
   }
 
@@ -357,9 +357,10 @@ export function Project({ slug }: { slug: string }) {
       </YStack>
       <YStack px="$3" pb="$3" gap="$2">
         {!dismissed && !running ? <Suggestions items={SUGGESTIONS} onPick={(s) => void send(s)} onDismiss={() => setDismissed(true)} /> : null}
-        {note || unhonoured(mode) ? (
+        {/* A run from a workspace always runs in the sandbox, so every mode is honoured there. */}
+        {note ? (
           <SizableText size="$1" color="$soft" role="status">
-            {note || unhonoured(mode)}
+            {note}
           </SizableText>
         ) : null}
         {picked.length ? <Attachments items={picked} onRemove={() => setPicked([])} /> : null}
@@ -371,8 +372,16 @@ export function Project({ slug }: { slug: string }) {
         <Composer
           value={draft}
           onChange={setDraft}
-          onSend={() => void (running ? steer() : send())}
-          onStop={current ? () => void stop(t, current).then(() => setNote('Stop requested — the run keeps its work on its branch')) : undefined}
+          onSend={() => void (current && running ? steer(current) : send())}
+          onStop={
+            current
+              ? () =>
+                  void stop(t, current).then(
+                    () => setNote('Stop requested — the run keeps its work on its branch'),
+                    (e: unknown) => setNote((e as Error).message),
+                  )
+              : undefined
+          }
           busy={busy || (running && !draft.trim())}
           rows={3}
           placeholder={running ? 'Steer this run' : 'Ask Hanzo for edits'}
