@@ -35,9 +35,9 @@ import { Card, day, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
 const SPAN: Record<string, string> = { hour: 'This hour', day: 'Today', week: 'This week', month: 'This month' }
 
-/** A thin bar: how much of a whole is used. */
+/** A thin bar: how much of a whole is used. Every whole drawn is above zero: a limit of none is not drawn. */
 function Bar({ part, whole, limit }: { part: number; whole: number; limit: boolean }) {
-  const pct = whole > 0 ? Math.min(100, Math.max(0, (part / whole) * 100)) : 0
+  const pct = Math.min(100, Math.max(0, (part / whole) * 100))
   return (
     <YStack height={6} rounded={999} bg="$hover" overflow="hidden" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
       <YStack height={6} width={`${pct}%`} rounded={999} bg={limit && pct >= 100 ? '$red10' : '$ink'} />
@@ -109,7 +109,7 @@ export function Usage() {
       after()
       setNote(done)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }
@@ -122,15 +122,15 @@ export function Usage() {
   const others = ceilings.value.filter((c) => c !== cap)
   const s = spent.value
   const top = Math.max(0, ...(s?.categories ?? []).map((c) => c.cents))
+  const adding = cents(amount)
 
+  // Offered only with a card to charge.
   const buy = () => {
-    const c = cents(amount)
-    if (!c) {
+    if (!adding) {
       setNote('Enter an amount in dollars')
       return
     }
-    if (!card) return
-    void act(() => topup(t, c, card.id), `${money(c)} is added to the balance`, () => {
+    void act(() => topup(t, adding, card!.id), `${money(adding)} is added to the balance`, () => {
       setBuying(false)
       left.reload()
     })
@@ -222,7 +222,7 @@ export function Usage() {
                       Cancel
                     </Button>
                     <Button size="sm" disabled={working} onPress={buy}>
-                      {cents(amount) ? `Add ${money(cents(amount) ?? 0)}` : 'Add funds'}
+                      {adding ? `Add ${money(adding)}` : 'Add funds'}
                     </Button>
                   </XStack>
                 </>

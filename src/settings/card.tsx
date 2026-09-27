@@ -92,13 +92,14 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
       gone = true
       const f = field.current
       field.current = null
+      setMounted(false)
       if (f) void f.destroy().catch(() => {})
     }
   }, [open, box, p])
 
+  // Save is offered only while the field is drawn.
   const add = async () => {
-    const f = field.current
-    if (!f) return
+    const f = field.current!
     setWorking(true)
     setNote('')
     try {

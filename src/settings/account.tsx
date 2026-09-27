@@ -82,7 +82,8 @@ export function Account() {
 
   const patch: Patch = {}
   if (callName.trim() !== (prefs.callName ?? '')) patch.callName = callName.trim() || null
-  if (work !== (prefs.work ?? '')) patch.work = work || null
+  // A work is only ever chosen from the list, never emptied.
+  if (work !== (prefs.work ?? '')) patch.work = work
   if (instructions.trim() !== (prefs.instructions ?? '').trim()) patch.instructions = instructions.trim() || null
   const renamed = name.trim() !== shownName.trim()
   const changed = renamed || Object.keys(patch).length > 0
@@ -95,7 +96,7 @@ export function Account() {
       if (Object.keys(patch).length) await save(patch)
       setNote('Saved')
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That was not saved')
+      setNote((e as Error).message)
     } finally {
       setBusy(false)
     }
@@ -108,13 +109,14 @@ export function Account() {
       setFace(await photo(t, file))
       setNote('Your photo is saved')
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The photo was not saved')
+      setNote((e as Error).message)
     } finally {
       setBusy(false)
     }
   }
 
-  const orgs = host.memberships ?? (host.org ? [host.org] : [])
+  const org = host.org
+  const orgs = host.memberships ?? (org ? [org] : [])
   const chosenWork = WORK.find((w) => w.id === work) ?? (work ? { id: work, label: work } : null)
 
   return (
@@ -215,20 +217,20 @@ export function Account() {
         </YStack>
       </Group>
 
-      {host.org ? (
+      {org ? (
         <Group title="Organization" detail="The organization this page acts in. Runs, codebases and settings belong to it.">
           <Card>
             <Row
               first
               mono
-              title={host.org}
+              title={org}
               detail={`Organization ID${host.admin ? ' · you are an admin' : ''}`}
               trailing={
                 <Button
                   size="icon-sm"
                   variant="ghost"
                   aria-label={copied ? 'Organization ID copied' : 'Copy organization ID'}
-                  onPress={() => void navigator.clipboard?.writeText(host.org ?? '').then(() => setCopied(true))}
+                  onPress={() => void navigator.clipboard?.writeText(org).then(() => setCopied(true))}
                 >
                   {copied ? <Check size={14} /> : <Copy size={14} />}
                 </Button>

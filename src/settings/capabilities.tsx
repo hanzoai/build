@@ -49,7 +49,7 @@ export function Capabilities() {
       await activate(t, all.map((x) => x.name), on)
       list.reload()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That was not saved')
+      setNote((e as Error).message)
     } finally {
       setBusy('')
     }

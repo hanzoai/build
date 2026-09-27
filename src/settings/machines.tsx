@@ -72,7 +72,7 @@ export function Machines() {
       setNote(status === 'draining' ? `${m.label} takes no new runs` : `${m.label} takes runs again`)
       list.reload()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     }
   }
 
@@ -148,9 +148,9 @@ export function Machines() {
         onOpenChange={(o) => !o && setRenaming(null)}
         title="Rename machine"
         name={renaming?.label ?? ''}
+        // Each dialog acts only while it is open, which is while its machine is chosen.
         run={async (label) => {
-          if (!renaming) return
-          await change(t, renaming.id, { label })
+          await change(t, renaming!.id, { label })
           setNote(`Renamed to ${label}`)
           list.reload()
         }}
@@ -162,9 +162,8 @@ export function Machines() {
         says="Runs can no longer be sent to it, and its claim key stops working. Linking it again registers it anew."
         act="Remove"
         run={async () => {
-          if (!removing) return
-          await remove(t, removing.id)
-          setNote(`${removing.label} is removed`)
+          await remove(t, removing!.id)
+          setNote(`${removing!.label} is removed`)
           list.reload()
         }}
       />
@@ -175,9 +174,8 @@ export function Machines() {
         says="A key it had before stops working, so a runner using it stops getting runs until it has the new one. The new key is shown once."
         act="Mint key"
         run={async () => {
-          if (!keying) return
-          const k = await key(t, keying.id)
-          setMinted({ machine: keying, key: k })
+          const k = await key(t, keying!.id)
+          setMinted({ machine: keying!, key: k })
         }}
       />
       <Dialog open={minted !== null} onOpenChange={(o) => !o && setMinted(null)}>
@@ -229,7 +227,7 @@ function Adding({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: 
       onAdded(m)
       close()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
       setWorking(false)
     }
   }

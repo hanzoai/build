@@ -45,7 +45,7 @@ export function Notifications() {
     try {
       setNote(await what())
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }

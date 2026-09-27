@@ -46,7 +46,7 @@ export function Integrations() {
       after()
       setNote(done)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }
@@ -59,7 +59,7 @@ export function Integrations() {
     try {
       host.open(await where())
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The connection did not start')
+      setNote((e as Error).message)
       setWorking(false)
     }
   }

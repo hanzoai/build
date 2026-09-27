@@ -41,7 +41,7 @@ export function Code() {
   const now: Required<Defaults> = { model: ENSO, effort: 'medium', mode: 'build', place: '', ...prefs.code }
   const keep = (change: Defaults) => {
     setNote('')
-    save({ code: { ...prefs.code, ...change } }).catch((e: unknown) => setNote(e instanceof Error ? e.message : 'That was not saved'))
+    save({ code: { ...prefs.code, ...change } }).catch((e: unknown) => setNote((e as Error).message))
   }
 
   const where = (places.value.length ? places.value : [SANDBOX]).map((p) => ({
@@ -51,9 +51,12 @@ export function Code() {
     hint: p.id ? [p.status, p.capacity].filter(Boolean).join(' · ') : 'The platform’s own sandbox',
     place: p.id,
   }))
-  const place = where.find((w) => w.place === now.place) ?? { id: now.place, label: now.place || 'Default', place: now.place }
+  // The sandbox is always listed, so a place not found is a machine that is not: it reads as its id.
+  const place = where.find((w) => w.place === now.place) ?? { id: now.place, label: now.place, place: now.place }
   const model = catalog.value.find((m) => m.id === now.model) ?? { id: now.model, label: now.model === ENSO ? 'Enso' : now.model }
   const go = (section: 'environments' | 'machines') => host.go(path({ kind: 'settings', section }))
+  const effort = EFFORTS.find((e) => e.id === now.effort)!
+  const mode = MODES.find((m) => m.id === now.mode)!
 
   return (
     <YStack gap="$6">
@@ -84,8 +87,8 @@ export function Code() {
             trailing={
               <ChipSelect
                 name="Default effort"
-                label={EFFORTS.find((e) => e.id === now.effort)!.label}
-                chosen={EFFORTS.find((e) => e.id === now.effort) ?? null}
+                label={effort.label}
+                chosen={effort}
                 items={EFFORTS}
                 onChange={(e) => keep({ effort: e.id })}
                 placement="bottom-end"
@@ -95,12 +98,12 @@ export function Code() {
           />
           <Row
             title="Mode"
-            detail={MODES.find((m) => m.id === now.mode)!.hint}
+            detail={mode.hint}
             trailing={
               <ChipSelect
                 name="Default mode"
-                label={MODES.find((m) => m.id === now.mode)!.label}
-                chosen={MODES.find((m) => m.id === now.mode) ?? null}
+                label={mode.label}
+                chosen={mode}
                 items={MODES}
                 onChange={(m) => keep({ mode: m.id })}
                 placement="bottom-end"

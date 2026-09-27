@@ -42,6 +42,7 @@ export function Plans() {
   const [note, setNote] = useState('')
 
   const on = current(subs.value)
+  const who = host.org ?? 'This organization'
   const card = chosen(cards.value)
   const yearly = list.value.some((p) => p.yearly > 0)
   const free = (p: Plan) => p.monthly === 0 && !p.sales
@@ -56,7 +57,7 @@ export function Plans() {
       setNote(await what())
       subs.reload()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
       setBuying(null)
@@ -78,8 +79,9 @@ export function Plans() {
     if (!host.admin) return <Line>An org admin changes the plan.</Line>
     if (!settled) return null
     if (free(p)) {
-      if (!on) return null
-      if (on.ending) return <Line>{`You move to ${p.name} when ${on.name} ends on ${day(on.ends)}.`}</Line>
+      // A free plan that is not the org's means a paid one is.
+      const paid = on!
+      if (paid.ending) return <Line>{`You move to ${p.name} when ${paid.name} ends on ${day(paid.ends)}.`}</Line>
       return (
         <Button size="sm" variant="outline" onPress={() => setLeaving(true)}>
           {`Switch to ${p.name}`}
@@ -126,8 +128,8 @@ export function Plans() {
               {!signed
                 ? 'Sign in to see the plan you are on.'
                 : on
-                  ? `${host.org ?? 'This organization'} is on ${on.name}.`
-                  : `${host.org ?? 'This organization'} is on the free plan.`}
+                  ? `${who} is on ${on.name}.`
+                  : `${who} is on the free plan.`}
             </SizableText>
           </YStack>
           {yearly ? (
@@ -237,7 +239,7 @@ export function Plans() {
         ) : null}
       </YStack>
 
-      <Dialog open={Boolean(buying)} onOpenChange={(o) => (o ? undefined : setBuying(null))}>
+      <Dialog open={Boolean(buying)} onOpenChange={(o) => !o && setBuying(null)}>
         <DialogContent maxW={420} showCloseButton={false}>
           <DialogTitle>{buying ? `Upgrade to ${buying.name}` : 'Upgrade'}</DialogTitle>
           {buying && card ? (
@@ -255,7 +257,7 @@ export function Plans() {
                   onPress={() =>
                     void act(async () => {
                       await subscribe(t, { plan: buying.id, interval: yearly && buying.yearly ? term : 'month', method: card.id })
-                      return `${host.org ?? 'This organization'} is on ${buying.name}`
+                      return `${who} is on ${buying.name}`
                     })
                   }
                 >

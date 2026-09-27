@@ -122,10 +122,10 @@ export function Keys() {
         title={`Revoke your ${revoking ?? 'secret'} key?`}
         says="It stops working within a minute, and anything using it is refused until it has a new one."
         act="Revoke"
+        // It acts only while it is open, which is while a type is chosen.
         run={async () => {
-          if (!revoking) return
-          await revoke(t, revoking)
-          setNote(`${NAME[revoking]} revoked`)
+          await revoke(t, revoking!)
+          setNote(`${NAME[revoking!]} revoked`)
           list.reload()
         }}
       />
@@ -149,14 +149,14 @@ function Making({ type, rotating, onClose, onMade }: { type: Kind | null; rotati
     onClose()
   }
 
-  const go = async () => {
-    if (!type) return
+  // Pressed only in the open dialog, which is open only for a type.
+  const go = async (type: Kind) => {
     setNote('')
     let list: string[]
     try {
       list = limits(limit)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That is not a limit')
+      setNote((e as Error).message)
       return
     }
     setWorking(true)
@@ -165,7 +165,7 @@ function Making({ type, rotating, onClose, onMade }: { type: Kind | null; rotati
       setMade(m)
       onMade(m)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }
@@ -217,7 +217,7 @@ function Making({ type, rotating, onClose, onMade }: { type: Kind | null; rotati
               <Button size="sm" variant="ghost" disabled={working} onPress={close}>
                 Cancel
               </Button>
-              <Button size="sm" disabled={working} onPress={() => void go()}>
+              <Button size="sm" disabled={working} onPress={() => void go(type!)}>
                 {rotating ? 'Rotate' : 'Create'}
               </Button>
             </XStack>
