@@ -10,7 +10,7 @@
  *   /-/issues    the forge's issues
  *   /-/artifacts what this org has built
  *   /-/templates the public starters
- *   /-/mcp       the fleet's native MCP servers
+ *   /-/customize skills, connectors, plugins and agents
  *   /<slug>      a deployed project's workspace, in this same window
  *
  * The rail is the sessions rail every Hanzo surface shares: New, the builder's
@@ -25,13 +25,14 @@
  * left column, never two.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, Kanban, LayoutTemplate, Menu, Puzzle, Workflow } from '@hanzogui/lucide-icons-2'
+import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, Kanban, LayoutTemplate, Menu, SlidersHorizontal, Workflow } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useMemo, useState } from 'react'
 
 import { pinBoard } from './choice.ts'
+import { Customize } from './customize/index.tsx'
 import { useKept, useRecents } from './data.ts'
 import { Forge } from './forge.tsx'
 import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
@@ -95,7 +96,7 @@ function Shell() {
       active: screen === 'issues',
     },
     { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
-    { id: 'mcp', label: 'MCP', icon: <Puzzle size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'mcp' })), active: screen === 'mcp' },
+    { id: 'mcp', label: 'Customize', icon: <SlidersHorizontal size={16} />, onPress: () => go(path({ kind: 'customize', tab: 'connectors' })), active: r.kind === 'customize' || screen === 'mcp' },
   ]
   const more: RailLink[] = [
     { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'templates' })), active: screen === 'templates' },
@@ -170,6 +171,7 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   const r = route(host.path)
   if (r.kind === 'run') return <Run key={r.id} id={r.id} />
   if (r.kind === 'settings') return <Settings section={r.section} />
+  if (r.kind === 'customize') return <Customize tab={r.tab} />
   if (r.kind === 'screen') {
     if (r.screen === 'artifacts') return <Artifacts />
     if (r.screen === 'templates') return <Templates />

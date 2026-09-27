@@ -10,7 +10,7 @@
  * host's own `go`.
  */
 import { SizableText } from '@hanzo/gui'
-import { Blocks, CircleDot, FolderGit2, Kanban, LayoutTemplate, Puzzle, SquarePen, Workflow } from '@hanzogui/lucide-icons-2'
+import { Blocks, CircleDot, FolderGit2, Kanban, LayoutTemplate, SlidersHorizontal, SquarePen, Workflow } from '@hanzogui/lucide-icons-2'
 import { SidebarItem, SidebarSection, StatusDot, type SessionStatus } from '@hanzo/ui/chat'
 import { useMemo, type ReactNode } from 'react'
 
@@ -89,8 +89,8 @@ export function DevSection({
       >
         Issues
       </SidebarItem>
-      <SidebarItem icon={<Puzzle size={16} aria-hidden />} active={screen === 'mcp'} onPress={() => go(path({ kind: 'screen', screen: 'mcp' }))}>
-        MCP
+      <SidebarItem icon={<SlidersHorizontal size={16} aria-hidden />} active={r.kind === 'customize'} onPress={() => go(path({ kind: 'customize', tab: 'connectors' }))}>
+        Customize
       </SidebarItem>
       <SidebarItem icon={<Blocks size={16} aria-hidden />} active={screen === 'artifacts'} onPress={() => go(path({ kind: 'screen', screen: 'artifacts' }))}>
         Artifacts

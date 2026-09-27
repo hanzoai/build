@@ -22,7 +22,11 @@ const API = 'https://api.hanzo.ai'
  * against real data before it ships. `ws` carries the sockets a run's framed
  * shell and desktop open back to the same origin.
  */
-const proxy = { '/v1': { target: API, changeOrigin: true, ws: true } }
+const proxy = {
+  '/v1': { target: API, changeOrigin: true, ws: true },
+  // The brand's skills catalogue: public, and served at the platform's root, not under /v1.
+  '/.well-known/agent-skills': { target: API, changeOrigin: true },
+}
 
 /**
  * A single-page app has one document and many addresses, so every address that

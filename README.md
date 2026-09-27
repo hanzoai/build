@@ -73,7 +73,8 @@ hanzo.id token for `Host.admin`. One left column, never two.
 | `''` | New — the empty state and the composer |
 | `sess_<32 hex>` | one run, live |
 | `-/automations` | repeating work, read from `/v1/auto/flows` |
-| `-/mcp` | the fleet's native MCP servers, from `POST /v1/mcp` `tools/list` |
+| `-/customize` · `-/customize/connectors` · `/plugins` · `/agents` | Customize: skills, connectors, plugins, agents |
+| `-/mcp` | Connectors → Discover, where the fleet's native MCP servers now live |
 | `-/codebases` | the forge's repositories |
 | `-/sync` | bring granted repositories onto the forge |
 | `-/projects` | the forge's boards |
@@ -89,14 +90,31 @@ collide.
 
 **The rail** (hanzo.build). At the top, the mark. Signed in to an organization,
 that spot is the organization switcher: the org, and the projects under it.
-New, then Automations, then the forge — Codebase, Projects, Issues — then MCP,
-Artifacts, More (Templates, Machines, Docs), then the org's coding runs newest
+New, then Automations, then the forge — Codebase, Projects, Issues — then
+Artifacts, Customize, More (Templates, Machines, Docs), then the org's coding runs newest
 first with a live status dot. The account stays at the foot. Settings opens
 that account on this page. Collapse is an explicit toggle kept in this browser.
 A host with its own rail draws `DevSection` there instead.
 
-**MCP.** The native servers `POST /v1/mcp` lists, each with the operations it
-names. A run starts a server when it calls it, and the server stays up afterwards.
+**Customize.** What the agent brings to a run, a tab each — Skills, Connectors,
+Plugins, Agents — and in each, Yours (what the org has) and Discover (what it
+can add), one search and one Add. Any member of the org may change any of it;
+the platform gates none of it to admins.
+
+- Skills: the org's own SKILL.md skills, written, revised and deleted here, and
+  the brand's catalogue (`/.well-known/agent-skills/`) to read and add. Adding is
+  switching `skill_<name>` on, and a switch per skill turns it off again.
+- Connectors: the MCP servers the org added — by URL or off the shelf, a secret
+  sealed in KMS — each with a switch per tool. Adding one switches its tools on.
+  Discover is the shelf (featured first; a listing that ships only a package has
+  no plus) and the fleet's native servers `POST /v1/mcp` lists, which every run
+  can call and nothing adds.
+- Plugins: TypeScript connectors built on the platform, from source or from a
+  description of an API; a failed build says why. Discover lists what the
+  deployment mounts.
+- Agents: the org's own — model, instructions, tools, budget — created, edited
+  (only what changed is sent) and deleted; Discover is the platform's presets
+  whose tool calls run on the platform.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
 (Default is the platform's sandbox; the org's machines follow), the codebase
@@ -159,6 +177,12 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/git/repos/{name}/tree` · `/blob` | Files and Code |
 | `POST /v1/platform/apps` · `GET /v1/platform/builds` | Add to project, Publish |
 | `POST /v1/mcp` | the native MCP servers, `tools/list` |
+| `GET /v1/tool?source=` · `GET`/`PUT /v1/tool/activation` | the org's tools, and which are on |
+| `GET /v1/tool/skills?activated=true` · `GET /v1/tool/skills/authored` · `POST /v1/tool/skills` · `DELETE /v1/tool/skills/{id}` | skills |
+| `GET /.well-known/agent-skills/index.json` · `…/{skill}/SKILL.md` | the brand's skills catalogue, public |
+| `GET`/`POST /v1/tool/mcp/servers` · `DELETE …/{id}` · `GET /v1/tool/catalog` · `…/{id}` | connectors, and the shelf |
+| `GET /v1/tool/plugins/authored` · `POST /v1/tool/plugins/build` · `DELETE …/authored/{id}` · `GET /v1/tool/plugins` | plugins, and what is mounted |
+| `GET`/`POST /v1/agent` · `GET`/`PATCH`/`DELETE /v1/agent/{ref}` · `GET /v1/agent/chat/presets` | agents, and presets |
 | `GET /v1/models` · `POST /v1/event` | the model list, a verdict |
 | `GET`/`PATCH /v1/pref` | the person's own settings: theme, text size, motion, dictation language, what to call them, their instructions, the coding defaults |
 | `PUT /v1/iam/account` · `POST /v1/account/avatar` | the person's name and photo |
@@ -186,6 +210,7 @@ src/
   environment.tsx a codebase's environment
   project.tsx   a project's workspace
   shelf.tsx     Artifacts and Templates
+  customize/    Customize: the shell, then one file per tab
   publish.tsx   Add to project / Publish
   account.tsx   the account and find-a-run dialogs
   data.ts       reads as hooks

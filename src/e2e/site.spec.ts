@@ -1,7 +1,8 @@
 /**
  * hanzo.build in a browser: every screen draws, stays on this origin, and
  * never asks platform.hanzo.ai for anything. Signed out, so it checks what a
- * visitor sees; the MCP list is public and is read live.
+ * visitor sees; the native MCP servers and the skills catalogue are public and
+ * are read live.
  */
 import { expect, test, type Page } from '@playwright/test'
 
@@ -14,11 +15,12 @@ const SCREENS: [string, string, RegExp][] = [
   ['issues', '/-/issues', /Open work across every board/],
   ['artifacts', '/-/artifacts', /What this organization has built/],
   ['templates', '/-/templates', /Start from a working app/],
-  ['mcp', '/-/mcp', /Native servers/],
+  ['mcp', '/-/mcp', /The fleet.s own servers/],
+  ['customize', '/-/customize', /What the agent brings to a run/],
   ['run', '/sess_0992f90537264a6b154ebff799f38e1c', /Sign in to follow this run/],
 ]
 
-const RAIL = ['New', 'Automations', 'Codebase', 'Projects', 'Issues', 'Artifacts', 'MCP']
+const RAIL = ['New', 'Automations', 'Codebase', 'Projects', 'Issues', 'Artifacts', 'Customize']
 
 /** Everything the page asked for and every error it threw, for the whole test. */
 function watch(page: Page) {
@@ -52,7 +54,7 @@ test('the rail moves between screens without leaving the page', async ({ page, b
     ['Projects', '/-/projects'],
     ['Issues', '/-/issues'],
     ['Artifacts', '/-/artifacts'],
-    ['MCP', '/-/mcp'],
+    ['Customize', '/-/customize/connectors'],
     ['New', '/'],
   ]) {
     await page.getByText(label, { exact: true }).first().click()
@@ -76,13 +78,13 @@ test('settings is a page of this site', async ({ page, baseURL }) => {
   expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin)
 })
 
-test('the MCP screen lists the native servers', async ({ page }, info) => {
-  await page.goto('/-/mcp')
+test('Connectors lists the native servers to a visitor', async ({ page }, info) => {
+  await page.goto('/-/customize/connectors')
   const count = page.getByText(/^\d+ servers · \d+ operations$/)
   await expect(count).toBeVisible()
   const servers = Number((await count.innerText()).split(' ')[0])
   expect(servers).toBeGreaterThan(100)
-  await page.getByLabel('Find a server').fill('git')
+  await page.getByLabel('Search connectors').fill('git')
   await expect(page.getByLabel('git', { exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath('mcp-git.png') })
 })

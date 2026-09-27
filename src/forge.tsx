@@ -19,7 +19,7 @@ import { useKept, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import type { Screen } from './route.ts'
 import { path } from './route.ts'
-import { Servers } from './mcp.tsx'
+import { Customize } from './customize/index.tsx'
 import { Sync } from './sync.tsx'
 import { grants } from './api/github.ts'
 
@@ -77,7 +77,8 @@ const STATUS: Record<string, string> = {
 export function Forge({ screen }: { screen: Exclude<Screen, 'artifacts' | 'templates'> }) {
   if (screen === 'automations') return <Automations />
   if (screen === 'sync') return <Sync />
-  if (screen === 'mcp') return <Servers />
+  // The fleet's native servers are Connectors → Discover now; the old address lands there.
+  if (screen === 'mcp') return <Customize tab="connectors" view="discover" />
   if (screen === 'codebases') return <Codebases />
   if (screen === 'projects') return <Projects />
   return <Issues />
