@@ -29,13 +29,12 @@ export function decode(payload: unknown): Record<string, unknown> | string | nul
   if (typeof payload !== 'string') return null
   const text = payload.trim()
   if (!text.startsWith('{')) return payload
+  // JSON that opens with a brace is an object; anything else is prose that opens with one.
   try {
-    const parsed: unknown = JSON.parse(text)
-    if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>
+    return JSON.parse(text) as Record<string, unknown>
   } catch {
-    /* prose that opens with a brace */
+    return payload
   }
-  return payload
 }
 
 /** A file's name, never the host path it sat at. */
@@ -207,7 +206,7 @@ export function merge<T extends Pick<Event, 'id' | 'seq'>>(...lists: T[][]): T[]
 export function who(actor: string): string {
   const cut = actor.indexOf('/')
   if (cut === -1) return actor.split('-')[0] || actor
-  const head = actor.slice(cut + 1).split('-')[0] ?? ''
+  const head = actor.slice(cut + 1).split('-')[0]!
   return head ? `${actor.slice(0, cut)}/${head}` : actor
 }
 
@@ -302,13 +301,15 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
       case 'log': {
         const text = typeof body === 'string' ? body : str(b?.message) || str(b?.text)
         if (!text) break
-        if (!agent && !phase && exited) {
-          phase = { kind: 'step', key: mint(), name: 'Commit', detail: 'committing the work', output: '', ran: 'running' }
-          out.push(phase)
-        }
-        if (!agent && !phase) agent = harness(out, mint)
         if (agent) agent.feed(text)
         else if (phase) phase.output += text
+        else if (exited) {
+          phase = { kind: 'step', key: mint(), name: 'Commit', detail: 'committing the work', output: text, ran: 'running' }
+          out.push(phase)
+        } else {
+          agent = harness(out, mint)
+          agent.feed(text)
+        }
         break
       }
       case 'tool-call': {

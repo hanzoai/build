@@ -24,6 +24,7 @@ import type { Card, Ran } from './turn.ts'
 type Said = Extract<Card, { kind: 'said' }>
 type Shell = Extract<Card, { kind: 'shell' | 'read' }>
 type Edit = Extract<Card, { kind: 'edit' }>
+type Step = Extract<Card, { kind: 'step' }>
 
 /** Colour codes a terminal would have drawn; a sandbox is not a terminal, but a harness may still print them. */
 const ANSI = /\u001b\[[0-9;?]*[A-Za-z]/g
@@ -164,8 +165,8 @@ export function harness(out: Card[], mint: () => string) {
     if (diff && edit) edit.card.patch = diff.join('\n')
     diff = null
   }
-  const step = (name: string, detail: string, ran: Ran) => {
-    const c: Card = { kind: 'step', key: mint(), name, detail, output: '', ran }
+  const step = (name: string, detail: string, ran: Ran): Step => {
+    const c: Step = { kind: 'step', key: mint(), name, detail, output: '', ran }
     out.push(c)
     return c
   }
@@ -290,7 +291,7 @@ export function harness(out: Card[], mint: () => string) {
       if (card && card.kind === 'step' && card.name === 'Plan') card.output += `\n${row}`
       else {
         card = step('Plan', '', 'done')
-        if (card.kind === 'step') card.output = row
+        card.output = row
       }
       mode = 'prose'
       return
@@ -322,7 +323,7 @@ export function harness(out: Card[], mint: () => string) {
     feed(chunk: string) {
       const text = rest + chunk
       const lines = text.split('\n')
-      rest = lines.pop() ?? ''
+      rest = lines.pop()!
       for (const l of lines) line(l)
     },
     /** The last line even without its newline, and what only the whole output can decide. */
