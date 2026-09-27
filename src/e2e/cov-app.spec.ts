@@ -682,6 +682,15 @@ async function attach(page: Page, files: { name: string; mimeType: string; buffe
 const text = (name: string, body: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(body) })
 
 test.describe('attaching files', () => {
+  test('with nothing attached, the prompt is sent as typed', async ({ page }) => {
+    const { sent } = await composer(page)
+    await page.goto('/')
+    await ask(page).fill('Fix the cart')
+    await ask(page).press('Enter')
+    await expect(page).toHaveURL(new RegExp(`/${SESSION}$`))
+    expect((sent.find((s) => s.method === 'POST' && s.path === '/v1/agent/coding')!.body as { prompt: string }).prompt).toBe('Fix the cart')
+  })
+
   test('files ride the prompt as text, a binary one as its bytes read as text, and a removed one does not', async ({ page }, info) => {
     const { sent } = await composer(page)
     await page.goto('/')
