@@ -75,6 +75,7 @@ export function Plans() {
     }
     if (p.sales) return <Line>Priced with our team for your organization.</Line>
     if (!signed) return <Line>Sign in to choose a plan.</Line>
+    if (!host.admin) return <Line>An org admin changes the plan.</Line>
     if (!settled) return null
     if (free(p)) {
       if (!on) return null

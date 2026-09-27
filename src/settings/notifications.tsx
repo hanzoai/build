@@ -104,7 +104,7 @@ export function Notifications() {
         title="Notifications"
         detail={`Webhooks: events in ${host.org ?? 'this organization'}, POSTed and signed to an address you run.`}
         action={
-          adding ? undefined : (
+          adding || !host.admin ? undefined : (
             <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
               <Plus size={14} /> Add webhook
             </Button>
@@ -183,15 +183,19 @@ export function Notifications() {
                     .filter(Boolean)
                     .join(' · ')}
                   trailing={
-                    <XStack render="button" aria-label={`Delete ${e.url}`} p="$1" onPress={() => drop(e)}>
-                      <X size={14} />
-                    </XStack>
+                    host.admin ? (
+                      <XStack render="button" aria-label={`Delete ${e.url}`} p="$1" onPress={() => drop(e)}>
+                        <X size={14} />
+                      </XStack>
+                    ) : undefined
                   }
                 />
                 <XStack gap="$2" px="$3" pb="$2.5" flexWrap="wrap">
-                  <Button size="sm" variant="outline" disabled={working} aria-label={`Send a test to ${e.url}`} onPress={() => trial(e)}>
-                    Send test
-                  </Button>
+                  {host.admin ? (
+                    <Button size="sm" variant="outline" disabled={working} aria-label={`Send a test to ${e.url}`} onPress={() => trial(e)}>
+                      Send test
+                    </Button>
+                  ) : null}
                   <Button size="sm" variant="ghost" disabled={working} aria-label={`Deliveries to ${e.url}`} onPress={() => show(e)}>
                     {log?.id === e.id ? 'Hide deliveries' : 'Deliveries'}
                   </Button>

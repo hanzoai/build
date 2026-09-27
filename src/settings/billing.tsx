@@ -92,9 +92,11 @@ export function Billing() {
         title="Payment"
         detail="The card a plan renews on and a top-up charges."
         action={
-          <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
-            <Plus size={14} /> Add card
-          </Button>
+          host.admin ? (
+            <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
+              <Plus size={14} /> Add card
+            </Button>
+          ) : undefined
         }
       >
         {cards.error ? (
@@ -115,14 +117,16 @@ export function Billing() {
                 title={label(m)}
                 detail={[m.expires ? `Expires ${m.expires}` : '', m.default ? 'Default' : ''].filter(Boolean).join(' · ') || undefined}
                 trailing={
-                  <XStack
-                    render="button"
-                    aria-label={`Remove ${label(m)}`}
-                    p="$1"
-                    onPress={() => void act(() => detach(t, m.id), `${label(m)} is removed`, cards.reload)}
-                  >
-                    <X size={14} />
-                  </XStack>
+                  host.admin ? (
+                    <XStack
+                      render="button"
+                      aria-label={`Remove ${label(m)}`}
+                      p="$1"
+                      onPress={() => void act(() => detach(t, m.id), `${label(m)} is removed`, cards.reload)}
+                    >
+                      <X size={14} />
+                    </XStack>
+                  ) : undefined
                 }
               />
             ))}
@@ -183,7 +187,7 @@ export function Billing() {
               title={plan.ending ? `Your plan ends on ${day(plan.ends)}` : 'Cancel plan'}
               detail={plan.ending ? 'Keep it, and it renews as before.' : 'It runs to the end of the period you paid for, then ends.'}
               trailing={
-                plan.ending ? (
+                !host.admin ? undefined : plan.ending ? (
                   <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => reactivate(t, plan.id), 'Your plan renews as before', subs.reload)}>
                     Keep plan
                   </Button>

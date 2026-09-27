@@ -190,7 +190,7 @@ export function Usage() {
         title="Balance"
         detail="Prepaid money pays for usage past the plan. Credits are spent first."
         action={
-          buying ? undefined : (
+          buying || !host.admin ? undefined : (
             <Button size="sm" variant="outline" onPress={() => setBuying(true)}>
               Buy more
             </Button>
