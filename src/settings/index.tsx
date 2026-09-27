@@ -1,0 +1,92 @@
+/**
+ * Settings: every setting the builder has, on this page — the account, the
+ * workspace's environments, machines and keys, what the agent brings to a run,
+ * and the organization's integrations, members, usage and notifications. A
+ * section is its own address, so it can be linked to and comes back on reload.
+ */
+import { SizableText, XStack, YStack } from '@hanzo/gui'
+
+import { useHost } from '../host.tsx'
+import { path, type Section } from '../route.ts'
+import { ENTRIES, GROUPS } from './sections.tsx'
+
+export function Settings({ section }: { section: Section }) {
+  const host = useHost()
+  const entry = ENTRIES.find((e) => e.id === section) ?? ENTRIES[0]!
+  const go = (id: Section) => host.go(path({ kind: 'settings', section: id }))
+
+  return (
+    <XStack flex={1} minH={0} minW={0}>
+      <YStack
+        role="navigation"
+        aria-label="Settings"
+        width={220}
+        shrink={0}
+        borderRightWidth={1}
+        borderColor="$borderColor"
+        px="$2"
+        py="$4"
+        gap="$4"
+        overflow="scroll"
+        $max-md={{ display: 'none' }}
+      >
+        <SizableText size="$4" color="$ink" px="$2">
+          Settings
+        </SizableText>
+        {GROUPS.map((g) => {
+          const list = ENTRIES.filter((e) => e.group === g)
+          if (!list.length) return null
+          return (
+            <YStack key={g} gap="$0.5">
+              <SizableText size="$1" color="$soft" px="$2" pb="$1">
+                {g}
+              </SizableText>
+              {list.map((e) => (
+                <XStack
+                  key={e.id}
+                  render="button"
+                  aria-label={e.label}
+                  aria-current={e.id === entry.id ? 'page' : undefined}
+                  onPress={() => go(e.id)}
+                  px="$2"
+                  py="$1.5"
+                  rounded="$2"
+                  bg={e.id === entry.id ? '$hover' : 'transparent'}
+                  hoverStyle={{ bg: '$hover' }}
+                >
+                  <SizableText size="$2" color={e.id === entry.id ? '$ink' : '$soft'}>
+                    {e.label}
+                  </SizableText>
+                </XStack>
+              ))}
+            </YStack>
+          )
+        })}
+      </YStack>
+      <YStack flex={1} minW={0} minH={0} overflow="scroll">
+        <XStack flexWrap="wrap" gap="$1.5" px="$4" pt="$3" $md={{ display: 'none' }}>
+          {ENTRIES.map((e) => (
+            <XStack
+              key={e.id}
+              render="button"
+              aria-label={e.label}
+              onPress={() => go(e.id)}
+              px="$2.5"
+              py="$1"
+              rounded="$10"
+              borderWidth={1}
+              borderColor={e.id === entry.id ? '$ink' : '$borderColor'}
+            >
+              <SizableText size="$1" color={e.id === entry.id ? '$ink' : '$soft'}>
+                {e.label}
+              </SizableText>
+            </XStack>
+          ))}
+        </XStack>
+        <YStack width="100%" maxW={760} self="center" px="$5" py="$6">
+          {entry.body()}
+        </YStack>
+      </YStack>
+    </XStack>
+  )
+}

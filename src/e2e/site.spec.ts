@@ -67,9 +67,12 @@ test('one mark at the top left when signed out', async ({ page }) => {
   await expect(page.getByText('Sign in', { exact: true }).first()).toBeVisible()
 })
 
-test('settings stays on this page', async ({ page, baseURL }) => {
+test('settings is a page of this site', async ({ page, baseURL }) => {
   await page.goto('/-/codebases')
   await page.getByText('Settings', { exact: true }).first().click()
+  await expect(page).toHaveURL(new URL('/-/settings/environments', baseURL).href)
+  await page.goto('/-/settings')
+  await expect(page.getByText('Sign in to see your account.')).toBeVisible()
   expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin)
 })
 

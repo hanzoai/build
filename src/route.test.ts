@@ -18,16 +18,22 @@ describe('route', () => {
     ['-/automations', { kind: 'screen', screen: 'automations' }],
     ['-/sync', { kind: 'screen', screen: 'sync' }],
     ['-/mcp', { kind: 'screen', screen: 'mcp' }],
+    ['-/settings', { kind: 'settings', section: 'general' }],
+    ['-/settings/account', { kind: 'settings', section: 'account' }],
+    ['-/customize', { kind: 'customize', tab: 'skills' }],
+    ['-/customize/connectors', { kind: 'customize', tab: 'connectors' }],
+    ['-/plans', { kind: 'screen', screen: 'plans' }],
+    ['-/settings/environments/', { kind: 'settings', section: 'environments' }],
     ['mega-shop', { kind: 'project', slug: 'mega-shop' }],
     ['artifacts', { kind: 'project', slug: 'artifacts' }],
   ])('%s', (p, r) => expect(route(p)).toEqual(r))
 
-  it.each(['sess_nothex', 'Mega-Shop', '-/elsewhere', '-leading', 'a/b', 'x'.repeat(41), '../etc', 'javascript:alert(1)', 'https://evil.example'])(
+  it.each(['sess_nothex', 'Mega-Shop', '-/elsewhere', '-/settings/elsewhere', '-/settings/skills', '-/customize/elsewhere', '-leading', 'a/b', 'x'.repeat(41), '../etc', 'javascript:alert(1)', 'https://evil.example'])(
     'reads %s as the empty state',
     (p) => expect(route(p)).toEqual({ kind: 'new' }),
   )
 
   it('inverts', () => {
-    for (const p of ['', ID, '-/artifacts', '-/codebases', '-/projects', '-/issues', '-/automations', '-/sync', '-/mcp', 'mega-shop']) expect(path(route(p))).toBe(p)
+    for (const p of ['', ID, '-/artifacts', '-/codebases', '-/projects', '-/issues', '-/automations', '-/sync', '-/mcp', '-/settings', '-/settings/machines', '-/customize', '-/customize/plugins', '-/plans', 'mega-shop']) expect(path(route(p))).toBe(p)
   })
 })

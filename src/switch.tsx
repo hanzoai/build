@@ -8,7 +8,6 @@
 import { YStack } from '@hanzo/gui'
 import { MenuLabel, MenuRow, MenuRule, OrgSwitcher, type Org, type OrgScope } from '@hanzo/ui/product'
 
-import { revealAccount } from './account.tsx'
 import { projects, type Project } from './api/projects.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
@@ -70,7 +69,7 @@ export function Where() {
             label="Settings"
             onPress={() => {
               close()
-              revealAccount()
+              host.go('-/settings')
             }}
           />
         </YStack>

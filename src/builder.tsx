@@ -29,7 +29,7 @@ import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, Kanban, LayoutTemplate, M
 import { Button } from '@hanzo/ui'
 import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { pinBoard } from './choice.ts'
 import { useKept, useRecents } from './data.ts'
@@ -41,7 +41,8 @@ import { path, route } from './route.ts'
 import { Run } from './run.tsx'
 import { DOTS } from './section.tsx'
 import { Artifacts, Templates } from './shelf.tsx'
-import { Account, Find, onAccount } from './account.tsx'
+import { Find } from './find.tsx'
+import { Settings } from './settings/index.tsx'
 import { Where } from './switch.tsx'
 
 type Order = 'newest' | 'running'
@@ -54,9 +55,7 @@ function Shell() {
   const [collapsed, setCollapsed] = useKept('hanzo.build.rail', false)
   const [drawer, setDrawer] = useState(false)
   const [order, setOrder] = useState<Order>('newest')
-  const [account, setAccount] = useState(false)
   const [finding, setFinding] = useState(false)
-  useEffect(() => onAccount(() => setAccount(true)), [])
 
   const go = (p: string) => {
     setDrawer(false)
@@ -103,7 +102,8 @@ function Shell() {
       id: 'machines',
       label: 'Machines',
       icon: <Cpu size={16} />,
-      onPress: () => host.go(''),
+      onPress: () => go(path({ kind: 'settings', section: 'machines' })),
+      active: r.kind === 'settings' && r.section === 'machines',
     },
     { id: 'docs', label: 'Docs', icon: <BookOpen size={16} />, onPress: () => window.open('https://docs.hanzo.ai/docs/dev', '_blank', 'noopener,noreferrer') },
   ]
@@ -128,10 +128,10 @@ function Shell() {
         }
         account={
           host.person
-            ? { name: host.person.email || host.person.name, onPress: () => setAccount(true) }
+            ? { name: host.person.email || host.person.name, onPress: () => go(path({ kind: 'settings', section: 'account' })) }
             : { name: 'Sign in', onPress: () => host.signIn?.() }
         }
-        onSettings={() => setAccount(true)}
+        onSettings={() => go(path({ kind: 'settings', section: 'general' }))}
         onSearch={() => setFinding(true)}
         collapsed={collapsed}
         onCollapse={setCollapsed}
@@ -158,7 +158,6 @@ function Shell() {
         </XStack>
         <Pane onStarted={() => recents.reload()} />
       </YStack>
-      <Account open={account} onOpenChange={setAccount} />
       <Find open={finding} onOpenChange={setFinding} recents={rows} onOpen={(id) => { setFinding(false); go(id) }} />
     </XStack>
   )
@@ -169,6 +168,7 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   const host = useHost()
   const r = route(host.path)
   if (r.kind === 'run') return <Run key={r.id} id={r.id} />
+  if (r.kind === 'settings') return <Settings section={r.section} />
   if (r.kind === 'screen') {
     if (r.screen === 'artifacts') return <Artifacts />
     if (r.screen === 'templates') return <Templates />
