@@ -94,8 +94,36 @@ describe('harness', () => {
     expect(read('\u001b[1mthinking\u001b[0m\r\nweighing it\r\n')).toEqual([{ kind: 'said', who: 'agent', text: 'weighing it' }])
   })
 
-  it('drops what the person asked, which the transcript already says', () => {
-    expect(read('user\nAdd the widget\n')).toEqual([])
+  it('draws what the person asked, every line of it to the next header', () => {
+    expect(read('user\nAdd the widget\n\nwarning: keep it small\n  ✓ and tested\ncodex\nOn it.\n')).toEqual([
+      { kind: 'said', who: 'person', text: 'Add the widget\n\nwarning: keep it small\n  ✓ and tested' },
+      { kind: 'said', who: 'agent', text: 'On it.' },
+    ])
+  })
+
+  it('takes what the platform told the agent off the ask, and what a follow-up added after it', () => {
+    const task = [
+      'When a decision needs the person you are working for, call ask_user with the options rather than guessing or stopping.',
+      '',
+      'These environment variables are named on this codebase and not set: TOKEN.',
+      "This codebase's install script has already run in this checkout.",
+      '',
+      'Plan only. Read the repository and answer with a plan for the task below.',
+      '',
+      'Add the widget',
+      '',
+      'with tests',
+      '',
+      'This follows an earlier run on this codebase: “Start”. Its work so far is on this branch; build on it.',
+    ].join('\n')
+    expect(read(`user\n${task}\ncodex\nOn it.\n`)[0]).toEqual({ kind: 'said', who: 'person', text: 'Add the widget\n\nwith tests' })
+  })
+
+  it('keeps a setup’s ask past its instructions and answer block, and a bare follow-up’s own line', () => {
+    const setup = "Set up this repository's development environment. End with:\n\n```environment\n{}\n```\n\nSet up the environment"
+    expect(read(`user\n${setup}`)).toEqual([{ kind: 'said', who: 'person', text: 'Set up the environment' }])
+    expect(read('user\nContinue where the earlier run left off.\n')).toEqual([{ kind: 'said', who: 'person', text: 'Continue where the earlier run left off.' }])
+    expect(read('user\nPlan only. Read the repository and answer.\n\nexec\nls\n')).toEqual([{ kind: 'shell', command: 'ls', output: '', ran: 'running' }])
   })
 
   it('reads a command however it ended, and keeps a shell’s output', () => {

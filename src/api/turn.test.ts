@@ -212,6 +212,26 @@ describe('cards', () => {
     ])
   })
 
+  it('draws the person’s ask once: from their own message when there is one, else from the harness', () => {
+    const task = (seq: number, words: string) => [ev(seq, 'tool-call', { message: 'running the task' }), ev(seq + 1, 'log', { message: `user\n${words}\ncodex\nOn it.\n` })]
+    const heard = cards([ev(1, 'message', { role: 'user', text: 'Add the widget' }), ...task(2, 'Add the widget')])
+    expect(bare(heard).map((c) => (c.kind === 'said' ? `${c.who}: ${c.text}` : c.kind))).toEqual(['person: Add the widget', 'agent: On it.'])
+    const steered = cards([...task(1, 'Add the widget'), ev(3, 'control', { command: 'message', message: 'and tests' }), ...task(4, 'and tests')])
+    expect(bare(steered).map((c) => (c.kind === 'said' ? `${c.who}: ${c.text}` : c.kind))).toEqual(['person: Add the widget', 'agent: On it.', 'person: and tests', 'agent: On it.'])
+  })
+
+  it('opens with the ask, ahead of the steps that set the run up, and leaves a steer where it was said', () => {
+    const asked = cards([
+      ev(1, 'status', { status: 'started' }),
+      ev(2, 'tool-call', { step: 'clone', status: 'ok' }),
+      ev(3, 'tool-call', { message: 'running the task' }),
+      ev(4, 'log', { message: 'user\nAdd the widget\n' }),
+    ])
+    expect(bare(asked).map((c) => c.kind + (c.kind === 'said' ? `:${c.who}` : ''))).toEqual(['said:person', 'note', 'step'])
+    const steered = cards([ev(1, 'status', { status: 'started' }), ev(2, 'control', { command: 'message', message: 'faster' })])
+    expect(bare(steered).map((c) => c.kind)).toEqual(['note', 'said'])
+  })
+
   it('says what a person asked, and nothing for a control it cannot read', () => {
     const got = cards([
       ev(1, 'control', 'prose'),

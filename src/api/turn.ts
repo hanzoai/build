@@ -23,6 +23,8 @@ import type { Event } from './sessions.ts'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
+type Said = Extract<Card, { kind: 'said' }>
+
 /** The payload as an object. A live frame may carry it as a JSON string. */
 export function decode(payload: unknown): Record<string, unknown> | string | null {
   if (payload && typeof payload === 'object') return payload as Record<string, unknown>
@@ -292,6 +294,17 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
     phase = null
   }
   const answers = new Set<string>()
+  // What the person said in an event of its own. The harness prints their ask
+  // too (harness.ts); an event saying the same words is the one drawn. Words
+  // that steered the run are not its ask.
+  const told = new Set<Said>()
+  const steered = new Set<Said>()
+  const person = (text: string) => {
+    const c: Said = { kind: 'said', key: mint(), who: 'person', text }
+    out.push(c)
+    told.add(c)
+    return c
+  }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     seq = e.seq
     n = 0
@@ -363,7 +376,7 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
         if (!b) break
         const command = str(b.command)
         const said = str(b.message)
-        if (command === 'message' && said) out.push({ kind: 'said', key: mint(), who: 'person', text: said })
+        if (command === 'message' && said) steered.add(person(said))
         else if (command === 'pause') out.push({ kind: 'note', key: mint(), text: 'Pause asked' })
         else if (command === 'resume') out.push({ kind: 'note', key: mint(), text: 'Resume asked' })
         else if (command === 'stop') out.push({ kind: 'note', key: mint(), text: 'Stop asked' })
@@ -371,7 +384,9 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
       }
       case 'message': {
         const text = typeof body === 'string' ? body : str(b?.text) || str(b?.content) || str(b?.message)
-        if (text) out.push({ kind: 'said', key: mint(), who: str(b?.role) === 'user' ? 'person' : 'agent', text })
+        if (!text) break
+        if (str(b?.role) === 'user') person(text)
+        else out.push({ kind: 'said', key: mint(), who: 'agent', text })
         break
       }
     }
@@ -385,7 +400,12 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
     if (kept) out.splice(i, 1)
     kept = true
   }
-  return out
+  const heard = new Set([...told].map((c) => c.text.trim()))
+  const drawn = out.filter((c) => !(c.kind === 'said' && c.who === 'person' && !told.has(c) && heard.has(c.text.trim())))
+  // The ask opens the conversation, ahead of the steps that set the run up.
+  const ask = drawn.findIndex((c) => c.kind === 'said' && c.who === 'person' && !steered.has(c))
+  if (ask > 0) drawn.unshift(...drawn.splice(ask, 1))
+  return drawn
 }
 
 /** The plan a plan run answered with, from its final status, or ''. */
