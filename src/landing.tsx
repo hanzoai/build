@@ -104,22 +104,20 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     [t],
   )
 
+  // Drawn only once a forge codebase is chosen; one the forge no longer lists offers its default branch.
+  const home = kept.repo?.default_branch || 'main'
   const loadBranches = useCallback(
     async (q: string) => {
-      if (!kept.repo) return { branches: [], next: null }
-      const found = await one(t, kept.repo.name)
+      const found = await one(t, codebase)
       const needle = q.trim().toLowerCase()
-      const names = (found?.branches ?? [kept.repo.default_branch || 'main']).filter(
-        (b) => !needle || b.toLowerCase().includes(needle),
-      )
+      const names = (found?.branches ?? [home]).filter((b) => !needle || b.toLowerCase().includes(needle))
       return { branches: names.map((name) => ({ name })), next: null }
     },
-    [t, kept.repo],
+    [t, codebase, home],
   )
 
+  // The composer sends only a draft with words in it, and not while a send is out.
   const send = async () => {
-    const prompt = draft.trim()
-    if (!prompt || busy) return
     if (!signed) {
       host.signIn?.()
       return
@@ -132,11 +130,12 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     setNote('')
     try {
       const run = await start(t, {
-        prompt: compose(prompt, files),
+        prompt: compose(draft.trim(), files),
         // The name alone. The org rides the request, and a slash is not a repo name.
-        repo: isForge(kept.repo) ? kept.repo.name : undefined,
-        base: isForge(kept.repo) ? kept.branch || kept.repo.default_branch || undefined : undefined,
-        targetId: place.id || undefined,
+        // An empty base or place is not sent: the default branch, and the sandbox.
+        repo: kept.repo.name,
+        base: kept.branch,
+        targetId: place.id,
         mode: kept.mode,
         model: kept.model === ENSO ? undefined : kept.model,
         effort: kept.effort,
@@ -145,7 +144,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       setFiles([])
       onStarted(run.session)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The run could not start')
+      setNote((e as Error).message)
     } finally {
       setBusy(false)
     }
@@ -186,7 +185,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         name="Where the run runs"
         icon={place.id ? <Monitor size={13} /> : <Cloud size={13} />}
         label={place.id ? place.label : 'Cloud'}
-        chosen={placeItems.find((i) => i.place.id === place.id) ?? null}
+        chosen={placeItems.find((i) => i.place.id === place.id)}
         items={placeItems}
         onChange={(i) => set({ place: i.place.id })}
         placeholder="Search machines…"

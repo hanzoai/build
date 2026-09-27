@@ -83,32 +83,34 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
       setStatus(d.build?.status ?? '')
       setPhase('declared')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'The platform refused this')
+      setError((e as Error).message)
       setPhase('failed')
     }
   }
 
+  // The build this write started; its status is what the platform last said of it.
+  const built = out?.build?.id ?? ''
+  const green = /^(succeeded|success|done|complete|completed|ok)$/i.test(status)
+
+  // Offered only once that build is green.
   const ship = async () => {
-    if (!out?.build?.id) return
     setPhase('shipping')
     setError('')
     try {
-      await declare(t, { repo: source.repo, ref: source.ref, name: source.name, project: project || source.name, mode: 'commit', tag: out.build.id })
+      await declare(t, { repo: source.repo, ref: source.ref, name: source.name, project: project || source.name, mode: 'commit', tag: built })
       setPhase('shipped')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'The platform refused this')
+      setError((e as Error).message)
       setPhase('declared')
     }
   }
-
-  const green = /^(succeeded|success|done|complete|completed|ok)$/i.test(status)
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent maxW={480}>
         <DialogTitle>Add to project</DialogTitle>
         <DialogDescription>
-          Build {source.title} at {source.ref || 'main'} and declare it in a project. {host.admin ? 'As an admin you can take a green build to main.' : 'It opens a review; merging it is what deploys.'}
+          Build {source.title} at {source.ref} and declare it in a project. {host.admin ? 'As an admin you can take a green build to main.' : 'It opens a review; merging it is what deploys.'}
         </DialogDescription>
 
         <YStack gap="$1.5">
@@ -133,7 +135,7 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
             <SizableText size="$2" color="$ink">
               {phase === 'shipped'
                 ? 'Declared on main — CD applies it on its next pass.'
-                : `Build ${out.build?.id ?? ''}: ${status || 'building'}`}
+                : `Build ${built}: ${status || 'building'}`}
             </SizableText>
             {out.review ? (
               <Out href={out.review}>

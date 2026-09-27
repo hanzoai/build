@@ -19,7 +19,7 @@ function useAct(onDone: () => void) {
       setWorking(false)
       onDone()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
       setWorking(false)
     }
   }
@@ -118,8 +118,8 @@ export function Rename({
           value={value}
           onChangeText={setValue}
           aria-label="Name"
-          onKeyDown={(e: { key?: string; nativeEvent?: { key?: string } }) => {
-            if ((e.key ?? e.nativeEvent?.key) === 'Enter') save()
+          onKeyDown={(e: { key?: string }) => {
+            if (e.key === 'Enter') save()
           }}
         />
         <Said note={note} />
