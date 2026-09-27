@@ -41,7 +41,8 @@ export function useRead<T>(load: (() => Promise<T>) | null, initial: T, key: unk
         setValue(v)
         setError(null)
       })
-      .catch((e: unknown) => live && setError(e instanceof Error ? e : new Error(String(e))))
+      // Every read goes through the platform's client, which refuses with an Error.
+      .catch((e: unknown) => live && setError(e as Error))
       .finally(() => live && setLoading(false))
     return () => {
       live = false
@@ -185,7 +186,7 @@ export function useRun(t: Target, id: string | null): RunState {
         },
       },
       ctl.signal,
-    ).catch((e: unknown) => setRefused(e instanceof Error ? e.message : 'The feed was refused'))
+    ).catch((e: unknown) => setRefused((e as Error).message))
     return () => ctl.abort()
   }, [t, id])
 

@@ -20,5 +20,6 @@ describe('claims', () => {
     expect(administers(t, null)).toBe(false)
     expect(administers(null, 'acme')).toBe(false)
     expect(administers(jwt({ orgs: 'acme' }), 'acme')).toBe(false)
+    expect(administers(jwt({ orgs: [null, { org: 'acme', role: 'admin' }] }), 'acme')).toBe(true)
   })
 })

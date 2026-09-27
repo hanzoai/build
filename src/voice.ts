@@ -29,9 +29,8 @@ export function spoken(): string {
   return LANGUAGES.some((l) => l.id === nav) ? nav! : 'en'
 }
 
-/** Whether this browser can record the microphone at all. */
+/** Whether this browser can record the microphone at all. A page that is not a secure context has no media devices. */
 function recordable(): boolean {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
   return typeof window.MediaRecorder === 'function' && Boolean(navigator.mediaDevices?.getUserMedia)
 }
 
@@ -48,7 +47,7 @@ export function useDictation(t: Target, onText: (text: string) => void, onNote: 
   const kept = usePrefs()
   const language = LANGUAGES.some((l) => l.id === kept.prefs.language) ? kept.prefs.language! : spoken()
   const setLanguage = useCallback(
-    (id: string) => kept.save({ language: id }).catch((e: unknown) => note.current(e instanceof Error ? e.message : 'The language was not saved.')),
+    (id: string) => kept.save({ language: id }).catch((e: unknown) => note.current((e as Error).message)),
     [kept],
   )
   const ear = useMemo(() => speech({ baseUrl: t.api, token: t.token, ear: 'whisper' }), [t])
@@ -85,7 +84,7 @@ export function useDictation(t: Target, onText: (text: string) => void, onNote: 
           const words = text.trim()
           if (words) said.current(words)
         })
-        .catch((e: unknown) => note.current(e instanceof Error ? e.message : 'The platform could not transcribe that.'))
+        .catch((e: unknown) => note.current((e as Error).message))
         .finally(() => setBusy(false))
     }
     rec.current = r
