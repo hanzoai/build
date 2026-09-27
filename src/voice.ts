@@ -12,6 +12,7 @@ import { speech } from '@hanzo/voice'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Target } from './api/call.ts'
+import { usePrefs } from './prefs.tsx'
 
 export const LANGUAGES = [
   { id: 'en', label: 'English' },
@@ -21,6 +22,12 @@ export const LANGUAGES = [
   { id: 'ja', label: '日本語' },
   { id: 'zh', label: '中文' },
 ]
+
+/** The language this browser is set to, when it is one dictation offers; English otherwise. */
+export function spoken(): string {
+  const nav = typeof navigator !== 'undefined' ? navigator.language.split('-')[0] : 'en'
+  return LANGUAGES.some((l) => l.id === nav) ? nav! : 'en'
+}
 
 /** Whether this browser can record the microphone at all. */
 function recordable(): boolean {
@@ -32,15 +39,18 @@ export function useDictation(t: Target, onText: (text: string) => void, onNote: 
   const [on, setOn] = useState(false)
   const [busy, setBusy] = useState(false)
   const [able, setAble] = useState(false)
-  const [language, setLanguage] = useState(() => {
-    const nav = typeof navigator !== 'undefined' ? navigator.language.split('-')[0] : 'en'
-    return LANGUAGES.some((l) => l.id === nav) ? nav! : 'en'
-  })
   const rec = useRef<MediaRecorder | null>(null)
   const said = useRef(onText)
   said.current = onText
   const note = useRef(onNote)
   note.current = onNote
+  // The person's saved language (Settings → General), else this browser's, else English.
+  const kept = usePrefs()
+  const language = LANGUAGES.some((l) => l.id === kept.prefs.language) ? kept.prefs.language! : spoken()
+  const setLanguage = useCallback(
+    (id: string) => kept.save({ language: id }).catch((e: unknown) => note.current(e instanceof Error ? e.message : 'The language was not saved.')),
+    [kept],
+  )
   const ear = useMemo(() => speech({ baseUrl: t.api, token: t.token, ear: 'whisper' }), [t])
 
   useEffect(() => setAble(recordable()), [])

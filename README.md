@@ -42,9 +42,10 @@ import { Builder, type Host } from '@hanzo/build'
 `Host` is everything that differs between hosts: where the platform is
 (`api`), the bearer (`token()`, read at call time), the org (`org`), who is
 signed in (`person`), whether they administer the org (`admin`), the address
-under the mount (`path`) and how to move (`go`), and where to link out
-(`links`, `open`). Peers: `@hanzo/ui`, `@hanzo/gui`, `@hanzogui/lucide-icons-2`,
-`react`.
+under the mount (`path`) and how to move (`go`), where to link out
+(`links`, `open`), and — for a host that can repaint itself — the theme
+(`theme`, `chooseTheme`), which follows the person's saved choice. Peers:
+`@hanzo/ui`, `@hanzo/gui`, `@hanzogui/lucide-icons-2`, `react`.
 
 ### In a host that has its own rail
 
@@ -159,6 +160,12 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `POST /v1/platform/apps` · `GET /v1/platform/builds` | Add to project, Publish |
 | `POST /v1/mcp` | the native MCP servers, `tools/list` |
 | `GET /v1/models` · `POST /v1/event` | the model list, a verdict |
+| `GET`/`PATCH /v1/pref` | the person's own settings: theme, text size, motion, dictation language, what to call them, their instructions, the coding defaults |
+| `PUT /v1/iam/account` · `POST /v1/account/avatar` | the person's name and photo |
+| `GET`/`PUT /v1/iam/consent` | whether Hanzo may train on their data, and usage insights |
+| `GET /v1/tool` · `PUT /v1/tool/activation` | what the agent may use, per kind of tool |
+| `GET /v1/ai/memory/list` · `POST /v1/ai/memory/remember` · `…/delete` | what Hanzo remembers |
+| `PATCH /v1/projects/{slug}` | a project public or private |
 
 `mode`, `model` and `effort` are sent with a run as asked; the platform
 honours them where it does and nothing here simulates them.

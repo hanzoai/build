@@ -1,12 +1,13 @@
 /**
  * The org's projects: what it has built, and where each one is served.
  *
- *   GET /v1/projects → Project[]
+ *   GET   /v1/projects → Project[]
+ *   PATCH /v1/projects/{slug}  {visibility}   public is free; private needs a funded org (402)
  *
  * `slug` is the one key every surface shares — the address under /dev, the
  * site's name, the `project` a run is tagged with.
  */
-import { call, type Target } from './call.ts'
+import { call, seg, type Target } from './call.ts'
 
 export interface Project {
   slug: string
@@ -18,6 +19,8 @@ export interface Project {
   status: string
   /** The deployed address, or '' when nothing has shipped. */
   live: string
+  /** Who can see it and read its source: 'public', 'private', or '' when the platform did not say. */
+  visibility: '' | 'public' | 'private'
   updated: number
 }
 
@@ -52,6 +55,7 @@ export function project(raw: unknown): Project {
     branch: str(repo.branch),
     status: str(p.status),
     live: safe(str(p.liveUrl)),
+    visibility: p.visibility === 'public' || p.visibility === 'private' ? p.visibility : '',
     updated: typeof p.updatedAt === 'number' ? p.updatedAt : 0,
   }
 }
@@ -63,6 +67,11 @@ export async function projects(t: Target): Promise<Project[]> {
     .map(project)
     .filter((p) => p.slug)
     .sort((a, b) => b.updated - a.updated)
+}
+
+/** Make a project public or private, and answer it as saved. */
+export async function setVisibility(t: Target, slug: string, visibility: 'public' | 'private'): Promise<Project> {
+  return project(await call<unknown>(t, 'PATCH', `/v1/projects/${seg(slug)}`, { visibility }))
 }
 
 /** The repository name a project's clone URL names — the last path segment, without `.git`. */

@@ -36,6 +36,7 @@ import { useKept, useRecents } from './data.ts'
 import { Forge } from './forge.tsx'
 import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
 import { Landing } from './landing.tsx'
+import { PrefsProvider } from './prefs.tsx'
 import { Project } from './project.tsx'
 import { path, route } from './route.ts'
 import { Run } from './run.tsx'
@@ -213,9 +214,11 @@ function Screens({ rail }: { rail: boolean }) {
 export function Builder({ host, rail = true }: { host: Host; rail?: boolean }) {
   return (
     <HostProvider host={host}>
-      <YStack flex={1} minH={0} minW={0} height="100%" bg="$background">
-        <Screens rail={rail} />
-      </YStack>
+      <PrefsProvider>
+        <YStack flex={1} minH={0} minW={0} height="100%" bg="$background">
+          <Screens rail={rail} />
+        </YStack>
+      </PrefsProvider>
     </HostProvider>
   )
 }

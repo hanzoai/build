@@ -10,6 +10,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 
 import type { Target } from './api/call.ts'
+import type { Theme } from './api/pref.ts'
 
 export interface Person {
   name: string
@@ -29,6 +30,10 @@ export interface Host {
   memberships?: readonly string[]
   /** Stay on this page and scope every read to `org`. */
   chooseOrg?: (org: string) => void
+  /** The page's theme as last chosen, for a host that can change it. */
+  theme?: Theme
+  /** Paint the page in `theme`. A host without it keeps its own, and Settings offers no choice. */
+  chooseTheme?: (theme: Theme) => void
   /** Who is signed in, or null. */
   person: Person | null
   /** Whether the person administers `org`: an admin publishes to main, anyone else opens a review. */

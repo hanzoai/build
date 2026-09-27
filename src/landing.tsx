@@ -24,6 +24,7 @@ import { ready, SANDBOX, type Place } from './api/places.ts'
 import { isForge } from './choice.ts'
 import { useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
 import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
@@ -34,11 +35,11 @@ export const MODES = [
   { id: 'plan', label: 'Plan', hint: 'Plans the change and writes nothing' },
 ] as const
 
-const EFFORTS = [
+export const EFFORTS = [
   { id: 'low', label: 'Low' },
   { id: 'medium', label: 'Medium' },
   { id: 'high', label: 'High' },
-]
+] as const
 
 /** What a person chose last time, per org. */
 interface Kept {
@@ -59,7 +60,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
-  const [kept, keep] = useKept<Kept>(`hanzo.build.new.${host.org ?? 'none'}`, FIRST)
+  const { prefs } = usePrefs()
+  const [stored, keep] = useKept<Kept | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
+  // Nothing chosen here yet: start from the person's coding defaults (Settings → Code).
+  const kept: Kept = stored ?? { ...FIRST, ...prefs.code }
   const set = (patch: Partial<Kept>) => keep({ ...kept, ...patch })
 
   const [draft, setDraft] = useState(kept.ask || '')
@@ -256,7 +260,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   return (
     <YStack flex={1} minH={0} minW={0} items="center" px="$4">
       <YStack width="100%" maxW={COLUMN} flex={1} minH={0}>
-        <EmptyPrompt title="What’s up next?" mark={<HanzoMark size={18} />} column={COLUMN} />
+        <EmptyPrompt title={prefs.callName ? `What’s up next, ${prefs.callName}?` : 'What’s up next?'} mark={<HanzoMark size={18} />} column={COLUMN} />
         <YStack flex={1} />
         <YStack pb="$2" gap="$2">
           {env.value && env.value.state !== 'ready' && !place.id ? (

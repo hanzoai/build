@@ -99,3 +99,14 @@ export async function call<T>(
   const text = await res.text()
   return (text ? JSON.parse(text) : undefined) as T
 }
+
+/**
+ * The `{status, msg, data}` envelope IAM and the model service answer with. A
+ * refusal there is `status: "error"` with its sentence in `msg`, whatever the
+ * HTTP status was — often 200 — so it is read here and thrown like any other.
+ */
+export function unwrap(raw: unknown): unknown {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as { status?: unknown; msg?: unknown; data?: unknown }
+  if (r.status === 'error') throw new Refusal(400, typeof r.msg === 'string' && r.msg ? r.msg : 'The platform refused that')
+  return r.data
+}

@@ -6,6 +6,7 @@
 // so the builder imports neither IAM nor a router.
 
 import { IamProvider, useIam } from '@hanzo/iam/react'
+import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useMemo } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router'
 
@@ -47,6 +48,7 @@ export function Mount() {
   const { user, isLoading, isAuthenticated, logout } = door
   const where = useLocation()
   const navigate = useNavigate()
+  const look = useTheme()
 
   useEffect(() => {
     if (!isLoading) own(subject())
@@ -74,6 +76,8 @@ export function Mount() {
       if (!selectOrg(next)) return
       window.location.assign('/')
     },
+    theme: look.theme === 'light' || look.theme === 'dark' || look.theme === 'system' ? look.theme : undefined,
+    chooseTheme: look.setTheme,
     person,
     admin: administers(scoped),
     path: where.pathname.replace(/^\/+/, ''),

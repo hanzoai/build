@@ -5,8 +5,8 @@ import '@hanzo/font/css'
 import '@hanzo/ui/theme.css'
 // The rules the components assume (the grid-child `min-width: 0` floor).
 import '@hanzo/ui/styles/motion.css'
-import { ThemeProvider } from 'next-themes'
-import { StrictMode } from 'react'
+import { ThemeProvider, useTheme } from 'next-themes'
+import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -32,15 +32,25 @@ const router = createBrowserRouter([
   },
 ])
 
+/**
+ * The gui root in whichever theme next-themes resolved — the person's choice,
+ * kept in this browser and set from their saved settings — so the components
+ * that resolve a colour in JS agree with the stylesheet the class selects.
+ */
+function Themed({ children }: { children: ReactNode }) {
+  const { resolvedTheme } = useTheme()
+  return <Hanzo theme={resolvedTheme === 'light' ? 'light' : 'dark'}>{children}</Hanzo>
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Hanzo theme="dark">
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+      <Themed>
         {/* A flex column, not a Box: a block parent makes `flex: 1` inert below it. */}
         <YStack flex={1} minW={0} bg="$background" style={{ height: '100dvh', overflow: 'hidden' }}>
           <RouterProvider router={router} />
         </YStack>
-      </ThemeProvider>
-    </Hanzo>
+      </Themed>
+    </ThemeProvider>
   </StrictMode>,
 )

@@ -72,7 +72,7 @@ test('settings is a page of this site', async ({ page, baseURL }) => {
   await page.getByText('Settings', { exact: true }).first().click()
   await expect(page).toHaveURL(new URL('/-/settings/environments', baseURL).href)
   await page.goto('/-/settings')
-  await expect(page.getByText('Sign in to see your account.')).toBeVisible()
+  await expect(page.getByText('Sign in to see your settings.')).toBeVisible()
   expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin)
 })
 
