@@ -9,5 +9,5 @@
     "types": []
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/app"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/app", "src/e2e"]
 }
