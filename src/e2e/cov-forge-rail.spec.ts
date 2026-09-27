@@ -10,7 +10,7 @@
 import type { Page } from '@playwright/test'
 
 import type { Given } from './cov-forge-host.tsx'
-import { DAVE, enter, held, mount, serve, token, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
+import { DAVE, enter, held, later, mount, serve, token, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
 import { ORG } from './signed.ts'
 
@@ -27,8 +27,6 @@ const RUNS = () => [
   { id: id('2'), title: 'Queued thing', status: 'queued', repo: `${ORG}/api` },
   { id: id('3'), title: 'Deploy the site', status: 'running', repo: `${ORG}/site` },
 ]
-
-const later = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** The platform the frame talks to, holding `world`. */
 async function frame(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept: Record<string, unknown> = {}) {
@@ -238,6 +236,23 @@ test.describe('Find', () => {
     await page.screenshot({ path: info.outputPath('find.png') })
     const statuses = sent.filter((s) => s.path === '/v1/agent/sessions').map((s) => new URLSearchParams(s.query).get('status'))
     expect(statuses.filter(Boolean)).toEqual(['running', 'error', 'done'])
+    await dialog.getByLabel('Search runs').fill('')
+    await dialog.getByRole('listitem', { name: 'Untitled run' }).click()
+    await expect(page).toHaveURL(new RegExp(`/${id('1')}$`))
+    await expect(page.getByRole('dialog', { name: 'Find a run' })).toHaveCount(0)
+  })
+
+  test('on a phone the search is in the bar, beside the drawer’s button', async ({ page }, info) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await frame(page)
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Search runs' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Find a run' })
+    await expect(dialog.getByRole('listitem', { name: 'Deploy the site' })).toBeVisible()
+    await page.screenshot({ path: info.outputPath('phone-find.png') })
+    await dialog.getByLabel('Search runs').fill('deploy')
+    await dialog.getByLabel('Search runs').press('Enter')
+    await expect(page).toHaveURL(new RegExp(`/${id('3')}$`))
   })
 
   test('a refused list says why', async ({ page }) => {

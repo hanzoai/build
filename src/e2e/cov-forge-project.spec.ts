@@ -429,16 +429,22 @@ test.describe('the workspace', () => {
     await expect(page.getByText('Added a cart to the header.')).toBeVisible()
     world.slow = {}
     world.down['GET /v1/projects'] = 'Projects are resting'
-    world.runs = []
     await page.getByRole('button', { name: 'All runs' }).click()
     await via(page, 'Artifacts')
     await expect(page.getByText('Projects are resting')).toBeVisible()
-    // Back to the workspace, the way the browser goes back: its list refused, it is drawn by its address.
+    // Back to the workspace, the way the browser goes back: its list refused, it is drawn by its
+    // address, with every run filed under it.
     await page.goBack()
     await page.goBack()
     await expect(page.getByRole('button', { name: 'Project: shop' })).toBeVisible()
-    await expect(page.getByText('shop is loaded — it is in the preview', { exact: false })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Chat' }).getByText('Elsewhere')).toBeVisible()
     await expect(page.locator('iframe')).toHaveCount(0)
+    // And with no runs, it says what it is.
+    world.runs = []
+    await page.getByRole('button', { name: 'All runs' }).click()
+    await expect(page.getByRole('button', { name: 'Project: shop' })).toHaveCount(0)
+    await page.goBack()
+    await expect(page.getByText('shop is loaded — it is in the preview', { exact: false })).toBeVisible()
   })
 
   test('someone in no organization is told there is no such project', async ({ page }) => {
