@@ -1,7 +1,8 @@
 /**
  * New: the empty state. A heading at the top of the column, and at the foot of
- * the pane the composer — where the run goes (the sandbox or one of the org's
- * machines), which repository and branch it starts from, and the ask itself.
+ * the pane the composer — where the run goes (Cloud: the sandbox with the
+ * codebase's environment; or one of the org's machines, under remote control),
+ * which repository and branch it starts from, and the ask itself.
  * Under it: attach, dictate, the mode, and the model and effort on the right.
  *
  * Sending starts a coding run and opens it. The choices a person made here are
@@ -12,7 +13,7 @@ import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { ModeSelect } from '@hanzo/ui/agents'
 import { Composer, EmptyPrompt } from '@hanzo/ui/chat'
-import { BranchSelect, ChipSelect, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
+import { BranchSelect, ChipSelect, FooterLink, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
@@ -72,6 +73,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState<Source | null>(null)
   const [offering, setOffering] = useState(false)
+  // The repository list is read again each time it opens; Refresh reads it again while open.
+  const [picking, setPicking] = useState(false)
+  const [round, setRound] = useState(0)
 
   // A codebase or an issue hands its words over once. Left in the kept choice,
   // every later visit to New would put them back.
@@ -153,16 +157,25 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     onStarted(run.session)
   }
 
+  // Cloud is the sandbox, set up by the chosen codebase's environment.
+  const setUp =
+    codebase && env.value
+      ? env.value.state === 'ready'
+        ? `${codebase} environment`
+        : env.value.state === 'proposed'
+          ? `${codebase} environment proposed`
+          : `no ${codebase} environment yet`
+      : ''
   const placeItems = useMemo(
     () =>
       (places.value.length ? places.value : [SANDBOX]).map((p) => ({
         id: p.id || 'sandbox',
-        label: p.label,
-        hint: p.id ? [p.status, p.capacity].filter(Boolean).join(' · ') : 'The platform’s own sandbox',
+        label: p.id ? p.label : 'Cloud',
+        hint: p.id ? ['Remote control', p.status, p.capacity].filter(Boolean).join(' · ') : ['Hanzo sandbox', setUp].filter(Boolean).join(' · '),
         disabled: !ready(p),
         place: p,
       })),
-    [places.value],
+    [places.value, setUp],
   )
 
   const branch = kept.branch || kept.repo?.default_branch || 'main'
@@ -172,7 +185,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       <ChipSelect
         name="Where the run runs"
         icon={place.id ? <Monitor size={13} /> : <Cloud size={13} />}
-        label={place.id ? place.label : 'Default'}
+        label={place.id ? place.label : 'Cloud'}
         chosen={placeItems.find((i) => i.place.id === place.id) ?? null}
         items={placeItems}
         onChange={(i) => set({ place: i.place.id })}
@@ -180,12 +193,24 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         loading={places.loading}
         error={places.error?.message ?? null}
         footer={
-          <SizableText size="$1" color="$soft">
-            A run on a machine uses that machine’s checkout and credentials.
-          </SizableText>
+          <YStack gap="$0.5">
+            <SizableText size="$1" color="$ink">
+              Set up remote control
+            </SizableText>
+            <SizableText size="$1" color="$soft">
+              Run{' '}
+              <SizableText size="$1" color="$ink" style={{ fontFamily: 'var(--f-mono, ui-monospace, monospace)' }}>
+                hanzo link
+              </SizableText>{' '}
+              on a machine: it joins this list, and a run there uses its checkout and credentials.
+            </SizableText>
+          </YStack>
         }
       />
       <RepoSelect
+        key={round}
+        open={picking}
+        onOpenChange={setPicking}
         value={isForge(kept.repo) ? kept.repo : null}
         onChange={(r) => {
           const row = known.current.get(r.name) ?? chosen(r)
@@ -193,9 +218,14 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         }}
         load={loadRepos}
         troubleshoot={{
-          label: 'Browse codebases',
-          onPress: () => host.go(path({ kind: 'screen', screen: 'codebases' })),
+          label: 'Missing a GitHub repository? Bring it onto the forge',
+          onPress: () => host.go(path({ kind: 'screen', screen: 'sync' })),
         }}
+        connect={
+          <XStack justify="flex-end">
+            <FooterLink label="Refresh list" onPress={() => setRound((n) => n + 1)} />
+          </XStack>
+        }
         note="Repositories on the forge. Type to search."
         action={{
           label: 'Add to project',
