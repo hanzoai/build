@@ -12,7 +12,7 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { ModeSelect } from '@hanzo/ui/agents'
-import { Composer, EmptyPrompt } from '@hanzo/ui/chat'
+import { Composer } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -288,11 +288,17 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   )
 
   return (
-    <YStack flex={1} minH={0} minW={0} items="center" px="$4">
-      <YStack width="100%" maxW={COLUMN} flex={1} minH={0}>
-        <EmptyPrompt title={prefs.callName ? `What’s up next, ${prefs.callName}?` : 'What’s up next?'} mark={<HanzoMark size={18} />} column={COLUMN} />
-        <YStack flex={1} />
-        <YStack pb="$2" gap="$2">
+    // The question and the field that answers it sit together in the middle of the
+    // page, as they do on claude.ai; a run's own page keeps its composer at the foot.
+    <YStack flex={1} minH={0} minW={0} items="center" justify="center" px="$4" pb="$10" overflow="scroll">
+      <YStack width="100%" maxW={COLUMN} gap="$5">
+        <XStack role="heading" aria-level={1} justify="center" items="center" gap="$3" flexWrap="wrap">
+          <HanzoMark size={26} />
+          <SizableText size="$8" color="$ink" style={{ textAlign: 'center' }}>
+            {prefs.callName ? `What’s up next, ${prefs.callName}?` : 'What’s up next?'}
+          </SizableText>
+        </XStack>
+        <YStack gap="$2">
           {env.value && env.value.state !== 'ready' && !place.id ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
               <SizableText size="$2" color="$ink" flex={1} minW={0}>
