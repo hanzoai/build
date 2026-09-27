@@ -60,13 +60,18 @@ export interface Run {
   target: string
 }
 
-/** The request body: only what was asked, with no empty strings sent as values. */
-export function body(ask: Ask): Record<string, string> {
-  const out: Record<string, string> = { prompt: ask.prompt.trim() }
+/**
+ * The request body: only what was asked, with no empty strings sent as values.
+ * A run in the sandbox asks for one with a desktop, so its Desktop tab has a
+ * screen to show; a machine is whatever it is.
+ */
+export function body(ask: Ask): Record<string, string | boolean> {
+  const out: Record<string, string | boolean> = { prompt: ask.prompt.trim() }
   for (const k of ['repo', 'base', 'targetId', 'project', 'after', 'mode', 'model', 'effort'] as const) {
     const v = ask[k]?.trim()
     if (v) out[k] = v
   }
+  if (!out.targetId) out.desktop = true
   return out
 }
 

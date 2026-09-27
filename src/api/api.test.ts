@@ -5,12 +5,14 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import * as changes from './changes.ts'
 import { call, query, Refusal, type Target } from './call.ts'
 import * as coding from './coding.ts'
 import * as git from './git.ts'
 import * as github from './github.ts'
 import { places, SANDBOX } from './places.ts'
 import * as platform from './platform.ts'
+import * as sandbox from './sandbox.ts'
 import { name, project, projects, safe } from './projects.ts'
 import * as sessions from './sessions.ts'
 
@@ -177,13 +179,15 @@ describe('coding', () => {
       repo: 'hanzo-inc/cloud',
       base: 'main',
       mode: 'build',
+      desktop: true,
     })
+    expect(coding.body({ prompt: 'fix it', targetId: 'tgt_1' })).toEqual({ prompt: 'fix it', targetId: 'tgt_1' })
   })
 
   it('starts a run and answers its session', async () => {
     const seen = answer(202, { sessionId: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', project: 'cloud', routed: false, targetId: '' })
     const run = await coding.start(T, { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main' })
-    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/coding', body: { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main' } })
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/coding', body: { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main', desktop: true } })
     expect(run).toEqual({ session: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', project: 'cloud', routed: false, target: '' })
   })
 
@@ -438,5 +442,72 @@ describe('ours', () => {
     expect(ours('font', 'http://hanzo-git.hanzo.svc/hanzoai/font')).toBe(true)
     expect(ours('mallory/cloud', 'https://github.com/hanzo-inc/cloud.git')).toBe(false)
     expect(ours('anything', '')).toBe(true)
+  })
+})
+
+describe('a run\'s sandbox', () => {
+  it('frames a door at the address its ticket names, a shell reattaching by name', async () => {
+    const seen = answer(201, { ticket: 'k', expiresIn: 30, url: '/v1/sandbox/m_1/terminal?ticket=k' })
+    expect(await sandbox.door(T, 'm_1', 'terminal', 'run-abc')).toBe('https://api.hanzo.ai/v1/sandbox/m_1/terminal?ticket=k&arg=run-abc')
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/sandbox/m_1/terminal/ticket' })
+    answer(201, { url: '/v1/sandbox/m_1/screen?ticket=s' })
+    expect(await sandbox.door(T, 'm_1', 'screen', 'run-abc')).toBe('https://api.hanzo.ai/v1/sandbox/m_1/screen?ticket=s')
+    answer(201, { url: 'https://elsewhere.example/x' })
+    await expect(sandbox.door(T, 'm_1', 'screen')).rejects.toBeInstanceOf(Refusal)
+  })
+
+  it('reads a directory as names and a file as text', async () => {
+    const seen = answer(200, { path: '/work', dir: true, entries: ['src', '.env', 'README.md'] })
+    expect(await sandbox.read(T, 'm_1', '')).toMatchObject({ dir: true, names: ['.env', 'README.md', 'src'] })
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/sandbox/read', body: { id: 'm_1', path: '' } })
+    answer(200, { path: '/work/README.md', data: btoa('# hi\n') })
+    expect(await sandbox.read(T, 'm_1', 'README.md')).toMatchObject({ dir: false, text: '# hi\n', binary: false })
+    answer(200, { path: '/work/a.bin', data: btoa('\u0000\u0001') })
+    expect(await sandbox.read(T, 'm_1', 'a.bin')).toMatchObject({ binary: true, text: '' })
+  })
+})
+
+describe('a run\'s changes', () => {
+  it('reads commits, patches and the pull request, dropping what it cannot name', async () => {
+    const seen = answer(200, {
+      repo: 'hanzoai/universe',
+      base: 'main',
+      head: 'agent/ab12',
+      commits: [{ sha: 'a1b2c3d4', message: 'add the widget', author: 'Hanzo Dev', date: '2026-09-27T10:00:00Z' }, { message: 'no sha' }],
+      files: [
+        { path: 'b.go', from: 'a.go', status: 'renamed', additions: 1, deletions: 1, patch: '@@ -1 +1 @@\n-a\n+b' },
+        { path: 'c.go', status: 'weird', additions: 2 },
+      ],
+      pull: { number: 7, url: 'https://git.hanzo.ai/hanzoai/universe/pulls/7', title: 'Add the widget', state: 'open', mergeable: true, reviews: [{ author: 'z', state: 'APPROVED', body: 'ship it', at: '2026-09-27T11:00:00Z' }] },
+    })
+    const c = await changes.read(T, 'sess_1')
+    expect(seen[0]).toMatchObject({ method: 'GET', url: 'https://api.hanzo.ai/v1/agent/coding/sess_1/changes' })
+    expect(c.commits).toHaveLength(1)
+    expect(c.files[0]).toMatchObject({ path: 'b.go', from: 'a.go', status: 'renamed' })
+    expect(c.files[1]).toMatchObject({ status: 'modified', deletions: 0, patch: '' })
+    expect(c.pull).toMatchObject({ number: 7, state: 'open', mergeable: true, reviews: [{ author: 'z', state: 'APPROVED' }] })
+  })
+
+  it('answers empty before the run pushes', () => {
+    expect(changes.changes({ repo: 'hanzoai/universe', base: 'main', head: 'agent/ab12', commits: [], files: [], pull: null })).toMatchObject({ commits: [], files: [], pull: null })
+  })
+
+  it('reads the branch in /v1/git\'s shapes', async () => {
+    const seen = answer(200, { ref: 'agent/ab12', entries: [{ name: 'src', path: 'src', type: 'tree', size: 0 }] })
+    expect(await changes.tree(T, 'sess_1', 'src')).toEqual([{ name: 'src', path: 'src', dir: true, size: 0 }])
+    expect(seen[0]).toMatchObject({ url: 'https://api.hanzo.ai/v1/agent/coding/sess_1/tree?path=src' })
+  })
+})
+
+describe('how long setup takes', () => {
+  const run = (mode: string, minutes: number, status = 'done') =>
+    sessions.session({ id: `s${minutes}`, mode, status, createdAt: '2026-09-27T10:00:00Z', endedAt: new Date(Date.parse('2026-09-27T10:00:00Z') + minutes * 60_000).toISOString() })
+
+  it('says the median and the ninetieth percentile of finished setup runs', () => {
+    expect(sessions.took([run('setup', 4), run('setup', 6), run('setup', 9), run('setup', 18), run('build', 60), run('setup', 99, 'error')], 'setup')).toEqual([9, 18])
+  })
+
+  it('says nothing under three', () => {
+    expect(sessions.took([run('setup', 4), run('setup', 6)], 'setup')).toBeNull()
   })
 })

@@ -17,9 +17,9 @@ import { Transcript, fold, type Turn } from '@hanzo/ui/agents'
 import { Composer } from '@hanzo/ui/chat'
 import { useEffect, useMemo, useState } from 'react'
 
-import { message, stop } from './api/sessions.ts'
+import { list, message, stop, took } from './api/sessions.ts'
 import { outcome, pull, said, steps, who } from './api/turn.ts'
-import { useKept, useRun } from './data.ts'
+import { useKept, useRead, useRun } from './data.ts'
 import { Desk } from './desk.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { Out } from './out.tsx'
@@ -56,6 +56,9 @@ export function Run({ id }: { id: string }) {
   // A setup run explores and installs before it answers, which takes minutes.
   const setup = record?.mode === 'setup'
   const [seen, setSeen] = useKept('hanzo.build.setup.seen', false)
+  // How long setup runs have taken here: the ones this person can see, finished.
+  const past = useRead(setup && running ? () => list(t, { kind: 'coding', status: 'done', limit: 500 }) : null, [], [t, setup, running])
+  const span = took(past.value, 'setup')
 
   useEffect(() => {
     if (!notify || running) return
@@ -203,7 +206,11 @@ export function Run({ id }: { id: string }) {
           {running ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
               <SizableText size="$2" color="$ink">
-                {setup ? 'Environment setup takes several minutes.' : 'This run is still working.'}
+                {setup
+                  ? span
+                    ? `Environment setup takes ~${span[0] === span[1] ? span[0] : `${span[0]}–${span[1]}`} minutes.`
+                    : 'Environment setup takes several minutes.'
+                  : 'This run is still working.'}
               </SizableText>
               <Button size="sm" disabled={notify} onPress={() => void ask()}>
                 {notify ? 'You will be notified' : 'Notify me'}
@@ -231,6 +238,9 @@ export function Run({ id }: { id: string }) {
         environment={record?.environment ?? ''}
         mode={record?.mode ?? ''}
         pr={pr}
+        title={title}
+        project={record?.project ?? ''}
+        sandbox={record?.sandbox ?? ''}
         events={events}
         live={running}
         refused={signed ? refused || (detail.error ? detail.error.message : '') : 'Sign in to follow this run.'}

@@ -106,8 +106,20 @@ codebase or an issue from its own screen lands here with that choice already
 made.
 
 **A run.** The transcript as it streams, steering while it works, Stop, and
-the pull request once it pushes one. Beside it: Environment, Git, Terminal,
-Files and Subscriptions.
+the pull request once it pushes one. Beside it:
+
+- Environment: the codebase's environment, and the run's facts.
+- Git: what it pushed, read from the forge — Diff, Review, Commits.
+- Desktop: its sandbox's screen, framed from the sandbox's own noVNC page. A
+  sandbox run asks for a desktop.
+- Terminal: a shell in the same working tree (a tmux session named for the run,
+  so it reattaches), and the agent's own log.
+- Files: the working tree live from the sandbox, or the run's branch; and
+  Artifacts, what it produced.
+- Subscriptions.
+
+The desktop and the shell are the sandbox's, so they close when the run stops.
+The setup bar says how long setup runs here have taken, once there are three.
 
 **An environment.** What a sandbox run does to its codebase's checkout before
 the agent starts: the install script, the start command, and the secrets it
@@ -134,6 +146,9 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/agent/targets` | the org's machines |
 | `GET /v1/auto/flows` · `POST /v1/auto/flows` · `POST /v1/auto/flows/{id}/enable` | automations |
 | `GET /v1/environment` · `GET`/`PUT`/`DELETE /v1/environment/{repo}` · `PUT`/`DELETE …/secrets/{name}` | a codebase's environment |
+| `GET /v1/agent/coding/{session}/changes` · `/tree` · `/blob` | what a run pushed, and its branch's files, from the forge |
+| `POST /v1/sandbox/{id}/screen/ticket` · `…/terminal/ticket` | the run's desktop and shell, framed with a single-use ticket |
+| `POST /v1/sandbox/read` | the run's working tree, live |
 | `GET /v1/provider/github/repos` · `POST /v1/provider/github/repos/import` | granted repositories, and bringing them onto the forge |
 | `GET /v1/git/repos` · `GET /v1/git/repos/{name}` | the codebase chip, and its branches |
 | `GET /v1/task/projects` · `GET /v1/task/board` · `GET /v1/task/projects/{key}/issues` | boards and issues, read from the forge |
@@ -158,6 +173,9 @@ src/
   forge.tsx     Codebase, Automations, Projects, Issues
   run.tsx       one run
   desk.tsx      the pane beside a run
+  door.tsx      a run's desktop or shell, framed
+  git.tsx       what a run pushed
+  files.tsx     a run's files and artifacts
   environment.tsx a codebase's environment
   project.tsx   a project's workspace
   shelf.tsx     Artifacts and Templates

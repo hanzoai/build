@@ -1,21 +1,23 @@
 /**
- * The pane beside a run's transcript: the machine it runs on, the branch it
- * writes, the commands it ran, and the files on that branch.
+ * The pane beside a run's transcript: its codebase's environment, what it
+ * pushed, its sandbox's desktop and shell, its files, and what it listens to.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Copy, File, Folder, MoreHorizontal, PanelRightClose } from '@hanzogui/lucide-icons-2'
+import { Copy, MoreHorizontal, PanelRightClose } from '@hanzogui/lucide-icons-2'
 import { Button, DropdownMenu } from '@hanzo/ui'
 import { useState } from 'react'
 
-import { blob, tree, type Entry } from './api/git.ts'
 import { shell, type ShellLine } from './api/turn.ts'
 import type { Event } from './api/sessions.ts'
-import { useRead } from './data.ts'
+import { Door } from './door.tsx'
 import { Environment } from './environment.tsx'
-import { useTarget } from './host.tsx'
-import { Out } from './out.tsx'
+import { Files } from './files.tsx'
+import { Git } from './git.tsx'
 
-type Tab = 'environment' | 'git' | 'terminal' | 'files' | 'subscriptions'
+type Tab = 'environment' | 'git' | 'desktop' | 'terminal' | 'files' | 'subscriptions'
+
+/** The tabs that are a surface of their own, drawn edge to edge. */
+const BLEED: Tab[] = ['desktop', 'terminal']
 
 export function Desk({
   id,
@@ -25,6 +27,9 @@ export function Desk({
   environment,
   mode,
   pr,
+  title,
+  project,
+  sandbox,
   events,
   live,
   refused,
@@ -39,6 +44,10 @@ export function Desk({
   environment: string
   mode: string
   pr: { href: string; label: string }
+  title: string
+  project: string
+  /** The sandbox the run holds, or '' before it leases one and on a machine. */
+  sandbox: string
   events: Event[]
   live: boolean
   refused: string
@@ -51,8 +60,8 @@ export function Desk({
   const [tab, setTab] = useState<Tab>(mode === 'setup' ? 'environment' : 'terminal')
   const [copied, setCopied] = useState(false)
   const name = repo.split('/').filter(Boolean).pop() || repo
-  const ref = branch || base || 'main'
   const lines = shell(events)
+  const bleed = BLEED.includes(tab)
 
   const copy = async () => {
     try {
@@ -65,6 +74,8 @@ export function Desk({
 
   return (
     <YStack
+      role="complementary"
+      aria-label="Run details"
       flex={1}
       minW={0}
       minH={0}
@@ -79,6 +90,9 @@ export function Desk({
         </TabButton>
         <TabButton id="git" tab={tab} onPick={setTab}>
           Git
+        </TabButton>
+        <TabButton id="desktop" tab={tab} onPick={setTab}>
+          Desktop
         </TabButton>
         <TabButton id="terminal" tab={tab} onPick={setTab}>
           Terminal
@@ -107,7 +121,7 @@ export function Desk({
           ]}
         />
       </XStack>
-      <YStack flex={1} minH={0} overflow={tab === 'terminal' ? 'hidden' : 'scroll'} p={tab === 'terminal' ? 0 : undefined} px={tab === 'terminal' ? 0 : '$3'} py={tab === 'terminal' ? 0 : '$3'}>
+      <YStack flex={1} minH={0} overflow={bleed ? 'hidden' : 'scroll'} px={bleed ? 0 : '$3'} py={bleed ? 0 : '$3'}>
         {tab === 'environment' ? (
           <YStack gap="$2">
             <Environment repo={name} busy={live && mode === 'setup'} />
@@ -122,25 +136,24 @@ export function Desk({
             <Fact label="Mode" value={mode || 'build'} />
           </YStack>
         ) : null}
-        {tab === 'git' ? (
-          <YStack gap="$2">
-            <Fact label="Writing" value={branch || '—'} />
-            <Fact label="From" value={base || '—'} />
-            {pr.href ? (
-              <Out href={pr.href} label={`Open pull request ${pr.label}`}>
-                <SizableText size="$2" color="$ink">
-                  Pull request {pr.label}
-                </SizableText>
-              </Out>
-            ) : (
-              <Fact label="Pull request" value="None yet" />
-            )}
-          </YStack>
-        ) : null}
+        {tab === 'git' ? <Git session={id} title={title} live={live} /> : null}
+        {tab === 'desktop' ? <Door which="screen" sandbox={sandbox} live={live} session={id} /> : null}
         {tab === 'terminal' ? (
-          <Terminal lines={lines} live={live} refused={refused} retry={retry} onRetry={onRetry} />
+          <Terminal id={id} sandbox={sandbox} lines={lines} live={live} refused={refused} retry={retry} onRetry={onRetry} />
         ) : null}
-        {tab === 'files' ? <Files repo={name} refName={ref} /> : null}
+        {tab === 'files' ? (
+          <Files
+            session={id}
+            repo={repo}
+            branch={branch}
+            sandbox={sandbox}
+            live={live}
+            mode={mode}
+            project={project}
+            pr={pr}
+            onEnvironment={() => setTab('environment')}
+          />
+        ) : null}
         {tab === 'subscriptions' ? (
           <YStack flex={1} items="center" justify="center" px="$6">
             <SizableText size="$2" color="$soft" style={{ textAlign: 'center', maxWidth: 320 }}>
@@ -187,7 +200,55 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)', whiteSpace: 'pre' as const }
 
+/**
+ * The Terminal tab: a shell in the run's sandbox, in the same working tree as the
+ * agent, while the run holds one; and the commands the agent itself ran, which
+ * outlive the sandbox. The shell is a tmux session named for the run, so a
+ * reopened tab reattaches to it.
+ */
 function Terminal({
+  id,
+  sandbox,
+  lines,
+  live,
+  refused,
+  retry,
+  onRetry,
+}: {
+  id: string
+  sandbox: string
+  lines: ShellLine[]
+  live: boolean
+  refused: string
+  retry: string
+  onRetry: () => void
+}) {
+  const reachable = live && Boolean(sandbox)
+  // The shell while there is one, unless the log was asked for.
+  const [log, setLog] = useState(false)
+  const showShell = reachable && !log
+  return (
+    <YStack flex={1} minH={0} bg="$background">
+      <XStack px="$2" py="$1.5" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
+        {reachable ? (
+          <XStack render="button" aria-label="Shell" onPress={() => setLog(false)} px="$2" py="$1" rounded="$2" bg={showShell ? '$hover' : 'transparent'}>
+            <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
+              Shell
+            </SizableText>
+          </XStack>
+        ) : null}
+        <XStack render="button" aria-label="Agent log" onPress={() => setLog(true)} px="$2" py="$1" rounded="$2" bg={showShell ? 'transparent' : '$hover'}>
+          <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
+            Agent log
+          </SizableText>
+        </XStack>
+      </XStack>
+      {showShell ? <Door which="terminal" sandbox={sandbox} live={live} session={`run-${id.replace(/^sess_/, '').slice(0, 12)}`} /> : <Log lines={lines} live={live} refused={refused} retry={retry} onRetry={onRetry} />}
+    </YStack>
+  )
+}
+
+function Log({
   lines,
   live,
   refused,
@@ -203,12 +264,7 @@ function Terminal({
   const prompt = 'workspace'
   const idle = lines.length === 0 && !live
   return (
-    <YStack flex={1} minH={0} bg="$background">
-      <XStack px="$3" py="$2" borderBottomWidth={1} borderColor="$borderColor">
-        <SizableText size="$1" color="$soft">
-          Terminal 1
-        </SizableText>
-      </XStack>
+    <YStack flex={1} minH={0}>
       <YStack flex={1} minH={0} overflow="scroll" px="$3" py="$3" gap="$1">
         {idle ? (
           <YStack flex={1} items="center" justify="center" gap="$3" py="$8">
@@ -253,82 +309,6 @@ function Terminal({
           Commands appear here as the run writes them.
         </SizableText>
       </XStack>
-    </YStack>
-  )
-}
-
-function Files({ repo, refName }: { repo: string; refName: string }) {
-  const t = useTarget()
-  const [dir, setDir] = useState('')
-  const [file, setFile] = useState('')
-  const list = useRead(repo ? () => tree(t, repo, refName, dir) : null, [] as Entry[], [t, repo, refName, dir])
-  const body = useRead(file ? () => blob(t, repo, refName, file) : null, null, [t, repo, refName, file])
-  const parent = dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : ''
-
-  return (
-    <YStack gap="$2">
-      <XStack gap="$2" items="center">
-        {dir ? (
-          <XStack render="button" aria-label="Up one directory" onPress={() => { setDir(parent); setFile('') }} px="$1" py="$1">
-            <SizableText size="$1" color="$soft">
-              Up
-            </SizableText>
-          </XStack>
-        ) : null}
-        <SizableText size="$1" color="$soft" numberOfLines={1}>
-          {repo}{refName ? `@${refName}` : ''}{dir ? `/${dir}` : ''}
-        </SizableText>
-      </XStack>
-      {list.error ? (
-        <SizableText size="$2" color="$soft">
-          {list.error.message}
-        </SizableText>
-      ) : list.loading && list.value.length === 0 ? (
-        <SizableText size="$2" color="$soft">
-          Reading the branch…
-        </SizableText>
-      ) : !repo ? (
-        <SizableText size="$2" color="$soft">
-          This run has no repository yet.
-        </SizableText>
-      ) : list.value.length === 0 ? (
-        <SizableText size="$2" color="$soft">
-          This directory is empty.
-        </SizableText>
-      ) : (
-        list.value.map((e) => (
-          <XStack
-            key={e.path}
-            render="button"
-            aria-label={e.dir ? `Open ${e.name}` : `Read ${e.name}`}
-            onPress={() => (e.dir ? (setDir(e.path), setFile('')) : setFile(e.path))}
-            items="center"
-            gap="$2"
-            py="$1"
-            hoverStyle={{ bg: '$hover' }}
-          >
-            {e.dir ? <Folder size={14} /> : <File size={14} />}
-            <SizableText size="$2" color="$ink" numberOfLines={1}>
-              {e.name}
-            </SizableText>
-          </XStack>
-        ))
-      )}
-      {file && body.value ? (
-        <YStack gap="$1" pt="$2" borderTopWidth={1} borderColor="$borderColor">
-          <SizableText size="$1" color="$soft">
-            {file}
-          </SizableText>
-          <SizableText size="$1" color="$ink" style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono, ui-monospace, monospace)' }}>
-            {body.value.binary ? 'Binary file' : body.value.truncated ? 'Too large to show' : body.value.text || 'Empty file'}
-          </SizableText>
-        </YStack>
-      ) : null}
-      {file && body.error ? (
-        <SizableText size="$1" color="$soft">
-          {body.error.message}
-        </SizableText>
-      ) : null}
     </YStack>
   )
 }

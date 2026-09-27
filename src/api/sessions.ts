@@ -38,6 +38,8 @@ export interface Session {
   mode: string
   /** The pull request the run proposed, or ''. */
   pr: string
+  /** The sandbox the run leased, once it has one. It is gone when the run ends. */
+  sandbox: string
   events: number
   createdAt: string
   updatedAt: string
@@ -80,6 +82,7 @@ export function session(raw: unknown): Session {
     environment: str(s.environment),
     mode: str(s.mode),
     pr: str(s.pr),
+    sandbox: str(s.sandbox),
     events: num(s.events),
     createdAt: str(s.createdAt),
     updatedAt: str(s.updatedAt),
@@ -98,6 +101,21 @@ export function event(raw: unknown): Event {
     payload: e.payload,
     createdAt: str(e.createdAt),
   }
+}
+
+/**
+ * How long runs in one mode took, in whole minutes: the median and the ninetieth
+ * percentile of the finished ones. Null under three, which is too few to say.
+ */
+export function took(runs: Session[], mode: string): [number, number] | null {
+  const spans = runs
+    .filter((r) => r.mode === mode && r.status === 'done' && r.endedAt)
+    .map((r) => Date.parse(r.endedAt) - Date.parse(r.createdAt))
+    .filter((ms) => Number.isFinite(ms) && ms > 0)
+    .sort((a, b) => a - b)
+  if (spans.length < 3) return null
+  const at = (q: number) => Math.max(1, Math.round(spans[Math.min(spans.length - 1, Math.floor(q * spans.length))]! / 60_000))
+  return [at(0.5), at(0.9)]
 }
 
 export interface ListQuery {

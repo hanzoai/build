@@ -5,8 +5,8 @@
  *   GET /v1/git/repos/{name}/blob?ref=&path=   one file; binary is base64,
  *                                              past 1 MiB it is truncated with no content
  *
- * A run pushes its branch to native git, so these read what a run wrote at the
- * branch it wrote it on.
+ * A run pushes its branch to the forge, not here, so a run's files are read
+ * through the run (changes.ts); these read a codebase as the platform holds it.
  */
 import { call, query, seg, type Target } from './call.ts'
 
@@ -29,8 +29,13 @@ export interface Blob {
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 export async function tree(t: Target, repo: string, ref: string, path = ''): Promise<Entry[]> {
-  const raw = await call<{ entries?: unknown }>(t, 'GET', `/v1/git/repos/${seg(repo)}/tree${query({ ref, path })}`)
-  const rows = Array.isArray(raw?.entries) ? raw.entries : []
+  return entries(await call<unknown>(t, 'GET', `/v1/git/repos/${seg(repo)}/tree${query({ ref, path })}`))
+}
+
+/** A tree answer's entries. A run's branch on the forge answers in the same shape. */
+export function entries(raw: unknown): Entry[] {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as { entries?: unknown }
+  const rows = Array.isArray(o.entries) ? o.entries : []
   return rows
     .map((r) => {
       const o = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>
@@ -45,7 +50,12 @@ export async function tree(t: Target, repo: string, ref: string, path = ''): Pro
 }
 
 export async function blob(t: Target, repo: string, ref: string, path: string): Promise<Blob> {
-  const o = (await call<Record<string, unknown>>(t, 'GET', `/v1/git/repos/${seg(repo)}/blob${query({ ref, path })}`)) ?? {}
+  return file(await call<unknown>(t, 'GET', `/v1/git/repos/${seg(repo)}/blob${query({ ref, path })}`), path)
+}
+
+/** A blob answer. A run's branch on the forge answers in the same shape. */
+export function file(raw: unknown, path: string): Blob {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const binary = o.binary === true
   const truncated = o.truncated === true
   return {
