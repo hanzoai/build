@@ -123,6 +123,12 @@ export function Soft({ children }: { children: string }) {
   )
 }
 
+/** `Sep 27, 2026` from an RFC 3339 instant, or '' when there is none. UTC, the calendar the platform bills and resets on. */
+export function day(iso: string): string {
+  const d = iso ? new Date(iso) : null
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
+}
+
 /** What the last action did, said once, where it was done. */
 export function Note({ children }: { children: string }) {
   if (!children) return null

@@ -39,6 +39,7 @@ import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
 import { Landing } from './landing.tsx'
 import { PrefsProvider } from './prefs.tsx'
 import { Project } from './project.tsx'
+import { Plans } from './plans.tsx'
 import { path, route } from './route.ts'
 import { Run } from './run.tsx'
 import { DOTS } from './section.tsx'
@@ -175,6 +176,7 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   if (r.kind === 'screen') {
     if (r.screen === 'artifacts') return <Artifacts />
     if (r.screen === 'templates') return <Templates />
+    if (r.screen === 'plans') return <Plans />
     return <Forge key={r.screen} screen={r.screen} />
   }
   return (

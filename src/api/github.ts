@@ -6,6 +6,7 @@
  *   GET  /v1/provider/github/user              the person's own connection
  *   POST /v1/provider/github/user/connect      → {authorizeUrl}
  *   POST /v1/provider/github/user/disconnect
+ *   GET  /v1/provider/github/installations     the accounts this org has bound the App on
  *
  * Paged by an opaque `after` cursor; `next` is the cursor for the page after
  * this one, or empty on the last. Rows are read defensively: a field the
@@ -158,6 +159,26 @@ export async function connect(t: Target): Promise<string> {
 
 export async function disconnect(t: Target): Promise<void> {
   await call<unknown>(t, 'POST', '/v1/provider/github/user/disconnect')
+}
+
+/** A GitHub account the platform's App is installed on, as this org sees it. */
+export interface Installation {
+  login: string
+  /** `Organization` or `User`. */
+  type: string
+  /** `all` or `selected` repositories. */
+  grant: string
+  /** This org has bound it, and GitHub still has the App installed there. */
+  connected: boolean
+}
+
+/** The accounts this org has bound the App on. An org admin adds one through `/v1/provider/github/connect`. */
+export async function installations(t: Target): Promise<Installation[]> {
+  const raw = obj(await call<unknown>(t, 'GET', '/v1/provider/github/installations'))
+  return (Array.isArray(raw.installations) ? raw.installations : [])
+    .map(obj)
+    .map((i) => ({ login: str(i.login), type: str(i.type), grant: str(i.grant), connected: i.connected === true }))
+    .filter((i) => i.login)
 }
 
 /** One repository the GitHub connection grants this organization. */

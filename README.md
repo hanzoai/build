@@ -81,6 +81,8 @@ hanzo.id token for `Host.admin`. One left column, never two.
 | `-/issues` | the forge's issues |
 | `-/artifacts` | what the org has built |
 | `-/templates` | the public starters |
+| `-/plans` | the plans this brand sells, and the move to another |
+| `-/settings/<section>` | Billing, Usage, Members, Integrations, Notifications, … |
 | `<slug>` | a project's workspace |
 
 A project slug holds no `_` and never starts with `-`, so the forms cannot
@@ -190,6 +192,14 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/tool` · `PUT /v1/tool/activation` | what the agent may use, per kind of tool |
 | `GET /v1/ai/memory/list` · `POST /v1/ai/memory/remember` · `…/delete` | what Hanzo remembers |
 | `PATCH /v1/projects/{slug}` | a project public or private |
+| `GET /v1/billing/plans` · `…/subscriptions` · `POST …/subscribe/card` · `…/subscriptions/{id}/cancel`·`/reactivate` | Plans, and the plan in Billing |
+| `GET`/`POST`/`DELETE /v1/billing/methods` · `GET /v1/billing/settings` | saved cards; a card is added from the processor's own field |
+| `GET /v1/billing/invoices` · `…/invoices/{id}/pdf` | invoices |
+| `GET /v1/billing/balance` · `…/credit-balance` · `…/usage/rollup` · `POST …/topup` · `GET /v1/usage/summary` | Usage |
+| `GET`/`POST`/`PATCH`/`DELETE /v1/billing/alerts` | the monthly limit (org admin) |
+| `GET /v1/iam/memberships?org=` · `GET`/`POST`/`DELETE /v1/iam/invitations` | Members |
+| `GET /v1/provider/{slack,github}` · `POST …/connect`·`/disconnect` · `GET /v1/provider/slack/channels` · `GET /v1/provider/github/installations` | Integrations |
+| `GET`/`POST /v1/webhook` · `DELETE /v1/webhook/{id}` · `POST …/test` · `GET …/deliveries` | Notifications |
 
 `mode`, `model` and `effort` are sent with a run as asked; the platform
 honours them where it does and nothing here simulates them.
