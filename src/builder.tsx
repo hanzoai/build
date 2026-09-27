@@ -31,7 +31,7 @@ import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, Kanban, LayoutTemplate, M
 import { Button } from '@hanzo/ui'
 import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { pinBoard } from './choice.ts'
 import { Customize } from './customize/index.tsx'
@@ -49,6 +49,7 @@ import { Artifacts, Templates } from './shelf.tsx'
 import { Find } from './find.tsx'
 import { DOCS, Slack, Who } from './foot.tsx'
 import { Settings } from './settings/index.tsx'
+import { Pitch } from './pitch.tsx'
 import { Bar } from './visit.tsx'
 
 type Order = 'newest' | 'running'
@@ -200,24 +201,48 @@ function Shell() {
   )
 }
 
-/** The wordmark: the product's name, which leads to New. */
+/** The wordmark: the product's name, as its host calls it, which leads to New. */
 function Name({ onPress }: { onPress: () => void }) {
+  const { name } = useHost()
   return (
-    <XStack render="button" aria-label="Hanzo" items="center" onPress={onPress}>
+    <XStack render="button" aria-label={name} items="center" onPress={onPress}>
       <SizableText size="$5" fontWeight="600" color="$ink" numberOfLines={1}>
-        Hanzo
+        {name}
       </SizableText>
     </XStack>
   )
 }
 
-/** A visitor: no runs to list, so the product's header stands where the rail would. */
+/**
+ * A visitor: no runs to list, so the product's header stands where the rail
+ * would. On New the composer fills the first screen and the pitch follows it.
+ */
 function Visit() {
   const host = useHost()
+  const r = route(host.path)
+  // An address that names a part of the pitch (/#features) opens scrolled to it.
+  useEffect(() => {
+    const id = window.location.hash.slice(1)
+    if (id) document.getElementById(id)?.scrollIntoView()
+  }, [])
+  const start = () => {
+    const page = document.getElementById('visit')
+    page?.scrollTo({ top: 0, behavior: 'smooth' })
+    page?.querySelector<HTMLElement>('textarea, [contenteditable="true"], input[type="text"]')?.focus()
+  }
   return (
     <YStack flex={1} minH={0} minW={0} bg="$background">
       <Bar name={<Name onPress={() => host.go('')} />} />
-      <Pane />
+      {r.kind === 'new' ? (
+        <YStack id="visit" flex={1} minH={0} overflow="scroll">
+          <YStack shrink={0} style={{ height: 'calc(100dvh - 60px)' }}>
+            <Pane />
+          </YStack>
+          <Pitch onStart={start} />
+        </YStack>
+      ) : (
+        <Pane />
+      )}
     </YStack>
   )
 }

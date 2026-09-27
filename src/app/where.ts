@@ -7,14 +7,12 @@
 export type Env = { readonly [name: string]: string | undefined }
 
 /**
- * The IAM client. hanzo.app is the Hanzo App, so there it is that app's client,
- * `hanzo-app`; anywhere else (hanzo.build until it sends people to hanzo.app,
- * the dev server) `hanzo-build`. Under the estate's `<org>-<app>` scheme the org
- * is the name's first word, and the issuer returns a browser to `/auth/callback`
- * on this origin.
+ * The IAM client. It is `hanzo-build` under the estate's `<org>-<app>` scheme,
+ * so the org is the name's first word, and the issuer returns a browser to
+ * `/auth/callback` on this origin.
  */
 export function origin(env: Env) {
-  const clientId = env.VITE_HANZO_CLIENT_ID || (window.location.hostname === 'hanzo.app' ? 'hanzo-app' : 'hanzo-build')
+  const clientId = env.VITE_HANZO_CLIENT_ID || 'hanzo-build'
   return {
     serverUrl: (env.VITE_HANZO_IAM || 'https://hanzo.id').replace(/\/+$/, ''),
     clientId,
@@ -24,13 +22,13 @@ export function origin(env: Env) {
 }
 
 /**
- * The platform. `api.hanzo.ai` on a hanzo.ai host, hanzo.app or hanzo.build; this page's
+ * The platform. `api.hanzo.ai` on a hanzo.ai host or hanzo.build; this page's
  * own origin anywhere else, where the dev and preview servers proxy `/v1` — the
  * gateway admits an origin by allowlist and a localhost port is not on it.
  */
 export function api(env: Env): string {
   if (env.VITE_HANZO_API) return env.VITE_HANZO_API.replace(/\/+$/, '')
   const host = window.location.hostname
-  if (host === 'hanzo.ai' || host.endsWith('.hanzo.ai') || host === 'hanzo.app' || host === 'hanzo.build') return 'https://api.hanzo.ai'
+  if (host === 'hanzo.ai' || host.endsWith('.hanzo.ai') || host === 'hanzo.build') return 'https://api.hanzo.ai'
   return window.location.origin
 }

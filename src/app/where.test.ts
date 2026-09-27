@@ -21,16 +21,6 @@ describe('where this page signs in', () => {
     })
   })
 
-  it('is the hanzo-app client on hanzo.app, the Hanzo App', () => {
-    at('https://hanzo.app/sess_x')
-    expect(origin({})).toEqual({
-      serverUrl: 'https://hanzo.id',
-      clientId: 'hanzo-app',
-      redirectUri: 'https://hanzo.app/auth/callback',
-      organization: 'hanzo',
-    })
-  })
-
   it('is the issuer and client a fork names', () => {
     at('http://localhost:3200/')
     expect(origin({ VITE_HANZO_CLIENT_ID: 'lux-build', VITE_HANZO_IAM: 'https://lux.id//' })).toEqual({ serverUrl: 'https://lux.id', clientId: 'lux-build', redirectUri: 'http://localhost:3200/auth/callback', organization: 'lux' })
@@ -38,8 +28,8 @@ describe('where this page signs in', () => {
 })
 
 describe('where the platform is', () => {
-  it('is api.hanzo.ai from a hanzo.ai host, hanzo.app or hanzo.build', () => {
-    for (const page of ['https://hanzo.ai/dev', 'https://app.hanzo.ai/dev', 'https://hanzo.app/', 'https://hanzo.build/']) {
+  it('is api.hanzo.ai from a hanzo.ai host or hanzo.build', () => {
+    for (const page of ['https://hanzo.ai/dev', 'https://app.hanzo.ai/dev', 'https://hanzo.build/']) {
       at(page)
       expect(api({}), page).toBe('https://api.hanzo.ai')
     }

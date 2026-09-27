@@ -81,7 +81,7 @@ test.describe('the rail', () => {
     await rows(page).filter({ hasText: 'Queued thing' }).click()
     await expect(page).toHaveURL(new URL(`/${id('2')}`, baseURL).href)
     await expect(rows(page).filter({ hasText: 'Queued thing' })).toHaveAttribute('aria-current', 'page')
-    await page.getByRole('button', { name: 'Hanzo', exact: true }).first().click()
+    await page.getByRole('button', { name: 'Hanzo Build', exact: true }).first().click()
     await expect(page).toHaveURL(new URL('/', baseURL).href)
 
     await page.getByRole('button', { name: 'Set up Hanzo in Slack' }).click()

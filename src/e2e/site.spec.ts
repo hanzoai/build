@@ -81,7 +81,7 @@ test('the header leads to the product’s pages, and both doors open IAM beside 
 
 test('the name at the top left when signed out', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Hanzo', exact: true })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Hanzo Build', exact: true })).toHaveCount(1)
   await expect(page.getByRole('banner').getByText('Log in', { exact: true })).toBeVisible()
 })
 

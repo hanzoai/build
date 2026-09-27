@@ -5,6 +5,7 @@ import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
 import { PrefsProvider, usePrefs } from './prefs.tsx'
 
 const HOST: Host = {
+  name: 'Hanzo',
   api: 'https://api.hanzo.ai',
   token: () => 'tok',
   org: 'acme',

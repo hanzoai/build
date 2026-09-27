@@ -32,6 +32,7 @@ function Page() {
   const [picks, setPicks] = useState(0)
   const token = bearer()
   const host: Host = {
+    name: 'Hanzo',
     api: window.location.origin,
     token: bearer,
     org: ORG,

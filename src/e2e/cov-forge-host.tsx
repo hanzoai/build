@@ -34,6 +34,7 @@ const token = () => given.token
 function Mount() {
   const [path, setPath] = useState(window.location.pathname.slice(AT.length))
   const host: Host = {
+    name: 'Hanzo',
     api: window.location.origin,
     token,
     org: given.org,

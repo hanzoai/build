@@ -20,6 +20,8 @@ export interface Person {
 }
 
 export interface Host {
+  /** The product's name, drawn at the top left: `Hanzo Build` on hanzo.build, `Hanzo` on hanzo.ai. */
+  name: string
   /** The platform origin, no trailing slash. */
   api: string
   /** The signed-in person's bearer, or null. Read at call time, so a refresh is picked up. */

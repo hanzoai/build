@@ -69,7 +69,7 @@ test('the name leads back to New from anywhere a visitor opened', async ({ page 
   await visit(page)
   await page.goto('/-/templates')
   await expect(page.getByRole('banner')).toBeVisible()
-  await page.getByRole('button', { name: 'Hanzo', exact: true }).click()
+  await page.getByRole('button', { name: 'Hanzo Build', exact: true }).click()
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByText('What’s up next?')).toBeVisible()
 })

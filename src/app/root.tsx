@@ -42,6 +42,7 @@ export function Mount() {
   )
 
   const host: Host = {
+    name: 'Hanzo Build',
     api: api(import.meta.env),
     token: bearer,
     org: scoped,
