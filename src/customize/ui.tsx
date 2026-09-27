@@ -9,6 +9,8 @@ import { Check, Plus, X } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { useState, type ReactNode } from 'react'
 
+import { useHost } from '../host.tsx'
+
 export const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 /** A button that holds a card's text reads from the left, not from the middle a button centres it in. */
 export const left = { textAlign: 'left' } as const
@@ -132,7 +134,7 @@ export function Tile({
 }
 
 /** The one card the shelf puts first, drawn larger. */
-export function Featured({ title, detail, meta, mark, action, onOpen }: { title: string; detail: string; meta?: string; mark: ReactNode; action?: ReactNode; onOpen: () => void }) {
+export function Featured({ title, detail, meta, mark, action, onOpen }: { title: string; detail: string; meta: string; mark: ReactNode; action?: ReactNode; onOpen: () => void }) {
   return (
     <XStack items="flex-start" gap="$4" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" flexWrap="wrap" rowGap="$3">
       <XStack render="button" aria-label={title} onPress={onOpen} flex={1} minW={220} gap="$4" items="flex-start" cursor="pointer" style={left}>
@@ -147,11 +149,9 @@ export function Featured({ title, detail, meta, mark, action, onOpen }: { title:
           <SizableText size="$2" color="$soft" numberOfLines={3}>
             {detail}
           </SizableText>
-          {meta ? (
-            <SizableText size="$1" color="$soft" numberOfLines={1}>
-              {meta}
-            </SizableText>
-          ) : null}
+          <SizableText size="$1" color="$soft" numberOfLines={1}>
+            {meta}
+          </SizableText>
         </YStack>
       </XStack>
       {action}
@@ -207,7 +207,7 @@ export function Confirm({ what, says, open, onOpenChange, onYes }: { what: strin
       await onYes()
       onOpenChange(false)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setBusy(false)
     }
@@ -242,6 +242,22 @@ export function Soft({ children, action }: { children: string; action?: ReactNod
   )
 }
 
+/** What a signed-out visitor is told, with the one control that signs them in. */
+export function Visitor({ children }: { children: string }) {
+  const host = useHost()
+  return (
+    <Soft
+      action={
+        <Button size="sm" onPress={() => host.signIn?.()}>
+          Sign in
+        </Button>
+      }
+    >
+      {children}
+    </Soft>
+  )
+}
+
 /** What the last action did, said once, where it was done. */
 export function Line({ children }: { children: string }) {
   if (!children) return null
@@ -253,18 +269,16 @@ export function Line({ children }: { children: string }) {
 }
 
 /** A small heading over a run of cards. */
-export function Part({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
+export function Part({ title, detail, children }: { title: string; detail: string; children: ReactNode }) {
   return (
     <YStack gap="$2.5">
       <YStack gap="$0.5">
         <SizableText size="$3" color="$ink">
           {title}
         </SizableText>
-        {detail ? (
-          <SizableText size="$1" color="$soft">
-            {detail}
-          </SizableText>
-        ) : null}
+        <SizableText size="$1" color="$soft">
+          {detail}
+        </SizableText>
       </YStack>
       {children}
     </YStack>
