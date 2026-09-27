@@ -4,8 +4,9 @@
  * tab is its own address; in each, Yours is what the org has and Discover is
  * what it can add, with one search box and one Add over both.
  *
- * Nothing here is gated to org admins, because the platform gates none of it:
- * every write on these tabs is open to any member of the org.
+ * Skills and connectors ride into every run in the org, so adding, switching
+ * and removing them is an org admin's and a member reads them; plugins and
+ * agents are any member's.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { BookOpen, Bot, Plug, Plus, Puzzle } from '@hanzogui/lucide-icons-2'

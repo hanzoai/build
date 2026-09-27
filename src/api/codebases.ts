@@ -59,10 +59,7 @@ export function codebase(raw: unknown, org = ''): Codebase | null {
 }
 
 /** A chip row remembered as a forge codebase, when the list had not seen it yet. */
-export function chosen(
-  r: { owner: string; name: string; full_name?: string; private?: boolean; default_branch?: string },
-  clone = '',
-): ForgeRepo {
+export function chosen(r: { owner: string; name: string; full_name?: string; private?: boolean; default_branch?: string }): ForgeRepo {
   return {
     owner: r.owner,
     name: r.name,
@@ -72,7 +69,7 @@ export function chosen(
     pushed_at: '',
     installation_id: 0,
     forge: true,
-    clone,
+    clone: '',
   }
 }
 
@@ -84,7 +81,7 @@ export function asRepo(c: Codebase): ForgeRepo {
     name: c.name,
     full_name: owner ? `${owner}/${c.name}` : c.name,
     private: !c.public,
-    default_branch: c.branch || 'main',
+    default_branch: c.branch,
     pushed_at: c.updated,
     installation_id: 0,
     forge: true,

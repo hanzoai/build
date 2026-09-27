@@ -20,12 +20,12 @@ import { label as named, models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
-import { Add, Choice, Confirm, Field, Grid, Line, Mark, matches, mono, Sheet, Soft, Tile, type Pane } from './ui.tsx'
+import { Add, Choice, Confirm, Field, Grid, Line, Mark, matches, mono, Sheet, Soft, Tile, Visitor, type Pane } from './ui.tsx'
 
 /** The model a new agent runs on when none is chosen: the deployment's own default. */
 const DEFAULT = 'default'
 
-const money = (m: number): string => `$${(m / 1_000_000).toFixed(m % 10_000 ? 4 : 2).replace(/\.?0+$/, '') || '0'}`
+const money = (m: number): string => `$${(m / 1_000_000).toFixed(m % 10_000 ? 4 : 2).replace(/\.?0+$/, '')}`
 
 export function Agents({ view, q, adding, onAdding, onView }: Pane) {
   const host = useHost()
@@ -106,7 +106,7 @@ export function Agents({ view, q, adding, onAdding, onView }: Pane) {
   }
 
   if (!signed) {
-    return <Soft action={host.signIn ? <Button size="sm" onPress={() => host.signIn?.()}>Sign in</Button> : undefined}>Sign in to see your agents.</Soft>
+    return <Visitor>Sign in to see your agents.</Visitor>
   }
   const shown = mine.value.filter((a) => matches(q, a.name, a.description, a.model))
   return (
@@ -203,7 +203,7 @@ function Editor({
       const saved = agent && was ? await update(t, was, d) : await create(t, d)
       onSaved(saved)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The agent was not saved')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }

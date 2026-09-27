@@ -5,6 +5,7 @@
  * run's session as `log` chunks (apps/sandbox work.go). It prints each item of
  * its turn under a header line (hanzo dev, exec/src/event_processor_with_human_output.rs):
  *
+ *   user / <task>                        what the agent was asked
  *   exec / <command> in <dir>            a command started
  *    succeeded in 12ms: / <output>       …how it ended, then what it printed
  *   codex / <text>                        the agent said something
@@ -18,12 +19,17 @@
  * is whole. Lines no header owns — reasoning, or the tail of output from before
  * the recorded events begin — are prose. Everything here becomes TEXT on the
  * screen; nothing is markup.
+ *
+ * The task under `user` is what the person asked, with what the platform told
+ * the agent ahead of it and what a follow-up said after it taken off (`asked`),
+ * so it opens the transcript as the person's own words.
  */
 import type { Card, Ran } from './turn.ts'
 
 type Said = Extract<Card, { kind: 'said' }>
 type Shell = Extract<Card, { kind: 'shell' | 'read' }>
 type Edit = Extract<Card, { kind: 'edit' }>
+type Step = Extract<Card, { kind: 'step' }>
 
 /** Colour codes a terminal would have drawn; a sandbox is not a terminal, but a harness may still print them. */
 const ANSI = /\u001b\[[0-9;?]*[A-Za-z]/g
@@ -108,6 +114,23 @@ export const shown = (path: string): string => {
   return cut.slice(cut.lastIndexOf('/') + 1)
 }
 
+/**
+ * The paragraphs the platform puts ahead of a task — the ask_user line and the
+ * environment brief (apps/coding sandboxrunner.go), a plan's or a setup's
+ * instructions and the setup's answer block (mode.go) — and the one a follow-up
+ * puts after the person's words (coding.ts `followUp`). None is theirs.
+ */
+const AHEAD = /^(When a decision needs the person you are working for, call ask_user|These environment variables are named on this codebase|This codebase's (install script|start command)|Plan only\. Read the repository|Set up this repository's development environment\.|```environment\n)/
+const AFTER = /^(This follows an earlier run on this codebase|An earlier run already worked on this;|Continue where the earlier run left off\.)/
+
+/** What the person asked, out of the task the agent was given. A follow-up with nothing said keeps its own line. */
+export function asked(task: string): string {
+  const parts = task.trim().split(/\n\s*\n/)
+  while (parts.length && AHEAD.test(parts[0]!)) parts.shift()
+  if (parts.length > 1 && AFTER.test(parts[parts.length - 1]!)) parts.pop()
+  return parts.join('\n\n')
+}
+
 /** A unified diff's sections, by the path each changes, from its first hunk on. */
 export function sections(diff: string): Map<string, string> {
   const out = new Map<string, string>()
@@ -146,6 +169,8 @@ export function harness(out: Card[], mint: () => string) {
   const edits: { card: Edit; paths: string[] }[] = []
   let edit: { card: Edit; paths: string[] } | null = null
   let diff: string[] | null = null
+  // Each task the agent was given, as the person's words once the whole block is read.
+  const tasks: { card: Said; lines: string[] }[] = []
 
   const said = (text: string): Said => {
     const c: Said = { kind: 'said', key: mint(), who: 'agent', text }
@@ -164,8 +189,8 @@ export function harness(out: Card[], mint: () => string) {
     if (diff && edit) edit.card.patch = diff.join('\n')
     diff = null
   }
-  const step = (name: string, detail: string, ran: Ran) => {
-    const c: Card = { kind: 'step', key: mint(), name, detail, output: '', ran }
+  const step = (name: string, detail: string, ran: Ran): Step => {
+    const c: Step = { kind: 'step', key: mint(), name, detail, output: '', ran }
     out.push(c)
     return c
   }
@@ -197,6 +222,11 @@ export function harness(out: Card[], mint: () => string) {
       diff!.push(l)
       return
     }
+    // A task is the person's words to the next header, whatever they look like.
+    if (mode === 'user' && !HEAD.test(l)) {
+      tasks[tasks.length - 1]!.lines.push(l)
+      return
+    }
     const result = RESULT.exec(l)
     if (result && open.length) {
       settle()
@@ -218,9 +248,13 @@ export function harness(out: Card[], mint: () => string) {
           card = said('')
           mode = 'agent'
           return
-        case 'user':
+        case 'user': {
+          const c: Said = { kind: 'said', key: mint(), who: 'person', text: '' }
+          out.push(c)
+          tasks.push({ card: c, lines: [] })
           mode = 'user'
           return
+        }
         case 'apply patch':
           patch()
           mode = 'prose'
@@ -290,14 +324,12 @@ export function harness(out: Card[], mint: () => string) {
       if (card && card.kind === 'step' && card.name === 'Plan') card.output += `\n${row}`
       else {
         card = step('Plan', '', 'done')
-        if (card.kind === 'step') card.output = row
+        card.output = row
       }
       mode = 'prose'
       return
     }
     switch (mode) {
-      case 'user':
-        return
       case 'patch':
         if (l.trim() && edit) edit.paths.push(l.trim())
         return
@@ -322,7 +354,7 @@ export function harness(out: Card[], mint: () => string) {
     feed(chunk: string) {
       const text = rest + chunk
       const lines = text.split('\n')
-      rest = lines.pop() ?? ''
+      rest = lines.pop()!
       for (const l of lines) line(l)
     },
     /** The last line even without its newline, and what only the whole output can decide. */
@@ -346,6 +378,8 @@ export function harness(out: Card[], mint: () => string) {
         e.card.patch = mine.length === 1 ? parts.get(mine[0]!)! : mine.map((f) => `${f}\n${parts.get(f)}`).join('\n')
       }
       edits.length = 0
+      for (const k of tasks) k.card.text = asked(k.lines.join('\n'))
+      tasks.length = 0
       for (let i = out.length - 1; i >= 0; i--) {
         const c = out[i]!
         if (c.kind === 'said' && !c.text.trim()) out.splice(i, 1)

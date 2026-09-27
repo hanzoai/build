@@ -3,6 +3,8 @@
  * agent said as markdown, each command it ran as a card that opens onto its
  * output, the files it changed with their diff, the files it read as chips,
  * the run's own steps, and a plan run's plan with the button that builds it.
+ * What the agent said, and its plan, can be copied and judged, as a reply on
+ * claude.ai can: a thumb pressed again takes the verdict back.
  *
  * It follows the run to the bottom as it streams and stops when the reader
  * scrolls up (Thread). Everything drawn is text.
@@ -10,8 +12,9 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { FileText } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
+import { Feedback, type Verdict } from '@hanzo/ui/agents'
 import { Code, Message, Step, Thread } from '@hanzo/ui/chat'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import type { Card, Ran } from './api/turn.ts'
 import { Patch } from './git.tsx'
@@ -43,6 +46,7 @@ export function Transcript({
   header,
   onApprove,
   approving = false,
+  onVerdict,
 }: {
   cards: Card[]
   /** The run is still working: a card still running shows it; otherwise it was cut off. */
@@ -52,6 +56,8 @@ export function Transcript({
   /** Build what a plan says. Absent, a plan has no button. */
   onApprove?: (plan: string) => void
   approving?: boolean
+  /** Record a verdict on what the agent said; throws when it did not land. */
+  onVerdict: (v: Verdict) => Promise<void>
 }) {
   // A card the run never finished is cut off once the run has ended, not still going.
   const state = (ran: Ran): Ran => (ran === 'running' && !live ? 'cancelled' : ran)
@@ -98,7 +104,7 @@ export function Transcript({
                 </SizableText>
               </Message>
             ) : (
-              <Message key={c.key} role="assistant">
+              <Message key={c.key} role="assistant" actions={<Judge text={c.text} onVerdict={onVerdict} />}>
                 <Prose text={c.text} />
               </Message>
             )
@@ -153,17 +159,42 @@ export function Transcript({
                   Plan
                 </SizableText>
                 <Prose text={c.text} />
-                {onApprove ? (
-                  <XStack>
+                <XStack items="center" gap="$2" flexWrap="wrap">
+                  {onApprove ? (
                     <Button size="sm" disabled={approving} onPress={() => onApprove(c.text)}>
                       {approving ? 'Starting the build…' : 'Approve and build'}
                     </Button>
-                  </XStack>
-                ) : null}
+                  ) : null}
+                  <Judge text={c.text} onVerdict={onVerdict} />
+                </XStack>
               </YStack>
             )
         }
       })}
     </Thread>
+  )
+}
+
+/** Copy what the agent said, and say whether it was good. A verdict that did not land is taken back and says why. */
+function Judge({ text, onVerdict }: { text: string; onVerdict: (v: Verdict) => Promise<void> }) {
+  const [verdict, setVerdict] = useState<Verdict>(null)
+  const [note, setNote] = useState('')
+  const judge = (next: Verdict) => {
+    setVerdict(next)
+    setNote('')
+    onVerdict(next).catch((e: Error) => {
+      setVerdict(null)
+      setNote(e.message)
+    })
+  }
+  return (
+    <XStack items="center" gap="$2" flexWrap="wrap">
+      <Feedback text={text} verdict={verdict} onVerdict={judge} />
+      {note ? (
+        <SizableText size="$1" color="$soft" role="status">
+          {note}
+        </SizableText>
+      ) : null}
+    </XStack>
   )
 }

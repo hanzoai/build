@@ -17,7 +17,7 @@ import { active, authored, brand, document, nameOf, remove, tool, write, type Ca
 import { toggle, type Tool } from '../api/tools.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
-import { Add, Confirm, day, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, type Pane } from './ui.tsx'
+import { Add, Confirm, day, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, Visitor, type Pane } from './ui.tsx'
 
 const PAGE = 60
 
@@ -55,7 +55,7 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
       on.reload()
       setNote(next ? `${name} is on` : `${name} is off`)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setBusy('')
     }
@@ -143,7 +143,7 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
   }
 
   if (!signed) {
-    return <Soft action={host.signIn ? <Button size="sm" onPress={() => host.signIn?.()}>Sign in</Button> : undefined}>Sign in to see your skills.</Soft>
+    return <Visitor>Sign in to see your skills.</Visitor>
   }
   const ownShown = own.value.filter((s) => matches(q, s.name, s.description))
   const added = on.value.filter((x) => nameOf(x.name) && !mine.has(nameOf(x.name)) && matches(q, nameOf(x.name), x.description))
@@ -316,7 +316,7 @@ function Editor({
       if (!skill) await toggle(t, [tool(saved.name)])
       onSaved(saved, !skill)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The skill was not saved')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }

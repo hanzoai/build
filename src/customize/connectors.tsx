@@ -20,7 +20,7 @@ import { toggle, tools, type Tool } from '../api/tools.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Out } from '../out.tsx'
-import { Add, Confirm, day, Featured, Field, Grid, left, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, type Pane } from './ui.tsx'
+import { Add, Confirm, day, Featured, Field, Grid, left, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, Visitor, type Pane } from './ui.tsx'
 
 const PAGE = 48
 
@@ -89,7 +89,7 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
   }
 
   if (!signed) {
-    return <Soft action={host.signIn ? <Button size="sm" onPress={() => host.signIn?.()}>Sign in</Button> : undefined}>Sign in to see your connectors.</Soft>
+    return <Visitor>Sign in to see your connectors.</Visitor>
   }
   const shown = mine.value.filter((s) => matches(q, s.name, s.url, s.listing))
   return (
@@ -139,7 +139,6 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
 /** The shelf: featured first, then by name, a page at a time. The platform searches it. */
 function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: boolean; may: boolean; added: Set<string>; onOpen: (l: Listing) => void; onAdd: (l: Listing) => void }) {
   const t = useTarget()
-  const host = useHost()
   const text = useSettled(q.trim(), 300)
   const first = useRead(signed ? () => shelf(t, { text, limit: PAGE }) : null, null as Page | null, [t, signed, text])
   const [more, setMore] = useState<Listing[]>([])
@@ -150,7 +149,7 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
   if (!signed) {
     return (
       <Part title="The shelf" detail="MCP servers the public registries publish.">
-        <Soft action={host.signIn ? <Button size="sm" onPress={() => host.signIn?.()}>Sign in</Button> : undefined}>Sign in to browse the shelf.</Soft>
+        <Visitor>Sign in to browse the shelf.</Visitor>
       </Part>
     )
   }
@@ -174,7 +173,7 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
       const got = await shelf(t, { text, limit: PAGE, offset: list.length })
       setMore((m) => [...m, ...got.listings])
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The next page did not load')
+      setNote((e as Error).message)
     } finally {
       setPaging(false)
     }
@@ -390,11 +389,11 @@ function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClo
         if (its.length) await toggle(t, its)
         said = its.length ? `${s.name} is added, and its ${its.length} tools are on.` : `${s.name} is added. It listed no tools yet.`
       } catch (e) {
-        said = `${s.name} is added, but its tools could not be switched on: ${e instanceof Error ? e.message : 'no answer'}`
+        said = `${s.name} is added, but its tools could not be switched on: ${(e as Error).message}`
       }
       onAdded(said)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The connector was not added')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }
@@ -457,7 +456,7 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
       await toggle(t, on, offNames)
       list.reload()
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'That did not work')
+      setNote((e as Error).message)
     } finally {
       setBusy(false)
     }
