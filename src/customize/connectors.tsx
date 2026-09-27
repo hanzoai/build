@@ -112,7 +112,7 @@ export function Connectors({ view, q, adding, onAdding, onView }: Pane) {
               key={s.id}
               title={s.name}
               detail={where(s.url)}
-              meta={[s.listing ? 'From the shelf' : 'Added by URL', s.secret ? 'secret sealed in KMS' : '', day(s.created)].filter(Boolean).join(' · ')}
+              meta={[s.listing ? 'From the shelf' : 'Added by URL', s.secret ? 'secret sealed in KMS' : '', day(s.created), s.admitted ? '' : 'not in runs until an admin adds it again'].filter(Boolean).join(' · ')}
               mark={<Mark name={s.name} />}
               onOpen={() => setOpened(s)}
             />

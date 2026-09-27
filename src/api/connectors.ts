@@ -28,6 +28,8 @@ export interface Server {
   /** The catalog listing it was added from, or '' for a URL typed in. */
   listing: string
   created: number
+  /** False when no admin put it in place, so no run carries it; true, or unsaid by an older platform. */
+  admitted: boolean
 }
 
 export interface Remote {
@@ -81,6 +83,7 @@ export function server(raw: unknown): Server {
     secret: o.hasSecret === true,
     listing: str(o.listing),
     created: num(o.createdAt),
+    admitted: o.admitted !== false,
   }
 }
 

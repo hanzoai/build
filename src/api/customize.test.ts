@@ -66,8 +66,16 @@ describe('skills', () => {
     let seen = answer(200, { source: 'skill', tools: [{ name: 'skill_git_repos', source: 'skill', activated: true }] })
     expect((await skills.active(T)).map((x) => x.name)).toEqual(['skill_git_repos'])
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/tool/skills?activated=true')
-    seen = answer(200, { skills: [{ id: 'triage', name: 'triage', description: 'How we triage', content: '# Triage', createdAt: 1700000000 }] })
-    expect(await skills.authored(T)).toEqual([{ id: 'triage', name: 'triage', description: 'How we triage', content: '# Triage', created: 1700000000, source: '' }])
+    seen = answer(200, {
+      skills: [
+        { id: 'triage', name: 'triage', description: 'How we triage', content: '# Triage', createdAt: 1700000000, admitted: true },
+        { id: 'old', name: 'old', content: '# Old', admitted: false },
+      ],
+    })
+    expect(await skills.authored(T)).toEqual([
+      { id: 'triage', name: 'triage', description: 'How we triage', content: '# Triage', created: 1700000000, source: '', admitted: true },
+      { id: 'old', name: 'old', description: '', content: '# Old', created: 0, source: '', admitted: false },
+    ])
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/tool/skills/authored')
   })
 
@@ -115,8 +123,10 @@ describe('connectors', () => {
       servers: [{ id: 'stripe-com', org: 'acme', name: 'Stripe', url: 'https://mcp.stripe.com', authHeader: 'Authorization', hasSecret: true, listing: 'com.stripe_mcp', source: 'catalog', createdAt: 1 }],
     })
     expect(await connectors.servers(T)).toEqual([
-      { id: 'stripe-com', name: 'Stripe', url: 'https://mcp.stripe.com', header: 'Authorization', secret: true, listing: 'com.stripe_mcp', created: 1 },
+      { id: 'stripe-com', name: 'Stripe', url: 'https://mcp.stripe.com', header: 'Authorization', secret: true, listing: 'com.stripe_mcp', created: 1, admitted: true },
     ])
+    answer(200, { servers: [{ id: 'old', name: 'Old', url: 'https://old.example/mcp', admitted: false }] })
+    expect((await connectors.servers(T))[0]?.admitted).toBe(false)
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/tool/mcp/servers')
   })
 

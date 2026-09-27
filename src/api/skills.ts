@@ -27,6 +27,8 @@ export interface Skill {
   created: number
   /** The repository it was read from, or '' for one written here. */
   source: string
+  /** False when no admin wrote it, so no run carries it; true, or unsaid by an older platform. */
+  admitted: boolean
 }
 
 /** One skill of the brand's catalogue. */
@@ -60,7 +62,15 @@ const rows = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 export function skill(raw: unknown): Skill {
   const o = obj(raw)
   const name = str(o.name)
-  return { id: str(o.id) || name, name, description: str(o.description), content: str(o.content), created: num(o.createdAt), source: str(o.source) }
+  return {
+    id: str(o.id) || name,
+    name,
+    description: str(o.description),
+    content: str(o.content),
+    created: num(o.createdAt),
+    source: str(o.source),
+    admitted: o.admitted !== false,
+  }
 }
 
 export function catalogue(raw: unknown): Catalogue {

@@ -169,7 +169,7 @@ export function Skills({ view, q, adding, onAdding, onView }: Pane) {
                     key={s.id}
                     title={s.name}
                     detail={s.description || firstLine(s.content)}
-                    meta={s.source ? `From ${s.source}` : day(s.created) ? `Saved ${day(s.created)}` : undefined}
+                    meta={[s.source ? `From ${s.source}` : day(s.created) ? `Saved ${day(s.created)}` : '', s.admitted ? '' : 'Not in runs until an admin saves it'].filter(Boolean).join(' · ') || undefined}
                     mark={<Mark name={s.name} />}
                     onOpen={() => setEditing(s)}
                     action={
