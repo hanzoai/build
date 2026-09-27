@@ -77,14 +77,15 @@ function Shell() {
   }, [recents.value, order])
 
   const screen = r.kind === 'screen' ? r.screen : ''
-  // The top left: the organization switcher once there is an org to switch, the mark before.
-  // Beside the rail from md up, beside the drawer's button below it — one place at a time.
+  // The top left: the builder's name, which leads to New, and under it the
+  // organization switcher once there is an org to switch. Beside the rail from md
+  // up, beside the drawer's button below it — one place at a time.
   const switcher = Boolean(host.person && (host.org || (host.memberships?.length ?? 0) > 0))
-  const top = switcher ? (
-    <Where />
-  ) : (
-    <XStack render="button" aria-label="Hanzo" items="center" onPress={() => go('')}>
-      <HanzoMark size={18} />
+  const name = (
+    <XStack render="button" aria-label="Hanzo Build" items="center" onPress={() => go('')}>
+      <SizableText size="$5" fontWeight="600" color="$ink" numberOfLines={1}>
+        Hanzo Build
+      </SizableText>
     </XStack>
   )
   const links: RailLink[] = [
@@ -155,15 +156,16 @@ function Shell() {
         collapsed={collapsed}
         onCollapse={setCollapsed}
         mark={<Brand org={host.org} />}
-        pt={collapsed ? undefined : switcher ? 80 : 40}
+        pt={collapsed ? undefined : switcher ? 92 : 48}
         open={drawer}
         onOpenChange={setDrawer}
         label="Runs"
       />
       {collapsed ? null : (
-        <XStack position="absolute" t={8} l={8} r={8} z={2} items="center" $max-md={{ display: 'none' }}>
-          {top}
-        </XStack>
+        <YStack position="absolute" t={10} l={12} r={8} z={2} gap="$2" $max-md={{ display: 'none' }}>
+          {name}
+          {switcher ? <Where /> : null}
+        </YStack>
       )}
       {host.person ? <Who open={menu} onOpenChange={setMenu} narrow={collapsed} /> : null}
       </YStack>
@@ -174,7 +176,9 @@ function Shell() {
           <Button variant="ghost" size="icon-sm" onPress={() => setDrawer(true)} aria-label="Open runs">
             <Menu size={18} />
           </Button>
-          {top}
+          {name}
+          <XStack flex={1} />
+          {switcher ? <Where /> : null}
         </XStack>
         <Pane onStarted={() => recents.reload()} />
       </YStack>
