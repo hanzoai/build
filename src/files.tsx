@@ -48,7 +48,8 @@ export function Files({
 
   return (
     <YStack gap="$3">
-      <XStack gap="$1" items="center">
+      {/* In a narrow pane, where the files are read from goes under what is shown. */}
+      <XStack gap="$1" items="center" flexWrap="wrap">
         <Pick on={pane === 'files'} onPress={() => setPane('files')}>
           Files
         </Pick>

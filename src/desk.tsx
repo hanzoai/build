@@ -78,25 +78,27 @@ export function Desk({
       $md={{ display: 'flex' }}
     >
       <XStack px="$2" pt="$2" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
-        <TabButton id="environment" tab={tab} onPick={setTab}>
-          Environment
-        </TabButton>
-        <TabButton id="git" tab={tab} onPick={setTab}>
-          Git
-        </TabButton>
-        <TabButton id="desktop" tab={tab} onPick={setTab}>
-          Desktop
-        </TabButton>
-        <TabButton id="terminal" tab={tab} onPick={setTab}>
-          Terminal
-        </TabButton>
-        <TabButton id="files" tab={tab} onPick={setTab}>
-          Files
-        </TabButton>
-        <TabButton id="subscriptions" tab={tab} onPick={setTab}>
-          Subscriptions
-        </TabButton>
-        <XStack flex={1} />
+        {/* The tabs scroll sideways in a narrow pane; hiding the pane and its menu stay put. */}
+        <XStack flex={1} minW={0} gap="$1" overflow="scroll">
+          <TabButton id="environment" tab={tab} onPick={setTab}>
+            Environment
+          </TabButton>
+          <TabButton id="git" tab={tab} onPick={setTab}>
+            Git
+          </TabButton>
+          <TabButton id="desktop" tab={tab} onPick={setTab}>
+            Desktop
+          </TabButton>
+          <TabButton id="terminal" tab={tab} onPick={setTab}>
+            Terminal
+          </TabButton>
+          <TabButton id="files" tab={tab} onPick={setTab}>
+            Files
+          </TabButton>
+          <TabButton id="subscriptions" tab={tab} onPick={setTab}>
+            Subscriptions
+          </TabButton>
+        </XStack>
         {onHide ? (
           <XStack render="button" aria-label="Hide the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={onHide}>
             <PanelRightClose size={16} />

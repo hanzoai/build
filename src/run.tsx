@@ -260,7 +260,8 @@ export function Run({ id }: { id: string }) {
             </SizableText>
           </YStack>
           {desk ? null : (
-            <XStack render="button" aria-label="Show the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={() => setDesk(true)}>
+            // The side pane is drawn from md up (desk.tsx), so below it there is nothing to show.
+            <XStack render="button" aria-label="Show the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={() => setDesk(true)} $max-md={{ display: 'none' }}>
               <PanelRight size={16} />
             </XStack>
           )}

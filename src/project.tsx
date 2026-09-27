@@ -18,7 +18,7 @@
  * Derived from the Hanzo App v2 editor (github.com/hanzoai/build-v2), itself
  * derived from OSW Studio and DeepSite (MIT). See NOTICE.
  */
-import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import {
   Clock,
   ExternalLink,
@@ -30,6 +30,7 @@ import {
 } from '@hanzogui/lucide-icons-2'
 import {
   Attachments,
+  CHAT,
   Console,
   DEVICES,
   Feedback,
@@ -147,7 +148,9 @@ export function Project({ slug }: { slug: string }) {
   const [view, setView] = useKept<ViewId>(`hanzo.build.view.${slug}`, 'preview')
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [collapsed, setCollapsed] = useKept('hanzo.build.chat', false)
+  // Below md the chat and the work take turns, and Chat is one more view to switch back to.
   const [pane, setPane] = useState<'chat' | 'view'>('chat')
+  const wide = useMedia().md
   const [dock, setDock] = useKept('hanzo.build.dock', 36)
   const [dismissed, setDismissed] = useKept(`hanzo.build.hints.${slug}`, false)
   const [mode, setMode] = useKept<Mode>('hanzo.build.mode', 'build')
@@ -481,6 +484,7 @@ export function Project({ slug }: { slug: string }) {
             <XStack render="button" aria-label="History" onPress={() => setHistory(true)} p="$1.5" rounded="$3" shrink={0} hoverStyle={{ bg: '$hover' }}>
               <Clock size={16} />
             </XStack>
+            {/* The chat folds away beside the work; on a phone the views switch to it instead. */}
             <XStack
               render="button"
               aria-label={collapsed ? 'Show the chat' : 'Hide the chat'}
@@ -490,6 +494,7 @@ export function Project({ slug }: { slug: string }) {
               rounded="$3"
               shrink={0}
               hoverStyle={{ bg: '$hover' }}
+              $max-md={{ display: 'none' }}
             >
               <PanelLeft size={16} />
             </XStack>
@@ -497,7 +502,16 @@ export function Project({ slug }: { slug: string }) {
         }
         middle={
           <XStack items="center" gap="$2">
-            <Views views={VIEWS} value={view} onChange={(v) => { setView(v as ViewId); setPane('view') }} label="View" />
+            <Views
+              views={[...VIEWS, CHAT]}
+              value={pane === 'chat' && !wide ? 'chat' : view}
+              onChange={(v) => {
+                if (v === 'chat') return setPane('chat')
+                setView(v as ViewId)
+                setPane('view')
+              }}
+              label="View"
+            />
             <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label="Device" labels="none" />
             <XStack render="button" aria-label="Reload the preview" onPress={() => frame.current?.reload()} p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
               <RefreshCcw size={16} />
