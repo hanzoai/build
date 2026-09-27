@@ -18,7 +18,7 @@ import { useState } from 'react'
 import { authored, build, mounted, remove, type Mount, type Plugin } from '../api/plugins.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
-import { Choice, Confirm, day, Field, Grid, Line, Mark, matches, mono, Sheet, Soft, Tile, type Pane } from './ui.tsx'
+import { Choice, Confirm, day, Field, Grid, Line, Mark, matches, mono, Sheet, Soft, Tile, Visitor, type Pane } from './ui.tsx'
 
 const kb = (n: number): string => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`)
 
@@ -60,7 +60,7 @@ export function Plugins({ view, q, adding, onAdding, onView }: Pane) {
   )
 
   if (!signed) {
-    return <Soft action={host.signIn ? <Button size="sm" onPress={() => host.signIn?.()}>Sign in</Button> : undefined}>{view === 'discover' ? 'Sign in to see what this deployment mounts.' : 'Sign in to see your plugins.'}</Soft>
+    return <Visitor>{view === 'discover' ? 'Sign in to see what this deployment mounts.' : 'Sign in to see your plugins.'}</Visitor>
   }
 
   if (view === 'discover') {
@@ -147,7 +147,7 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
       const out = await build(t, { name: name.trim(), provider, source: way === 'source' ? source : '', spec: way === 'spec' ? spec : '' })
       onBuilt(out.plugin, `${out.plugin.name} built: ${kb(out.bytes)}${out.generated ? ', written from your description — read it below' : ''}.`)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The build failed')
+      setNote((e as Error).message)
     } finally {
       setWorking(false)
     }

@@ -233,11 +233,10 @@ test('agents: a preset opens a new agent written from it', async ({ page }, info
   expect(sentTo(sent, 'POST', '/v1/agent').at(-1)?.body).toMatchObject({ name: 'create', description: 'Product & Fashion Create', model: 'zen5.8-coder', tools: ['*'], cap_micro_usd: 5_000_000, max_task_micro_usd: 500_000, period: 'month' })
 })
 
-test('a phone gets every tab whole, with the cards in one column', async ({ page }, info) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await open(page, '/-/customize')
-  for (const tab of ['skills', 'connectors', 'plugins', 'agents']) {
-    await page.goto(tab === 'skills' ? '/-/customize' : `/-/customize/${tab}`)
+for (const tab of ['skills', 'connectors', 'plugins', 'agents']) {
+  test(`a phone gets ${tab} whole, with the cards in one column`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await open(page, tab === 'skills' ? '/-/customize' : `/-/customize/${tab}`)
     await expect(page.getByRole('tab', { selected: true })).toBeVisible()
     for (const view of ['Yours', 'Discover']) {
       await page.getByRole('button', { name: view, exact: true }).click()
@@ -245,12 +244,12 @@ test('a phone gets every tab whole, with the cards in one column', async ({ page
       expect(await cramped(page), `${tab} ${view}`).toEqual([])
       await page.screenshot({ path: info.outputPath(`phone-${tab}-${view.toLowerCase()}.png`), fullPage: true })
     }
-  }
-  await page.goto('/-/customize/agents')
-  await page.getByRole('button', { name: 'New agent' }).first().click()
-  await page.waitForTimeout(300)
-  await page.screenshot({ path: info.outputPath('phone-agents-new.png') })
-})
+    if (tab !== 'agents') return
+    await page.getByRole('button', { name: 'New agent' }).first().click()
+    await page.waitForTimeout(300)
+    await page.screenshot({ path: info.outputPath('phone-agents-new.png') })
+  })
+}
 
 test('a member reads the org’s skills and connectors, and changes none of them', async ({ page }) => {
   await catalogue(page)
