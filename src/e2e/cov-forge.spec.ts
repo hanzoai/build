@@ -15,8 +15,13 @@ import { expect, test } from './fixture.ts'
 import { ORG } from './signed.ts'
 
 const MIN = 60_000
-const ago = (ms: number) => Date.now() - ms
-const iso = (ms: number) => new Date(ago(ms)).toISOString()
+
+/** A row's time, as the platform answers it: `age` ms before the answer, so a slow page reads the same. */
+const aged = (row: Record<string, unknown>, now: number, key: string, iso: boolean) => {
+  if (typeof row.age !== 'number') return row
+  const at = now - row.age
+  return { ...row, [key]: iso ? new Date(at).toISOString() : at }
+}
 
 interface World extends Holds {
   flows: Record<string, unknown>[]
@@ -40,19 +45,20 @@ async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kep
       return { status: 201, json: f }
     }
     // A flow listed without its version is named by reading it once more.
-    if (path === '/v1/auto/flows') return { json: { data: world.flows.map((f) => ({ ...f, version: f.listed === false ? undefined : f.version })) } }
+    const now = Date.now()
+    if (path === '/v1/auto/flows') return { json: { data: world.flows.map((f) => ({ ...aged(f, now, 'updated', false), version: f.listed === false ? undefined : f.version })) } }
     if (flow?.[2]) {
       const f = world.flows.find((x) => x.id === flow[1])!
       f.status = flow[2] === 'enable' ? 'ENABLED' : 'DISABLED'
       return { json: f }
     }
-    if (flow) return { json: world.flows.find((x) => x.id === flow[1]) }
+    if (flow) return { json: aged(world.flows.find((x) => x.id === flow[1])!, now, 'updated', false) }
     if (path === '/v1/git/repos' && method === 'POST') {
       const r = { name: b.name, org: ORG, description: b.description, defaultBranch: 'trunk', updatedAt: new Date().toISOString() }
       world.repos.push(r)
       return { status: 201, json: r }
     }
-    if (path === '/v1/git/repos') return { json: { data: world.repos } }
+    if (path === '/v1/git/repos') return { json: { data: world.repos.map((r) => aged(r, now, 'updatedAt', true)) } }
     if (path === '/v1/environment') return { json: { data: world.envs } }
     if (path === '/v1/provider/github/repos/import') return { status: 202, json: { queued: (b.repos as string[]).length } }
     if (path === '/v1/provider/github/repos') return { json: { repos: world.grants, unread: world.unread } }
@@ -91,10 +97,10 @@ const pending = (page: Page, org = ORG) => page.evaluate((k) => JSON.parse(sessi
 
 test.describe('Automations', () => {
   const FLOWS = () => [
-    { id: 'f1', status: 'ENABLED', updated: ago(20_000), version: { displayName: 'Nightly dependency bump' } },
-    { id: 'f2', status: 'DISABLED', updated: ago(5 * MIN), version: { displayName: 'Weekly digest' } },
-    { id: 'f3', status: 'DISABLED', updated: ago(3 * 60 * MIN), version: { displayName: 'Triage new issues' }, listed: false },
-    { id: 'f4', status: 'ENABLED', updated: ago(4 * 24 * 60 * MIN), version: { displayName: 'Rotate keys' } },
+    { id: 'f1', status: 'ENABLED', age: 20_000, version: { displayName: 'Nightly dependency bump' } },
+    { id: 'f2', status: 'DISABLED', age: 5 * MIN, version: { displayName: 'Weekly digest' } },
+    { id: 'f3', status: 'DISABLED', age: 3 * 60 * MIN, version: { displayName: 'Triage new issues' }, listed: false },
+    { id: 'f4', status: 'ENABLED', age: 4 * 24 * 60 * MIN, version: { displayName: 'Rotate keys' } },
     { id: 'f5', status: 'DISABLED', updated: Date.UTC(2026, 0, 15, 12), version: { displayName: 'New year cleanup' } },
     { id: 'f6', status: 'DISABLED', version: { displayName: 'Never run' } },
   ]
@@ -139,7 +145,7 @@ test.describe('Automations', () => {
   })
 
   test('a new one starts off, named; a refusal is said in the dialog, which stays open', async ({ page }, info) => {
-    const { sent } = await forge(page, { flows: [], holds: { 'POST /v1/auto/flows': [{ status: 422, detail: 'That name is taken' }, { wait: 800 }] } })
+    const { sent } = await forge(page, { flows: [], holds: { 'POST /v1/auto/flows': [{ status: 422, detail: 'That name is taken' }, { wait: 2000 }] } })
     await page.goto('/-/automations')
     await expect(page.getByText('No automations yet.')).toBeVisible()
     // The empty state offers one too.
@@ -165,7 +171,7 @@ test.describe('Automations', () => {
   })
 
   test('says it is reading, and says why a read was refused', async ({ page }) => {
-    const { world } = await forge(page, { flows: FLOWS(), slow: { 'GET /v1/auto/flows': 1500 } })
+    const { world } = await forge(page, { flows: FLOWS(), slow: { 'GET /v1/auto/flows': 3000 } })
     await page.goto('/-/automations')
     await expect(page.getByText('Reading automations…')).toBeVisible()
     await expect(page.getByText('Weekly digest')).toBeVisible()
@@ -180,15 +186,14 @@ test.describe('Automations', () => {
 test.describe('Codebase', () => {
   /** Twenty-seven repositories: two pages, two of them edited at the same moment. */
   const REPOS = () => {
-    const same = iso(2 * 60 * MIN)
     const list: Record<string, unknown>[] = [
-      { name: 'universe', org: ORG, description: 'The cluster, declared', defaultBranch: 'main', updatedAt: iso(10 * MIN) },
-      { name: 'site', org: ORG, description: 'hanzo.build', updatedAt: iso(30 * MIN) },
-      { name: 'alpha', org: ORG, description: '', updatedAt: same },
-      { name: 'beta', org: ORG, description: '', updatedAt: same },
+      { name: 'universe', org: ORG, description: 'The cluster, declared', defaultBranch: 'main', age: 10 * MIN },
+      { name: 'site', org: ORG, description: 'hanzo.build', age: 30 * MIN },
+      { name: 'alpha', org: ORG, description: '', age: 2 * 60 * MIN },
+      { name: 'beta', org: ORG, description: '', age: 2 * 60 * MIN },
     ]
     for (let i = 1; i <= 23; i++) {
-      list.push({ name: `repo-${String(i).padStart(2, '0')}`, org: ORG, description: i === 7 ? 'The widget factory' : '', updatedAt: iso((3 * 60 + i) * MIN) })
+      list.push({ name: `repo-${String(i).padStart(2, '0')}`, org: ORG, description: i === 7 ? 'The widget factory' : '', age: (3 * 60 + i) * MIN })
     }
     return list
   }
@@ -280,7 +285,7 @@ test.describe('Codebase', () => {
   })
 
   test('says it is reading, and says why a read was refused', async ({ page }) => {
-    const { world } = await forge(page, { repos: REPOS(), slow: { 'GET /v1/git/repos': 1500 } })
+    const { world } = await forge(page, { repos: REPOS(), slow: { 'GET /v1/git/repos': 3000 } })
     await page.goto('/-/codebases')
     await expect(page.getByText('Reading the forge…')).toBeVisible()
     await expect(page.getByText('Showing 1–25 of 27')).toBeVisible()
@@ -293,7 +298,7 @@ test.describe('Codebase', () => {
 
   test('a repository queued from Sync shows as syncing until the connection says it landed', async ({ page }) => {
     const { world } = await forge(page, {
-      repos: [{ name: 'site', org: ORG, updatedAt: iso(MIN * 30) }],
+      repos: [{ name: 'site', org: ORG, age: 30 * MIN }],
       grants: [
         { name: 'widgets', fullName: `${ORG}/widgets` },
         { name: 'site', fullName: `${ORG}/site`, imported: true },
@@ -318,7 +323,7 @@ test.describe('Codebase', () => {
     expect(await pending(page)).toEqual([{ fullName: `${ORG}/widgets`, name: 'widgets' }])
     // Then widgets lands, and the forge lists it.
     world.grants[0]!.imported = true
-    world.repos.push({ name: 'widgets', org: ORG, updatedAt: iso(MIN * 2) })
+    world.repos.push({ name: 'widgets', org: ORG, age: 2 * MIN })
     await via(page, 'Projects')
     await via(page, 'Codebase')
     await expect(row(page, 'widgets')).toContainText('2m ago')
@@ -326,13 +331,13 @@ test.describe('Codebase', () => {
   })
 
   test('a look that answers after the page is left changes nothing there', async ({ page, baseURL }) => {
-    await forge(page, { grants: [{ name: 'widgets', fullName: `${ORG}/widgets`, imported: true }], slow: { 'GET /v1/provider/github/repos': 2000 } })
+    await forge(page, { grants: [{ name: 'widgets', fullName: `${ORG}/widgets`, imported: true }], slow: { 'GET /v1/provider/github/repos': 3000 } })
     await queued(page, ORG, [{ fullName: `${ORG}/widgets`, name: 'widgets' }])
     await page.goto('/-/codebases')
     await expect(row(page, 'widgets')).toContainText('Syncing…')
     await via(page, 'Projects')
     await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
-    await page.waitForTimeout(2500)
+    await page.waitForTimeout(3500)
     // Still queued: the answer came to a page that was gone.
     expect(await pending(page)).toHaveLength(1)
   })
@@ -438,7 +443,7 @@ test.describe('Sync', () => {
 
   test('a look that answers after Sync is left does not move the page', async ({ page, baseURL }) => {
     // The first look after the queue is held, and answers "landed" once the page has moved on.
-    const { sent, world } = await forge(page, { grants: [{ name: 'widgets', fullName: `${ORG}/widgets` }], holds: { 'GET /v1/provider/github/repos': [{}, { wait: 3000 }] } })
+    const { sent, world } = await forge(page, { grants: [{ name: 'widgets', fullName: `${ORG}/widgets` }], holds: { 'GET /v1/provider/github/repos': [{}, { wait: 4000 }] } })
     await page.goto('/-/sync')
     await page.getByRole('button', { name: `Open ${ORG}` }).click()
     await page.getByRole('button', { name: 'Select widgets' }).click()
@@ -450,7 +455,7 @@ test.describe('Sync', () => {
     await page.getByRole('button', { name: 'Back to codebases' }).click()
     await via(page, 'Projects')
     await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
-    await page.waitForTimeout(3500)
+    await page.waitForTimeout(4500)
     await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
   })
 
@@ -490,7 +495,7 @@ test.describe('Sync', () => {
   })
 
   test('says it is reading, why a read failed, and when the connection holds nothing', async ({ page }) => {
-    const { world } = await forge(page, { grants: [], slow: { 'GET /v1/provider/github/repos': 1500 } })
+    const { world } = await forge(page, { grants: [], slow: { 'GET /v1/provider/github/repos': 3000 } })
     const again = async () => {
       await page.getByRole('button', { name: 'Back to codebases' }).click()
       await own(page, 'Sync').click()
@@ -630,7 +635,7 @@ test.describe('Projects and Issues', () => {
   })
 
   test('each says it is reading, why a read failed, and when there is nothing', async ({ page }) => {
-    const { world } = await forge(page, { slow: { 'GET /v1/task/projects': 1500, 'GET /v1/task/board': 1500 } })
+    const { world } = await forge(page, { slow: { 'GET /v1/task/projects': 3000, 'GET /v1/task/board': 3000 } })
     await page.goto('/-/projects')
     await expect(page.getByText('Reading the forge…')).toBeVisible()
     await expect(page.getByText('No boards yet. A repository shows up here once it has an issue.')).toBeVisible()

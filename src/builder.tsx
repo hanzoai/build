@@ -231,7 +231,7 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
 /** The Hanzo mark on a personal account. An organization shows its own initial. */
 function Brand({ org }: { org: string | null }) {
   if (!org || org === 'hanzo') return <HanzoMark size={18} />
-  const letter = org.trim().charAt(0).toUpperCase() || 'H'
+  const letter = org.charAt(0).toUpperCase()
   return (
     <XStack width={18} height={18} rounded="$1" items="center" justify="center" bg="$raised" aria-hidden>
       <SizableText size="$1" fontWeight="600" color="$ink">

@@ -266,7 +266,7 @@ test.describe('the workspace', () => {
   })
 
   test('a suggestion is asked once however often it is pressed, and suggestions can be put away', async ({ page }) => {
-    const { sent } = await studio(page, { runs: [], holds: { 'POST /v1/agent/coding': [{ wait: 1200 }] } })
+    const { sent } = await studio(page, { runs: [], holds: { 'POST /v1/agent/coding': [{ wait: 2500 }] } })
     await page.goto('/shop')
     await expect(page.getByText('Shop is loaded — it is in the preview', { exact: false })).toBeVisible()
     const seo = page.getByRole('button', { name: 'Review SEO' })
@@ -423,7 +423,7 @@ test.describe('the workspace', () => {
   })
 
   test('says it is reading the runs; a refused project list still opens the workspace by its address', async ({ page }) => {
-    const { world } = await studio(page, { slow: { 'GET /v1/agent/sessions': 1500 } })
+    const { world } = await studio(page, { slow: { 'GET /v1/agent/sessions': 3000 } })
     await page.goto('/shop')
     await expect(page.getByText('Reading this project’s runs…')).toBeVisible()
     await expect(page.getByText('Added a cart to the header.')).toBeVisible()

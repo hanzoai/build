@@ -87,7 +87,7 @@ test.describe('Artifacts', () => {
   test('a starter is copied one at a time, a refused copy says why, and a copy the platform does not name opens as the starter', async ({ page, baseURL }) => {
     const { sent } = await shelf(page, {
       forks: [{ slug: 'synapse-2', name: 'Synapse' }, {}],
-      holds: { 'POST /v1/projects/fork': [{ wait: 1200 }, { status: 402, detail: 'Private projects need a paid plan' }] },
+      holds: { 'POST /v1/projects/fork': [{ wait: 2500 }, { status: 402, detail: 'Private projects need a paid plan' }] },
     })
     await page.goto('/-/artifacts')
     await page.getByRole('button', { name: 'Start from Synapse' }).click()
@@ -109,7 +109,7 @@ test.describe('Artifacts', () => {
 
   test('a rename that is empty is refused in the dialog, the same name changes nothing, Enter saves, and a refusal stays', async ({ page }, info) => {
     const { sent } = await shelf(page, {
-      holds: { 'PATCH /v1/projects/shop': [{}, { status: 409, detail: 'A project named Taken exists' }, { wait: 1500 }] },
+      holds: { 'PATCH /v1/projects/shop': [{}, { status: 409, detail: 'A project named Taken exists' }, { wait: 2500 }] },
     })
     await page.goto('/-/artifacts')
     await act(page, 'Shop', 'Rename')
@@ -154,7 +154,7 @@ test.describe('Artifacts', () => {
   })
 
   test('a delete is confirmed first, a refusal is said in the dialog, and one that goes takes the project off the list', async ({ page }) => {
-    const { sent } = await shelf(page, { holds: { 'DELETE /v1/projects/blog': [{ status: 409, detail: 'Blog is still deploying' }, { wait: 1500 }] } })
+    const { sent } = await shelf(page, { holds: { 'DELETE /v1/projects/blog': [{ status: 409, detail: 'Blog is still deploying' }, { wait: 2500 }] } })
     await page.goto('/-/artifacts')
     await act(page, 'Blog', 'Delete')
     const dialog = page.getByRole('dialog')
@@ -185,7 +185,7 @@ test.describe('Artifacts', () => {
   })
 
   test('says it is reading, why a read failed, and when nothing is built yet', async ({ page }) => {
-    const { world } = await shelf(page, { projects: [], slow: { 'GET /v1/projects': 1500 } })
+    const { world } = await shelf(page, { projects: [], slow: { 'GET /v1/projects': 3000 } })
     await page.goto('/-/artifacts')
     await expect(page.getByText('Reading your projects…')).toBeVisible()
     await expect(page.getByText('Nothing built yet. Describe something on the New page and it lands here.')).toBeVisible()
@@ -209,7 +209,7 @@ test.describe('Artifacts', () => {
 
 test.describe('Templates', () => {
   test('each starter says its framework when it has one, and one is copied into a project', async ({ page, baseURL }, info) => {
-    const { sent } = await shelf(page, { holds: { 'POST /v1/projects/fork': [{ status: 402, detail: 'Private projects need a paid plan' }, { wait: 1200 }] } })
+    const { sent } = await shelf(page, { holds: { 'POST /v1/projects/fork': [{ status: 402, detail: 'Private projects need a paid plan' }, { wait: 2500 }] } })
     await page.goto('/-/templates')
     await expect(page.getByRole('button', { name: 'Start from Synapse' })).toContainText('Next.js')
     await expect(page.getByRole('button', { name: 'Start from Circle' })).toContainText(/^CIRCLE\s*Circle\s*A community$/i)

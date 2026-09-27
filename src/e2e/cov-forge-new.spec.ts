@@ -281,7 +281,7 @@ test.describe('Add to project', () => {
       page,
       {
         declared: [declared({ id: 'b1', job: 'j1', image: 'ghcr.io/acme/universe:b1', status: 'queued' }), { app: 'universe', declaration: { mode: 'commit', ref: 'main', live: true } }],
-        holds: { 'GET /v1/platform/builds': [{ status: 500 }], 'POST /v1/platform/apps': [{ wait: 800 }, { wait: 800 }] },
+        holds: { 'GET /v1/platform/builds': [{ status: 500 }], 'POST /v1/platform/apps': [{ wait: 2000 }, { wait: 2000 }] },
       },
       DAVE,
       holding(FORGE),
