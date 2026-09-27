@@ -19,7 +19,7 @@ const patched = (sent: Sent[]) => sent.filter((s) => s.method === 'PATCH' && s.p
 test('Settings opens on General, and a theme chosen there paints the page and is saved', async ({ page }, info) => {
   const { sent } = await platform(page)
   await page.goto('/-/settings')
-  await expect(page.getByText('How Hanzo Build looks and listens', { exact: false })).toBeVisible()
+  await expect(page.getByText('How Hanzo looks and listens', { exact: false })).toBeVisible()
   await expect(page.getByRole('button', { name: 'General' }).first()).toHaveAttribute('aria-current', 'page')
   await pick(page, /^Theme: /, 'Light')
   await expect(page.locator('html')).toHaveClass(/\blight\b/)
@@ -163,7 +163,7 @@ test('every section fits a phone', async ({ page }, info) => {
   await platform(page)
   await page.setViewportSize({ width: 390, height: 844 })
   const says: [string, string][] = [
-    ['general', 'How Hanzo Build looks and listens'],
+    ['general', 'How Hanzo looks and listens'],
     ['account', 'Your Hanzo identity'],
     ['privacy', 'What Hanzo may do with your data'],
     ['capabilities', 'What the agent may use in'],

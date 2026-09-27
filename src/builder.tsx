@@ -49,6 +49,7 @@ import { Artifacts, Templates } from './shelf.tsx'
 import { Find } from './find.tsx'
 import { DOCS, Slack, Who } from './foot.tsx'
 import { Settings } from './settings/index.tsx'
+import { Bar } from './visit.tsx'
 
 type Order = 'newest' | 'running'
 
@@ -80,13 +81,7 @@ function Shell() {
   // it the search that finds a run. The organization is the account's, so it is
   // switched from the account menu at the foot. Beside the rail from md up, beside
   // the drawer's button below it — one place at a time.
-  const name = (
-    <XStack render="button" aria-label="Hanzo Build" items="center" onPress={() => go('')}>
-      <SizableText size="$5" fontWeight="600" color="$ink" numberOfLines={1}>
-        Hanzo Build
-      </SizableText>
-    </XStack>
-  )
+  const name = <Name onPress={() => go('')} />
   const links: RailLink[] = [
     { id: 'projects', label: 'Projects', icon: <Kanban size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'projects' })), active: screen === 'projects' },
     { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
@@ -205,6 +200,28 @@ function Shell() {
   )
 }
 
+/** The wordmark: the product's name, which leads to New. */
+function Name({ onPress }: { onPress: () => void }) {
+  return (
+    <XStack render="button" aria-label="Hanzo" items="center" onPress={onPress}>
+      <SizableText size="$5" fontWeight="600" color="$ink" numberOfLines={1}>
+        Hanzo
+      </SizableText>
+    </XStack>
+  )
+}
+
+/** A visitor: no runs to list, so the product's header stands where the rail would. */
+function Visit() {
+  const host = useHost()
+  return (
+    <YStack flex={1} minH={0} minW={0} bg="$background">
+      <Bar name={<Name onPress={() => host.go('')} />} />
+      <Pane />
+    </YStack>
+  )
+}
+
 /** Whichever pane the address names, beside a rail — the builder's or the host's. */
 function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   const host = useHost()
@@ -245,7 +262,10 @@ function Screens({ rail }: { rail: boolean }) {
   const host = useHost()
   const r = route(host.path)
   if (r.kind === 'project') return <Project key={r.slug} slug={r.slug} />
-  return rail ? <Shell /> : <Pane />
+  if (!rail) return <Pane />
+  // Signed out with no token to wait on: a token still resolving is a person, not a visitor.
+  if (!host.person && !host.token() && host.signIn) return <Visit />
+  return <Shell />
 }
 
 /**

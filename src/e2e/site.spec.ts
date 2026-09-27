@@ -1,8 +1,8 @@
 /**
- * hanzo.build in a browser: every screen draws, stays on this origin, and
- * never asks platform.hanzo.ai for anything. Signed out, so it checks what a
- * visitor sees; the native MCP servers and the skills catalogue are public and
- * are read live.
+ * The site in a browser: every screen draws, stays on this origin, and never
+ * asks platform.hanzo.ai for anything. Signed out, so it checks what a visitor
+ * sees — the product's header over each screen, not the rail; the native MCP
+ * servers and the skills catalogue are public and are read live.
  */
 import type { Page } from '@playwright/test'
 
@@ -22,7 +22,10 @@ const SCREENS: [string, string, RegExp][] = [
   ['run', '/sess_0992f90537264a6b154ebff799f38e1c', /Sign in to follow this run/],
 ]
 
-const RAIL = ['New', 'Projects', 'Artifacts', 'Customize', 'Automations', 'More']
+const BAR = ['Features', 'Resources', 'Enterprise', 'Pricing', 'Log in', 'Sign up']
+
+/** The IAM client this host signs in as: hanzo.app is the Hanzo App's. */
+const client = (base: string) => (new URL(base).hostname === 'hanzo.app' ? 'hanzo-app' : 'hanzo-build')
 
 /** Everything the page asked for and every error it threw, for the whole test. */
 function watch(page: Page) {
@@ -38,7 +41,9 @@ for (const [name, path, says] of SCREENS) {
     const seen = watch(page)
     await page.goto(path)
     await expect(page.getByText(says).first()).toBeVisible()
-    for (const label of RAIL) await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+    const bar = page.getByRole('banner')
+    for (const label of BAR) await expect(bar.getByText(label, { exact: true })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Runs' })).toHaveCount(0)
     await page.waitForLoadState('networkidle')
     expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin)
     expect([...seen.hosts]).not.toContain('platform.hanzo.ai')
@@ -47,30 +52,37 @@ for (const [name, path, says] of SCREENS) {
   })
 }
 
-test('the rail moves between screens without leaving the page', async ({ page, baseURL }) => {
+test('the header leads to the product’s pages, and both doors open IAM beside the page', async ({ page, baseURL }) => {
   const seen = watch(page)
   await page.goto('/')
-  for (const [label, at] of [
-    ['Projects', '/-/projects'],
-    ['Artifacts', '/-/artifacts'],
-    ['Customize', '/-/customize'],
-    ['Automations', '/-/automations'],
-    ['More', ''],
-    ['Codebase', '/-/codebases'],
-    ['Issues', '/-/issues'],
-    ['Templates', '/-/templates'],
-    ['New', '/'],
+  const bar = page.getByRole('banner')
+  const site = bar.getByRole('navigation', { name: 'Site' })
+  for (const [label, href] of [
+    ['Features', 'https://hanzo.ai/app'],
+    ['Enterprise', 'https://hanzo.ai/enterprise'],
+    ['Pricing', 'https://hanzo.ai/pricing'],
   ]) {
-    await page.getByText(label, { exact: true }).first().click()
-    if (at) await expect(page).toHaveURL(new URL(at, baseURL).href)
+    await expect(site.getByRole('link', { name: label })).toHaveAttribute('href', href)
   }
+  await site.getByRole('button', { name: 'Resources' }).click()
+  const resources = page.getByRole('menu', { name: 'Resources' })
+  for (const label of ['Docs', 'Blog', 'Customers', 'Learn', 'Support']) await expect(resources.getByText(label, { exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(resources).toHaveCount(0)
+  for (const door of ['Log in', 'Sign up']) {
+    const [popup] = await Promise.all([page.waitForEvent('popup'), bar.getByRole('button', { name: door, exact: true }).click()])
+    expect(popup.url()).toMatch(/^https:\/\/hanzo\.id\//)
+    expect(popup.url()).toContain(`client_id=${client(baseURL!)}`)
+    await popup.close()
+  }
+  expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin)
   expect([...seen.hosts]).not.toContain('platform.hanzo.ai')
 })
 
 test('the name at the top left when signed out', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Hanzo Build', exact: true })).toHaveCount(1)
-  await expect(page.getByText('Sign in', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Hanzo', exact: true })).toHaveCount(1)
+  await expect(page.getByRole('banner').getByText('Log in', { exact: true })).toBeVisible()
 })
 
 test('settings is a page of this site', async ({ page, baseURL }) => {
@@ -109,19 +121,18 @@ test('a run shows its codebase’s environment beside it', async ({ page }, info
   await page.screenshot({ path: info.outputPath('environment.png') })
 })
 
-test('a phone gets every screen whole, with the rail as a drawer', async ({ page }, info) => {
+test('a phone gets every screen whole, with the header folded into one menu', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 })
   for (const [name, path, says] of SCREENS) {
     await page.goto(path)
     await expect(page.getByText(says).first()).toBeVisible()
-    await expect(page.getByLabel('Open runs')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Menu' })).toBeVisible()
     expect(await cramped(page), name).toEqual([])
     await page.screenshot({ path: info.outputPath(`phone-${name}.png`) })
   }
-  await page.getByLabel('Open runs').click()
-  const drawer = page.getByRole('navigation', { name: 'Runs' })
-  await drawer.getByText('More', { exact: true }).click()
-  await expect(drawer.getByText('Codebase', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Menu' }).click()
+  const menu = page.getByRole('menu', { name: 'Menu' })
+  for (const label of ['Features', 'Enterprise', 'Pricing', 'Docs', 'Sign up']) await expect(menu.getByText(label, { exact: true })).toBeVisible()
 })
 
 test('a run asks a visitor to sign in, not for an API key', async ({ page }) => {

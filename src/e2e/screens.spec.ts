@@ -84,7 +84,7 @@ const SCREENS: Record<Screen, [Platform, RegExp]> = {
   plans: [org, /Plans that grow with you/],
 }
 const HEADINGS: Record<Section, [Platform, RegExp]> = {
-  general: [you, /How Hanzo Build looks and listens/],
+  general: [you, /How Hanzo looks and listens/],
   account: [you, /Your Hanzo identity/],
   privacy: [you, /What Hanzo may do with your data/],
   billing: [org, /The plan acme is on/],

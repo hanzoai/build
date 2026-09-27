@@ -56,7 +56,7 @@ export function General() {
 
   return (
     <YStack gap="$6">
-      <Heading title="General" detail="How Hanzo Build looks and listens. Saved to your account, so it follows you." />
+      <Heading title="General" detail="How Hanzo looks and listens. Saved to your account, so it follows you." />
       <Group title="Appearance">
         <Card>
           {host.chooseTheme ? (
