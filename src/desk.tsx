@@ -3,8 +3,8 @@
  * pushed, its sandbox's desktop and shell, its files, and what it listens to.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Copy, MoreHorizontal, PanelRightClose } from '@hanzogui/lucide-icons-2'
-import { Button, DropdownMenu } from '@hanzo/ui'
+import { Info, MoreHorizontal, PanelRightClose } from '@hanzogui/lucide-icons-2'
+import { Button, DropdownMenu, type DropdownMenuProps } from '@hanzo/ui'
 import { useState } from 'react'
 
 import { shell, type ShellLine } from './api/turn.ts'
@@ -32,6 +32,7 @@ export function Desk({
   sandbox,
   events,
   live,
+  menu = [],
   refused,
   retry = 'Retry',
   onRetry,
@@ -50,6 +51,8 @@ export function Desk({
   sandbox: string
   events: Event[]
   live: boolean
+  /** What can be done to the run — rename, share, copy its id — as its header's menu offers it. */
+  menu?: NonNullable<DropdownMenuProps['items']>
   refused: string
   /** The refusal's one action: Retry, or Sign in when nobody is. */
   retry?: string
@@ -58,19 +61,9 @@ export function Desk({
 }) {
   // A setup run's work IS the environment, so it opens there.
   const [tab, setTab] = useState<Tab>(mode === 'setup' ? 'environment' : 'terminal')
-  const [copied, setCopied] = useState(false)
   const name = repo.split('/').filter(Boolean).pop() || repo
   const lines = shell(events)
   const bleed = BLEED.includes(tab)
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(id)
-      setCopied(true)
-    } catch {
-      setCopied(false)
-    }
-  }
 
   return (
     <YStack
@@ -115,10 +108,7 @@ export function Desk({
               <MoreHorizontal size={16} />
             </XStack>
           }
-          items={[
-            { key: 'copy', label: copied ? 'Copied' : 'Copy run id', icon: <Copy size={16} />, description: id, onSelect: () => void copy() },
-            { key: 'details', label: 'Details', onSelect: () => setTab('environment') },
-          ]}
+          items={[...menu, { key: 'details', label: 'Details', icon: <Info size={16} />, onSelect: () => setTab('environment') }]}
         />
       </XStack>
       <YStack flex={1} minH={0} overflow={bleed ? 'hidden' : 'scroll'} px={bleed ? 0 : '$3'} py={bleed ? 0 : '$3'}>

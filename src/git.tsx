@@ -183,16 +183,7 @@ function File({ change: f, first }: { change: Change; first: boolean }) {
       {open ? (
         <YStack px="$3" pb="$2" overflow="scroll">
           {lines.length ? (
-            lines.map((l, i) => (
-              <SizableText
-                key={i}
-                size="$1"
-                style={mono}
-                color={l.startsWith('@@') ? '$soft' : l.startsWith('+') ? '$green10' : l.startsWith('-') ? '$red10' : '$ink'}
-              >
-                {l || ' '}
-              </SizableText>
-            ))
+            <Patch text={f.patch} />
           ) : (
             <SizableText size="$1" color="$soft">
               {f.truncated ? 'Too large to show here.' : 'Binary file'}
@@ -206,6 +197,24 @@ function File({ change: f, first }: { change: Change; first: boolean }) {
         </YStack>
       ) : null}
     </YStack>
+  )
+}
+
+/** A unified diff's lines, coloured by what each does: the Git tab's, and a transcript's edit card's. */
+export function Patch({ text }: { text: string }) {
+  return (
+    <>
+      {text.split('\n').map((l, i) => (
+        <SizableText
+          key={i}
+          size="$1"
+          style={mono}
+          color={l.startsWith('@@') ? '$soft' : l.startsWith('+') ? '$green10' : l.startsWith('-') ? '$red10' : '$ink'}
+        >
+          {l || ' '}
+        </SizableText>
+      ))}
+    </>
   )
 }
 

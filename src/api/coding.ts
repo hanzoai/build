@@ -30,13 +30,17 @@ export type Mode = 'build' | 'plan' | 'setup'
 /** Why this mode cannot run where it is sent, or '' when it can. */
 export const unhonoured = (mode: Mode | undefined, target?: string): string =>
   (mode === 'plan' || mode === 'setup') && target?.trim()
-    ? `A ${mode} runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Default, or switch to Build.`
+    ? `A ${mode} runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Cloud, or switch to Build.`
     : ''
 
 export interface Ask {
   /** The task, in the words you would use with a colleague. */
   prompt: string
-  /** The repository's name in the caller's org. A slash is not a name. Omitted starts something new. */
+  /**
+   * The repository: its name in the caller's org, or `owner/name` as a run's
+   * record states it, which the engine resolves as it did for that run.
+   * Omitted starts something new.
+   */
   repo?: string
   /** The branch to start from. Omitted takes the repository's default. */
   base?: string
@@ -90,4 +94,73 @@ export async function start(t: Target, ask: Ask): Promise<Run> {
     routed: r?.routed === true,
     target: s('targetId'),
   }
+}
+
+/** A run a follow-up continues, as its record states it. */
+export interface Earlier {
+  id: string
+  title: string
+  /** `owner/name`, as the record states it. */
+  repo: string
+  /** The branch it started from, or '' for the repository's default. */
+  base: string
+  /** 'sandbox', or the id of the machine it ran on. */
+  environment: string
+  project: string
+  mode: string
+  /** Its work is on its own branch (turn.ts `settled`). */
+  pushed: boolean
+}
+
+/** The earlier run's ask, without the codebase its title leads with (`universe: add the widget`). */
+export function headline(title: string, repo: string): string {
+  const name = repo.split('/').filter(Boolean).pop() ?? ''
+  const t = title.trim()
+  return name && t.startsWith(`${name}: `) ? t.slice(name.length + 2).trim() : t
+}
+
+/**
+ * The same codebase, place and project as the earlier run, starting from its
+ * branch when it pushed one. `after` IS that branch as the base (BaseOf,
+ * apps/coding coding.go), so it is named only then: a plan, a setup, or a build
+ * that changed nothing pushed no branch to clone, and its follow-up starts where
+ * it did.
+ */
+function from(e: Earlier): Omit<Ask, 'prompt'> {
+  const place = e.environment && e.environment !== 'sandbox' ? e.environment : undefined
+  return {
+    repo: e.repo || undefined,
+    project: e.project || undefined,
+    targetId: place,
+    ...(e.pushed ? { after: e.id } : { base: e.base || undefined }),
+  }
+}
+
+const modeOf = (m: string): Mode => (m === 'plan' || m === 'setup' ? m : 'build')
+
+/**
+ * A new run continuing an earlier one in its mode: what the person said, and
+ * which run it follows, because the new run's agent reads nothing else. With
+ * nothing said it goes on with the earlier ask, in the words the platform uses
+ * when it carries a paused run on (apps/coding steer.go followUp).
+ */
+export function followUp(e: Earlier, said: string): Ask {
+  const head = headline(e.title, e.repo)
+  const words = said.trim()
+  let prompt: string
+  if (words) {
+    const was = head ? `This follows an earlier run on this codebase: “${head}”.` : 'This follows an earlier run on this codebase.'
+    prompt = `${words}\n\n${was}${e.pushed ? ' Its work so far is on this branch; build on it.' : ''}`
+  } else {
+    const kept = e.pushed ? 'An earlier run already worked on this; its work so far is on this branch. Build on it. ' : ''
+    prompt = `${head}\n\n${kept}Continue where the earlier run left off.`.trim()
+  }
+  return { ...from(e), prompt, mode: modeOf(e.mode) }
+}
+
+/** A build of what a plan run answered: its ask as the title, and the plan to carry out. */
+export function approve(e: Earlier, plan: string): Ask {
+  const head = headline(e.title, e.repo)
+  const ask = `Carry out this plan:\n\n${plan.trim()}`
+  return { ...from(e), prompt: head ? `${head}\n\n${ask}` : ask, mode: 'build' }
 }

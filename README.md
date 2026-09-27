@@ -132,15 +132,24 @@ the platform gates none of it to admins.
   whose tool calls run on the platform.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
-(Default is the platform's sandbox; the org's machines follow), the codebase
-and the branch — the forge's repositories, filtered as you type — then the
-ask. Under it: attach (files ride the prompt as text), dictate, Build or Plan,
-and the model and effort. A codebase can be added to a project. Opening a
-codebase or an issue from its own screen lands here with that choice already
-made.
+(Cloud is the platform's sandbox with the codebase's environment; the org's
+machines follow under remote control, each linked with `hanzo link`), the
+codebase and the branch — the forge's repositories, filtered as you type, read
+again with Refresh list, and a way to Sync for a GitHub repository that is not
+there yet — then the ask. Under it: attach (files ride the prompt as text),
+dictate, Build or Plan, and the model and effort. A codebase can be added to a
+project. Opening a codebase or an issue from its own screen lands here with
+that choice already made.
 
-**A run.** The transcript as it streams, steering while it works, Stop, and
-the pull request once it pushes one. Beside it:
+**A run.** The transcript as it streams, drawn by what each part is: what the
+agent says as markdown, each command it runs as a card that opens onto its
+output, the files it edits with their diff, the files it reads as chips, and the
+run's own steps. Steering while it works; Pause, Resume and Stop; the pull
+request once it pushes one. Once it has finished, a follow-up starts a new run
+from the branch it pushed — the same codebase, place and mode — and opens it; a
+paused sandbox run goes on the same way. A plan run ends with its plan and
+Approve and build. Rename it, share a project run's story publicly, and find any
+run by status in Find. Beside it:
 
 - Environment: the codebase's environment, and the run's facts.
 - Git: what it pushed, read from the forge — Diff, Review, Commits.
@@ -176,7 +185,9 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `POST /v1/agent/coding` | start a run → 202 `{sessionId, …}` |
 | `GET /v1/agent/sessions?kind=coding` | Recents, and a project's runs |
 | `GET /v1/agent/sessions/{id}` · `GET /v1/agent/sessions/stream?root=` | a run, and its live feed (SSE over fetch) |
-| `POST /v1/agent/sessions/{id}/message` · `/stop` | steer, stop |
+| `POST /v1/agent/sessions/{id}/message` · `/pause` · `/resume` · `/stop` | steer, pause, resume a machine's run, stop |
+| `PATCH /v1/agent/sessions/{id}` `{title}` · `{published}` | rename a run, share its story at `GET /v1/agent/builds/{org}/{project}` |
+| `GET /v1/agent/sessions?kind=coding&status=&after=` | Find, by status, paged |
 | `GET`/`POST /v1/agent/targets` · `PATCH`/`DELETE …/{id}` · `POST …/{id}/key` | the org's machines, and a machine's claim key |
 | `GET`/`POST`/`DELETE /v1/account/keys` | your API keys |
 | `GET /v1/auto/flows` · `POST /v1/auto/flows` · `POST /v1/auto/flows/{id}/enable` | automations |
@@ -227,6 +238,8 @@ src/
   landing.tsx   New
   forge.tsx     Codebase, Automations, Projects, Issues
   run.tsx       one run
+  transcript.tsx  a run's transcript, as cards
+  prose.tsx     markdown, drawn as text (markdown.ts reads it)
   desk.tsx      the pane beside a run
   door.tsx      a run's desktop or shell, framed
   git.tsx       what a run pushed
@@ -236,7 +249,7 @@ src/
   shelf.tsx     Artifacts and Templates
   customize/    Customize: the shell, then one file per tab
   publish.tsx   Add to project / Publish
-  find.tsx      the find-a-run dialog
+  find.tsx      finding a run, by status, paged
   foot.tsx      the rail's foot: the Slack card and the account menu
   ask.tsx       confirming an act, or naming something, in a dialog
   settings/     Settings, one file per section

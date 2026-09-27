@@ -1,10 +1,13 @@
 /**
  * Runs, as the platform records them: one session per run.
  *
- *   GET  /v1/agent/sessions?kind=&project=&status=&limit=   newest first
- *   GET  /v1/agent/sessions/{id}                            + the 50 most recent events
- *   POST /v1/agent/sessions/{id}/message {message}           steer a running run
- *   POST /v1/agent/sessions/{id}/stop    {message}           end it, work kept
+ *   GET   /v1/agent/sessions?kind=&project=&status=&limit=&after=   newest first, {sessions, next}
+ *   GET   /v1/agent/sessions/{id}                            + the 50 most recent events
+ *   PATCH /v1/agent/sessions/{id}         {title}|{published} rename it; open its story to the public build route
+ *   POST  /v1/agent/sessions/{id}/message {message}           steer a running run
+ *   POST  /v1/agent/sessions/{id}/pause                       pause it; a sandbox run keeps its work on its branch
+ *   POST  /v1/agent/sessions/{id}/resume                      ask a paused run to go on
+ *   POST  /v1/agent/sessions/{id}/stop    {message}           end it, work kept
  *   GET  /v1/agent/sessions/stream?root={id}                 SSE: `session` and `event` frames,
  *                                                            each wrapped: {"session":{…}}, {"event":{…}}
  *
@@ -40,6 +43,10 @@ export interface Session {
   pr: string
   /** The sandbox the run leased, once it has one. It is gone when the run ends. */
   sandbox: string
+  /** The org the run is in, which the public build route is addressed by. */
+  org: string
+  /** Whether its story is open to the public build route. Only a run that names a project can be. */
+  published: boolean
   events: number
   createdAt: string
   updatedAt: string
@@ -83,6 +90,8 @@ export function session(raw: unknown): Session {
     mode: str(s.mode),
     pr: str(s.pr),
     sandbox: str(s.sandbox),
+    org: str(s.org),
+    published: s.published === true,
     events: num(s.events),
     createdAt: str(s.createdAt),
     updatedAt: str(s.updatedAt),
@@ -121,13 +130,29 @@ export function took(runs: Session[], mode: string): [number, number] | null {
 export interface ListQuery {
   kind?: string
   project?: string
+  /** running, paused, done or error: the four the platform filters on. */
   status?: string
   limit?: number
+  /** The `next` of the page before. */
+  after?: string
+}
+
+export interface Page {
+  sessions: Session[]
+  /** The cursor for the page after this one, or '' on the last. */
+  next: string
+}
+
+export async function page(t: Target, q: ListQuery = {}): Promise<Page> {
+  const raw = obj(await call<unknown>(t, 'GET', `/v1/agent/sessions${query({ ...q })}`))
+  return {
+    sessions: (Array.isArray(raw.sessions) ? raw.sessions : []).map(session).filter((s) => s.id),
+    next: str(raw.next),
+  }
 }
 
 export async function list(t: Target, q: ListQuery = {}): Promise<Session[]> {
-  const raw = obj(await call<unknown>(t, 'GET', `/v1/agent/sessions${query({ ...q })}`))
-  return (Array.isArray(raw.sessions) ? raw.sessions : []).map(session).filter((s) => s.id)
+  return (await page(t, q)).sessions
 }
 
 export async function get(t: Target, id: string): Promise<Detail> {
@@ -147,6 +172,35 @@ export async function message(t: Target, id: string, text: string): Promise<void
 export async function stop(t: Target, id: string, why = 'Stopped from the builder'): Promise<void> {
   await call<unknown>(t, 'POST', `/v1/agent/sessions/${seg(id)}/stop`, { message: why })
 }
+
+export async function pause(t: Target, id: string): Promise<void> {
+  await call<unknown>(t, 'POST', `/v1/agent/sessions/${seg(id)}/pause`, {})
+}
+
+export async function resume(t: Target, id: string): Promise<void> {
+  await call<unknown>(t, 'POST', `/v1/agent/sessions/${seg(id)}/resume`, {})
+}
+
+/** A new title, up to the platform's 512 characters. */
+export async function rename(t: Target, id: string, title: string): Promise<Session> {
+  const name = title.trim()
+  if (!name) throw new Refusal(400, 'Give the run a name')
+  if (name.length > 512) throw new Refusal(400, 'A run’s name is at most 512 characters')
+  return session(await call<unknown>(t, 'PATCH', `/v1/agent/sessions/${seg(id)}`, { title: name }))
+}
+
+/**
+ * Open the run's story to the public build route, or close it. The platform
+ * refuses to open one that names no project, because that route is keyed on
+ * the org and the project.
+ */
+export async function publish(t: Target, id: string, on: boolean): Promise<Session> {
+  return session(await call<unknown>(t, 'PATCH', `/v1/agent/sessions/${seg(id)}`, { published: on }))
+}
+
+/** Where anyone can read a published run's story: the public build route, by org and project. */
+export const story = (t: Target, org: string, project: string): string =>
+  org && project ? `${t.api}/v1/agent/builds/${seg(org)}/${seg(project)}` : ''
 
 export interface Watch {
   session?: (s: Session) => void
