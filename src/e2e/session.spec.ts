@@ -133,7 +133,7 @@ test('a run that names no project offers no share', async ({ page: p }) => {
 test('Find reads the org’s runs by status and pages back', async ({ page: p }, info) => {
   const sent = await platform(p)
   await p.goto(`/${SESSION}`)
-  await p.getByRole('button', { name: 'Search' }).first().click()
+  await p.getByRole('button', { name: 'Search runs' }).first().click()
   const dialog = p.getByRole('dialog')
   await expect(dialog.getByRole('listitem', { name: `${REPO}: Add the widget` })).toBeVisible()
   await dialog.getByRole('button', { name: 'Older runs' }).click()

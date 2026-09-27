@@ -1,12 +1,13 @@
 /**
  * The rail's foot: the card that offers Hanzo in Slack, and the menu the account
- * row opens — who is signed in, Settings, Usage, the plans, help and logging out.
+ * row opens — who is signed in, the organization they act in, Settings, Usage,
+ * the plans, help and logging out.
  * Everything it opens is an address of this page, but help, which is the
  * documentation.
  */
 import { Popover, SizableText, XStack, YStack } from '@hanzo/gui'
 import { Gauge, LifeBuoy, LogOut, Settings, Slack as Mark, Sparkles, X } from '@hanzogui/lucide-icons-2'
-import { MenuRow, MenuRule } from '@hanzo/ui/product'
+import { MenuLabel, MenuRow, MenuRule } from '@hanzo/ui/product'
 
 import { useHost } from './host.tsx'
 import { path } from './route.ts'
@@ -42,6 +43,8 @@ export function Slack({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: ()
  */
 export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChange: (o: boolean) => void; narrow: boolean }) {
   const host = useHost()
+  // The organizations this person acts in; choosing one reloads the page scoped to it.
+  const orgs = host.memberships ?? (host.org ? [host.org] : [])
   const go = (p: string) => {
     onOpenChange(false)
     host.go(p)
@@ -65,6 +68,25 @@ export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChang
           <SizableText size="$2" color="$soft" px="$2" py="$1.5" numberOfLines={1}>
             {host.person?.email || host.person?.name || ''}
           </SizableText>
+          {orgs.length ? (
+            <>
+              <MenuRule />
+              <MenuLabel>Organization</MenuLabel>
+              <YStack role="radiogroup" aria-label="Organizations" gap="$1">
+                {orgs.map((o) => (
+                  <MenuRow
+                    key={o}
+                    label={o}
+                    active={o === host.org}
+                    onPress={() => {
+                      onOpenChange(false)
+                      if (o !== host.org) host.chooseOrg?.(o)
+                    }}
+                  />
+                ))}
+              </YStack>
+            </>
+          ) : null}
           <MenuRule />
           <MenuRow label="Settings" icon={<Settings size={16} />} onPress={() => go(path({ kind: 'settings', section: 'general' }))} />
           <MenuRow label="Usage" icon={<Gauge size={16} />} onPress={() => go(path({ kind: 'settings', section: 'usage' }))} />

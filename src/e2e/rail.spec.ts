@@ -54,13 +54,14 @@ test.describe('the rail', () => {
     await platform(page)
     await page.goto('/')
     const open = async () => {
-      await page.getByRole('button', { name: 'Account: dave@acme.test' }).click()
+      await page.getByRole('button', { name: 'Account: Dave · acme' }).click()
       const menu = page.getByRole('menu', { name: 'Account' })
       await expect(menu).toBeVisible()
       return menu
     }
     let menu = await open()
     await expect(menu.getByText('dave@acme.test')).toBeVisible()
+    await expect(menu.getByRole('radiogroup', { name: 'Organizations' }).getByText('acme', { exact: true })).toBeVisible()
     for (const row of ['Settings', 'Usage', 'View all plans', 'Get help', 'Log out']) await expect(menu.getByRole('menuitem', { name: row })).toBeVisible()
     await page.screenshot({ path: info.outputPath('account-menu.png') })
     await menu.getByRole('menuitem', { name: 'Usage' }).click()
@@ -82,7 +83,7 @@ test.describe('the rail', () => {
     await platform(page, { 'hanzo.build.rail': true })
     await page.goto('/')
     await expect(page.getByText('Try Hanzo in Slack')).toHaveCount(0)
-    await page.getByRole('button', { name: 'Account: dave@acme.test' }).click()
+    await page.getByRole('button', { name: 'Account: Dave · acme' }).click()
     const menu = page.getByRole('menu', { name: 'Account' })
     await expect(menu.getByRole('menuitem', { name: 'Log out' })).toBeVisible()
     expect((await menu.boundingBox())!.x).toBeGreaterThanOrEqual(56)
@@ -96,7 +97,7 @@ test.describe('the rail', () => {
     await platform(page)
     await page.goto('/')
     await page.getByLabel('Open runs').click()
-    await page.getByRole('button', { name: 'Account: dave@acme.test' }).last().click()
+    await page.getByRole('button', { name: 'Account: Dave · acme' }).last().click()
     const menu = page.getByRole('menu', { name: 'Account' })
     await expect(menu).toBeVisible()
     await expect(menu.getByRole('menuitem', { name: 'Log out' })).toBeVisible()
@@ -284,4 +285,22 @@ test.describe('Code settings', () => {
       await page.screenshot({ path: info.outputPath(`phone-${section}.png`), fullPage: true })
     }
   })
+})
+
+test('the account menu switches the organization, and the row says which', async ({ page }) => {
+  await platform(page)
+  // A person in two organizations: the token names both, and the page acts in acme first.
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
+  const two = [b64({ alg: 'none' }), b64({ sub: 'acme/dave', email: 'dave@acme.test', orgs: [{ org: 'acme', role: 'admin' }, { org: 'lux', role: 'member' }] }), 'x'].join('.')
+  await page.addInitScript((t) => {
+    localStorage.setItem('hanzo_iam_access_token', t)
+    if (!localStorage.getItem('hanzo_iam_current_org')) localStorage.setItem('hanzo_iam_current_org', 'acme')
+  }, two)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Account: Dave · acme' }).click()
+  const orgs = page.getByRole('menu', { name: 'Account' }).getByRole('radiogroup', { name: 'Organizations' })
+  await expect(orgs.getByText('lux', { exact: true })).toBeVisible()
+  await orgs.getByText('lux', { exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Account: Dave · lux' })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('hanzo_iam_current_org'))).toBe('lux')
 })
