@@ -24,3 +24,10 @@ export function step(href: string, page: string): Step {
   }
   return { kind: 'away', href: url.href }
 }
+
+/** Take the step a click names: move in the router, leave for the grant, or stay. */
+export function follow(href: string, page: string, to: { here: (path: string) => void; away: (href: string) => void }): void {
+  const next = step(href, page)
+  if (next.kind === 'here') to.here(next.path)
+  else if (next.kind === 'away') to.away(next.href)
+}

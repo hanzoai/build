@@ -41,7 +41,8 @@ export function useRead<T>(load: (() => Promise<T>) | null, initial: T, key: unk
         setValue(v)
         setError(null)
       })
-      .catch((e: unknown) => live && setError(e instanceof Error ? e : new Error(String(e))))
+      // Every read goes through the platform's client, which refuses with an Error.
+      .catch((e: unknown) => live && setError(e as Error))
       .finally(() => live && setLoading(false))
     return () => {
       live = false
@@ -60,18 +61,19 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
   const read = useRead(signed ? () => list(t, { kind: 'coding', limit: 50 }) : null, [] as Session[], [t, signed])
   const [rows, setRows] = useState<Session[]>([])
   useEffect(() => setRows(read.value), [read.value])
-  // A feed of the whole org carries every agent's heartbeat, so an unseen id
-  // re-reads the list at most every five seconds.
   const last = useRef(0)
-  const reload = useRef(() => {})
-  reload.current = () => {
-    const now = Date.now()
-    if (now - last.current < 5000) return
-    last.current = now
-    read.reload()
-  }
+  // useRead's reload is the same function every render, so it never reopens the feed.
+  const again = read.reload
   useEffect(() => {
     if (!signed) return
+    // A feed of the whole org carries every agent's heartbeat, so an unseen id
+    // re-reads the list at most every five seconds.
+    const reload = () => {
+      const now = Date.now()
+      if (now - last.current < 5000) return
+      last.current = now
+      again()
+    }
     const ctl = new AbortController()
     void watch(
       t,
@@ -82,7 +84,7 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
             const i = prev.findIndex((r) => r.id === s.id)
             if (i === -1) {
               // A run this list has not seen: re-read rather than guess its kind.
-              reload.current()
+              reload()
               return prev
             }
             const next = prev.slice()
@@ -90,7 +92,7 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
             return next
           }),
         open: (n) => {
-          if (n > 0) reload.current()
+          if (n > 0) reload()
         },
       },
       ctl.signal,
@@ -98,7 +100,7 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
       /* a refused feed leaves the list as read */
     })
     return () => ctl.abort()
-  }, [t, signed])
+  }, [t, signed, again])
   return { ...read, value: rows }
 }
 
@@ -185,7 +187,7 @@ export function useRun(t: Target, id: string | null): RunState {
         },
       },
       ctl.signal,
-    ).catch((e: unknown) => setRefused(e instanceof Error ? e.message : 'The feed was refused'))
+    ).catch((e: unknown) => setRefused((e as Error).message))
     return () => ctl.abort()
   }, [t, id])
 

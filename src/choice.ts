@@ -43,7 +43,7 @@ function write(org: string | null, value: Record<string, unknown>) {
 /** Point New at a forge codebase, and optionally a first draft. */
 export function pinCodebase(org: string | null, c: Codebase, ask = '') {
   const repo = asRepo(c)
-  write(org, { ...read(org), repo, branch: repo.default_branch || 'main', ask })
+  write(org, { ...read(org), repo, branch: repo.default_branch, ask })
 }
 
 /** Which board Issues is showing. '' is every board. */

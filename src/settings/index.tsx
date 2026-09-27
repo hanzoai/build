@@ -12,7 +12,8 @@ import { ENTRIES, GROUPS } from './sections.tsx'
 
 export function Settings({ section }: { section: Section }) {
   const host = useHost()
-  const entry = ENTRIES.find((e) => e.id === section) ?? ENTRIES[0]!
+  // Every section the route grammar names has an entry.
+  const entry = ENTRIES.find((e) => e.id === section)!
   const go = (id: Section) => host.go(path({ kind: 'settings', section: id }))
 
   return (
@@ -35,7 +36,6 @@ export function Settings({ section }: { section: Section }) {
         </SizableText>
         {GROUPS.map((g) => {
           const list = ENTRIES.filter((e) => e.group === g)
-          if (!list.length) return null
           return (
             <YStack key={g} gap="$0.5">
               <SizableText size="$1" color="$soft" px="$2" pb="$1">

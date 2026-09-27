@@ -23,7 +23,8 @@ const QUOTE = /^\s{0,3}>\s?(.*)$/
 const ROW = /^\s*\|(.*)\|\s*$/
 const DIVIDER = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/
 
-const cells = (line: string): string[] => (ROW.exec(line)?.[1] ?? line).split('|').map((c) => c.trim())
+/** A table row's cells. Only a line ROW matched is one. */
+const cells = (line: string): string[] => ROW.exec(line)![1]!.split('|').map((c) => c.trim())
 
 /** The blocks of a markdown text, in order. */
 export function blocks(md: string): Block[] {
@@ -42,7 +43,7 @@ export function blocks(md: string): Block[] {
       const body: string[] = []
       i++
       while (i < lines.length && !lines[i]!.trim().startsWith(fence[1]!)) body.push(lines[i++]!)
-      out.push({ kind: 'code', lang: fence[2] ?? '', text: body.join('\n') })
+      out.push({ kind: 'code', lang: fence[2]!, text: body.join('\n') })
       continue
     }
     if (!line.trim()) {
@@ -93,7 +94,7 @@ export function blocks(md: string): Block[] {
           continue
         }
         // A line indented under an item continues it.
-        if (lines[j]!.trim() && /^\s{2,}/.test(lines[j]!) && items.length) {
+        if (lines[j]!.trim() && /^\s{2,}/.test(lines[j]!)) {
           items[items.length - 1]!.text += ` ${lines[j]!.trim()}`
           j++
           continue
@@ -131,7 +132,8 @@ export function spans(text: string): Span[] {
       out.push(href && !m[0].startsWith('!') ? { kind: 'link', text: m[3], href } : { kind: 'text', text: m[3] })
     } else if (m[5] !== undefined || m[6] !== undefined) out.push({ kind: 'strong', text: (m[5] ?? m[6])! })
     else if (m[7] !== undefined || m[8] !== undefined) out.push({ kind: 'em', text: (m[7] ?? m[8])! })
-    else if (m[9] !== undefined) out.push({ kind: 'link', text: m[9], href: m[9] })
+    // What is left is the bare address, the only other thing INLINE matches.
+    else out.push({ kind: 'link', text: m[9]!, href: m[9]! })
     at = m.index! + m[0].length
   }
   if (at < text.length) out.push({ kind: 'text', text: text.slice(at) })

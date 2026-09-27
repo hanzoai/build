@@ -63,8 +63,8 @@ export function Attach({ files, onFiles, onNote }: { files: Attached[]; onFiles:
         aria-hidden
         onChange={(e) => {
           const input = e.currentTarget
-          if (!input.files) return
-          void read(files, input.files).then(({ files: next, note }) => {
+          // A file input always holds a list, empty or not.
+          void read(files, input.files!).then(({ files: next, note }) => {
             onFiles(next)
             onNote(note)
             input.value = ''
@@ -108,7 +108,7 @@ export function Dictate({ onText, onNote }: { onText: (text: string) => void; on
         name="Dictation language"
         icon={<ChevronDown size={12} />}
         label=""
-        chosen={voice.languages.find((l) => l.id === voice.language) ?? null}
+        chosen={voice.languages.find((l) => l.id === voice.language)!}
         items={voice.languages}
         onChange={(l) => voice.setLanguage(l.id)}
         placeholder="Search languages…"

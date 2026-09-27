@@ -13,37 +13,9 @@ import { Outlet, useLocation, useNavigate } from 'react-router'
 import { Builder } from '../builder.tsx'
 import type { Host, Person } from '../host.tsx'
 import { enter } from './enter.ts'
-import { step } from './stay.ts'
+import { follow } from './stay.ts'
 import { administers, bearer, org, orgs, own, selectOrg, subject } from './token.ts'
-
-/**
- * WHERE THIS BROWSER SIGNS IN. hanzo.app is the Hanzo App, so there it signs in
- * as that app's client, `hanzo-app`; anywhere else (hanzo.build until it sends
- * people to hanzo.app, the dev server) as `hanzo-build`. Under the estate's
- * `<org>-<app>` scheme the org is the name's first word.
- */
-export function origin() {
-  const clientId = import.meta.env.VITE_HANZO_CLIENT_ID || (window.location.hostname === 'hanzo.app' ? 'hanzo-app' : 'hanzo-build')
-  return {
-    serverUrl: (import.meta.env.VITE_HANZO_IAM || 'https://hanzo.id').replace(/\/+$/, ''),
-    clientId,
-    redirectUri: `${window.location.origin}/auth/callback`,
-    organization: clientId.split('-')[0]!,
-  }
-}
-
-/**
- * The platform. `api.hanzo.ai` on a Hanzo host; this page's own origin
- * anywhere else, where the dev and preview servers proxy `/v1` — the gateway
- * admits an origin by allowlist and a localhost port is not on it.
- */
-function api(): string {
-  const set = import.meta.env.VITE_HANZO_API
-  if (set) return set.replace(/\/+$/, '')
-  const host = window.location.hostname
-  if (host === 'hanzo.ai' || host.endsWith('.hanzo.ai') || host === 'hanzo.app' || host === 'hanzo.build') return 'https://api.hanzo.ai'
-  return window.location.origin
-}
+import { api, origin } from './where.ts'
 
 export function Mount() {
   const door = useIam()
@@ -70,7 +42,7 @@ export function Mount() {
   )
 
   const host: Host = {
-    api: api(),
+    api: api(import.meta.env),
     token: bearer,
     org: scoped,
     memberships: orgs(),
@@ -90,11 +62,7 @@ export function Mount() {
       settings: window.location.origin,
       home: window.location.origin,
     },
-    open: (href) => {
-      const next = step(href, window.location.href)
-      if (next.kind === 'here') navigate(next.path)
-      else if (next.kind === 'away') window.location.assign(next.href)
-    },
+    open: (href) => follow(href, window.location.href, { here: navigate, away: (to) => window.location.assign(to) }),
     signIn: () => void enter(door),
     signOut: () => void logout(),
   }
@@ -108,7 +76,7 @@ export function Identity() {
   // emptied of their selections.
   own(subject())
   return (
-    <IamProvider config={{ ...origin(), postLogoutRedirectUri: `${window.location.origin}/` }}>
+    <IamProvider config={{ ...origin(import.meta.env), postLogoutRedirectUri: `${window.location.origin}/` }}>
       <Outlet />
     </IamProvider>
   )

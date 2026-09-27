@@ -60,7 +60,7 @@ function Draw({ block }: { block: Block }): ReactNode {
   switch (block.kind) {
     case 'heading':
       return (
-        <SizableText size={SIZES[block.level - 1] ?? '$3'} color="$ink" fontWeight="600" pt="$1">
+        <SizableText size={SIZES[block.level - 1]!} color="$ink" fontWeight="600" pt="$1">
           <Inline text={block.text} />
         </SizableText>
       )

@@ -58,16 +58,6 @@ export function subject(): string | undefined {
   return typeof sub === 'string' && sub ? sub : undefined
 }
 
-/** Whether this browser holds a session. */
-export function hasSession(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return Boolean(bearer() || window.localStorage.getItem(WHO))
-  } catch {
-    return false
-  }
-}
-
 /**
  * Bind everything this app keeps in the browser to ONE person.
  *
