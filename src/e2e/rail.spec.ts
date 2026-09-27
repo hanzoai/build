@@ -300,7 +300,8 @@ test('the account menu switches the organization, and the row says which', async
   await page.getByRole('button', { name: 'Account: Dave · acme' }).click()
   const orgs = page.getByRole('menu', { name: 'Account' }).getByRole('radiogroup', { name: 'Organizations' })
   await expect(orgs.getByText('lux', { exact: true })).toBeVisible()
-  await orgs.getByText('lux', { exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Account: Dave · lux' })).toBeVisible()
+  // Switching reloads the app, so the row is drawn again from a fresh start.
+  await Promise.all([page.waitForEvent('load'), orgs.getByText('lux', { exact: true }).click()])
+  await expect(page.getByRole('button', { name: 'Account: Dave · lux' })).toBeVisible({ timeout: 15_000 })
   expect(await page.evaluate(() => localStorage.getItem('hanzo_iam_current_org'))).toBe('lux')
 })
