@@ -17,7 +17,8 @@
     "test": "vitest run",
     "e2e": "HANZO_E2E=1 vitest run src/e2e",
     "prepack": "pnpm run build:lib",
-    "site": "playwright test"
+    "site": "playwright test",
+    "cover": "node cover/run.ts"
   },
   "devDependencies": {
     "@hanzo/font": "catalog:",
@@ -33,6 +34,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "monocart-coverage-reports": "catalog:",
     "next-themes": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

@@ -1,196 +1,13 @@
 /**
  * Customize — skills, connectors, plugins and agents, yours and to discover —
- * signed in against a stubbed platform (signed.ts) that keeps what it is sent,
+ * signed in against a stubbed platform (stubs.ts) that keeps what it is sent,
  * so a write shows up on the next read the way it would live.
  */
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { signIn, type Reply, type Sent } from './signed.ts'
-
-const CATALOGUE = {
-  brand: 'hanzo',
-  products: [
-    { name: 'git', path: '_git/index.json', skill_count: 2 },
-    { name: 'kms', path: '_kms/index.json', skill_count: 1 },
-  ],
-  skills: [
-    { name: 'git_repos', description: 'List the forge’s repositories.', service: 'git', path: 'git_repos/SKILL.md' },
-    { name: 'git_branches', description: 'List a repository’s branches.', service: 'git', path: 'git_branches/SKILL.md' },
-    { name: 'kms_secrets', description: 'Read the names of an org’s secrets.', service: 'kms', path: 'kms_secrets/SKILL.md' },
-  ],
-}
-
-const LISTINGS = [
-  {
-    id: 'com.stripe_mcp',
-    name: 'com.stripe/mcp',
-    title: 'Stripe',
-    description: 'Payments, customers and invoices.',
-    vendor: 'com.stripe',
-    featured: true,
-    official: true,
-    transports: ['streamable-http'],
-    remotes: [{ transport: 'streamable-http', url: 'https://mcp.stripe.com' }],
-    repo: 'https://github.com/stripe/agent-toolkit',
-  },
-  {
-    id: 'io.linear_mcp',
-    name: 'io.linear/mcp',
-    title: 'Linear',
-    description: 'Issues and projects.',
-    vendor: 'io.linear',
-    transports: ['streamable-http'],
-    remotes: [{ transport: 'streamable-http', url: 'https://mcp.linear.app/mcp' }],
-  },
-  {
-    id: 'io.local_files',
-    name: 'io.local/files',
-    title: 'Local files',
-    description: 'Reads a disk. Ships as a package.',
-    vendor: 'io.local',
-    transports: ['stdio'],
-    packages: [{ registry: 'npm', identifier: '@local/files-mcp', runtime: 'npx', transport: 'stdio' }],
-  },
-]
-
-const PRESETS = [
-  { id: 'create', title: 'Product & Fashion Create', systemPrompt: 'You are Hanzo Create, a render assistant.', serverExecuted: true },
-  { id: 'graph', title: 'Studio Graph Copilot', systemPrompt: 'You read a graph.', serverExecuted: false },
-]
-
-/** A platform that keeps what it is sent. */
-function platform(page: Page, seed: Record<string, unknown>[] = []) {
-  const on = new Set<string>(['skill_triage', 'skill_git_branches'])
-  const skills = [{ id: 'triage', name: 'triage', description: 'How we triage an issue', content: '# Triage\n\nRead it first.', createdAt: 1790000000, org: 'acme' }]
-  const servers: Record<string, unknown>[] = [...seed]
-  const plugins: Record<string, unknown>[] = [{ id: 'p0a1b2', name: 'weather', provider: '', source: 'export const weather = 1', createdAt: 1790000000 }]
-  const agents: Record<string, unknown>[] = [
-    { id: 'agent_1', name: 'helper', model: 'zen5.8', description: 'Answers questions about the codebase', instructions: 'Be terse.', tools: ['skill_triage'], status: 'ready', runs: 4, cap_micro_usd: 10_000_000, max_task_micro_usd: 1_000_000, consumed_micro_usd: 250_000, period: 'month' },
-  ]
-  const mcpTools = () =>
-    servers.flatMap((s) => [
-      { name: `${s.id}_create_payment_link`, source: 'mcp', description: 'Create a payment link', activated: on.has(`${s.id}_create_payment_link`) },
-      { name: `${s.id}_list_customers`, source: 'mcp', description: 'List customers', activated: on.has(`${s.id}_list_customers`) },
-    ])
-  const skillTools = () => [
-    ...CATALOGUE.skills.map((s) => ({ name: `skill_${s.name}`, source: 'skill', description: s.description, activated: on.has(`skill_${s.name}`) })),
-    ...skills.map((s) => ({ name: `skill_${s.name}`, source: 'skill', description: s.description, activated: on.has(`skill_${s.name}`) })),
-  ]
-
-  const answer = ({ method, path, query, body }: Sent): Reply | undefined => {
-    const b = (body ?? {}) as Record<string, unknown>
-    if (path === '/v1/tool/activation' && method === 'PUT') {
-      for (const n of (b.activate as string[]) ?? []) on.add(n)
-      for (const n of (b.deactivate as string[]) ?? []) on.delete(n)
-      return { json: { enabled: [...on] } }
-    }
-    if (path === '/v1/tool/activation') return { json: { enabled: [...on] } }
-    if (path === '/v1/tool/skills' && method === 'POST') {
-      const s = { id: b.name, name: b.name, description: b.description, content: b.content, createdAt: 1790000100, org: 'acme' }
-      const i = skills.findIndex((x) => x.name === b.name)
-      if (i === -1) skills.push(s as (typeof skills)[number])
-      else skills[i] = s as (typeof skills)[number]
-      return { status: 201, json: { skill: s } }
-    }
-    if (path === '/v1/tool/skills') return { json: { source: 'skill', tools: skillTools().filter((x) => !query.includes('activated=true') || x.activated) } }
-    if (path === '/v1/tool/skills/authored') return { json: { skills } }
-    if (path.startsWith('/v1/tool/skills/') && method === 'DELETE') {
-      const id = decodeURIComponent(path.split('/').pop()!)
-      skills.splice(skills.findIndex((x) => x.id === id), 1)
-      return { json: { deleted: id } }
-    }
-    if (path === '/v1/tool') {
-      const all = [...mcpTools(), ...skillTools(), { name: 'agent_helper', source: 'agent', description: 'helper', activated: on.has('agent_helper') }]
-      const src = new URLSearchParams(query).get('source')
-      return { json: { tools: all.filter((x) => (!src || x.source === src) && (!query.includes('activated=true') || x.activated)) } }
-    }
-    if (path === '/v1/tool/mcp/servers' && method === 'POST') {
-      const l = LISTINGS.find((x) => x.id === b.listing)
-      const s = {
-        id: l ? l.vendor.replace('.', '-') : String(b.name).toLowerCase(),
-        org: 'acme',
-        name: b.name || l?.title,
-        url: l ? l.remotes?.[0]?.url : b.url,
-        authHeader: b.authHeader,
-        hasSecret: Boolean(b.secret),
-        listing: b.listing ?? '',
-        source: b.listing ? 'catalog' : 'org',
-        createdAt: 1790000200,
-      }
-      servers.push(s)
-      return { status: 201, json: s }
-    }
-    if (path === '/v1/tool/mcp/servers') return { json: { servers } }
-    if (path.startsWith('/v1/tool/mcp/servers/') && method === 'DELETE') {
-      servers.splice(servers.findIndex((x) => x.id === path.split('/').pop()), 1)
-      return { status: 204, text: '' }
-    }
-    if (path === '/v1/tool/catalog') {
-      const q = (new URLSearchParams(query).get('q') ?? '').toLowerCase()
-      const list = LISTINGS.filter((l) => !q || `${l.title} ${l.description}`.toLowerCase().includes(q))
-      return { json: { catalog: list, total: list.length, limit: 48, offset: 0 } }
-    }
-    if (path.startsWith('/v1/tool/catalog/')) return { json: LISTINGS.find((l) => l.id === path.split('/').pop()) ?? {} }
-    if (path === '/v1/mcp')
-      return {
-        json: {
-          jsonrpc: '2.0',
-          id: 1,
-          result: {
-            tools: [
-              { name: 'git', description: 'git: the forge.', inputSchema: { properties: { op: { enum: ['list_git_repos', 'get_git_repo'] } } } },
-              { name: 'kms', description: 'kms: secrets.', inputSchema: { properties: { op: { enum: ['list_secrets'] } } } },
-            ],
-          },
-        },
-      }
-    if (path === '/v1/tool/plugins/build') {
-      if (String(b.source ?? '').includes('oops')) return { status: 422, json: { status: 422, title: 'Unprocessable Entity', detail: 'bundle: Expected ";" but found "oops"' } }
-      const p = { id: `p${plugins.length}`, name: b.name, provider: b.provider ?? '', source: b.source ?? `// written from: ${b.spec}`, createdAt: 1790000300 }
-      plugins.unshift(p)
-      return { status: 201, json: { bytes: 2048, generated: Boolean(b.spec), plugin: p } }
-    }
-    if (path === '/v1/tool/plugins/authored') return { json: { plugins } }
-    if (path.startsWith('/v1/tool/plugins/authored/') && method === 'DELETE') {
-      plugins.splice(plugins.findIndex((x) => x.id === path.split('/').pop()), 1)
-      return { json: { deleted: path.split('/').pop() } }
-    }
-    if (path === '/v1/tool/plugins') return { json: { plugins: [{ name: 'tools', enabled: true, prefixes: ['/v1/tool'] }, { name: 'agents', enabled: true, prefixes: ['/v1/agent'] }] } }
-    if (path === '/v1/agent/chat/presets') return { json: { presets: PRESETS } }
-    if (path === '/v1/agent' && method === 'POST') {
-      const a = { ...b, id: `agent_${agents.length + 1}`, model: b.model ?? 'zen5.8', status: 'ready', runs: 0, consumed_micro_usd: 0 }
-      agents.push(a)
-      return { status: 201, json: a }
-    }
-    if (path === '/v1/agent') return { json: { agents: agents.map(({ instructions: _, ...a }) => a) } }
-    const ref = path.match(/^\/v1\/agent\/(agent_\d+|[a-z]+)$/)?.[1]
-    if (ref && !['sessions', 'targets', 'coding', 'metrics', 'activity', 'runs'].includes(ref)) {
-      const i = agents.findIndex((a) => a.id === ref || a.name === ref)
-      if (method === 'PATCH') {
-        agents[i] = { ...agents[i], ...b }
-        return { json: agents[i] }
-      }
-      if (method === 'DELETE') {
-        agents.splice(i, 1)
-        return { status: 204, text: '' }
-      }
-      return { json: agents[i] }
-    }
-    if (path === '/v1/models') return { json: { data: [{ id: 'zen5.8' }, { id: 'zen5.8-coder' }] } }
-    return undefined
-  }
-  return signIn(page, answer)
-}
-
-/** The brand's public catalogue, which lives at the platform's root and not under /v1. */
-async function catalogue(page: Page) {
-  await page.route('**/.well-known/agent-skills/**', (r) => {
-    const url = new URL(r.request().url())
-    if (url.pathname.endsWith('/index.json')) return r.fulfill({ json: CATALOGUE })
-    const name = url.pathname.split('/').at(-2)
-    return r.fulfill({ body: `# ${name}\n\nWhat ${name} does, step by step.\n`, contentType: 'text/markdown' })
-  })
-}
+import { cramped, expect, test } from './fixture.ts'
+import type { Sent } from './signed.ts'
+import { catalogue, customize as platform } from './stubs.ts'
 
 async function open(page: Page, at: string) {
   await catalogue(page)
@@ -416,23 +233,6 @@ test('agents: a preset opens a new agent written from it', async ({ page }, info
   expect(sentTo(sent, 'POST', '/v1/agent').at(-1)?.body).toMatchObject({ name: 'create', description: 'Product & Fashion Create', model: 'zen5.8-coder', tools: ['*'], cap_micro_usd: 5_000_000, max_task_micro_usd: 500_000, period: 'month' })
 })
 
-/** Anything wider than the window, or cut off at its edges. */
-async function overflow(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const w = window.innerWidth
-    const out: string[] = []
-    if (document.documentElement.scrollWidth > w + 1) out.push(`page ${document.documentElement.scrollWidth}px wide`)
-    for (const el of document.querySelectorAll('body *')) {
-      const r = el.getBoundingClientRect()
-      const s = getComputedStyle(el)
-      if (!r.width || !r.height || s.visibility === 'hidden') continue
-      if (el.closest('[aria-label="Runs"]')) continue
-      if (r.right > w + 1 || r.left < -1) out.push(`${el.tagName} ${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 40)}`)
-    }
-    return out
-  })
-}
-
 test('a phone gets every tab whole, with the cards in one column', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await open(page, '/-/customize')
@@ -442,7 +242,7 @@ test('a phone gets every tab whole, with the cards in one column', async ({ page
     for (const view of ['Yours', 'Discover']) {
       await page.getByRole('button', { name: view, exact: true }).click()
       await page.waitForTimeout(300)
-      expect(await overflow(page), `${tab} ${view}`).toEqual([])
+      expect(await cramped(page), `${tab} ${view}`).toEqual([])
       await page.screenshot({ path: info.outputPath(`phone-${tab}-${view.toLowerCase()}.png`), fullPage: true })
     }
   }

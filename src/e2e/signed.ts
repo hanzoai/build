@@ -33,7 +33,6 @@ export type Answer = (sent: Sent) => Reply | undefined
 
 /** Signs the page in, seeds `kept` into its storage, and answers for the platform; returns what the page sent. */
 export async function signIn(page: Page, answer: Answer, kept: Record<string, unknown> = {}): Promise<Sent[]> {
-  const sent: Sent[] = []
   await page.addInitScript(
     ([token, org, seed]) => {
       if (sessionStorage.getItem('seeded')) return
@@ -47,6 +46,12 @@ export async function signIn(page: Page, answer: Answer, kept: Record<string, un
   )
   await page.route('**/.well-known/openid-configuration', (r) => r.fulfill({ status: 404 }))
   await page.route('**/v1/iam/oauth/userinfo', (r) => r.fulfill({ json: { sub: `${ORG}/dave`, name: 'Dave', email: 'dave@acme.test' } }))
+  return serve(page, answer)
+}
+
+/** Answers every /v1 call but IAM's for the platform, signed in or not; returns what the page sent. */
+export async function serve(page: Page, answer: Answer): Promise<Sent[]> {
+  const sent: Sent[] = []
   await page.route(
     (u) => u.pathname.startsWith('/v1/') && !u.pathname.startsWith('/v1/iam/'),
     async (r) => {

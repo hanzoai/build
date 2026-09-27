@@ -15,6 +15,7 @@ pnpm dev            # http://localhost:3200
 pnpm test           # the transport contract and the address grammar
 pnpm site           # every screen of https://hanzo.build in a browser (SITE= for another origin)
 pnpm e2e            # one live agent turn, projected the way a run draws it
+pnpm cover          # unit tests and every browser spec against a dev server, one coverage report in coverage/
 pnpm build:lib      # lib/ — what npm ships
 ```
 
@@ -26,6 +27,15 @@ refused.
 `/v1` is proxied to `api.hanzo.ai` from the dev server and from the preview of
 a build: the gateway admits an origin by allowlist and a localhost port is not
 on it.
+
+`pnpm cover` is one number for the unit tests and the browser specs together:
+both keep raw V8 coverage with source maps (`cover/unit.ts`, `src/e2e/fixture.ts`)
+and `cover/run.ts` merges them by original source into `coverage/html/index.html`,
+`lcov.info` and `coverage-summary.json`, and lists every file short of 100% with
+the lines no test reached in `coverage/gaps.txt`. Arguments go to Playwright
+(`pnpm cover src/e2e/run.spec.ts`). `src/e2e/screens.spec.ts` draws every screen
+and state at a phone, a tablet, a laptop and a desktop — checked to fit, and
+saved to `screens/<size>/<name>.png`.
 
 ## Mounting it
 

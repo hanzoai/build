@@ -1,118 +1,14 @@
 /**
  * A run as Claude Code on the web draws one, signed in against a stubbed
- * platform (signed.ts): the transcript as cards, a follow-up that continues a
+ * platform (stubs.ts): the transcript as cards, a follow-up that continues a
  * finished run, pause and resume, an approved plan, renaming and sharing, and
  * finding a run; and New's place and repository pickers.
  */
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { ORG, REPO, SESSION, signIn, type Sent } from './signed.ts'
-
-const NEXT = `sess_${'b'.repeat(32)}`
-
-/** What `dev exec` printed, as the sandbox narrated it. */
-const OUT = [
-  'Hanzo Dev v0.6.94',
-  '--------',
-  'workdir: /work/universe',
-  '--------',
-  'user',
-  'Add the widget',
-  'codex',
-  'I will read the widget first.',
-  'exec',
-  `/bin/bash -lc 'sed -n '"'"'1,40p'"'"' widget.go' in /work/universe`,
-  ' succeeded in 4ms:',
-  'package widget',
-  'exec',
-  `/bin/bash -lc 'go test ./...' in /work/universe`,
-  ' exited 1 in 900ms:',
-  'FAIL widgets',
-  'apply patch',
-  'patch: completed',
-  '/work/universe/widget.go',
-  'diff --git a/widget.go b/widget.go',
-  '@@ -1 +1,2 @@',
-  ' package widget',
-  '+func New() {}',
-  'codex',
-  'Added **New** to `widget.go`:',
-  '',
-  '- it returns a widget',
-  '- the tests pass',
-  'tokens used',
-  '1,234',
-  '',
-].join('\n')
-
-const PLAN = '1. Read `widget.go`\n2. Add **New**'
-
-interface Shape {
-  status?: string
-  mode?: string
-  project?: string
-  published?: boolean
-  environment?: string
-  /** The status event the run ended or paused with. */
-  last?: Record<string, unknown> | null
-}
-
-function events({ mode = 'build', last = { status: 'done', changed: true, branch: 'agent/ab12' } }: Shape) {
-  const ev = (seq: number, kind: string, payload: unknown) => ({ id: `e${seq}`, sessionId: SESSION, seq, kind, actor: `${ORG}/dave`, payload, createdAt: '' })
-  const list = [
-    ev(1, 'status', { status: 'started', branch: 'agent/ab12' }),
-    ev(2, 'tool-call', { step: 'lease', message: 'leasing a dev sandbox', status: 'running' }),
-    ev(3, 'tool-call', { step: 'leased', message: 'sandbox m_1 (dev)', status: 'running' }),
-    ev(4, 'tool-call', { step: 'clone', message: 'cloning the codebase', status: 'running' }),
-    ev(5, 'log', { message: 'Cloning into universe…\n' }),
-    ev(6, 'tool-call', { step: 'exit', message: 'exit 0' }),
-    ev(7, 'tool-call', { step: '', message: 'running the task', status: 'running' }),
-    ev(8, 'log', { message: mode === 'plan' ? `codex\n${PLAN}\n` : OUT }),
-    ev(9, 'tool-call', { step: 'exit', message: 'exit 0' }),
-  ]
-  if (last) list.push(ev(10, 'status', mode === 'plan' ? { status: 'done', mode: 'plan', changed: false, plan: PLAN } : last))
-  return list
-}
-
-/** The platform for one run, and what it answers a start, a pause, a rename and a list with. */
-function platform(page: Page, shape: Shape = {}) {
-  const { status = 'done', mode = 'build', project = '', published = false, environment = 'sandbox' } = shape
-  return signIn(page, ({ method, path, query }) => {
-    if (path === `/v1/agent/sessions/${SESSION}` && method === 'GET') {
-      return {
-        json: {
-          id: SESSION,
-          org: ORG,
-          title: `${REPO}: Add the widget`,
-          status,
-          kind: 'coding',
-          repo: `hanzoai/${REPO}`,
-          base: 'main',
-          branch: mode === 'plan' ? '' : 'agent/ab12',
-          environment,
-          mode,
-          project,
-          published,
-          events: 10,
-          recentEvents: events(shape),
-        },
-      }
-    }
-    if (path === `/v1/agent/sessions/${SESSION}` && method === 'PATCH') return { json: { id: SESSION, title: 'Renamed run', published: true, project } }
-    if (path === `/v1/agent/sessions/${NEXT}`) return { json: { id: NEXT, title: `${REPO}: now add tests`, status: 'running', kind: 'coding', recentEvents: [] } }
-    if (path === '/v1/agent/sessions/stream') return { text: '', type: 'text/event-stream' }
-    if (path === '/v1/agent/coding' && method === 'POST') return { status: 202, json: { sessionId: NEXT, repo: REPO, branch: 'agent/bb' } }
-    if (/^\/v1\/agent\/sessions\/[^/]+\/(pause|resume|stop|message)$/.test(path)) return { json: { command: path.split('/').pop() } }
-    if (path === '/v1/agent/sessions' && method === 'GET') {
-      const q = new URLSearchParams(query)
-      if (q.get('after') === 'c1') return { json: { sessions: [{ id: `sess_${'d'.repeat(32)}`, title: 'An older run', status: 'done', repo: 'hanzoai/old' }], next: '' } }
-      if (q.get('status') === 'paused') return { json: { sessions: [{ id: `sess_${'e'.repeat(32)}`, title: 'A paused run', status: 'paused', repo: 'hanzoai/universe' }], next: '' } }
-      return { json: { sessions: [{ id: SESSION, title: `${REPO}: Add the widget`, status, repo: `hanzoai/${REPO}` }], next: 'c1' } }
-    }
-    if (path === `/v1/environment/${REPO}`) return { json: { repo: REPO, install: 'pnpm i', start: '', secrets: [], state: 'ready' } }
-    return undefined
-  })
-}
+import { cramped, expect, test } from './fixture.ts'
+import { ORG, REPO, SESSION, type Sent } from './signed.ts'
+import { landing, NEXT, PLAN, session as platform } from './stubs.ts'
 
 const posted = (sent: Sent[], path: string) => sent.filter((s) => s.method === 'POST' && s.path === path)
 const transcript = (p: Page) => p.getByLabel('Transcript')
@@ -253,31 +149,6 @@ test('Find reads the org’s runs by status and pages back', async ({ page: p },
   await expect(p).toHaveURL(new RegExp(`/sess_${'e'.repeat(32)}$`))
 })
 
-const KEPT = {
-  [`hanzo.build.new.${ORG}`]: {
-    repo: { owner: ORG, name: REPO, full_name: `${ORG}/${REPO}`, private: true, default_branch: 'main', pushed_at: '', installation_id: 0, forge: true, clone: '' },
-    branch: 'main',
-    place: '',
-    mode: 'build',
-    model: '',
-    effort: 'medium',
-    ask: '',
-  },
-}
-
-function landing(page: Page) {
-  return signIn(
-    page,
-    ({ path }) => {
-      if (path === '/v1/agent/targets') return { json: { targets: [{ id: 'tgt_1', label: 'dave-laptop', status: 'online', capacity: '10 vCPU / 32G' }] } }
-      if (path === '/v1/git/repos') return { json: { data: [{ name: REPO, org: ORG, defaultBranch: 'main' }] } }
-      if (path === `/v1/environment/${REPO}`) return { json: { repo: REPO, install: 'pnpm i', start: '', secrets: [], state: 'ready' } }
-      return undefined
-    },
-    KEPT,
-  )
-}
-
 test('New runs in Cloud or on a machine under remote control, and says how to link one', async ({ page: p }, info) => {
   await landing(p)
   await p.goto('/')
@@ -314,8 +185,7 @@ test('a running run fits a phone', async ({ page: p }, info) => {
   await p.goto(`/${SESSION}`)
   await expect(p.getByRole('button', { name: 'Pause' })).toBeVisible()
   await expect(p.getByRole('button', { name: 'Notify me' })).toBeVisible()
-  const wide = await p.evaluate(() => document.documentElement.scrollWidth)
-  expect(wide).toBeLessThanOrEqual(390)
+  expect(await cramped(p)).toEqual([])
   await p.screenshot({ path: info.outputPath('run-phone.png') })
 })
 
@@ -325,7 +195,6 @@ test('New’s place picker fits a phone', async ({ page: p }, info) => {
   await p.goto('/')
   await p.getByRole('button', { name: 'Where the run runs: Cloud' }).click()
   await expect(p.getByText('Set up remote control')).toBeVisible()
-  const wide = await p.evaluate(() => document.documentElement.scrollWidth)
-  expect(wide).toBeLessThanOrEqual(390)
+  expect(await cramped(p)).toEqual([])
   await p.screenshot({ path: info.outputPath('place-phone.png') })
 })

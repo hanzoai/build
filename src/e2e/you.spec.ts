@@ -1,95 +1,14 @@
 /**
  * The personal half of Settings — General, Account, Privacy, Capabilities,
  * Memory and Code — signed in as an org admin against a stubbed platform
- * (signed.ts). IAM's own routes are answered here, since signed.ts leaves them
- * to IAM.
+ * (stubs.ts), IAM's own routes included.
  */
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { ORG, signIn, type Sent } from './signed.ts'
+import { cramped, expect, test } from './fixture.ts'
+import { ORG, type Sent } from './signed.ts'
+import { FACE, PNG, you as platform } from './stubs.ts'
 
-const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
-const FACE = `https://api.hanzo.ai/v1/account/avatar/${ORG}/dave/${'a'.repeat(64)}`
-
-interface World {
-  prefs: Record<string, unknown>
-  consent: { insights: boolean; training: string }
-  tools: { name: string; source: string; description: string; dispatchable: boolean; activated: boolean }[]
-  memories: { owner: string; name: string; content: string; kind: string; updatedTime: string }[]
-  projects: { slug: string; name: string; visibility: string; updatedAt: number }[]
-}
-
-/** A platform holding `world`, which every write changes; answers what the page sent, IAM's calls included. */
-async function platform(page: Page, seed: Partial<World> = {}, kept: Record<string, unknown> = {}) {
-  const world: World = {
-    prefs: {},
-    consent: { insights: true, training: '' },
-    tools: [
-      { name: 'slack_post', source: 'connector', description: '', dispatchable: true, activated: true },
-      { name: 'slack_read', source: 'connector', description: '', dispatchable: true, activated: false },
-      { name: 'review', source: 'skill', description: '', dispatchable: false, activated: false },
-    ],
-    memories: [{ owner: ORG, name: 'mem_1', content: 'Deploys with pnpm, never npm.', kind: 'user', updatedTime: '2026-09-20T10:00:00Z' }],
-    projects: [{ slug: 'shop', name: 'Shop', visibility: 'public', updatedAt: 2 }],
-    ...seed,
-  }
-  const sent = await signIn(
-    page,
-    ({ method, path, body }) => {
-      const b = (body ?? {}) as Record<string, unknown>
-      if (path === '/v1/pref' && method === 'PATCH') {
-        for (const [k, v] of Object.entries(b)) if (v === null) delete world.prefs[k]
-        else world.prefs[k] = v
-        return { json: { prefs: world.prefs, updatedAt: 2 } }
-      }
-      if (path === '/v1/pref') return { json: { prefs: world.prefs, updatedAt: 1 } }
-      if (path === '/v1/models') return { json: { data: [{ id: 'zen5.8' }, { id: 'zen5.8-coder' }] } }
-      if (path === '/v1/agent/targets') return { json: { targets: [{ id: 'tgt_1', label: 'dgx', kind: 'gpu', status: 'online', capacity: '' }] } }
-      if (path === '/v1/tool/activation' && method === 'PUT') {
-        const on = (b.activate as string[]) ?? []
-        const off = (b.deactivate as string[]) ?? []
-        for (const x of world.tools) x.activated = on.includes(x.name) ? true : off.includes(x.name) ? false : x.activated
-        return { json: { enabled: world.tools.filter((x) => x.activated).map((x) => x.name) } }
-      }
-      if (path === '/v1/tool') return { json: { tools: world.tools } }
-      if (path === '/v1/ai/memory/list') return { json: { status: 'ok', msg: '', data: world.memories } }
-      if (path === '/v1/ai/memory/remember') {
-        const m = { owner: ORG, name: `mem_${world.memories.length + 1}`, content: String(b.content), kind: 'user', updatedTime: '2026-09-27T10:00:00Z' }
-        world.memories = [m, ...world.memories]
-        return { json: { status: 'ok', msg: '', data: m } }
-      }
-      if (path === '/v1/ai/memory/delete') {
-        world.memories = world.memories.filter((m) => `${m.owner}/${m.name}` !== b.id)
-        return { json: { status: 'ok', msg: '', data: true } }
-      }
-      if (path === '/v1/projects/shop' && method === 'PATCH') {
-        Object.assign(world.projects[0]!, { visibility: b.visibility })
-        return { json: world.projects[0] }
-      }
-      if (path === '/v1/projects') return { json: world.projects }
-      if (path === '/v1/account/avatar') return { json: { avatar: FACE } }
-      return undefined
-    },
-    kept,
-  )
-  await page.route('**/v1/iam/consent', async (r) => {
-    const req = r.request()
-    const body = req.postData() ? JSON.parse(req.postData()!) : null
-    sent.push({ method: req.method(), path: '/v1/iam/consent', query: '', body })
-    if (req.method() === 'PUT') Object.assign(world.consent, body)
-    await r.fulfill({ json: { status: 'ok', msg: '', data: world.consent } })
-  })
-  await page.route('**/v1/iam/account', async (r) => {
-    const req = r.request()
-    const body = JSON.parse(req.postData() || '{}')
-    sent.push({ method: req.method(), path: '/v1/iam/account', query: '', body })
-    await r.fulfill({ json: { status: 'ok', msg: '', data: { owner: ORG, name: 'dave', displayName: body.displayName, avatar: '' } } })
-  })
-  await page.route(`${FACE}`, (r) => r.fulfill({ body: PNG, contentType: 'image/png' }))
-  return { sent, world }
-}
-
-/** Choose `option` from the chip named `chip`. */
 async function pick(page: Page, chip: RegExp, option: string) {
   await page.getByRole('button', { name: chip }).click()
   await page.getByRole('option', { name: option, exact: false }).first().click()
@@ -255,15 +174,7 @@ test('every section fits a phone', async ({ page }, info) => {
     await page.goto(`/-/settings/${section}`)
     await expect(page.getByText(detail, { exact: false })).toBeVisible()
     await page.waitForLoadState('networkidle')
-    const wide = await page.evaluate(() => {
-      const w = window.innerWidth
-      return [...document.querySelectorAll('body *')]
-        .filter((el) => !el.children.length || el.getAttribute('role') === 'button' || el.getAttribute('role') === 'switch')
-        .map((el) => ({ el, r: el.getBoundingClientRect() }))
-        .filter(({ r }) => r.width && r.height && (r.right > w + 1 || r.left < -1))
-        .map(({ el }) => `${el.tagName} ${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 40)}`)
-    })
-    expect(wide, section).toEqual([])
+    expect(await cramped(page), section).toEqual([])
     await page.screenshot({ path: info.outputPath(`phone-${section}.png`), fullPage: true })
   }
 })

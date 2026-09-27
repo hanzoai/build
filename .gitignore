@@ -3,3 +3,5 @@ dist
 *.tsbuildinfo
 lib
 test-results
+coverage
+screens

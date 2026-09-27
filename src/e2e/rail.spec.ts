@@ -1,74 +1,12 @@
 /**
  * The rail, Artifacts and the Code settings, signed in as an org admin against a
- * stubbed platform (signed.ts): every control drawn here is driven, and what it
+ * stubbed platform (stubs.ts): every control drawn here is driven, and what it
  * sends is checked.
  */
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { signIn, type Sent } from './signed.ts'
-
-const at = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d, 12) / 1000
-
-const PROJECTS = [
-  { slug: 'shop', name: 'Shop', visibility: 'private', status: 'live', liveUrl: 'https://shop.hanzo.app', createdAt: at(2026, 8, 1), updatedAt: at(2026, 9, 20) },
-  { slug: 'blog', name: 'Blog', visibility: 'public', status: 'draft', createdAt: at(2026, 9, 2), updatedAt: at(2026, 9, 12) },
-  { slug: 'docs', name: 'Docs site', visibility: 'public', status: 'live', createdAt: at(2026, 7, 1), updatedAt: at(2026, 8, 3) },
-]
-
-const STARTERS = ['synapse', 'circle', 'metrics', 'folio', 'mint'].map((slug) => ({ slug, title: slug[0]!.toUpperCase() + slug.slice(1), category: 'App', description: '', framework: 'Next.js' }))
-
-const MACHINES = [
-  { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 3, running: 1 },
-  { id: 'tgt_2', label: 'laptop', kind: 'laptop', status: 'offline', host: 'mbp' },
-]
-
-const ENVIRONMENTS = [
-  { repo: 'universe', install: 'pnpm install', start: 'pnpm dev', secrets: ['TOKEN'], state: 'ready', updatedAt: '2026-09-20T10:00:00Z' },
-  { repo: 'site', install: '', start: '', secrets: [], state: 'proposed', proposal: { install: 'npm ci', start: '', secrets: [], note: '' } },
-]
-
-/** A platform with projects, starters, machines, environments and keys, answering every write. */
-function platform(page: Page, kept: Record<string, unknown> = {}): Promise<Sent[]> {
-  return signIn(
-    page,
-    ({ method, path, query, body }) => {
-      if (path === '/v1/projects' && method === 'GET') return { json: PROJECTS }
-      if (path === '/v1/templates') return { json: { data: STARTERS } }
-      if (path === '/v1/projects/fork') return { status: 201, json: { slug: `${(body as { slug: string }).slug}-2`, name: 'Copy' } }
-      if (path.startsWith('/v1/projects/') && method === 'PATCH') return { json: { ...PROJECTS[0], ...(body as object) } }
-      if (path.startsWith('/v1/projects/') && method === 'DELETE') return { status: 204, text: '' }
-      if (path === '/v1/agent/targets' && method === 'GET') return { json: { targets: MACHINES } }
-      if (path === '/v1/agent/targets' && method === 'POST') return { status: 201, json: { id: 'tgt_3', ...(body as object) } }
-      if (path === '/v1/agent/targets/tgt_1/key') return { json: { targetId: 'tgt_1', claimKey: 'tk_live_once' } }
-      if (path.startsWith('/v1/agent/targets/') && method === 'PATCH') return { json: { ...MACHINES[0], ...(body as object) } }
-      if (path.startsWith('/v1/agent/targets/') && method === 'DELETE') return { json: { deleted: true } }
-      if (path === '/v1/environment') return { json: { data: ENVIRONMENTS } }
-      if (path === '/v1/environment/universe' && method === 'GET') return { json: ENVIRONMENTS[0] }
-      if (path === '/v1/environment/universe' && method === 'DELETE') return { status: 204, text: '' }
-      if (path === '/v1/account/keys' && method === 'GET') return { json: { keys: [{ type: 'publishable', prefix: 'pk-acme', key: 'pk-acme-public-1234' }] } }
-      if (path === '/v1/account/keys' && method === 'POST') return { json: { key: 'sk-live-shown-once', accessKey: 'sk-live-shown-once', type: 'secret', limit: (body as { limit?: string[] }).limit } }
-      if (path === '/v1/account/keys' && method === 'DELETE') return { json: { ok: true, type: new URLSearchParams(query).get('type') } }
-      return undefined
-    },
-    kept,
-  )
-}
-
-/** Controls and text a phone would cut off at its right edge. */
-async function clipped(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const w = window.innerWidth
-    const out: string[] = []
-    for (const el of document.querySelectorAll('body *')) {
-      if (el.children.length && !['BUTTON', 'INPUT'].includes(el.tagName) && el.getAttribute('role') !== 'button') continue
-      const r = el.getBoundingClientRect()
-      const s = getComputedStyle(el)
-      if (!r.width || !r.height || s.visibility === 'hidden' || s.opacity === '0') continue
-      if (r.right > w + 1 || r.left < -1) out.push(`${el.tagName} ${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 40)}`)
-    }
-    return out
-  })
-}
+import { cramped, expect, test } from './fixture.ts'
+import { rail as platform } from './stubs.ts'
 
 /** Choose a row of the menu that is open. */
 async function pick(page: Page, row: string) {
@@ -233,7 +171,7 @@ test.describe('Artifacts', () => {
     await platform(page)
     await page.goto('/-/artifacts')
     await expect(page.getByText('September 2026')).toBeVisible()
-    expect(await clipped(page)).toEqual([])
+    expect(await cramped(page)).toEqual([])
     await page.screenshot({ path: info.outputPath('phone-artifacts.png'), fullPage: true })
   })
 })
@@ -342,7 +280,7 @@ test.describe('Code settings', () => {
     ] as const) {
       await page.goto(`/-/settings/${section}`)
       await expect(page.getByText(says).first()).toBeVisible()
-      expect(await clipped(page), section).toEqual([])
+      expect(await cramped(page), section).toEqual([])
       await page.screenshot({ path: info.outputPath(`phone-${section}.png`), fullPage: true })
     }
   })

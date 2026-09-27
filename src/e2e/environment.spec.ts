@@ -1,38 +1,10 @@
 /**
  * Setting a codebase's environment up from New, signed in as an org admin
- * against a stubbed platform (signed.ts).
+ * against a stubbed platform (stubs.ts).
  */
-import { expect, test, type Page } from '@playwright/test'
-
-import { ORG, REPO, SESSION, signIn } from './signed.ts'
-
-/** New holding the codebase, which has no environment; a save keeps it, a run starts. */
-function platform(page: Page) {
-  const env = { repo: REPO, install: '', start: '', secrets: [] as string[], state: 'none', session: '', proposal: null }
-  return signIn(
-    page,
-    ({ method, path, body }) => {
-      if (path === `/v1/environment/${REPO}` && method === 'PUT') {
-        Object.assign(env, body, { state: 'ready' })
-        return { json: env }
-      }
-      if (path === `/v1/environment/${REPO}`) return { json: env }
-      if (path === '/v1/agent/coding') return { status: 202, json: { sessionId: SESSION, repo: REPO, branch: '' } }
-      return undefined
-    },
-    {
-      [`hanzo.build.new.${ORG}`]: {
-        repo: { owner: ORG, name: REPO, full_name: `${ORG}/${REPO}`, private: true, default_branch: 'main', pushed_at: '', installation_id: 0, forge: true, clone: '' },
-        branch: 'main',
-        place: '',
-        mode: 'build',
-        model: '',
-        effort: 'medium',
-        ask: '',
-      },
-    },
-  )
-}
+import { expect, test } from './fixture.ts'
+import { REPO, SESSION } from './signed.ts'
+import { setup as platform } from './stubs.ts'
 
 test('New offers to set up a codebase that has no environment', async ({ page }, info) => {
   await platform(page)

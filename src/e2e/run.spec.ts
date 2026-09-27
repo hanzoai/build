@@ -1,73 +1,13 @@
 /**
- * A live run's side pane, signed in against a stubbed platform (signed.ts): its
+ * A live run's side pane, signed in against a stubbed platform (stubs.ts): its
  * desktop and shell framed from the sandbox's own pages, what it pushed, its
  * files live and on the branch, and what it produced.
  */
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { SESSION, signIn } from './signed.ts'
-
-const BOX = `m_${'b'.repeat(24)}`
-const PR = 'https://git.hanzo.ai/hanzoai/universe/pulls/7'
-
-/** What cloud's own pages do once their socket is up: tell the window that frames them. */
-const page = (source: string, says: string) =>
-  `<!doctype html><html><body style="margin:0;background:#101820;color:#fff;font:14px sans-serif"><p>${says}</p>` +
-  `<script>parent.postMessage({ source: '${source}', ready: true }, '*')</script></body></html>`
-
-function platform(p: Page, status = 'running') {
-  return signIn(p, ({ method, path, query, body }) => {
-    if (path === `/v1/agent/sessions/${SESSION}`) {
-      return {
-        json: {
-          id: SESSION,
-          title: 'universe: Add the widget',
-          status,
-          kind: 'coding',
-          repo: 'hanzoai/universe',
-          base: 'main',
-          branch: 'agent/ab12',
-          environment: 'sandbox',
-          mode: 'build',
-          project: 'widgets',
-          sandbox: BOX,
-          pr: PR,
-          createdAt: '2026-09-27T10:00:00Z',
-          recentEvents: [
-            { id: 'e1', sessionId: SESSION, seq: 1, kind: 'tool-call', payload: { step: 'install', message: 'pnpm install', status: 'running' } },
-            { id: 'e2', sessionId: SESSION, seq: 2, kind: 'log', payload: { message: 'go test ./...\nok  widgets 0.2s' } },
-          ],
-        },
-      }
-    }
-    if (path === '/v1/agent/sessions/stream') return { text: '', type: 'text/event-stream' }
-    if (path === `/v1/sandbox/${BOX}/screen/ticket`) return { status: 201, json: { ticket: 's', expiresIn: 30, url: `/v1/sandbox/${BOX}/screen?ticket=s` } }
-    if (path === `/v1/sandbox/${BOX}/terminal/ticket`) return { status: 201, json: { ticket: 't', expiresIn: 30, url: `/v1/sandbox/${BOX}/terminal?ticket=t` } }
-    if (path === `/v1/sandbox/${BOX}/screen`) return { text: page('hanzo-screen', 'the desktop'), type: 'text/html' }
-    if (path === `/v1/sandbox/${BOX}/terminal`) return { text: page('hanzo-term', `the shell ${query}`), type: 'text/html' }
-    if (path === '/v1/sandbox/read' && method === 'POST') {
-      const at = (body as { path?: string }).path ?? ''
-      if (at === '') return { json: { path: '/work', dir: true, entries: ['src', 'README.md'] } }
-      if (at === 'src') return { json: { path: '/work/src', dir: true, entries: ['main.go'] } }
-      return { json: { path: `/work/${at}`, data: Buffer.from(`# ${at}\n`).toString('base64') } }
-    }
-    if (path === `/v1/agent/coding/${SESSION}/changes`) {
-      return {
-        json: {
-          repo: 'hanzoai/universe',
-          base: 'main',
-          head: 'agent/ab12',
-          commits: [{ sha: 'a1b2c3d4e5f6', message: 'Add the widget', author: 'Hanzo Dev', date: '2026-09-27T10:05:00Z' }],
-          files: [{ path: 'widget.go', status: 'added', additions: 2, deletions: 0, patch: '@@ -0,0 +1,2 @@\n+package widget\n+func New() {}' }],
-          pull: { number: 7, url: PR, title: 'Add the widget', state: 'open', mergeable: true, reviews: [{ author: 'z', state: 'APPROVED', body: 'ship it', at: '2026-09-27T11:00:00Z' }] },
-        },
-      }
-    }
-    if (path === `/v1/agent/coding/${SESSION}/tree`) return { json: { ref: 'agent/ab12', entries: [{ name: 'widget.go', path: 'widget.go', type: 'blob', size: 30 }] } }
-    if (path === '/v1/environment/universe') return { json: { repo: 'universe', install: 'pnpm i', start: '', secrets: [], state: 'ready' } }
-    return undefined
-  })
-}
+import { expect, test } from './fixture.ts'
+import { SESSION } from './signed.ts'
+import { BOX, run as platform } from './stubs.ts'
 
 const desk = (p: Page) => p.getByRole('complementary', { name: 'Run details' })
 const tab = (p: Page, name: string) => desk(p).getByRole('button', { name, exact: true }).first()

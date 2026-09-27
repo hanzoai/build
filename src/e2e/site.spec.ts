@@ -4,7 +4,9 @@
  * visitor sees; the native MCP servers and the skills catalogue are public and
  * are read live.
  */
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
+
+import { cramped, expect, test } from './fixture.ts'
 
 const SCREENS: [string, string, RegExp][] = [
   ['new', '/', /What.s up next\?/],
@@ -106,29 +108,6 @@ test('a run shows its codebase’s environment beside it', async ({ page }, info
   await expect(page.getByText('This run', { exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath('environment.png') })
 })
-
-/** Controls and text a phone would cut off at its right edge, or that sit on top of another control. */
-async function cramped(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const w = window.innerWidth
-    const out: string[] = []
-    const leaves = [...document.querySelectorAll('body *')].filter(
-      (el) => !el.children.length || ['BUTTON', 'INPUT'].includes(el.tagName) || el.getAttribute('role') === 'button',
-    )
-    for (const el of leaves) {
-      const r = el.getBoundingClientRect()
-      const s = getComputedStyle(el)
-      if (!r.width || !r.height || s.visibility === 'hidden' || s.opacity === '0') continue
-      if (r.right > w + 1 || r.left < -1) out.push(`${el.tagName} ${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 40)}`)
-    }
-    const menu = document.querySelector('[aria-label="Open runs"]')?.getBoundingClientRect()
-    const mark = [...document.querySelectorAll('[aria-label="Hanzo"], [aria-label^="Organization"]')]
-      .map((el) => el.getBoundingClientRect())
-      .find((r) => r.width && r.height)
-    if (menu && mark && mark.left < menu.right && menu.left < mark.right && mark.top < menu.bottom && menu.top < mark.bottom) out.push('the mark sits on the menu button')
-    return out
-  })
-}
 
 test('a phone gets every screen whole, with the rail as a drawer', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 })
