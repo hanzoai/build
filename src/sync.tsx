@@ -19,10 +19,6 @@ import { path } from './route.ts'
 
 const EMPTY: Grants = { repos: [], unread: [] }
 
-function noteOf(e: unknown, fallback: string): string {
-  return e instanceof Error ? e.message : fallback
-}
-
 export function Sync() {
   const host = useHost()
   const t = useTarget()
@@ -62,7 +58,7 @@ export function Sync() {
       const url = await connect(t)
       host.open(url)
     } catch (e) {
-      setError(noteOf(e, 'Could not open the GitHub connection'))
+      setError((e as Error).message)
     }
   }
 
@@ -78,7 +74,7 @@ export function Sync() {
       writePending(host.org, next)
       setSyncing(true)
     } catch (e) {
-      setError(noteOf(e, 'Could not queue those repositories'))
+      setError((e as Error).message)
     } finally {
       setBusy(false)
     }

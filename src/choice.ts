@@ -53,7 +53,7 @@ export function pinBoard(org: string | null, key: string) {
   } catch {
     /* Issues then shows every board */
   }
-  window.dispatchEvent(new Event('hanzo-board'))
+  window.dispatchEvent(new CustomEvent('hanzo-board', { detail: key }))
 }
 
 export const isForge = (repo: { forge?: boolean; name?: string } | null): repo is ForgeRepo =>

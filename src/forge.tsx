@@ -102,7 +102,7 @@ function Automations() {
       await arm(t, a.id, a.status !== 'ENABLED')
       setTick((n) => n + 1)
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : 'Could not change that automation')
+      setProblem((e as Error).message)
     }
   }
 
@@ -225,7 +225,7 @@ function NewAutomation({
       await onCreate(name)
       setName('')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create that automation')
+      setError((e as Error).message)
     } finally {
       setBusy(false)
     }
@@ -508,7 +508,7 @@ function NewRepo({
       setName('')
       setDescription('')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create that repository')
+      setError((e as Error).message)
     } finally {
       setBusy(false)
     }
@@ -606,19 +606,12 @@ function Issues() {
   const [board, setBoard] = useKept<string>(boardKey(host.org), '')
   const list = useRead(signed ? () => issues(t, board) : null, [] as Work[], [t, signed, board])
 
+  // Another screen chose the board (the rail's Issues chooses every board) while this one is open.
   useEffect(() => {
-    const on = () => {
-      try {
-        const raw = window.localStorage.getItem(boardKey(host.org))
-        const next = raw === null ? '' : JSON.parse(raw)
-        setBoard(typeof next === 'string' ? next : '')
-      } catch {
-        setBoard('')
-      }
-    }
+    const on = (e: Event) => setBoard((e as CustomEvent<string>).detail)
     window.addEventListener('hanzo-board', on)
     return () => window.removeEventListener('hanzo-board', on)
-  }, [host.org, setBoard])
+  }, [setBoard])
 
   const open = (w: Work) => {
     const name = w.repo || w.project
