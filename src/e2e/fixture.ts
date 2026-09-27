@@ -3,8 +3,8 @@
  *
  * `test` is Playwright's own, with the page's JavaScript coverage taken for the
  * builder's own modules — what the dev server serves under /src/ — and kept for
- * `pnpm cover` to merge with the unit tests' (cover/). Against a built site
- * there is no /src/, and nothing is kept.
+ * `pnpm cover` to merge with the unit tests' (cover/), once for every document
+ * the page shows. Against a built site there is no /src/, and nothing is kept.
  */
 import { test as base, expect, type Page } from '@playwright/test'
 import MCR from 'monocart-coverage-reports'
@@ -14,14 +14,39 @@ import { raw } from '../../cover/index.ts'
 const report = MCR(raw('browser'))
 const OURS = /^https?:\/\/[^/]+\/src\//
 
+/** Keeps what the page has run in the document it shows, and starts counting afresh. */
+async function keep(page: Page, again: boolean): Promise<void> {
+  // A page the test closed or crashed has nothing left to give.
+  const scripts = await page.coverage.stopJSCoverage().catch(() => [])
+  const ours = scripts.filter((s) => OURS.test(s.url))
+  if (ours.length) await report.add(ours)
+  if (again) await page.coverage.startJSCoverage({ resetOnNavigation: false })
+}
+
+/**
+ * V8 forgets what a document ran once the page leaves it, so a test's own moves
+ * — a goto, a reload, back and forward — keep it first. A move the page makes
+ * itself (a link to another origin, `location.assign`) takes what that document
+ * ran with it: a spec answers such a request with a 204, which keeps the page
+ * where it is, and reads the request.
+ */
+const MOVES = ['goto', 'reload', 'goBack', 'goForward'] as const
+
 export const test = base.extend({
   page: async ({ page }, use) => {
     await page.coverage.startJSCoverage({ resetOnNavigation: false })
+    for (const name of MOVES) {
+      const move = page[name].bind(page) as (...args: unknown[]) => Promise<unknown>
+      Object.assign(page, {
+        [name]: async (...args: unknown[]) => {
+          // The blank page a test starts on ran nothing.
+          if (page.url() !== 'about:blank') await keep(page, true)
+          return move(...args)
+        },
+      })
+    }
     await use(page)
-    // A page the test closed or crashed has nothing left to give.
-    const scripts = await page.coverage.stopJSCoverage().catch(() => [])
-    const ours = scripts.filter((s) => OURS.test(s.url))
-    if (ours.length) await report.add(ours)
+    await keep(page, false)
   },
 })
 
