@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { follow, step } from './stay.ts'
 
-const page = 'https://hanzo.build/-/codebases'
+const page = 'https://build.test/-/codebases'
 
 describe('this page stays on its own frontend', () => {
   it('keeps a platform address on this page', () => {
@@ -13,8 +13,8 @@ describe('this page stays on its own frontend', () => {
 
   it('routes an address on this origin inside the app', () => {
     expect(step('/-/sync', page)).toEqual({ kind: 'here', path: '/-/sync' })
-    expect(step('https://hanzo.build/', page)).toEqual({ kind: 'here', path: '/' })
-    expect(step('https://hanzo.build/platform/computers', page)).toEqual({ kind: 'here', path: '/' })
+    expect(step('https://build.test/', page)).toEqual({ kind: 'here', path: '/' })
+    expect(step('https://build.test/platform/computers', page)).toEqual({ kind: 'here', path: '/' })
   })
 
   it('stays put for an address it cannot read', () => {

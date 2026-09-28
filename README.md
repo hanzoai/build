@@ -3,17 +3,25 @@
 Say what you want. Hanzo writes it, runs it, and puts it on a live URL — with
 the database, the sign-in and the storage already there.
 
-The builder is one component, `<Builder host={…} />` from `@hanzo/build`, with
-three hosts: this page (hanzo.build), and the Dev section of the Hanzo app at
-hanzo.ai/dev and hanzo.app/dev. None of them forks it. hanzo.build is this
-frontend. A click stays on this origin — sign-in returns to `/auth/callback`
-here — and github.com is opened only for the repository grant.
+The builder is one component, `<Builder host={…} />` from `@hanzo/build`. The
+Hanzo app at hanzo.ai mounts it as its Dev mode, and that is where people use
+it: hanzo.build and build.hanzo.ai redirect there, to the same place. This
+repository's own page is the development host — the same component, signed in
+through hanzo.id — and a click stays on its origin, with github.com opened only
+for the repository grant.
+
+The page is signed-in only. A visitor is drawn nothing: the tab goes to
+hanzo.id (no popup) and comes back to the address it asked for; hanzo.id
+answers at once, with no screen, for a person already signed in there. Words
+carried on arrival as `?q=` wait in New's composer, and a draft sent while
+signed out is sent once its person is in (`landing.tsx` `hold`). It signs in as
+`hanzo-app`, the Hanzo App's client.
 
 ```
 pnpm install
 pnpm dev            # http://localhost:3200
 pnpm test           # the transport contract and the address grammar
-pnpm site           # every screen of https://hanzo.build in a browser (SITE= for another origin)
+pnpm site           # every browser spec against the dev server (SITE= for another origin)
 pnpm e2e            # one live agent turn, projected the way a run draws it
 pnpm cover          # unit tests and every browser spec against a dev server, one coverage report in coverage/
 pnpm build:lib      # lib/ — what npm ships
@@ -100,7 +108,7 @@ collide.
 
 ## What is on the screen
 
-**The rail** (hanzo.build). At the top, the mark. Signed in to an organization,
+**The rail** (this page, or `rail` left on). At the top, the mark. Signed in to an organization,
 that spot is the organization switcher: the org, and the projects under it.
 New, Projects, Artifacts, Customize, Automations, then More (Codebase, Issues,
 Templates, Machines, Docs), then the org's coding runs newest first with a live

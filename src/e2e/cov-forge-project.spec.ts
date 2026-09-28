@@ -9,6 +9,7 @@ import type { Page } from '@playwright/test'
 
 import { enter, held, via, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
+import { mounted, went } from './mount.ts'
 import { ORG } from './signed.ts'
 
 const id = (c: string) => `sess_${c.repeat(32)}`
@@ -454,12 +455,10 @@ test.describe('the workspace', () => {
   })
 
   test('a visitor is asked to sign in', async ({ page }) => {
-    await page.context().route('https://hanzo.id/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>Hanzo</title>Sign in' }))
-    await page.goto('/shop')
+    await mounted(page, { path: 'shop', org: null, admin: false, person: null, signIn: true })
     await expect(page.getByText('Sign in to open this project.')).toBeVisible()
-    const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByRole('button', { name: 'Sign in' }).click()])
-    expect(new URL(popup.url()).hostname).toBe('hanzo.id')
-    await popup.close()
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await expect.poll(() => went(page)).toContain('sign in')
   })
 
   test('on a phone the chat and the work take turns', async ({ page }) => {

@@ -61,12 +61,48 @@ const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', model: E
 const COLUMN = 768
 
 /**
- * What was typed here and not sent, for as long as this document lives. Signing
- * in swaps a visitor's page for the rail, which draws New again in another
- * place; the popup keeps the document so the sentence can come along, and this
- * is where it waits.
+ * What was typed here and not sent, kept in this tab.
+ *
+ * Signing in leaves the page for hanzo.id and comes back (app/enter.ts), and the
+ * sentence is still in the composer after. A draft its person SENT while signed
+ * out is sent on the return: pressing Send was the ask, and the sign-in stood
+ * between it and the run. Only this page writes `sent`, so no link can start a
+ * run on somebody's behalf — an address carrying words only fills the composer.
+ *
+ * sessionStorage, because a draft belongs to the tab it was typed in and not to
+ * the next person at this browser; a browser that refuses storage keeps it for
+ * the life of the page, as before.
  */
-let unsent: { draft: string; files: Attached[] } = { draft: '', files: [] }
+export interface Unsent {
+  draft: string
+  files: Attached[]
+  sent?: boolean
+}
+
+const UNSENT = 'hanzo.build.unsent'
+
+let held: Unsent = { draft: '', files: [] }
+
+function unsent(): Unsent {
+  try {
+    const v = JSON.parse(window.sessionStorage.getItem(UNSENT) ?? 'null') as Unsent | null
+    if (v && typeof v.draft === 'string' && Array.isArray(v.files)) return v
+  } catch {
+    /* a browser that refuses storage, or a value that is not ours */
+  }
+  return held
+}
+
+/** Hold what New has unsent, or forget it once there is nothing. */
+export function hold(u: Unsent): void {
+  held = u
+  try {
+    if (!u.draft && !u.files.length) window.sessionStorage.removeItem(UNSENT)
+    else window.sessionStorage.setItem(UNSENT, JSON.stringify(u))
+  } catch {
+    /* kept for the life of the page */
+  }
+}
 
 export function Landing({ onStarted }: { onStarted: (session: string) => void }) {
   const host = useHost()
@@ -78,11 +114,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const kept: Kept = stored ?? { ...FIRST, ...prefs.code }
   const set = (patch: Partial<Kept>) => keep({ ...kept, ...patch })
 
-  const [draft, setDraft] = useState(kept.ask || unsent.draft)
-  const [files, setFiles] = useState<Attached[]>(unsent.files)
-  useEffect(() => {
-    unsent = { draft, files }
-  }, [draft, files])
+  const [was] = useState(unsent)
+  const [draft, setDraft] = useState(kept.ask || was.draft)
+  const [files, setFiles] = useState<Attached[]>(was.files)
+  useEffect(() => hold({ draft, files }), [draft, files])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState<Source | null>(null)
@@ -133,6 +168,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   // The composer sends only a draft with words in it, and not while a send is out.
   const send = async () => {
     if (!signed) {
+      hold({ draft, files, sent: true })
       host.signIn?.()
       return
     }
@@ -165,6 +201,16 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       setBusy(false)
     }
   }
+
+  // A draft sent while signed out goes once its person is in, and only once.
+  const owed = useRef(was.sent === true)
+  useEffect(() => {
+    if (!signed || !owed.current || !draft.trim()) return
+    owed.current = false
+    void send()
+    // Sent once, on the sign-in that it waited for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signed])
 
   /** Start the agent that finds this codebase's environment, and open it. A refusal is the dialog's to say. */
   const setup = async () => {

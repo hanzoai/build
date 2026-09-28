@@ -536,16 +536,10 @@ test('Account lists every organization, copies this one’s id, and switches to 
   await expect(page.getByRole('button', { name: 'Switch' })).toHaveCount(1)
 })
 
-test('signed out, Account’s Sign in opens IAM’s sign-in', async ({ page }) => {
-  await page.route('**/.well-known/openid-configuration', (r) => r.fulfill({ status: 404 }))
-  // IAM's pages are its own: the popup's request is kept here, and answered with nothing to draw.
-  await page.context().route('https://hanzo.id/**', (r) => r.fulfill({ status: 204 }))
-  await page.goto('/-/settings/account')
-  const asked = page.context().waitForEvent('request', (r) => new URL(r.url()).pathname === '/v1/iam/oauth/authorize')
+test('signed out, Account’s Sign in asks the host to sign in', async ({ page }) => {
+  await mounted(page, { path: '-/settings/account', org: null, admin: false, person: null, signIn: true })
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  const url = new URL((await asked).url())
-  expect(url.origin).toBe('https://hanzo.id')
-  expect(url.searchParams.get('client_id')).toBe('hanzo-build')
+  await expect.poll(() => went(page)).toContain('sign in')
 })
 
 test('logging out from Account hands the session back to IAM and forgets it here', async ({ page }) => {

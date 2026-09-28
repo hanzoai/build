@@ -11,12 +11,12 @@ const at = (href: string) => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('where this page signs in', () => {
-  it('is hanzo.id as the hanzo-build client, returning to this origin', () => {
-    at('https://hanzo.build/-/codebases')
+  it('is hanzo.id as the Hanzo App\'s client, returning to this origin', () => {
+    at('http://localhost:3200/-/codebases')
     expect(origin({})).toEqual({
       serverUrl: 'https://hanzo.id',
-      clientId: 'hanzo-build',
-      redirectUri: 'https://hanzo.build/auth/callback',
+      clientId: 'hanzo-app',
+      redirectUri: 'http://localhost:3200/auth/callback',
       organization: 'hanzo',
     })
   })
@@ -28,8 +28,8 @@ describe('where this page signs in', () => {
 })
 
 describe('where the platform is', () => {
-  it('is api.hanzo.ai from a hanzo.ai host or hanzo.build', () => {
-    for (const page of ['https://hanzo.ai/dev', 'https://app.hanzo.ai/dev', 'https://hanzo.build/']) {
+  it('is api.hanzo.ai from a hanzo.ai host', () => {
+    for (const page of ['https://hanzo.ai/dev', 'https://app.hanzo.ai/dev']) {
       at(page)
       expect(api({}), page).toBe('https://api.hanzo.ai')
     }
@@ -40,10 +40,12 @@ describe('where the platform is', () => {
     expect(api({})).toBe('http://localhost:3200')
     at('https://nothanzo.ai/')
     expect(api({})).toBe('https://nothanzo.ai')
+    at('https://hanzo.build/')
+    expect(api({})).toBe('https://hanzo.build')
   })
 
   it('is the platform a fork names', () => {
-    at('https://hanzo.build/')
+    at('https://hanzo.ai/')
     expect(api({ VITE_HANZO_API: 'https://api.lux.network/' })).toBe('https://api.lux.network')
   })
 })

@@ -49,8 +49,6 @@ import { Artifacts, Templates } from './shelf.tsx'
 import { Find } from './find.tsx'
 import { DOCS, Slack, Who } from './foot.tsx'
 import { Settings } from './settings/index.tsx'
-import { Pitch } from './pitch.tsx'
-import { Bar } from './visit.tsx'
 
 type Order = 'newest' | 'running'
 
@@ -224,40 +222,6 @@ function Name({ onPress }: { onPress: () => void }) {
   )
 }
 
-/**
- * A visitor: no runs to list, so the product's header stands where the rail
- * would. On New the composer fills the first screen and the pitch follows it.
- */
-function Visit() {
-  const host = useHost()
-  const r = route(host.path)
-  // An address that names a part of the pitch (/#features) opens scrolled to it.
-  useEffect(() => {
-    const id = window.location.hash.slice(1)
-    if (id) document.getElementById(id)?.scrollIntoView()
-  }, [])
-  const start = () => {
-    const page = document.getElementById('visit')
-    page?.scrollTo({ top: 0, behavior: 'smooth' })
-    page?.querySelector<HTMLElement>('textarea, [contenteditable="true"], input[type="text"]')?.focus()
-  }
-  return (
-    <YStack flex={1} minH={0} minW={0} bg="$background">
-      <Bar name={<Name onPress={() => host.go('')} />} />
-      {r.kind === 'new' ? (
-        <YStack id="visit" flex={1} minH={0} overflow="scroll">
-          <YStack shrink={0} style={{ height: 'calc(100dvh - 60px)' }}>
-            <Pane />
-          </YStack>
-          <Pitch onStart={start} />
-        </YStack>
-      ) : (
-        <Pane />
-      )}
-    </YStack>
-  )
-}
-
 /** Whichever pane the address names, beside a rail — the builder's or the host's. */
 function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   const host = useHost()
@@ -299,8 +263,6 @@ function Screens({ rail }: { rail: boolean }) {
   const r = route(host.path)
   if (r.kind === 'project') return <Project key={r.slug} slug={r.slug} />
   if (!rail) return <Pane />
-  // Signed out with no token to wait on: a token still resolving is a person, not a visitor.
-  if (!host.person && !host.token() && host.signIn) return <Visit />
   return <Shell />
 }
 

@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test'
 
 import { DAVE, enter, held, MEMBER, serve, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
+import { mounted, went } from './mount.ts'
 import { ORG, SESSION } from './signed.ts'
 
 const NEXT = `sess_${'c'.repeat(32)}`
@@ -274,14 +275,14 @@ test.describe('New', () => {
     expect(posted(sent, '/v1/audio/transcriptions')).toHaveLength(2)
   })
 
-  test('a visitor who sends is asked to sign in', async ({ page }) => {
-    await page.context().route('https://hanzo.id/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>Hanzo</title>Sign in' }))
-    await serve(page, () => ({ status: 401, json: { status: 401, title: 'Unauthorized', detail: 'Sign in to use this.' } }))
-    await page.goto('/')
+  test('a visitor who sends is asked to sign in, and what they sent waits for them', async ({ page }) => {
+    const sent = await serve(page, () => ({ status: 401, json: { status: 401, title: 'Unauthorized', detail: 'Sign in to use this.' } }))
+    await mounted(page, { path: '', org: null, admin: false, person: null, signIn: true })
     await ask(page).fill('Add a footer')
-    const [popup] = await Promise.all([page.waitForEvent('popup'), ask(page).press('Enter')])
-    expect(new URL(popup.url()).hostname).toBe('hanzo.id')
-    await popup.close()
+    await ask(page).press('Enter')
+    await expect.poll(() => went(page)).toEqual(['sign in'])
+    expect(sent.filter((s) => s.path === '/v1/agent/coding')).toEqual([])
+    expect(JSON.parse((await page.evaluate(() => sessionStorage.getItem('hanzo.build.unsent'))) ?? '{}')).toEqual({ draft: 'Add a footer', files: [], sent: true })
   })
 })
 

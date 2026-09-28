@@ -9,6 +9,7 @@ import type { Page } from '@playwright/test'
 
 import { expect, test } from './fixture.ts'
 import { browser, ev, finished, hold, NEXT, ORG, rig, SESSION, to } from './cov-run.ts'
+import { mounted, went } from './mount.ts'
 import { visitor } from './stubs.ts'
 
 const desk = (p: Page) => p.getByRole('complementary', { name: 'Run details' })
@@ -20,14 +21,8 @@ const refusal = (detail: string, code = 500) => ({ status: code, json: { detail 
 
 test('signed out, a run asks for a sign in wherever it would show something', async ({ page: p }, info) => {
   await visitor(p)
-  await p.route('**/.well-known/openid-configuration', (r) => r.fulfill({ status: 404 }))
-  // Each Sign in opens IAM's authorize page in a popup, which is left open: closing it sends the page there instead.
-  const signs: string[] = []
-  await p.context().route('https://hanzo.id/**', (r) => {
-    signs.push(r.request().url())
-    return r.fulfill({ body: 'signing in', contentType: 'text/html' })
-  })
-  await p.goto(`/${SESSION}`)
+  await mounted(p, { path: SESSION, org: null, admin: false, person: null, signIn: true })
+  const signs = () => went(p).then((w) => w.filter((x) => x === 'sign in'))
   const t = p.getByLabel('Transcript')
   await expect(t.getByText('Sign in to follow this run.')).toBeVisible()
   await expect(p.getByRole('button', { name: 'Manage this run' }).getByRole('heading', { name: 'Untitled run' })).toBeVisible()
@@ -40,12 +35,11 @@ test('signed out, a run asks for a sign in wherever it would show something', as
   await expect(p.getByRole('menuitem', { name: /Copy run id/ })).toBeVisible()
   await p.keyboard.press('Escape')
   await t.getByRole('button', { name: 'Sign in' }).click()
-  await expect.poll(() => signs.length).toBe(1)
-  expect(signs[0]).toMatch(/client_id=hanzo-build/)
+  await expect.poll(async () => (await signs()).length).toBe(1)
   // The terminal says it too, and its one action signs in.
   await expect(desk(p).getByText('Sign in to follow this run.')).toBeVisible()
   await desk(p).getByRole('button', { name: 'Sign in' }).click()
-  await expect.poll(() => signs.length).toBe(2)
+  await expect.poll(async () => (await signs()).length).toBe(2)
   await tab(p, 'Git').click()
   await expect(desk(p).getByText('Sign in to see what this run pushed.')).toBeVisible()
   await tab(p, 'Files').click()

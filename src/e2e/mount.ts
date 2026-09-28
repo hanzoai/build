@@ -1,5 +1,5 @@
 /**
- * Opening the builder under a host other than hanzo.build's own (mount.tsx):
+ * Opening the builder under a host other than this package's own (mount.tsx):
  * the dev server's page, with its entry swapped for the mount, so the page
  * is served exactly as the app's is — the same stylesheets and module graph —
  * and only the host differs.
@@ -18,6 +18,8 @@ export interface Mount {
   token: string | null
   memberships?: string[]
   theme?: Theme
+  /** The host signs people in: its sign-in is written into `went` as 'sign in'. */
+  signIn?: boolean
 }
 
 /** Opens `path` in a builder mounted by the host `m` describes. */

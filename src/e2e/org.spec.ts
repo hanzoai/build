@@ -5,6 +5,7 @@
  * stand-in served at its own address, so no card number is ever typed here.
  */
 import { expect, test } from './fixture.ts'
+import { mounted } from './mount.ts'
 import { ORG, type Sent } from './signed.ts'
 import { org as platform, PLANS } from './stubs.ts'
 
@@ -232,7 +233,7 @@ test('a member reads the limits, the roster and the connectors, and changes none
 
 test('a visitor sees the plans and is asked to sign in to choose one', async ({ page }) => {
   await page.route((u) => u.pathname === '/v1/billing/plans', (r) => r.fulfill({ json: PLANS }))
-  await page.goto('/-/plans')
+  await mounted(page, { path: '-/plans', org: null, admin: false, person: null, signIn: true })
   await expect(page.getByText('Sign in to see the plan you are on.')).toBeVisible()
   await expect(page.getByLabel('Max plan', { exact: true }).getByText('Sign in to choose a plan.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Current plan' })).toHaveCount(0)

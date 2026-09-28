@@ -1,7 +1,7 @@
 /**
  * Where a click on this page may go.
  *
- * hanzo.build is this frontend. An address on this origin moves in the router.
+ * This page is its own frontend. An address on this origin moves in the router.
  * github.com is the grant. platform.hanzo.ai is another product, and a click
  * that names it stays on this page.
  */

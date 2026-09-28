@@ -1,9 +1,14 @@
 // The builder's own page: Hanzo IAM for who is here, react-router for where.
 //
-// One of the builder's hosts; the Hanzo app's Dev section (hanzo.ai/dev,
-// hanzo.app/dev) is the other, and draws the builder's runs in its own rail.
-// Everything the builder needs from a host is handed over as `Host` values here,
-// so the builder imports neither IAM nor a router.
+// The package's development host. The product is the Hanzo app at hanzo.ai,
+// whose Dev mode mounts the same `<Builder>` and draws its runs in its own
+// rail. Everything the builder needs from a host is handed over as `Host`
+// values here, so the builder imports neither IAM nor a router.
+//
+// SIGNED IN ONLY. A visitor is drawn nothing: this tab goes to hanzo.id and
+// comes back to the address it asked for (enter.ts). A person hanzo.id already
+// knows is answered at once, with no screen and nothing to press. Words carried
+// on arrival as `?q=` wait in New's composer (landing.tsx `hold`).
 
 import { IamProvider, useIam } from '@hanzo/iam/react'
 import { useTheme } from 'next-themes'
@@ -12,6 +17,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router'
 
 import { Builder } from '../builder.tsx'
 import type { Host, Person } from '../host.tsx'
+import { hold } from '../landing.tsx'
 import { enter } from './enter.ts'
 import { follow } from './stay.ts'
 import { administers, bearer, org, orgs, own, selectOrg, subject } from './token.ts'
@@ -27,6 +33,26 @@ export function Mount() {
   useEffect(() => {
     if (!isLoading) own(subject())
   }, [isLoading, isAuthenticated])
+
+  // Words carried on arrival are New's draft, and leave the address: a reload
+  // or a shared link must not carry them again.
+  useEffect(() => {
+    const q = new URLSearchParams(where.search)
+    const asked = q.get('q')?.trim()
+    if (!asked) return
+    hold({ draft: asked, files: [] })
+    q.delete('q')
+    const rest = q.toString()
+    navigate(`${where.pathname}${rest ? `?${rest}` : ''}${where.hash}`, { replace: true })
+  }, [where, navigate])
+
+  // Nobody is signed in: leave for hanzo.id, once IAM has said so.
+  const out = !isLoading && !isAuthenticated
+  useEffect(() => {
+    if (out) enter(door)
+    // `door` is a new object each render; the answer is what decides.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [out])
 
   const scoped = org()
   const person: Person | null = useMemo(() => {
@@ -64,11 +90,13 @@ export function Mount() {
       home: window.location.origin,
     },
     open: (href) => follow(href, window.location.href, { here: navigate, away: (to) => window.location.assign(to) }),
-    signIn: () => void enter(door),
+    signIn: () => enter(door),
     signOut: () => void logout(),
   }
 
-  return <Builder host={host} />
+  // A token still resolving is a person; with none, nothing is drawn while the tab leaves.
+  if (isAuthenticated || (isLoading && bearer())) return <Builder host={host} />
+  return null
 }
 
 /** Identity above every screen, the callback included: it is the screen that completes it. */

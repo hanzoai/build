@@ -1,7 +1,8 @@
 /**
  * Every screen and state of the builder at four sizes — a phone, a tablet, a
  * laptop and a desktop — signed in as an org admin against the stubs the other
- * specs drive (stubs.ts) and signed out against what the platform tells anyone.
+ * specs drive (stubs.ts). There is no signed-out page to draw: a visitor is
+ * sent to sign in (app/root.tsx).
  *
  * Each one draws its heading, fits its window (fixture.ts `cramped`: nothing
  * cut off or sideways, no control on another), throws nothing, and is saved at
@@ -28,8 +29,8 @@ interface State {
   /** The file name under screens/<size>/. */
   name: string
   path: string
-  /** The platform the page talks to; signed out when left out. */
-  platform?: (page: Page) => Promise<unknown>
+  /** The platform the page talks to, signed in. */
+  platform: (page: Page) => Promise<unknown>
   /** What the screen's heading says. */
   says: RegExp
   /** What brings the screen to this state, on this size. */
@@ -102,15 +103,6 @@ const HEADINGS: Record<Section, [Platform, RegExp]> = {
 const CUSTOMIZE = /What the agent brings to a run/
 const screens = Object.entries(SCREENS) as [Screen, [Platform, RegExp]][]
 
-const signedOut: State[] = [
-  { name: 'out-new', path: '/', says: /What.s up next\?/ },
-  ...screens.map(([screen, [, says]]) => ({ name: `out-${screen}`, path: `/-/${screen}`, says })),
-  ...SECTIONS.map((section) => ({ name: `out-settings-${section}`, path: `/-/settings/${section}`, says: /^Sign in to / })),
-  ...TABS.map((tab) => ({ name: `out-customize-${tab}`, path: `/-/customize/${tab}`, says: CUSTOMIZE })),
-  { name: 'out-run', path: RUN, says: /Sign in to follow this run/ },
-  { name: 'out-project', path: '/shop', says: /Sign in to open this project/ },
-]
-
 const signedIn: State[] = [
   { name: 'new', path: '/', platform: stub.landing, says: /What.s up next\?/ },
   { name: 'new-place', path: '/', platform: stub.landing, says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Where the run runs: Cloud' }).click(), over: true },
@@ -182,7 +174,6 @@ const project: State[] = [
 ]
 
 const STATES: State[] = [
-  ...signedOut,
   ...signedIn,
   ...run('running'),
   ...run('done'),
@@ -219,7 +210,7 @@ for (const [size, box] of Object.entries(SIZES) as [Size, { width: number; heigh
         test.fail(size === 'phone' && DRAWN_OVER.includes(s.name), 'the drawer’s close button is off the window (@hanzo/ui)')
         const errors: string[] = []
         page.on('pageerror', (e) => errors.push(e.message))
-        await (s.platform ?? stub.visitor)(page)
+        await s.platform(page)
         await page.goto(s.path)
         await expect(page.getByText(s.says).filter({ visible: true }).first()).toBeVisible()
         await s.act?.(page, size)

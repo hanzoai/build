@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test'
 
 import { enter, held, serve, via, type Holds, type Reply, type Sent } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
+import { mounted, went } from './mount.ts'
 import { ORG } from './signed.ts'
 import { PNG } from './stubs.ts'
 
@@ -197,13 +198,11 @@ test.describe('Artifacts', () => {
   })
 
   test('a visitor who takes a starter is asked to sign in', async ({ page }) => {
-    await page.context().route('https://hanzo.id/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>Hanzo</title>Sign in' }))
     await serve(page, ({ path }) => (path === '/v1/templates' ? { json: { data: STARTERS } } : { status: 401, json: { detail: 'Sign in' } }))
-    await page.goto('/-/artifacts')
+    await mounted(page, { path: '-/artifacts', org: null, admin: false, person: null, signIn: true })
     await expect(page.getByText('Sign in to see what your organization has built.')).toBeVisible()
-    const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByRole('button', { name: 'Start from Circle' }).click()])
-    expect(new URL(popup.url()).hostname).toBe('hanzo.id')
-    await popup.close()
+    await page.getByRole('button', { name: 'Start from Circle' }).click()
+    await expect.poll(() => went(page)).toContain('sign in')
   })
 })
 

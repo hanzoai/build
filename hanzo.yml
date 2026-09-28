@@ -22,14 +22,6 @@ test:
       test -s dist/index.html
       test -d dist/assets
 
-# hanzo.build is bytes, not a process: the export is the whole product and its
-# API is api.hanzo.ai on another origin. It publishes to the Sites plane, where
-# the edge serves the prefix straight from S3 — no image, no pod, no replicas.
-# dist/404.html, written by vite.config.ts, is what boots the router on an
-# address that has no file of its own.
-site:
-  slug: build
-  dir: dist
-  # The publish job is a fresh checkout: without a build line it has no dist.
-  build: corepack enable && pnpm install --frozen-lockfile && pnpm build
-  on: [main]
+# Nothing is published: the builder is used at hanzo.ai (its Dev mode), and
+# hanzo.build redirects there (hanzoai/universe static-sites build-to-hanzo-ai).
+# What ships is the package on npm (.github/workflows/publish.yml).

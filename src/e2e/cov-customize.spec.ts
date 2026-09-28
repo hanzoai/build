@@ -11,6 +11,7 @@
 import type { Page } from '@playwright/test'
 
 import { expect, test } from './fixture.ts'
+import { mounted, went } from './mount.ts'
 import type { Reply, Sent } from './signed.ts'
 import { catalogue, customize, LISTINGS, PNG, visitor } from './stubs.ts'
 
@@ -57,8 +58,7 @@ const sentTo = (sent: Sent[], method: string, path: string) => sent.filter((s) =
 
 test('a visitor reads the catalogue, the fleet’s servers and the presets, and is asked to sign in for the rest', async ({ page }, info) => {
   await visitor(page)
-  await page.route('https://hanzo.id/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Sign in</title>' }))
-  await page.goto('/-/customize')
+  await mounted(page, { path: '-/customize', org: null, admin: false, person: null, signIn: true })
 
   // Discover is what a visitor lands on; nothing there is theirs to add.
   await expect(page.getByRole('button', { name: 'Discover', pressed: true })).toBeVisible()
@@ -93,11 +93,10 @@ test('a visitor reads the catalogue, the fleet’s servers and the presets, and 
   await expect(page.getByText('Product & Fashion Create', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0)
 
-  // Sign in opens IAM beside the page, which stays as it is.
+  // Sign in is the host's to do.
   await page.getByRole('button', { name: 'Yours', exact: true }).click()
-  const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByRole('button', { name: 'Sign in', exact: true }).click()])
-  expect(popup.url()).toMatch(/^https:\/\/hanzo\.id\//)
-  await expect(page.getByText('Sign in to see your agents.')).toBeVisible()
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect.poll(() => went(page)).toContain('sign in')
 })
 
 // Skills.

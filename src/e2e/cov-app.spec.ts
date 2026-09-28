@@ -1,7 +1,7 @@
 /**
  * The page around the builder, and the parts every screen shares: signing in
- * through hanzo.id (a popup that keeps the page, the redirect when the popup is
- * refused, the return and its refusals, signing out), who is signed in and which
+ * through hanzo.id (this tab goes and comes back, with nothing of the app drawn
+ * to a visitor; the return and its refusals; signing out), who is signed in and which
  * org they work in, a host that draws its own rail (`DevSection`), the reads and
  * the live feed every pane owes, the person's own settings, attaching files and
  * dictating, and the markdown an agent writes.
@@ -14,6 +14,7 @@ import type { BrowserContext, Page } from '@playwright/test'
 
 import { ask, composer, status } from './composer.ts'
 import { expect, test } from './fixture.ts'
+import { mounted, went } from './mount.ts'
 import { ORG, SESSION, serve, signIn, type Reply } from './signed.ts'
 import { org, PNG } from './stubs.ts'
 
@@ -35,11 +36,16 @@ interface Asked {
  */
 async function issuer(
   ctx: BrowserContext,
-  { token = { status: 200, json: { access_token: TOKEN, refresh_token: 'r1', expires_in: 3600, token_type: 'Bearer' } as unknown }, user = { sub: `${ORG}/dave`, name: 'Dave', email: 'dave@acme.test' } as Record<string, unknown> } = {},
+  {
+    token = { status: 200, json: { access_token: TOKEN, refresh_token: 'r1', expires_in: 3600, token_type: 'Bearer' } as unknown },
+    user = { sub: `${ORG}/dave`, name: 'Dave', email: 'dave@acme.test' } as Record<string, unknown>,
+    held = Promise.resolve(),
+  }: { token?: unknown; user?: Record<string, unknown>; held?: Promise<void> } = {},
 ): Promise<Asked> {
   const asked: Asked = { authorize: [], token: [] }
-  await ctx.route(`${ISSUER}/.well-known/openid-configuration`, (r) =>
-    r.fulfill({
+  await ctx.route(`${ISSUER}/.well-known/openid-configuration`, async (r) => {
+    await held
+    await r.fulfill({
       json: {
         issuer: ISSUER,
         authorization_endpoint: `${ISSUER}/v1/iam/oauth/authorize`,
@@ -48,8 +54,8 @@ async function issuer(
         revocation_endpoint: `${ISSUER}/v1/iam/oauth/revoke`,
         end_session_endpoint: `${ISSUER}/v1/iam/oauth/logout`,
       },
-    }),
-  )
+    })
+  })
   await ctx.route(`${ISSUER}/v1/iam/oauth/authorize?**`, (r) => {
     const url = new URL(r.request().url())
     asked.authorize.push(url)
@@ -73,52 +79,50 @@ const stored = (page: Page, key: string) => page.evaluate((k) => window.localSto
 const arrived = (page: Page, who = 'Dave · acme') => expect(page.getByRole('button', { name: `Account: ${who}` })).toBeVisible({ timeout: 20_000 })
 
 test.describe('signing in', () => {
-  test('a popup signs in and the page, with what was typed, stays', async ({ page, baseURL }) => {
-    const asked = await issuer(page.context())
+  test('a visitor is drawn nothing: this tab goes to hanzo.id and comes back signed in, with the words it carried', async ({ page, baseURL }) => {
+    let answer = () => {}
+    const asked = await issuer(page.context(), { held: new Promise((done) => (answer = done)) })
     await nothing(page)
-    await page.goto('/')
-    const ask = page.getByRole('textbox', { name: 'Describe a task or ask a question' })
-    await ask.fill('Add a cart to the shop')
-    const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByRole('banner').getByRole('button', { name: 'Log in' }).click()])
-    await popup.waitForEvent('close')
+    const popups: string[] = []
+    page.on('popup', (p) => popups.push(p.url()))
+    await page.goto('/?q=Add%20a%20cart%20to%20the%20shop')
+    // On its way to hanzo.id, held at discovery: the page draws nothing of the app.
+    await page.waitForTimeout(500)
+    await expect(page.getByRole('textbox')).toHaveCount(0)
+    await expect(page.getByRole('navigation')).toHaveCount(0)
+    expect(asked.authorize).toEqual([])
+    answer()
     await arrived(page)
+    const ask = page.getByRole('textbox', { name: 'Describe a task or ask a question' })
     await expect(ask).toHaveValue('Add a cart to the shop')
     expect(page.url()).toBe(new URL('/', baseURL).href)
+    expect(popups).toEqual([])
 
     const at = asked.authorize[0]!
-    expect(at.searchParams.get('client_id')).toBe('hanzo-build')
+    expect(at.searchParams.get('client_id')).toBe('hanzo-app')
     expect(at.searchParams.get('redirect_uri')).toBe(new URL('/auth/callback', baseURL).href)
     expect(at.searchParams.get('code_challenge_method')).toBe('S256')
     expect(asked.token).toHaveLength(1)
-    expect(Object.fromEntries(asked.token[0]!)).toMatchObject({ grant_type: 'authorization_code', code: 'c0de', client_id: 'hanzo-build' })
+    expect(Object.fromEntries(asked.token[0]!)).toMatchObject({ grant_type: 'authorization_code', code: 'c0de', client_id: 'hanzo-app' })
     expect(asked.token[0]!.get('code_verifier')).toBeTruthy()
     expect(await stored(page, 'hanzo_iam_access_token')).toBe(TOKEN)
     expect(await stored(page, 'hanzo:who')).toBe(`${ORG}/dave`)
   })
 
-  test('a browser that refuses the popup is sent to hanzo.id and brought back signed in', async ({ page, baseURL }) => {
-    await page.addInitScript(() => {
-      window.open = () => null
-    })
+  test('the return lands on the address the visitor asked for', async ({ page, baseURL }) => {
     const asked = await issuer(page.context())
     await nothing(page)
     await page.goto('/-/codebases')
-    await page.getByRole('banner').getByRole('button', { name: 'Log in' }).click()
     await arrived(page)
-    expect(page.url()).toBe(new URL('/', baseURL).href)
+    await expect(page).toHaveURL(new URL('/-/codebases', baseURL).href)
     expect(asked.authorize).toHaveLength(1)
     expect(asked.token[0]!.get('code')).toBe('c0de')
-    expect(await stored(page, 'hanzo_iam_access_token')).toBe(TOKEN)
   })
 
   test('a refused exchange says why, and keeps nobody signed in', async ({ page }) => {
-    await page.addInitScript(() => {
-      window.open = () => null
-    })
     await issuer(page.context(), { token: { status: 400, json: { error: 'invalid_grant' } } })
     await nothing(page)
     await page.goto('/')
-    await page.getByRole('banner').getByRole('button', { name: 'Log in' }).click()
     await expect(page.getByText('Token exchange failed (400): {"error":"invalid_grant"}')).toBeVisible({ timeout: 20_000 })
     await expect(page.getByText('Try signing in again.')).toBeVisible()
     expect(await stored(page, 'hanzo_iam_access_token')).toBeNull()
@@ -136,28 +140,6 @@ test.describe('signing in', () => {
     await expect(page.getByText('OAuth error on a sign-in this browser did not start. Restart sign-in.')).toBeVisible()
   })
 
-  test('in the popup, the return hands the code to the page that opened it and closes, making no exchange', async ({ page, baseURL }) => {
-    const asked = await issuer(page.context())
-    // This page as Sign in's popup: named as the SDK names it, with a page that opened it.
-    await page.addInitScript(() => {
-      const w = window as unknown as { handed: unknown[]; shut: boolean }
-      w.handed = []
-      w.shut = false
-      window.name = 'hanzo_iam_login'
-      Object.defineProperty(window, 'opener', { value: { postMessage: (m: unknown, o: string) => w.handed.push({ m, o }) } })
-      window.close = () => {
-        w.shut = true
-      }
-    })
-    await nothing(page)
-    await page.goto('/auth/callback?code=c0de&state=s1')
-    await expect.poll(() => page.evaluate(() => (window as unknown as { shut: boolean }).shut)).toBe(true)
-    const handed = await page.evaluate(() => (window as unknown as { handed: unknown[] }).handed)
-    expect(handed[0]).toEqual({ m: { source: 'hanzo-iam', code: 'c0de', state: 's1' }, o: new URL(baseURL!).origin })
-    expect(asked.token).toEqual([])
-    expect(await stored(page, 'hanzo_iam_access_token')).toBeNull()
-  })
-
   test('the return shows it is working until the account arrives', async ({ page }) => {
     let release = () => {}
     const gate = new Promise<void>((done) => (release = done))
@@ -167,17 +149,32 @@ test.describe('signing in', () => {
       await gate
       await r.fulfill({ json: { access_token: TOKEN, expires_in: 3600 } })
     })
-    await page.addInitScript(() => {
-      window.open = () => null
-    })
     await nothing(page)
     await page.goto('/')
-    await page.getByRole('banner').getByRole('button', { name: 'Log in' }).click()
-    // The trip to hanzo.id and back loads the page twice.
     await expect(page.getByText('Completing sign-in…')).toBeVisible({ timeout: 20_000 })
     await expect(page.getByText('One moment.')).toBeVisible()
     release()
     await arrived(page)
+  })
+
+  test('words sent while signed out are sent once the person is in', async ({ page }) => {
+    const sent = await serve(page, ({ path, method }) => (path === '/v1/agent/coding' && method === 'POST' ? { status: 202, json: { sessionId: SESSION, repo: '', branch: '' } } : undefined))
+    await mounted(page, { path: '', org: ORG, admin: true, person: null, signIn: true })
+    const ask = page.getByRole('textbox', { name: 'Describe a task or ask a question' })
+    await ask.fill('Add a cart to the shop')
+    await ask.press('Enter')
+    await expect.poll(() => went(page)).toEqual(['sign in'])
+    expect(sent.filter((s) => s.path === '/v1/agent/coding')).toEqual([])
+
+    // Back from signing in: the same tab, now with a person.
+    await mounted(page, { path: '', org: ORG, admin: true, person: { name: 'Dave', email: 'dave@acme.test', avatar: '' } })
+    await expect.poll(() => sent.filter((s) => s.method === 'POST' && s.path === '/v1/agent/coding').length).toBe(1)
+    expect((sent.find((s) => s.path === '/v1/agent/coding')!.body as { prompt: string }).prompt).toBe('Add a cart to the shop')
+    await expect.poll(() => went(page)).toEqual([SESSION])
+    // Once: a reload does not send it again.
+    await page.reload()
+    await page.waitForTimeout(500)
+    expect(sent.filter((s) => s.method === 'POST' && s.path === '/v1/agent/coding')).toHaveLength(1)
   })
 })
 
@@ -213,9 +210,15 @@ test.describe('who is signed in', () => {
       localStorage.setItem('hanzo.build.new.acme', '{"ask":"hers"}')
       localStorage.setItem('theme', 'dark')
     })
+    // hanzo.id is asked, and answers nothing, so this tab stays to be read.
+    const asked: URL[] = []
+    await page.context().route(`${ISSUER}/v1/iam/oauth/authorize?**`, (r) => {
+      asked.push(new URL(r.request().url()))
+      return r.fulfill({ status: 204 })
+    })
     await nothing(page)
     await page.goto('/')
-    await expect(page.getByRole('banner').getByRole('button', { name: 'Log in' })).toBeVisible()
+    await expect.poll(() => asked.length).toBe(1)
     expect(await stored(page, 'hanzo:who')).toBeNull()
     expect(await stored(page, 'hanzo.build.slack')).toBeNull()
     expect(await stored(page, 'hanzo.build.new.acme')).toBeNull()
@@ -763,7 +766,7 @@ test.describe('dictating without a microphone', () => {
 
   test('a visitor’s choice of language asks them to sign in', async ({ page }) => {
     await serve(page, () => undefined)
-    await page.goto('/')
+    await mounted(page, { path: '', org: null, admin: false, person: null, signIn: true })
     await page.getByRole('button', { name: 'Dictation language:', exact: true }).click()
     await page.getByRole('option', { name: 'Deutsch' }).click()
     await expect(status(page)).toHaveText('Sign in to save your settings.')

@@ -1,19 +1,17 @@
-import { completePopupSignin, useIam } from '@hanzo/iam/react'
+import { useIam } from '@hanzo/iam/react'
 import { Box, Text, YStack } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+
+import { back } from './enter.ts'
 
 /**
  * The return from Hanzo IAM.
  *
  * The SDK reads the authorization code and state from the URL and the PKCE
  * verifier from storage, exchanges the code, and stores the tokens. Nothing
- * here touches a credential; this screen only decides where the reader lands,
- * and there is one place to land — this app answers one address.
- *
- * In the popup Sign in opens, this screen only hands the code back to the page
- * that opened it and closes: that page holds the attempt and makes the exchange,
- * so the person's work is still on it when the account arrives (enter.ts).
+ * here touches a credential; this screen only decides where the reader lands:
+ * the address they left from (enter.ts), or New.
  *
  * A failed exchange is reported rather than swallowed: it is the most expensive
  * refusal in the whole flow, and it is invisible from the outside.
@@ -24,11 +22,10 @@ export function Callback() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (completePopupSignin()) return
     let cancelled = false
     handleCallback()
       .then(() => {
-        if (!cancelled) go('/', { replace: true })
+        if (!cancelled) go(back(), { replace: true })
       })
       .catch((err: unknown) => {
         // The SDK hands every refusal over as an Error.

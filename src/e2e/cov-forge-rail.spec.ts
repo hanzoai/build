@@ -130,15 +130,23 @@ test.describe('the rail', () => {
     await expect(rail(page).getByText('No runs yet.')).toBeVisible()
   })
 
-  test('a person whose token IAM no longer honours signs in again from the rail', async ({ page }) => {
-    await page.context().route('https://hanzo.id/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>Hanzo</title>Sign in' }))
+  test('a person whose token IAM no longer honours signs in again from the rail, in this tab', async ({ page, baseURL }) => {
+    const asked: URL[] = []
+    await page.context().route('https://hanzo.id/**', (r) => {
+      const url = new URL(r.request().url())
+      if (url.pathname === '/v1/iam/oauth/authorize') asked.push(url)
+      return r.fulfill({ contentType: 'text/html', body: '<title>Hanzo</title>Sign in' })
+    })
+    const popups: string[] = []
+    page.on('popup', (p) => popups.push(p.url()))
     await lapsed(page)
     await serve(page, () => ({ status: 401, json: { status: 401, detail: 'Sign in to use this.' } }))
-    await page.goto('/')
+    await page.goto('/-/codebases')
     await expect(rail(page).getByText('Sign in to see your runs.')).toBeVisible()
-    const [popup] = await Promise.all([page.waitForEvent('popup'), rail(page).getByRole('button', { name: 'Account: Sign in' }).click()])
-    expect(new URL(popup.url()).hostname).toBe('hanzo.id')
-    await popup.close()
+    await rail(page).getByRole('button', { name: 'Account: Sign in' }).click()
+    await page.waitForURL((u) => u.hostname === 'hanzo.id')
+    expect(asked[0]!.searchParams.get('redirect_uri')).toBe(new URL('/auth/callback', baseURL).href)
+    expect(popups).toEqual([])
   })
 })
 
