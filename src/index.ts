@@ -12,7 +12,7 @@
 export { Builder, nav } from './builder.tsx'
 export { DevSection, DOTS, useSessions } from './section.tsx'
 export { HostProvider } from './host.tsx'
-export { Slack, Who } from './foot.tsx'
+export { Slack, useWho, Who } from './foot.tsx'
 export { administers } from './claims.ts'
 export type { Host, Person } from './host.tsx'
 export type { Session, Status } from './api/sessions.ts'

@@ -79,6 +79,25 @@ test.describe('the rail', () => {
     await help.close()
   })
 
+  // The row lies outside the menu, so its second press is first a press outside:
+  // the menu closes on it, and the row must not open it straight back.
+  for (const rail of [false, true]) {
+    test(`pressing the account row again puts the menu away${rail ? ' on the collapsed rail' : ''}, and it stays away`, async ({ page }) => {
+      await platform(page, rail ? { 'hanzo.build.rail': true } : {})
+      await page.goto('/')
+      const row = page.getByRole('button', { name: 'Account: Dave · acme' })
+      const menu = page.getByRole('menu', { name: 'Account' })
+      await row.click()
+      await expect(menu).toBeVisible()
+      await row.click()
+      await expect(menu).toHaveCount(0)
+      await page.waitForTimeout(800)
+      await expect(menu).toHaveCount(0)
+      await row.click()
+      await expect(menu).toBeVisible()
+    })
+  }
+
   test('on the collapsed rail the account menu opens beside it, and the card is gone', async ({ page }, info) => {
     await platform(page, { 'hanzo.build.rail': true })
     await page.goto('/')

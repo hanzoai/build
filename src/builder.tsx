@@ -47,7 +47,7 @@ import { Run } from './run.tsx'
 import { DOTS } from './section.tsx'
 import { Artifacts, Templates } from './shelf.tsx'
 import { Find } from './find.tsx'
-import { DOCS, Slack, Who } from './foot.tsx'
+import { DOCS, Slack, useWho, Who } from './foot.tsx'
 import { Settings } from './settings/index.tsx'
 
 type Order = 'newest' | 'running'
@@ -61,7 +61,7 @@ function Shell() {
   const [drawer, setDrawer] = useState(false)
   const [order, setOrder] = useState<Order>('newest')
   const [finding, setFinding] = useState(false)
-  const [menu, setMenu] = useState(false)
+  const who = useWho()
   const [slack, setSlack] = useKept('hanzo.build.slack', false)
 
   const go = (p: string) => {
@@ -112,7 +112,7 @@ function Shell() {
                 name: [host.person.name || host.person.email, host.org].filter(Boolean).join(' · '),
                 onPress: () => {
                   setDrawer(false)
-                  setMenu(true)
+                  who.toggle()
                 },
               }
             : { name: 'Sign in', onPress: () => host.signIn?.() }
@@ -149,7 +149,7 @@ function Shell() {
           </XStack>
         </YStack>
       )}
-      {host.person ? <Who open={menu} onOpenChange={setMenu} narrow={collapsed} /> : null}
+      {host.person ? <Who open={who.open} onOpenChange={who.onOpenChange} narrow={collapsed} /> : null}
       </YStack>
       <YStack flex={1} minW={0} minH={0} position="relative">
         {/* Below md the rail is a drawer; this is the one control that opens it. */}

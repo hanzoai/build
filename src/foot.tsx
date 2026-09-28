@@ -5,6 +5,7 @@
  * Everything it opens is an address of this page, but help, which is the
  * documentation.
  */
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Popover, SizableText, XStack, YStack } from '@hanzo/gui'
 import { Gauge, LifeBuoy, LogOut, Settings, Slack as Mark, Sparkles, X } from '@hanzogui/lucide-icons-2'
 import { MenuLabel, MenuRow, MenuRule } from '@hanzo/ui/product'
@@ -34,6 +35,35 @@ export function Slack({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: ()
       </XStack>
     </XStack>
   )
+}
+
+/**
+ * The account menu's open state, for whatever row opens it.
+ *
+ * The row that opens the menu lies outside it, so a press on the row while the
+ * menu is open reaches the popover first as a press outside, which closes it —
+ * and a row that then simply opened it put it straight back, a flicker instead
+ * of a close. So the open state is noted as each press BEGINS, before the popover
+ * acts on it, and `toggle` (the row's press) closes a menu that was open then.
+ */
+export function useWho(): { open: boolean; onOpenChange: (o: boolean) => void; toggle: () => void } {
+  const [open, setOpen] = useState(false)
+  const shown = useRef(open)
+  shown.current = open
+  const began = useRef(false)
+  useEffect(() => {
+    const down = () => {
+      began.current = shown.current
+    }
+    document.addEventListener('pointerdown', down, true)
+    return () => document.removeEventListener('pointerdown', down, true)
+  }, [])
+  const toggle = useCallback(() => {
+    const was = began.current || shown.current
+    began.current = false
+    setOpen(!was)
+  }, [])
+  return { open, onOpenChange: setOpen, toggle }
 }
 
 /**
