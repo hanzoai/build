@@ -8,13 +8,19 @@
  * build to main, which CD applies: that is the second call, with the build's
  * tag, because main refuses an image that is not built yet.
  *
+ * A repository in the org's own code workspace answers `live` instead: its
+ * build puts it on the project's address when it finishes, so there is no
+ * review and nothing to take to main. Its build is followed on the board like
+ * any other, and `onLive` is told when it succeeds, so the host reads the
+ * project's address again.
+ *
  * Every state shown is one the platform reported; a refusal shows the
  * platform's own sentence.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { ExternalLink } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Input } from '@hanzo/ui'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { builds, declare, label, type Declared } from './api/platform.ts'
 import { useHost, useTarget } from './host.tsx'
@@ -34,7 +40,7 @@ export interface Source {
 
 type Phase = 'ask' | 'sending' | 'declared' | 'shipping' | 'shipped' | 'failed'
 
-export function Publish({ source, onClose }: { source: Source | null; onClose: () => void }) {
+export function Publish({ source, onClose, onLive }: { source: Source | null; onClose: () => void; onLive?: () => void }) {
   const t = useTarget()
   const host = useHost()
   const [project, setProject] = useState('')
@@ -42,6 +48,8 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
   const [out, setOut] = useState<Declared | null>(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
+  const told = useRef(onLive)
+  told.current = onLive
 
   useEffect(() => {
     setProject(source?.project ?? source?.name ?? '')
@@ -72,6 +80,13 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
     }
   }, [t, out, phase])
 
+  const green = /^(succeeded|success|done|complete|completed|ok)$/i.test(status)
+
+  // A site's build going green is the site going live, at the project's address.
+  useEffect(() => {
+    if (out?.live && green) told.current?.()
+  }, [out, green])
+
   if (!source) return null
 
   const send = async () => {
@@ -90,7 +105,6 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
 
   // The build this write started; its status is what the platform last said of it.
   const built = out?.build?.id ?? ''
-  const green = /^(succeeded|success|done|complete|completed|ok)$/i.test(status)
 
   // Offered only once that build is green.
   const ship = async () => {
@@ -110,7 +124,9 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
       <DialogContent maxW={480}>
         <DialogTitle>Add to project</DialogTitle>
         <DialogDescription>
-          Build {source.title} at {source.ref} and declare it in a project. {host.admin ? 'As an admin you can take a green build to main.' : 'It opens a review; merging it is what deploys.'}
+          {out?.live
+            ? `Build ${source.title} at ${source.ref} and publish it at its project’s address.`
+            : `Build ${source.title} at ${source.ref} and declare it in a project. ${host.admin ? 'As an admin you can take a green build to main.' : 'It opens a review; merging it is what deploys.'}`}
         </DialogDescription>
 
         <YStack gap="$1.5">
@@ -132,10 +148,17 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
 
         {out ? (
           <YStack gap="$2" role="status">
+            {out.notice ? (
+              <SizableText size="$2" color="$soft">
+                {out.notice}
+              </SizableText>
+            ) : null}
             <SizableText size="$2" color="$ink">
               {phase === 'shipped'
                 ? 'Declared on main — CD applies it on its next pass.'
-                : `Build ${built}: ${status || 'building'}`}
+                : out.live && green
+                  ? `Build ${built} succeeded — it is live at the project’s address.`
+                  : `Build ${built}: ${status || 'building'}`}
             </SizableText>
             {out.review ? (
               <Out href={out.review}>
@@ -162,7 +185,7 @@ export function Publish({ source, onClose }: { source: Source | null; onClose: (
             <Button size="sm" disabled={phase === 'sending'} onPress={() => void send()}>
               {phase === 'sending' ? 'Adding…' : 'Add to project'}
             </Button>
-          ) : host.admin && (phase === 'declared' || phase === 'shipping') ? (
+          ) : host.admin && !out?.live && (phase === 'declared' || phase === 'shipping') ? (
             <Button size="sm" disabled={!green || phase === 'shipping'} onPress={() => void ship()}>
               {phase === 'shipping' ? 'Shipping…' : green ? 'Ship to main' : 'Waiting for the build'}
             </Button>

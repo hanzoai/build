@@ -275,11 +275,14 @@ describe('places, projects, git, platform', () => {
     expect(await git.blob(T, 'cloud', 'main', 'big.bin')).toEqual({ path: 'big.bin', text: '', binary: true, truncated: false, size: 3 })
   })
 
-  it('declares a repository into a project, on a branch by default', async () => {
+  it('declares a repository into a project, on a branch by default, with what the platform says of the review', async () => {
+    const REVIEW =
+      'This deploy opened a review: the declaration is on a branch of universe and deploys nothing until it is merged. The branch is deleted once main declares this tag, or after 7 days if it is not merged.'
     const seen = answer(202, {
       app: { name: 'site' },
       build: { id: 'bld_1', job: 'j', image: 'ghcr.io/hanzo/site:bld_1', status: 'building' },
       declaration: { mode: 'branch', ref: 'deploy/hanzo/site/bld_1', review: 'https://github.com/hanzoai/universe/compare/main...deploy', live: false },
+      notice: REVIEW,
     })
     const out = await platform.declare(T, { repo: platform.clone('acme/Site'), ref: '', name: 'Site!', project: 'My Shop', mode: 'branch' })
     expect(seen[0]).toMatchObject({
@@ -293,6 +296,7 @@ describe('places, projects, git, platform', () => {
       ref: 'deploy/hanzo/site/bld_1',
       review: 'https://github.com/hanzoai/universe/compare/main...deploy',
       live: false,
+      notice: REVIEW,
     })
   })
 

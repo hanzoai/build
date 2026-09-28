@@ -42,6 +42,16 @@ describe('said', () => {
     expect(status({ status: 'done' })).toBe('Done')
   })
 
+  it('says a run on a project with a site published what it pushed, or why it did not', () => {
+    expect(status({ status: 'done', changed: true, branch: 'agent/x', pr: '#4', live: 'https://shop.hanzo.app' })).toBe('Pushed agent/x — #4 — published')
+    expect(status({ status: 'done', changed: true, branch: 'agent/x', pr: '#4', unpublished: 'coding: the build exited 1: missing script: build' })).toBe(
+      'Pushed agent/x — #4 — not published: coding: the build exited 1: missing script: build',
+    )
+    // Why it did not is said even beside an address.
+    expect(status({ status: 'done', live: 'https://shop.hanzo.app', unpublished: 'the store refused index.html' })).toBe('Done — not published: the store refused index.html')
+    expect(status({ status: 'done', live: 7, unpublished: false })).toBe('Done')
+  })
+
   it('says an error, a stop, a pause and a follow-up, with the work kept only when it was', () => {
     expect(status({ status: 'error' })).toBe('The run hit an error')
     expect(status({ status: 'stopped', branch: 'agent/x', changed: true })).toBe('Stopped — work kept on agent/x')
@@ -134,7 +144,19 @@ describe('outcome', () => {
         ev(4, 'status', {}),
         ev(5, 'log', { status: 'done' }),
       ]),
-    ).toEqual({ status: 'started', problem: 'no token' })
+    ).toEqual({ status: 'started', problem: 'no token', published: 0 })
+  })
+
+  it('keeps where the latest status said the run’s work went live, and never the address', () => {
+    expect(
+      outcome([
+        ev(9, 'status', { status: 'done', changed: true, live: 'https://shop.hanzo.app' }),
+        ev(2, 'status', { status: 'done', changed: true, live: 'https://evil.example' }),
+        ev(12, 'status', { status: 'done', changed: true, unpublished: 'the build exited 1' }),
+        ev(14, 'log', { live: 'https://shop.hanzo.app' }),
+      ]),
+    ).toEqual({ status: 'done', problem: '', published: 9 })
+    expect(outcome([ev(3, 'status', { status: 'done', live: '' })]).published).toBe(0)
   })
 })
 

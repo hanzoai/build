@@ -132,7 +132,7 @@ describe('turns', () => {
       { seq: 2, kind: 'status', payload: { status: 'done', branch: 'attacker', url: 'https://evil.example/pr', prError: 'no token' } },
       { seq: 1, kind: 'status', payload: { status: 'started', branch: 'agent/sess_1' } },
     ])
-    expect(o).toEqual({ status: 'done', problem: 'no token' })
+    expect(o).toEqual({ status: 'done', problem: 'no token', published: 0 })
   })
 
   it('merges a read and a feed without doubling a turn', () => {

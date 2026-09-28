@@ -451,12 +451,32 @@ describe('platform', () => {
     const seen = answer(202, { app: { name: 'site' }, declaration: { mode: 'commit', ref: 'main', live: true } })
     const out = await platform.declare(T, { repo: 'https://github.com/acme/site.git', ref: 'main', name: 'site', project: 'shop', mode: 'commit', tag: 'bld_1' })
     expect(seen[0].body).toEqual({ repo: 'https://github.com/acme/site.git', ref: 'main', name: 'site', partOf: 'shop', mode: 'commit', tag: 'bld_1' })
-    expect(out).toEqual({ build: null, mode: 'commit', ref: 'main', review: '', live: true })
+    expect(out).toEqual({ build: null, mode: 'commit', ref: 'main', review: '', live: true, notice: '' })
   })
 
-  it('reads an empty answer as a declaration of nothing', async () => {
+  it('reads a repository in the org’s own workspace as its project’s site: live, with the notice and no review', async () => {
+    const notice = "Building site from main in a sandbox; it goes live at the project's address when the build finishes."
+    answer(202, {
+      app: { name: 'site', org: 'acme', partOf: 'site', hosts: [] },
+      build: { id: 'dep_1', status: 'building', repo: 'https://git.hanzo.ai/acme-ws/site.git', ref: 'main' },
+      declaration: { declaration: {}, mode: 'commit', ref: 'main', created: false, changed: false, live: true },
+      notice,
+    })
+    expect(await platform.declare(T, { repo: 'https://git.hanzo.ai/acme-ws/site.git', ref: 'main', name: 'site', project: 'site', mode: 'branch' })).toEqual({
+      build: { id: 'dep_1', job: '', image: '', status: 'building' },
+      mode: 'commit',
+      ref: 'main',
+      review: '',
+      live: true,
+      notice,
+    })
+  })
+
+  it('reads an empty answer as a declaration of nothing, and a notice that is not a sentence as none', async () => {
     answer(202, undefined)
-    expect(await platform.declare(T, { repo: 'r', ref: 'main', name: 'a', project: 'a', mode: 'branch' })).toEqual({ build: null, mode: '', ref: '', review: '', live: false })
+    expect(await platform.declare(T, { repo: 'r', ref: 'main', name: 'a', project: 'a', mode: 'branch' })).toEqual({ build: null, mode: '', ref: '', review: '', live: false, notice: '' })
+    answer(202, { declaration: { live: 'yes' }, notice: 7 })
+    expect(await platform.declare(T, { repo: 'r', ref: 'main', name: 'a', project: 'a', mode: 'branch' })).toMatchObject({ live: false, notice: '' })
   })
 
   it('lists builds, a thin row as empty values, and an answer without builds as none', async () => {
@@ -543,6 +563,55 @@ describe('projects', () => {
   it('names no address for a clone URL with one segment', () => {
     expect(projects.address('cloud')).toBe('')
     expect(projects.ours('hanzo-inc/cloud', '')).toBe(true)
+  })
+
+  it('takes a starter as a copy that answers building until it is published', async () => {
+    const seen = answer(201, {
+      id: 'prj_1',
+      org: 'acme',
+      slug: 'synapse-2',
+      name: 'Synapse',
+      repo: { url: 'https://git.hanzo.ai/acme-ws/synapse-2.git', branch: 'main' },
+      framework: 'next',
+      status: 'building',
+      analytics: true,
+      forkedFrom: 'synapse',
+      createdAt: 5,
+      updatedAt: 6,
+    })
+    expect(await projects.fork(T, 'synapse')).toEqual({
+      slug: 'synapse-2',
+      name: 'Synapse',
+      repo: 'https://git.hanzo.ai/acme-ws/synapse-2.git',
+      branch: 'main',
+      status: 'building',
+      live: '',
+      visibility: '',
+      forked: 'synapse',
+      created: 5,
+      updated: 6,
+    })
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/projects/fork', body: { slug: 'synapse' } })
+  })
+
+  it('reads a project’s deployments newest first, a thin one as empty values, one with no id as none', async () => {
+    const seen = answer(200, [
+      { id: 'dep_1', projectId: 'prj_1', version: 1, status: 'live', source: 'build', commit: 'abc123', liveUrl: 'https://shop.hanzo.app', files: 3, bytes: 900, message: '', createdAt: 10, updatedAt: 20 },
+      { id: 'dep_2', projectId: 'prj_1', version: 2, status: 'error', source: 'build', files: 0, bytes: 0, message: 'coding: the build exited 1: missing script: build', createdAt: 30, updatedAt: 40 },
+      { id: 'dep_3', version: '3', status: 7 },
+      { version: 4, status: 'building' },
+      null,
+    ])
+    expect(await projects.deployments(T, 'my shop')).toEqual([
+      { id: 'dep_2', version: 2, status: 'error', commit: '', message: 'coding: the build exited 1: missing script: build', created: 30, updated: 40 },
+      { id: 'dep_1', version: 1, status: 'live', commit: 'abc123', message: '', created: 10, updated: 20 },
+      { id: 'dep_3', version: 0, status: '', commit: '', message: '', created: 0, updated: 0 },
+    ])
+    expect(seen[0]).toMatchObject({ method: 'GET', url: 'https://api.hanzo.ai/v1/projects/my%20shop/deployments' })
+    answer(200, { data: [{ id: 'dep_1' }] })
+    expect(await projects.deployments(T, 'shop')).toEqual([])
+    answer(404, { status: 404, detail: 'project not found' })
+    await expect(projects.deployments(T, 'gone')).rejects.toMatchObject({ status: 404, message: 'project not found' })
   })
 })
 

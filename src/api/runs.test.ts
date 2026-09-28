@@ -141,6 +141,19 @@ describe('a run’s changes', () => {
     answer(200, { entries: [] })
     await changes.tree(T, 'sess_1')
   })
+
+  it('merges the run’s pull request and reads it after, a thin answer as empty values', async () => {
+    const seen = answer(200, { number: 7, url: 'https://git.hanzo.ai/acme/site/pulls/7', state: 'merged', base: 'main' })
+    expect(await changes.merge(T, 'sess_1')).toEqual({ number: 7, url: 'https://git.hanzo.ai/acme/site/pulls/7', state: 'merged', base: 'main' })
+    expect(seen[0]).toEqual({ url: 'https://api.hanzo.ai/v1/agent/coding/sess_1/merge', method: 'POST', body: {} })
+    answer(200, { number: '7', state: 1 })
+    expect(await changes.merge(T, 'sess_1')).toEqual({ number: 0, url: '', state: '', base: '' })
+  })
+
+  it('says the forge’s reason when a merge is refused', async () => {
+    answer(409, { status: 409, title: 'Conflict', detail: "coding: the run's branch conflicts with main; ask a run to bring it up to date" })
+    await expect(changes.merge(T, 'sess_1')).rejects.toMatchObject({ status: 409, message: "coding: the run's branch conflicts with main; ask a run to bring it up to date" })
+  })
 })
 
 describe('a run’s sandbox', () => {

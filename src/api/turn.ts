@@ -12,6 +12,8 @@
  * The coding plane's vocabulary (apps/coding): `status` for a lifecycle move
  * (started, routed, done, error, stopped, paused), `tool-call` for a step,
  * `log` for a free line. A person's steering is a `control` {command, message}.
+ * A run on a project with a site ends `done` with `live` when it published what
+ * it pushed, or `unpublished` saying why it did not.
  *
  * `cards` is the transcript as it is drawn: the run's steps, and the agent's own
  * output read by what each part is (harness.ts). The output a card shows is what
@@ -62,7 +64,10 @@ function status(b: Record<string, unknown>, mode: string): string {
       if (b.changed === false) return 'Done — nothing to change'
       const pr = str(b.pr)
       const tail = str(b.prError) ? ' — the pull request could not be opened' : pr ? ` — ${pr}` : ''
-      return branch ? `Pushed ${branch}${tail}` : `Done${tail}`
+      // A run on a project with a site publishes what it pushed, or says why not.
+      const why = str(b.unpublished)
+      const site = why ? ` — not published: ${why}` : str(b.live) ? ' — published' : ''
+      return branch ? `Pushed ${branch}${tail}${site}` : `Done${tail}${site}`
     }
     case 'error':
       return str(b.error) || 'The run hit an error'
@@ -179,6 +184,12 @@ export interface Outcome {
    * never put on screen as the reason.
    */
   problem: string
+  /**
+   * The place in the run (its `seq`) of the latest status that said its work
+   * went live on its project's site, or 0. It is the cue to read the project
+   * again; the address shown is the project's own, never one an event names.
+   */
+  published: number
 }
 
 /**
@@ -186,13 +197,14 @@ export interface Outcome {
  * the branch and the pull request are read from the run's record (`pull`).
  */
 export function outcome(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): Outcome {
-  const out: Outcome = { status: '', problem: '' }
+  const out: Outcome = { status: '', problem: '', published: 0 }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     if (e.kind !== 'status') continue
     const b = decode(e.payload)
     if (!b || typeof b === 'string') continue
     out.status = str(b.status) || out.status
     out.problem = str(b.prError) || out.problem
+    if (str(b.live)) out.published = e.seq
   }
   return out
 }

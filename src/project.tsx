@@ -15,6 +15,12 @@
  * preview is the project's own deployed address; a run's sandbox serves no
  * address the platform publishes, and nothing here invents one.
  *
+ * A project in a workspace the platform made is published by the platform: a
+ * template taken there reads `building` until its copy is `live` or failed, and
+ * is read again until then; a run that publishes what it pushed says so on its
+ * final status, which reads the project again and loads the preview again. Its
+ * pull request is merged from beside its link.
+ *
  * Derived from the Hanzo App v2 editor (github.com/hanzoai/build-v2), itself
  * derived from OSW Studio and DeepSite (MIT). See NOTICE.
  */
@@ -58,13 +64,15 @@ import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { read as pushed, type Pull } from './api/changes.ts'
 import { start, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
-import { name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
+import { deployments, name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
 import { outcome, pull, said, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
+import { Merge } from './git.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { MODES } from './landing.tsx'
 import { Out } from './out.tsx'
@@ -74,6 +82,9 @@ import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
 type ViewId = 'preview' | 'files' | 'code' | 'layers'
 
 const LIVE = new Set(['running', 'paused'])
+
+/** How often a project being published is read again, ms. */
+const AGAIN = 5000
 
 /** One run in the conversation: what was asked, and what it came to. */
 function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onOpen: () => void; project: string }) {
@@ -132,6 +143,18 @@ export function Project({ slug }: { slug: string }) {
   const signed = Boolean(host.person)
   const all = useProjects(t, signed)
   const project: Row | null = all.value.find((p) => p.slug === slug) ?? null
+  // A project that has never served reads `building` while it is published, and
+  // is read again until it is live or its build failed.
+  const building = project?.status === 'building'
+  const failed = project?.status === 'error'
+  const { reload: again } = all
+  useEffect(() => {
+    if (!building) return
+    const every = setInterval(again, AGAIN)
+    return () => clearInterval(every)
+  }, [building, again])
+  // Why the build failed is its latest deployment's to say.
+  const failure = useRead(failed ? () => deployments(t, slug) : null, [], [t, slug, failed, project?.updated])
 
   const listed = useRead(signed ? () => list(t, { kind: 'coding', project: slug, limit: 50 }) : null, [] as Session[], [t, signed, slug])
   // Only the runs on this project's own repository: a record can be moved into
@@ -167,6 +190,41 @@ export function Project({ slug }: { slug: string }) {
   const [publish, setPublish] = useState<Source | null>(null)
   const [switcher, setSwitcher] = useState(false)
   const frame = useRef<PreviewHandle | null>(null)
+
+  // What was published may be new files at the same address: the project is read
+  // for its address, and the frame loads again.
+  const fresh = () => {
+    again()
+    frame.current?.reload()
+  }
+
+  // The open run's final status says when it published what it pushed. That is
+  // narration, which any member can write, so it is the cue to read the project
+  // and never the address framed; one already there when the run was first read
+  // is not news.
+  const heard = useRef<{ run: string | null; at: number }>({ run: null, at: 0 })
+  useEffect(() => {
+    if (!run.record) return
+    if (heard.current.run !== current) {
+      heard.current = { run: current, at: end.published }
+      return
+    }
+    if (end.published <= heard.current.at) return
+    heard.current.at = end.published
+    fresh()
+    // `fresh` reads what it needs when it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, run.record, end.published])
+
+  // Where the open run's pull request stands on the forge: Merge is offered while it is open.
+  const proposal = useRead<{ run: string; pull: Pull | null } | null>(
+    signed && current && pr.href ? () => pushed(t, current).then((c) => ({ run: current, pull: c.pull })) : null,
+    null,
+    [t, signed, current, pr.href],
+  )
+  const proposing = proposal.value?.run === current && proposal.value.pull?.state === 'open'
+  // Files is drawn again after a merge, from what the forge holds now.
+  const [round, setRound] = useState(0)
 
   // Files and Code: native git, at the branch the open run pushed (or the project's own).
   const repo = project?.repo ? repoName(project.repo) : ''
@@ -205,13 +263,20 @@ export function Project({ slug }: { slug: string }) {
     [root.value],
   )
 
-  // A project taken from a starter and not yet published shows the starter's own
-  // live page, which is what the copy is until its first publish.
-  const forked = project && !project.live ? project.forked : ''
+  // A project taken from a starter, not published and not being, shows the
+  // starter's own live page, which is what the copy is until its first publish.
+  const forked = project && !project.live && !building && !failed ? project.forked : ''
   const starters = useRead(forked ? () => templates(t) : null, [], [t.api, forked])
   const starter = forked ? starters.value.find((s) => s.slug === forked && s.demo) : undefined
   const shown = project?.live || starter?.demo || ''
   const src = shown ? new URL(page, shown).toString() : null
+  const why = failure.value[0]?.message || failure.error?.message || (failure.loading ? '' : 'Its build ended without saying why.')
+
+  const merged = () => {
+    proposal.reload()
+    root.reload()
+    setRound((n) => n + 1)
+  }
 
   const lines: Line[] = useMemo(
     () => [
@@ -336,11 +401,13 @@ export function Project({ slug }: { slug: string }) {
               ? 'Reading this project’s runs…'
               : project?.live
                 ? `${project.name} is loaded — it is in the preview, and every run on it is under the clock above. Say what to change and it gets built.`
-                : starter
-                  ? `${project?.name} is loaded — the preview shows the ${starter.title} starter until your copy is published. Say what to change and it gets built.`
-                  : project
-                    ? `${project.name} is loaded and nothing is published yet. Say what to change and it gets built.`
-                    : `${slug} is loaded. Say what to change and it gets built.`}
+                : building
+                  ? `${project?.name} is being published — it appears in the preview when its build finishes. Say what to change and it gets built.`
+                  : starter
+                    ? `${project?.name} is loaded — the preview shows the ${starter.title} starter until your copy is published. Say what to change and it gets built.`
+                    : project
+                      ? `${project.name} is loaded and nothing is published yet. Say what to change and it gets built.`
+                      : `${slug} is loaded. Say what to change and it gets built.`}
           </SizableText>
         ) : (
           ordered.map((r) => (
@@ -354,12 +421,15 @@ export function Project({ slug }: { slug: string }) {
                     </SizableText>
                   ))}
                   {pr.href ? (
-                    <Out href={pr.href} label={`Open pull request ${pr.label}`}>
-                      <SizableText size="$1" color="$ink" textDecorationLine="underline">
-                        Pull request {pr.label}
-                      </SizableText>
-                      <ExternalLink size={11} />
-                    </Out>
+                    <XStack items="center" gap="$2" flexWrap="wrap">
+                      <Out href={pr.href} label={`Open pull request ${pr.label}`}>
+                        <SizableText size="$1" color="$ink" textDecorationLine="underline">
+                          Pull request {pr.label}
+                        </SizableText>
+                        <ExternalLink size={11} />
+                      </Out>
+                      <Merge session={r.id} open={proposing} onMerged={merged} />
+                    </XStack>
                   ) : null}
                 </YStack>
               ) : null}
@@ -419,10 +489,10 @@ export function Project({ slug }: { slug: string }) {
         empty={
           <YStack items="center" gap="$2" p="$6">
             <SizableText size="$3" color="$ink">
-              Nothing deployed yet
+              {building ? (project?.forked ? 'Publishing your copy…' : 'Publishing…') : failed ? 'Publishing failed' : 'Nothing deployed yet'}
             </SizableText>
             <SizableText size="$2" color="$soft" text="center">
-              Publish this project and its page appears here.
+              {building ? 'Its page appears here when the build finishes.' : failed ? why : 'Publish this project and its page appears here.'}
             </SizableText>
           </YStack>
         }
@@ -448,6 +518,7 @@ export function Project({ slug }: { slug: string }) {
     ) : view === 'files' ? (
       repo ? (
         <FileTree
+          key={round}
           load={async (dir) => (await tree(t, repo, ref, dir)).map((e) => ({ path: e.path, kind: e.dir ? ('dir' as const) : ('file' as const) }))}
           value={file}
           onSelect={(p) => void openFile(p)}
@@ -647,7 +718,7 @@ export function Project({ slug }: { slug: string }) {
         </DialogContent>
       </Dialog>
 
-      <Publish source={publish} onClose={() => setPublish(null)} />
+      <Publish source={publish} onClose={() => setPublish(null)} onLive={fresh} />
     </>
   )
 }

@@ -2,7 +2,7 @@
  * Adding a repository to a project, which is how a project is published.
  *
  *   POST /v1/platform/apps {repo, ref, name, partOf, mode, tag?}
- *     → 202 {app, build?: {id, job, image, status}, declaration: {mode, ref, review, live, …}}
+ *     → 202 {app, build?: {id, job, image, status}, declaration: {mode, ref, review, live, …}, notice?}
  *   GET  /v1/platform/builds → {builds: [{id, repo, commit, status, startedAt, duration}]}
  *
  * The declaration is a values file in universe. `branch` (the default) opens a
@@ -10,6 +10,11 @@
  * refuses to name an image that is not built yet, so publishing to main is two
  * calls: build on a branch, then commit that tag once the build is green. An
  * org admin gets both; anyone else gets the review link.
+ *
+ * A repository in the org's own code workspace is its project's site instead:
+ * built in a sandbox and served at the project's address when the build
+ * finishes. That answer is `declaration.live` with a `notice` saying so, and no
+ * review; its build is on the same board, building, succeeded or failed.
  */
 import { call, type Target } from './call.ts'
 
@@ -36,6 +41,8 @@ export interface Declared {
   review: string
   /** Whether anything can deploy from this write. */
   live: boolean
+  /** What the platform says of this write in a sentence, or ''. */
+  notice: string
 }
 
 export interface Build {
@@ -88,6 +95,7 @@ export async function declare(t: Target, d: Declare): Promise<Declared> {
     ref: str(dec.ref),
     review: https(str(dec.review)),
     live: dec.live === true,
+    notice: str(raw.notice),
   }
 }
 

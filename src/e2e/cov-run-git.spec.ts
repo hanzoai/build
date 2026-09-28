@@ -2,17 +2,18 @@
  * What a run pushed and what it holds, on a stubbed platform (cov-run.ts): the
  * Git tab's diff, review and commits in every state the forge answers — nothing
  * pushed, renamed, binary and too large, reviews of each kind — read again while
- * the run works; and the Files tab's live sandbox, its branch and what the run
- * produced.
+ * the run works, and its open pull request merged; and the Files tab's live
+ * sandbox, its branch and what the run produced.
  */
 import type { Page } from '@playwright/test'
 
 import { expect, test } from './fixture.ts'
-import { BOX, finished, hold, PR, rig, SESSION, to } from './cov-run.ts'
+import { BOX, finished, hold, PR, rig, SESSION, to, type World } from './cov-run.ts'
 
 const desk = (p: Page) => p.getByRole('complementary', { name: 'Run details' })
 const tab = (p: Page, name: string) => desk(p).getByRole('button', { name, exact: true }).first()
 const CHANGES = `/v1/agent/coding/${SESSION}/changes`
+const MERGE = `/v1/agent/coding/${SESSION}/merge`
 const b64 = (s: string) => Buffer.from(s).toString('base64')
 
 const pushed = {
@@ -109,6 +110,55 @@ test('the review reads merged, closed, ready and undecided pulls, and links only
   world.changes = { ...pushed, pull: { ...pushed.pull, mergeable: null } }
   await again()
   await expect(desk(p).getByText('Open', { exact: true })).toBeVisible()
+})
+
+test('Merge lands an open pull request once however often it is pressed, and the review reads it merged', async ({ page: p }) => {
+  let world: World | null = null
+  const { sent, world: w } = await rig(p, { changes: { ...pushed, pull: { ...pushed.pull, mergeable: true } } }, (s) => {
+    if (s.method !== 'POST' || s.path !== MERGE) return undefined
+    world!.changes = { ...pushed, files: [], pull: { ...pushed.pull, state: 'merged' } }
+    return { json: { number: 7, url: PR, state: 'merged', base: 'main' } }
+  })
+  world = w
+  const go = await hold(p, MERGE, 'POST')
+  await p.goto(`/${SESSION}`)
+  await tab(p, 'Git').click()
+  await tab(p, 'Review').click()
+  await expect(desk(p).getByText('Open · ready to merge')).toBeVisible()
+  await desk(p).getByRole('button', { name: 'Merge', exact: true }).click()
+  await desk(p).getByRole('button', { name: 'Merging…' }).click()
+  go()
+  await expect(desk(p).getByText('Merged into main')).toBeVisible()
+  await expect(desk(p).getByText('Merged', { exact: true })).toBeVisible()
+  await expect(desk(p).getByRole('button', { name: /^Merg/ })).toHaveCount(0)
+  expect(to(sent, 'POST', MERGE)).toHaveLength(1)
+  // What it changed is read again: merged, the diff from its base is empty.
+  await tab(p, 'Diff').click()
+  await expect(desk(p).getByText('No pushed changes')).toBeVisible()
+})
+
+test('a refused merge says the forge’s reason and Merge stays; a merge answered with no base says merged', async ({ page: p }) => {
+  const why = 'coding: the forge would not merge it: a required check has not passed'
+  let world: World | null = null
+  let tries = 0
+  const { sent, world: w } = await rig(p, { changes: pushed }, (s) => {
+    if (s.method !== 'POST' || s.path !== MERGE) return undefined
+    if (++tries === 1) return { status: 409, json: { status: 409, title: 'Conflict', detail: why } }
+    world!.changes = { ...pushed, pull: { ...pushed.pull, state: 'merged' } }
+    return { json: { number: 7, state: 'merged' } }
+  })
+  world = w
+  await p.goto(`/${SESSION}`)
+  await tab(p, 'Git').click()
+  await tab(p, 'Review').click()
+  await desk(p).getByRole('button', { name: 'Merge', exact: true }).click()
+  await expect(desk(p).getByText(why)).toBeVisible()
+  await expect(desk(p).getByRole('button', { name: 'Merge', exact: true })).toBeVisible()
+  await desk(p).getByRole('button', { name: 'Merge', exact: true }).click()
+  // The note and the pull request's own state both say it.
+  await expect(desk(p).getByText('Merged', { exact: true })).toHaveCount(2)
+  await expect(desk(p).getByText(why)).toHaveCount(0)
+  expect(to(sent, 'POST', MERGE)).toHaveLength(2)
 })
 
 test('the commits say who made each and when, as far as the forge says', async ({ page: p }) => {

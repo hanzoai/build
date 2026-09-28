@@ -1,9 +1,10 @@
 /**
  * The org's projects: what it has built, and where each one is served.
  *
- *   GET    /v1/projects         → Project[]
- *   PATCH  /v1/projects/{slug}  rename it, or make it public or private
- *   DELETE /v1/projects/{slug}  delete it and take its site down
+ *   GET    /v1/projects                     → Project[]
+ *   PATCH  /v1/projects/{slug}              rename it, or make it public or private
+ *   DELETE /v1/projects/{slug}              delete it and take its site down
+ *   GET    /v1/projects/{slug}/deployments  → Deployment[], newest first
  *
  * `slug` is the one key every surface shares — the address under /dev, the
  * site's name, the `project` a run is tagged with. A project belongs to the org,
@@ -20,6 +21,11 @@ export interface Project {
   repo: string
   /** The branch pushes to which rebuild it, or ''. */
   branch: string
+  /**
+   * Where it stands: `building` while a project that has never served is being
+   * published, `live` once it serves, `error` when its build failed. A live
+   * project stays `live` while it is built again.
+   */
   status: string
   /** The deployed address, or '' when nothing has shipped. */
   live: string
@@ -99,6 +105,44 @@ export async function remove(t: Target, slug: string): Promise<void> {
   await call<unknown>(t, 'DELETE', `/v1/projects/${seg(slug)}`)
 }
 
+/** One attempt to put a project on its address, as the platform recorded it. */
+export interface Deployment {
+  id: string
+  /** Counts the project's deployments from 1. */
+  version: number
+  /** `building`, `live` or `error`, as the platform said. */
+  status: string
+  /** The revision that was built, or ''. */
+  commit: string
+  /** What happened, in words: the build's own note, or on a failure why it failed. */
+  message: string
+  /** Unix seconds; 0 when unknown. */
+  created: number
+  updated: number
+}
+
+export function deployment(raw: unknown): Deployment {
+  const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return {
+    id: str(d.id),
+    version: num(d.version),
+    status: str(d.status),
+    commit: str(d.commit),
+    message: str(d.message),
+    created: num(d.createdAt),
+    updated: num(d.updatedAt),
+  }
+}
+
+/** A project's deployments, newest first: the first says how its latest build went. */
+export async function deployments(t: Target, slug: string): Promise<Deployment[]> {
+  const raw = await call<unknown>(t, 'GET', `/v1/projects/${seg(slug)}/deployments`)
+  return (Array.isArray(raw) ? raw : [])
+    .map(deployment)
+    .filter((d) => d.id)
+    .sort((a, b) => b.version - a.version)
+}
+
 /** The repository name a project's clone URL names — the last path segment, without `.git`. */
 export function name(clone: string): string {
   const cut = clone.replace(/\.git$/, '').replace(/\/+$/, '')
@@ -140,7 +184,9 @@ export async function templates(t: Target): Promise<Template[]> {
 
 /**
  * Take a copy of a starter: a project whose repository is the starter's own,
- * so what opens is that template rather than a model's imitation of it.
+ * so what opens is that template rather than a model's imitation of it. In an
+ * org whose code is in a workspace the platform made, the copy is published at
+ * once, and answers `building` until it is `live` or its build failed.
  */
 export async function fork(t: Target, slug: string): Promise<Project> {
   return project(await call<unknown>(t, 'POST', '/v1/projects/fork', { slug }))

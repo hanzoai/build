@@ -1,6 +1,7 @@
 /**
  * The shelves — Artifacts and Templates — and the two questions an act asks
- * first (ask.tsx): a starter copied into a project, a project renamed, made
+ * first (ask.tsx): a starter copied into a project, and published when the
+ * org's code is in a workspace the platform made; a project renamed, made
  * public or private, and deleted, each refusal said where it was asked. One
  * document per test (cov-forge.spec.ts says why).
  */
@@ -219,6 +220,32 @@ test.describe('Templates', () => {
     await expect(page.getByRole('button', { name: 'Start from Circle' })).toContainText('Copying…')
     await expect(page).toHaveURL(new URL('/circle-2', baseURL).href)
     expect(sentTo(sent, 'POST', '/v1/projects/fork').map((s) => s.body)).toEqual([{ slug: 'mint' }, { slug: 'circle' }])
+  })
+
+  test('a starter taken into a workspace the platform made opens publishing, and frames the copy once it is live', async ({ page, baseURL }) => {
+    const copy = {
+      slug: 'synapse-2',
+      name: 'Synapse',
+      visibility: 'private',
+      status: 'building',
+      forkedFrom: 'synapse',
+      repo: { url: `https://git.hanzo.ai/${ORG}-code/synapse-2.git`, branch: 'main' },
+      createdAt: unix(2026, 9, 28),
+    }
+    const { sent, world } = await shelf(page, { forks: [copy] })
+    await page.route('https://synapse-2.hanzo.app/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><h1>Your Synapse</h1>' }))
+    await page.goto('/-/templates')
+    // The platform holds the copy once it answers the fork.
+    world.projects = [...world.projects, copy]
+    await page.getByRole('button', { name: 'Start from Synapse' }).click()
+    await expect(page).toHaveURL(new URL('/synapse-2', baseURL).href)
+    await expect(page.getByText('Publishing your copy…')).toBeVisible()
+    await expect(page.locator('iframe')).toHaveCount(0)
+    world.projects = world.projects.map((p) => (p.slug === 'synapse-2' ? { ...p, status: 'live', liveUrl: 'https://synapse-2.hanzo.app' } : p))
+    await expect(page.locator('iframe')).toHaveAttribute('src', 'https://synapse-2.hanzo.app/', { timeout: 10_000 })
+    await expect(page.frameLocator('iframe').getByRole('heading', { name: 'Your Synapse' })).toBeVisible()
+    await expect(page.getByText('Publishing your copy…')).toHaveCount(0)
+    expect(sentTo(sent, 'POST', '/v1/projects/fork').map((s) => s.body)).toEqual([{ slug: 'synapse' }])
   })
 
   test('a refused catalogue says why', async ({ page }) => {

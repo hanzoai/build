@@ -2,8 +2,10 @@
  * A project's workspace: its runs as a conversation, asking, steering and
  * stopping, verdicts, the preview and the page's own bridge, Files and Code at
  * the run's branch, Layers, the bar, the dock, history, the project switcher,
- * Share and Publish — against a platform that answers each call the way a test
- * says. One document per test (cov-forge.spec.ts says why).
+ * Share and Publish; a copy being published and one whose build failed, a run
+ * that published what it pushed and one that could not, and its pull request
+ * merged — against a platform that answers each call the way a test says. One
+ * document per test (cov-forge.spec.ts says why).
  */
 import type { Page } from '@playwright/test'
 
@@ -31,6 +33,16 @@ interface World extends Holds {
   /** Whether the event bus takes a verdict. */
   accepts: boolean
   files: Record<string, { content?: string; binary?: boolean; truncated?: boolean }>
+  /** A project's deployments, by slug, newest first. */
+  deployments: Record<string, Record<string, unknown>[]>
+  /** What a run pushed, by session: its pull request is where Merge reads. */
+  changes: Record<string, Record<string, unknown>>
+  /** What Publish's declaration answers, and what the builds board lists. */
+  declared: Record<string, unknown>
+  builds: Record<string, unknown>[]
+  /** The deployed site's heading, and how many times its pages were loaded. */
+  site: string
+  served: number
 }
 
 const PROJECTS = () => [
@@ -40,6 +52,21 @@ const PROJECTS = () => [
 
 /** A copy of the Synapse starter, taken and not yet published. */
 const TAKEN = { slug: 'synapse', name: 'Synapse', visibility: 'private', forkedFrom: 'synapse', repo: { url: 'https://github.com/hanzo-apps/template-synapse', branch: 'main' }, updatedAt: 1 }
+
+/** The same starter taken into the workspace the platform made for the org, which publishes it at once. */
+const COPY = { ...TAKEN, status: 'building', repo: { url: `https://git.hanzo.ai/${ORG}-code/synapse.git`, branch: 'main' } }
+
+const WHY = 'coding: the build exited 1: missing script: build'
+const MERGE = `/v1/agent/coding/${CART}/merge`
+/** What the open run pushed, with its pull request `state`. */
+const PUSHED = (state: string, mergeable = true) => ({
+  repo: `${ORG}/shop`,
+  base: 'main',
+  head: 'agent/cart',
+  commits: [],
+  files: [],
+  pull: { number: 4, url: PR, title: 'Add a cart', state, mergeable, reviews: [] },
+})
 
 const STARTERS = [{ slug: 'synapse', title: 'Synapse', category: 'Landing', source: 'https://github.com/hanzo-apps/template-synapse', demo: DEMO }]
 
@@ -95,6 +122,12 @@ async function studio(page: Page, seed: Partial<World> = {}, who?: Who) {
       'logo.png': { binary: true },
       'data.json': { truncated: true },
     },
+    deployments: {},
+    changes: {},
+    declared: { build: { id: 'b9', status: 'queued' }, declaration: { mode: 'branch', review: '' } },
+    builds: [],
+    site: 'Shop',
+    served: 0,
     holds: {},
     down: {},
     slow: {},
@@ -136,8 +169,18 @@ async function studio(page: Page, seed: Partial<World> = {}, who?: Who) {
       if (!f) return { status: 404, json: { status: 404, detail: `${at} is not on ${q.get('ref')}` } }
       return { json: { path: at, content: f.content ?? '', binary: f.binary === true, truncated: f.truncated === true, size: 1 } }
     }
-    if (path === '/v1/platform/apps') return { status: 202, json: { build: { id: 'b9', status: 'queued' }, declaration: { mode: 'branch', review: '' } } }
-    if (path === '/v1/platform/builds') return { json: { builds: [] } }
+    if (path === '/v1/platform/apps') return { status: 202, json: world.declared }
+    if (path === '/v1/platform/builds') return { json: { builds: world.builds } }
+    const deployed = path.match(/^\/v1\/projects\/([^/]+)\/deployments$/)
+    if (deployed) return { json: world.deployments[deployed[1]!] ?? [] }
+    const coding = path.match(/^\/v1\/agent\/coding\/(sess_[0-9a-f]{32})\/(changes|merge)$/)
+    if (coding?.[2] === 'changes') return { json: world.changes[coding[1]!] ?? { pull: null } }
+    if (coding?.[2] === 'merge') {
+      const was = world.changes[coding[1]!]!
+      const pull: Record<string, unknown> = { ...(was.pull as Record<string, unknown>), state: 'merged' }
+      world.changes[coding[1]!] = { ...was, pull }
+      return { json: { number: pull.number, url: pull.url, state: 'merged', base: 'main' } }
+    }
     if (path === '/v1/audio/transcriptions') return { json: { text: 'in blue' } }
     void body
     return undefined
@@ -145,13 +188,15 @@ async function studio(page: Page, seed: Partial<World> = {}, who?: Who) {
   const sent = await enter(page, held(world, answer), who)
   // The deployed site: About at /about.html, the shop's front page anywhere else.
   await page.route(`${LIVE}/**`, (r) => {
-    const title = new URL(r.request().url()).pathname === '/about.html' ? 'About' : 'Shop'
+    world.served += 1
+    const title = new URL(r.request().url()).pathname === '/about.html' ? 'About' : world.site
     return r.fulfill({ contentType: 'text/html', body: PAGE(new URL(page.url()).origin, title) })
   })
   return { sent, world }
 }
 
 const posted = (sent: Sent[], path: string) => sent.filter((s) => s.method === 'POST' && s.path === path)
+const reads = (sent: Sent[], path: string) => sent.filter((s) => s.method === 'GET' && s.path === path).length
 const box = (page: Page) => page.getByRole('textbox', { name: 'Ask Hanzo for edits' })
 
 test.describe('the workspace', () => {
@@ -487,5 +532,155 @@ test.describe('the workspace', () => {
     await expect(box(page)).toBeHidden()
     await page.getByRole('tab', { name: 'Chat' }).click()
     await expect(box(page)).toBeVisible()
+  })
+})
+
+test.describe('publishing and merging', () => {
+  test('a copy being published says so, frames nothing, and is read again until its build fails, which its latest deployment says why', async ({ page }) => {
+    const { sent, world } = await studio(page, { projects: [...PROJECTS(), COPY] })
+    await page.goto('/synapse')
+    await expect(page.getByText('Publishing your copy…')).toBeVisible()
+    await expect(page.getByText('Its page appears here when the build finishes.')).toBeVisible()
+    await expect(page.getByText('Synapse is being published — it appears in the preview when its build finishes.', { exact: false })).toBeVisible()
+    // Not even the starter's own page: what is coming is the copy.
+    await expect(page.locator('iframe')).toHaveCount(0)
+    await expect(page.getByText('Nothing deployed yet')).toHaveCount(0)
+    expect(sent.some((s) => s.path === '/v1/templates')).toBe(false)
+
+    world.deployments.synapse = [
+      { id: 'dep_1', version: 1, status: 'error', message: 'an older failure', createdAt: 1, updatedAt: 2 },
+      { id: 'dep_2', version: 2, status: 'error', source: 'build', message: WHY, createdAt: 3, updatedAt: 4 },
+    ]
+    world.projects = [...PROJECTS(), { ...COPY, status: 'error', updatedAt: 4 }]
+    await expect(page.getByText('Publishing failed')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(WHY)).toBeVisible()
+    await expect(page.getByText('an older failure')).toHaveCount(0)
+    await expect(page.locator('iframe')).toHaveCount(0)
+    await expect(page.getByText('Synapse is loaded and nothing is published yet.', { exact: false })).toBeVisible()
+    // Ended, it is not read again.
+    const was = reads(sent, '/v1/projects')
+    await page.waitForTimeout(6000)
+    expect(reads(sent, '/v1/projects')).toBe(was)
+  })
+
+  test('a failed build with nothing to say says so, a refused read of why says that, and a project that is not a copy is only publishing', async ({ page }) => {
+    const failed = { ...COPY, status: 'error' }
+    const blog = { ...PROJECTS()[1], status: 'building' }
+    const { world } = await studio(page, { projects: [PROJECTS()[0]!, blog, failed], deployments: { synapse: [] } })
+    await page.goto('/synapse')
+    await expect(page.getByText('Its build ended without saying why.')).toBeVisible()
+    await page.getByRole('button', { name: 'Project: Synapse' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Blog' }).click()
+    await expect(page.getByText('Publishing…', { exact: true })).toBeVisible()
+    world.down['GET /v1/projects/synapse/deployments'] = 'Deployments are resting'
+    await page.getByRole('button', { name: 'Project: Blog' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Synapse' }).click()
+    await expect(page.getByText('Deployments are resting')).toBeVisible()
+  })
+
+  test('Publish of a repository in the org’s own workspace says it goes live with no review or ship, and loads the preview again once built', async ({ page }) => {
+    const notice = "Building shop from agent/cart in a sandbox; it goes live at the project's address when the build finishes."
+    const { sent, world } = await studio(page, {
+      declared: {
+        app: { name: 'shop', org: ORG, partOf: 'shop', hosts: [] },
+        build: { id: 'dep_7', status: 'building', repo: `https://git.hanzo.ai/${ORG}/shop.git`, ref: 'agent/cart' },
+        declaration: { mode: 'commit', ref: 'agent/cart', created: false, changed: false, live: true },
+        notice,
+      },
+      builds: [{ id: 'dep_7', repo: `https://git.hanzo.ai/${ORG}/shop.git`, commit: 'abc1234', status: 'building', startedAt: '2026-09-28T10:00:00Z' }],
+    })
+    await page.goto('/shop')
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
+    await page.getByRole('button', { name: 'Publish' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', { name: 'Add to project' }).click()
+    await expect(dialog.getByText(notice)).toBeVisible()
+    await expect(dialog.getByText('Build Shop at agent/cart and publish it at its project’s address.')).toBeVisible()
+    await expect(dialog.getByText('Build dep_7: building')).toBeVisible()
+    await expect(dialog.getByRole('link', { name: 'Open the review' })).toHaveCount(0)
+    // An admin, and still nothing to take to main: the build is the release.
+    await expect(dialog.getByRole('button', { name: /Ship to main|Waiting for the build/ })).toHaveCount(0)
+
+    const was = reads(sent, '/v1/projects')
+    world.site = 'Shop, published'
+    world.builds = [{ ...world.builds[0], status: 'succeeded', duration: '41s' }]
+    await expect(dialog.getByText('Build dep_7 succeeded — it is live at the project’s address.')).toBeVisible({ timeout: 10_000 })
+    await expect.poll(() => reads(sent, '/v1/projects')).toBeGreaterThan(was)
+    await dialog.getByRole('button', { name: 'Done' }).click()
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop, published' })).toBeVisible()
+  })
+
+  test('a run that published what it pushed says so, and the preview is loaded again once', async ({ page }) => {
+    const { sent, world } = await studio(page, { runs: [{ ...RUNS()[0]!, status: 'running' }], events: { [CART]: EVENTS()[CART]!.slice(0, 3) } })
+    await page.goto('/shop')
+    const chat = page.getByRole('region', { name: 'Chat' })
+    await expect(chat.getByText('Added a cart to the header.')).toBeVisible()
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
+    const was = reads(sent, '/v1/projects')
+    world.site = 'Shop with a cart'
+    world.runs[0]!.status = 'done'
+    world.events[CART]!.push(ev(CART, 5, 'status', { status: 'done', changed: true, branch: 'agent/cart', pr: '#4', live: LIVE }))
+    await expect(chat.getByText('Pushed agent/cart — #4 — published')).toBeVisible()
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop with a cart' })).toBeVisible()
+    expect(reads(sent, '/v1/projects')).toBeGreaterThan(was)
+    // The run is read again every second; the status it already said is not news.
+    world.site = 'Shop, reloaded again'
+    await page.waitForTimeout(2500)
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop with a cart' })).toBeVisible()
+  })
+
+  test('a run that could not publish what it pushed says why, and leaves the preview as it is', async ({ page }) => {
+    const { sent, world } = await studio(page, { runs: [{ ...RUNS()[0]!, status: 'running' }], events: { [CART]: EVENTS()[CART]!.slice(0, 3) } })
+    await page.goto('/shop')
+    const chat = page.getByRole('region', { name: 'Chat' })
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
+    const served = world.served
+    const was = reads(sent, '/v1/projects')
+    world.runs[0]!.status = 'done'
+    world.events[CART]!.push(ev(CART, 5, 'status', { status: 'done', changed: true, branch: 'agent/cart', unpublished: WHY }))
+    await expect(chat.getByText(`Pushed agent/cart — not published: ${WHY}`)).toBeVisible()
+    expect(world.served).toBe(served)
+    expect(reads(sent, '/v1/projects')).toBe(was)
+  })
+
+  test('Merge lands the open run’s pull request once however often it is pressed, and Files is read again', async ({ page }) => {
+    const { sent } = await studio(page, { changes: { [CART]: PUSHED('open') }, holds: { [`POST ${MERGE}`]: [{ wait: 2500 }] } })
+    await page.goto('/shop')
+    await page.getByRole('tab', { name: 'Files' }).click()
+    await expect(page.getByLabel('shop at agent/cart').getByText('index.html')).toBeVisible()
+    const trees = reads(sent, '/v1/git/repos/shop/tree')
+    const chat = page.getByRole('region', { name: 'Chat' })
+    await chat.getByRole('button', { name: 'Merge', exact: true }).click()
+    await expect(chat.getByRole('button', { name: 'Merging…' })).toBeVisible()
+    await chat.getByRole('button', { name: 'Merging…' }).click()
+    await expect(chat.getByText('Merged into main')).toBeVisible()
+    await expect(chat.getByRole('button', { name: /^Merg/ })).toHaveCount(0)
+    await expect(chat.getByRole('link', { name: 'Open pull request #4' })).toBeVisible()
+    expect(posted(sent, MERGE)).toEqual([expect.objectContaining({ body: {} })])
+    await expect.poll(() => reads(sent, '/v1/git/repos/shop/tree')).toBeGreaterThan(trees)
+    await expect(page.getByLabel('shop at agent/cart').getByText('index.html')).toBeVisible()
+  })
+
+  test('a refused merge says the forge’s reason and Merge stays; a pull request that is not open offers none', async ({ page }) => {
+    const why = "coding: the run's branch conflicts with main; ask a run to bring it up to date"
+    const { sent, world } = await studio(page, { changes: { [CART]: PUSHED('open', false) }, holds: { [`POST ${MERGE}`]: [{ status: 409, detail: why }] } })
+    await page.goto('/shop')
+    const chat = page.getByRole('region', { name: 'Chat' })
+    await chat.getByRole('button', { name: 'Merge', exact: true }).click()
+    await expect(chat.getByText(why)).toBeVisible()
+    await expect(chat.getByRole('button', { name: 'Merge', exact: true })).toBeVisible()
+    await chat.getByRole('button', { name: 'Merge', exact: true }).click()
+    await expect(chat.getByText('Merged into main')).toBeVisible()
+    await expect(chat.getByText(why)).toHaveCount(0)
+    expect(posted(sent, MERGE)).toHaveLength(2)
+
+    // Another run's pull request, closed: its link, and nothing to merge.
+    world.changes[UNTITLED] = { ...PUSHED('closed'), pull: { ...PUSHED('closed').pull, url: `https://git.hanzo.ai/${ORG}/shop/pulls/5` } }
+    world.runs[1] = { ...world.runs[1], repo: `${ORG}/shop`, pr: `https://git.hanzo.ai/${ORG}/shop/pulls/5` }
+    await page.getByRole('button', { name: 'History' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: /Untitled run/ }).click()
+    await expect(chat.getByRole('link', { name: 'Open pull request #5' })).toBeVisible()
+    await expect.poll(() => reads(sent, `/v1/agent/coding/${UNTITLED}/changes`)).toBeGreaterThan(0)
+    await expect(chat.getByRole('button', { name: /^Merg/ })).toHaveCount(0)
   })
 })

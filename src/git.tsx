@@ -1,14 +1,16 @@
 /**
  * A run's Git tab: what it pushed, read from the forge. Diff is the net change
  * from its base, Review is the pull request it opened and what reviewers said,
- * Commits is its branch's history since the base. While the run works it is
- * read again every little while, because a run pushes when it finishes a step.
+ * with Merge while it is open, Commits is its branch's history since the base.
+ * While the run works it is read again every little while, because a run
+ * pushes when it finishes a step.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { ChevronDown, ChevronRight } from '@hanzogui/lucide-icons-2'
+import { Button } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
 
-import { read, type Change, type Changes } from './api/changes.ts'
+import { merge, read, type Change, type Changes } from './api/changes.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { Out } from './out.tsx'
@@ -109,6 +111,7 @@ export function Git({ session, title, live }: { session: string; title: string; 
                   </SizableText>
                 </Out>
               ) : null}
+              <Merge session={session} open={c.pull.state === 'open'} onMerged={reload} />
             </YStack>
             {c.pull.reviews.length ? (
               c.pull.reviews.map((r, i) => (
@@ -152,6 +155,48 @@ export function Git({ session, title, live }: { session: string; title: string; 
         <Soft>No pushed commits</Soft>
       )}
     </YStack>
+  )
+}
+
+/**
+ * Merge for a run's pull request, shown while it is open: `POST …/merge` lands
+ * the run's branch in its base at the commit the forge holds now. One press is
+ * one merge — pressed again while it is out, nothing more is sent — and a
+ * refusal says the forge's reason. `onMerged` reads the run again, which is
+ * what closes the button: the pull request reads merged.
+ */
+export function Merge({ session, open, onMerged }: { session: string; open: boolean; onMerged: () => void }) {
+  const t = useTarget()
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const press = async () => {
+    if (busy) return
+    setBusy(true)
+    setNote('')
+    try {
+      const done = await merge(t, session)
+      setNote(done.base ? `Merged into ${done.base}` : 'Merged')
+      onMerged()
+    } catch (e) {
+      setNote((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (!open && !note) return null
+  return (
+    <XStack items="center" gap="$2" flexWrap="wrap">
+      {open ? (
+        <Button size="sm" variant="outline" aria-busy={busy} onPress={() => void press()}>
+          {busy ? 'Merging…' : 'Merge'}
+        </Button>
+      ) : null}
+      {note ? (
+        <SizableText size="$1" color="$soft" role="status">
+          {note}
+        </SizableText>
+      ) : null}
+    </XStack>
   )
 }
 

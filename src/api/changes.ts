@@ -1,9 +1,11 @@
 /**
- * What a run changed, read from the forge it pushed to, as the person asking.
+ * What a run changed, read from the forge it pushed to, as the person asking,
+ * and its pull request merged there.
  *
- *   GET /v1/agent/coding/{session}/changes     commits base..head, each file's patch, the pull request
- *   GET /v1/agent/coding/{session}/tree?path=  one directory at the run's branch (its base until it pushes)
- *   GET /v1/agent/coding/{session}/blob?path=  one file there, in /v1/git's blob shape
+ *   GET  /v1/agent/coding/{session}/changes     commits base..head, each file's patch, the pull request
+ *   GET  /v1/agent/coding/{session}/tree?path=  one directory at the run's branch (its base until it pushes)
+ *   GET  /v1/agent/coding/{session}/blob?path=  one file there, in /v1/git's blob shape
+ *   POST /v1/agent/coding/{session}/merge       → {number, url, state, base}; 409 with the forge's reason
  *
  * Before the run pushes, changes answers empty, not 404.
  */
@@ -113,4 +115,25 @@ export async function tree(t: Target, session: string, path = ''): Promise<Entry
 
 export async function blob(t: Target, session: string, path: string): Promise<Blob> {
   return file(await call<unknown>(t, 'GET', `/v1/agent/coding/${seg(session)}/blob${query({ path })}`), path)
+}
+
+/** A pull request after its merge. */
+export interface Merged {
+  number: number
+  url: string
+  /** `merged`. */
+  state: string
+  /** The branch it was merged into. */
+  base: string
+}
+
+/**
+ * Merge the run's pull request into its base, at the commit the forge holds
+ * now: a push after that is refused, not merged unseen. One already merged
+ * answers as it is; a conflict, a closed pull request or a rule on the base is
+ * a 409 carrying the forge's reason. Nothing is forced.
+ */
+export async function merge(t: Target, session: string): Promise<Merged> {
+  const o = obj(await call<unknown>(t, 'POST', `/v1/agent/coding/${seg(session)}/merge`, {}))
+  return { number: num(o.number), url: str(o.url), state: str(o.state), base: str(o.base) }
 }
