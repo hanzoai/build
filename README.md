@@ -193,7 +193,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 
 | call | what |
 |---|---|
-| `POST /v1/agent/coding` | start a run → 202 `{sessionId, …}` |
+| `POST /v1/agent/coding` | start a run → 202 `{sessionId, …}`; with no `repo` the platform starts a new project named from the ask |
 | `GET /v1/agent/sessions?kind=coding` | Recents, and a project's runs |
 | `GET /v1/agent/sessions/{id}` · `GET /v1/agent/sessions/stream?root=` | a run, and its live feed (SSE over fetch) |
 | `POST /v1/agent/sessions/{id}/message` · `/pause` · `/resume` · `/stop` | steer, pause, resume a machine's run, stop |

@@ -23,8 +23,8 @@
  * bar and panes — and its mark leads back here.
  *
  * A host with a rail of its own mounts `<Builder rail={false}>` and draws the
- * builder's places and runs in that rail with `DevSection` (section.tsx): one
- * left column, never two.
+ * builder's places (`nav`) and runs in that rail (`useSessions`, or `DevSection`,
+ * section.tsx): one left column, never two.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, Kanban, LayoutTemplate, Menu, Search, SlidersHorizontal, Workflow } from '@hanzogui/lucide-icons-2'
@@ -77,40 +77,12 @@ function Shell() {
     return list
   }, [recents.value, order])
 
-  const screen = r.kind === 'screen' ? r.screen : ''
   // The top left, as on claude.ai: the builder's name, which leads to New, and under
   // it the search that finds a run. The organization is the account's, so it is
   // switched from the account menu at the foot. Beside the rail from md up, beside
   // the drawer's button below it — one place at a time.
   const name = <Name onPress={() => go('')} />
-  const links: RailLink[] = [
-    { id: 'projects', label: 'Projects', icon: <Kanban size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'projects' })), active: screen === 'projects' },
-    { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
-    { id: 'customize', label: 'Customize', icon: <SlidersHorizontal size={16} />, onPress: () => go(path({ kind: 'customize', tab: 'skills' })), active: r.kind === 'customize' || screen === 'mcp' },
-    { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' },
-  ]
-  const more: RailLink[] = [
-    { id: 'codebases', label: 'Codebase', icon: <FolderGit2 size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'codebases' })), active: screen === 'codebases' },
-    {
-      id: 'issues',
-      label: 'Issues',
-      icon: <CircleDot size={16} />,
-      onPress: () => {
-        pinBoard(host.org, '')
-        go(path({ kind: 'screen', screen: 'issues' }))
-      },
-      active: screen === 'issues',
-    },
-    { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'templates' })), active: screen === 'templates' },
-    {
-      id: 'machines',
-      label: 'Machines',
-      icon: <Cpu size={16} />,
-      onPress: () => go(path({ kind: 'settings', section: 'machines' })),
-      active: r.kind === 'settings' && r.section === 'machines',
-    },
-    { id: 'docs', label: 'Docs', icon: <BookOpen size={16} />, onPress: () => window.open(DOCS, '_blank', 'noopener,noreferrer') },
-  ]
+  const { links, more } = nav(host, go)
 
   return (
     <XStack flex={1} minH={0} minW={0} bg="$background">
@@ -199,6 +171,45 @@ function Shell() {
       <Find open={finding} onOpenChange={setFinding} recents={rows} onOpen={(id) => { setFinding(false); go(id) }} />
     </XStack>
   )
+}
+
+/**
+ * The builder's places, as a rail draws them: four in view and the rest under
+ * More. Every one moves the builder through `go`, so a host that draws its own
+ * rail lists the same places, in the same words, as the builder's rail does.
+ */
+export function nav(host: Host, go: (path: string) => void): { links: RailLink[]; more: RailLink[] } {
+  const r = route(host.path)
+  const screen = r.kind === 'screen' ? r.screen : ''
+  const links: RailLink[] = [
+    { id: 'projects', label: 'Projects', icon: <Kanban size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'projects' })), active: screen === 'projects' },
+    { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
+    { id: 'customize', label: 'Customize', icon: <SlidersHorizontal size={16} />, onPress: () => go(path({ kind: 'customize', tab: 'skills' })), active: r.kind === 'customize' || screen === 'mcp' },
+    { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' },
+  ]
+  const more: RailLink[] = [
+    { id: 'codebases', label: 'Codebase', icon: <FolderGit2 size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'codebases' })), active: screen === 'codebases' },
+    {
+      id: 'issues',
+      label: 'Issues',
+      icon: <CircleDot size={16} />,
+      onPress: () => {
+        pinBoard(host.org, '')
+        go(path({ kind: 'screen', screen: 'issues' }))
+      },
+      active: screen === 'issues',
+    },
+    { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'templates' })), active: screen === 'templates' },
+    {
+      id: 'machines',
+      label: 'Machines',
+      icon: <Cpu size={16} />,
+      onPress: () => go(path({ kind: 'settings', section: 'machines' })),
+      active: r.kind === 'settings' && r.section === 'machines',
+    },
+    { id: 'docs', label: 'Docs', icon: <BookOpen size={16} />, onPress: () => window.open(DOCS, '_blank', 'noopener,noreferrer') },
+  ]
+  return { links, more }
 }
 
 /** The wordmark: the product's name, as its host calls it, which leads to New. */

@@ -5,8 +5,11 @@
  * which repository and branch it starts from, and the ask itself.
  * Under it: attach, dictate, the mode, and the model and effort on the right.
  *
- * Sending starts a coding run and opens it. The choices a person made here are
- * kept in this browser, per org, so the next New starts where the last one did.
+ * Sending starts a coding run and opens it. The codebase is optional: in the
+ * sandbox a run with none starts a new project named from the ask, as the
+ * platform does for a run that names no repository; a machine works in its own
+ * checkout, so a run there names one. The choices a person made here are kept in
+ * this browser, per org, so the next New starts where the last one did.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
@@ -133,8 +136,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       host.signIn?.()
       return
     }
-    if (!isForge(kept.repo)) {
-      setNote('Choose a codebase on the forge.')
+    const repo = isForge(kept.repo) ? kept.repo : null
+    if (!repo && place.id) {
+      setNote(`A run on ${place.label} works in its own checkout: choose the codebase, or run it in Cloud.`)
       return
     }
     setBusy(true)
@@ -143,9 +147,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       const run = await start(t, {
         prompt: compose(draft.trim(), files),
         // The name alone. The org rides the request, and a slash is not a repo name.
+        // No codebase is not sent, and the run starts a new project.
         // An empty base or place is not sent: the default branch, and the sandbox.
-        repo: kept.repo.name,
-        base: kept.branch,
+        repo: repo?.name,
+        base: repo ? kept.branch : undefined,
         targetId: place.id,
         mode: kept.mode,
         model: kept.model === ENSO ? undefined : kept.model,
@@ -249,7 +254,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             })
           },
         }}
-        placeholder="Codebase"
+        placeholder="New project"
         disabled={!signed}
       />
       {isForge(kept.repo) ? <BranchSelect value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} /> : null}
