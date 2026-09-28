@@ -502,10 +502,12 @@ describe('projects', () => {
       status: '',
       live: '',
       visibility: '',
+      forked: '',
       created: 0,
       updated: 0,
     })
     expect(projects.project(null).slug).toBe('')
+    expect(projects.project({ slug: 'synapse', forkedFrom: 'synapse' }).forked).toBe('synapse')
   })
 
   it('lists a page of projects, and anything else as none', async () => {
@@ -525,8 +527,13 @@ describe('projects', () => {
   })
 
   it('reads the catalog’s thin rows, and an answer with no rows as none', async () => {
-    answer(200, { data: [null, { slug: 'shop' }] })
-    expect(await projects.templates(T)).toEqual([{ slug: 'shop', title: 'shop', category: '', description: '', framework: '', source: '' }])
+    answer(200, { data: [null, { slug: 'shop' }, { slug: 'mint', demo: 'http://mint.example' }, { slug: 'synapse', demo: 'https://synapse.hanzo.app' }] })
+    // A demo the preview may not frame is no demo.
+    expect(await projects.templates(T)).toEqual([
+      { slug: 'shop', title: 'shop', category: '', description: '', framework: '', source: '', demo: '' },
+      { slug: 'mint', title: 'mint', category: '', description: '', framework: '', source: '', demo: '' },
+      { slug: 'synapse', title: 'synapse', category: '', description: '', framework: '', source: '', demo: 'https://synapse.hanzo.app/' },
+    ])
     answer(200, { data: 'shop' })
     expect(await projects.templates(T)).toEqual([])
     answer(204, undefined)

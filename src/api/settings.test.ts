@@ -285,7 +285,7 @@ describe('projects', () => {
 
   it('titles a starter by its slug when it has no title, and skips rows that are not starters', async () => {
     answer(200, { data: [{ slug: 'mint' }, 'folio', null] })
-    expect(await templates(T)).toEqual([{ slug: 'mint', title: 'mint', category: '', description: '', framework: '', source: '' }])
+    expect(await templates(T)).toEqual([{ slug: 'mint', title: 'mint', category: '', description: '', framework: '', source: '', demo: '' }])
     answer(200, {})
     expect(await templates(T)).toEqual([])
   })

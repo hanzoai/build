@@ -25,6 +25,8 @@ export interface Project {
   live: string
   /** `public` or `private`, or '' when the platform did not say. */
   visibility: '' | Visibility
+  /** The catalog template's slug, or `<org>/<slug>` of the published project, this was taken from; '' for neither. */
+  forked: string
   /** Unix seconds; 0 when unknown. A deploy does not move `updated`. */
   created: number
   updated: number
@@ -65,6 +67,7 @@ export function project(raw: unknown): Project {
     status: str(p.status),
     live: safe(str(p.liveUrl)),
     visibility: p.visibility === 'public' || p.visibility === 'private' ? p.visibility : '',
+    forked: str(p.forkedFrom),
     created: num(p.createdAt),
     updated: num(p.updatedAt),
   }
@@ -111,6 +114,8 @@ export interface Template {
   framework: string
   /** The repository the starter is cut from. */
   source: string
+  /** The starter's own live page, or '' when it has none the preview may frame. */
+  demo: string
 }
 
 /** The public catalog. It is reference content: no bearer, no org. */
@@ -127,6 +132,7 @@ export async function templates(t: Target): Promise<Template[]> {
         description: str(o.description),
         framework: str(o.framework),
         source: str(o.source),
+        demo: safe(str(o.demo)),
       }
     })
     .filter((x) => x.slug)

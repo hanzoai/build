@@ -60,7 +60,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
-import { name as repoName, ours, type Project as Row } from './api/projects.ts'
+import { name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
 import { outcome, pull, said, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
@@ -205,7 +205,13 @@ export function Project({ slug }: { slug: string }) {
     [root.value],
   )
 
-  const src = project?.live ? new URL(page, project.live).toString() : null
+  // A project taken from a starter and not yet published shows the starter's own
+  // live page, which is what the copy is until its first publish.
+  const forked = project && !project.live ? project.forked : ''
+  const starters = useRead(forked ? () => templates(t) : null, [], [t.api, forked])
+  const starter = forked ? starters.value.find((s) => s.slug === forked && s.demo) : undefined
+  const shown = project?.live || starter?.demo || ''
+  const src = shown ? new URL(page, shown).toString() : null
 
   const lines: Line[] = useMemo(
     () => [
@@ -328,7 +334,13 @@ export function Project({ slug }: { slug: string }) {
           <SizableText size="$2" color="$ink" px="$2">
             {runs.loading
               ? 'Reading this project’s runs…'
-              : `${project?.name ?? slug} is loaded — it is in the preview, and every run on it is under the clock above. Say what to change and it gets built.`}
+              : project?.live
+                ? `${project.name} is loaded — it is in the preview, and every run on it is under the clock above. Say what to change and it gets built.`
+                : starter
+                  ? `${project?.name} is loaded — the preview shows the ${starter.title} starter until your copy is published. Say what to change and it gets built.`
+                  : project
+                    ? `${project.name} is loaded and nothing is published yet. Say what to change and it gets built.`
+                    : `${slug} is loaded. Say what to change and it gets built.`}
           </SizableText>
         ) : (
           ordered.map((r) => (

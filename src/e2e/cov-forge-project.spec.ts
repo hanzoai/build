@@ -19,6 +19,7 @@ const HALTED = id('3')
 const ELSEWHERE = id('4')
 const NEXT = id('5')
 const LIVE = 'https://shop.hanzo.app'
+const DEMO = 'https://synapse.hanzo.app'
 const PR = `https://git.hanzo.ai/${ORG}/shop/pulls/4`
 
 const ev = (session: string, seq: number, kind: string, payload: unknown) => ({ id: `${session}-e${seq}`, sessionId: session, seq, kind, actor: `${ORG}/dave-1a2b`, payload, createdAt: '' })
@@ -36,6 +37,11 @@ const PROJECTS = () => [
   { slug: 'shop', name: 'Shop', visibility: 'private', liveUrl: LIVE, repo: { url: `https://git.hanzo.ai/${ORG}/shop.git`, branch: 'main' }, updatedAt: 3 },
   { slug: 'blog', name: 'Blog', visibility: 'public', updatedAt: 2 },
 ]
+
+/** A copy of the Synapse starter, taken and not yet published. */
+const TAKEN = { slug: 'synapse', name: 'Synapse', visibility: 'private', forkedFrom: 'synapse', repo: { url: 'https://github.com/hanzo-apps/template-synapse', branch: 'main' }, updatedAt: 1 }
+
+const STARTERS = [{ slug: 'synapse', title: 'Synapse', category: 'Landing', source: 'https://github.com/hanzo-apps/template-synapse', demo: DEMO }]
 
 const RUNS = () => [
   { id: CART, title: 'Add a cart', status: 'done', kind: 'coding', repo: `${ORG}/shop`, project: 'shop', branch: 'agent/cart', pr: PR },
@@ -97,6 +103,7 @@ async function studio(page: Page, seed: Partial<World> = {}, who?: Who) {
   const answer = ({ method, path, query, body }: Sent): Reply | undefined => {
     const q = new URLSearchParams(query)
     if (path === '/v1/projects') return { json: world.projects }
+    if (path === '/v1/templates') return { json: { data: STARTERS } }
     if (path === '/v1/agent/sessions') return { json: { sessions: world.runs.filter((r) => r.project === q.get('project')), next: '' } }
     if (path === '/v1/agent/sessions/stream') return { text: '', type: 'text/event-stream' }
     const session = path.match(/^\/v1\/agent\/sessions\/(sess_[0-9a-f]{32})(?:\/(message|stop))?$/)
@@ -423,6 +430,16 @@ test.describe('the workspace', () => {
     await expect(page).toHaveURL(new URL('/', baseURL).href)
   })
 
+  test('a starter taken and not yet published shows the starter’s own page, and says so', async ({ page }) => {
+    await studio(page, { projects: [...PROJECTS(), TAKEN] })
+    await page.route(`${DEMO}/**`, (r) => r.fulfill({ contentType: 'text/html', body: PAGE(new URL(page.url()).origin, 'Synapse') }))
+    await page.goto('/synapse')
+    await expect(page.getByText('Synapse is loaded — the preview shows the Synapse starter until your copy is published.', { exact: false })).toBeVisible()
+    await expect(page.locator('iframe')).toHaveAttribute('src', `${DEMO}/`)
+    await expect(page.frameLocator('iframe').getByRole('heading', { name: 'Synapse' })).toBeVisible()
+    await expect(page.getByText('Nothing deployed yet')).toHaveCount(0)
+  })
+
   test('says it is reading the runs; a refused project list still opens the workspace by its address', async ({ page }) => {
     const { world } = await studio(page, { slow: { 'GET /v1/agent/sessions': 3000 } })
     await page.goto('/shop')
@@ -445,7 +462,7 @@ test.describe('the workspace', () => {
     await page.getByRole('button', { name: 'All runs' }).click()
     await expect(page.getByRole('button', { name: 'Project: shop' })).toHaveCount(0)
     await page.goBack()
-    await expect(page.getByText('shop is loaded — it is in the preview', { exact: false })).toBeVisible()
+    await expect(page.getByText('shop is loaded. Say what to change and it gets built.')).toBeVisible()
   })
 
   test('someone in no organization is told there is no such project', async ({ page }) => {
