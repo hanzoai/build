@@ -57,6 +57,14 @@ const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', model: E
 
 const COLUMN = 768
 
+/**
+ * What was typed here and not sent, for as long as this document lives. Signing
+ * in swaps a visitor's page for the rail, which draws New again in another
+ * place; the popup keeps the document so the sentence can come along, and this
+ * is where it waits.
+ */
+let unsent: { draft: string; files: Attached[] } = { draft: '', files: [] }
+
 export function Landing({ onStarted }: { onStarted: (session: string) => void }) {
   const host = useHost()
   const t = useTarget()
@@ -67,8 +75,11 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const kept: Kept = stored ?? { ...FIRST, ...prefs.code }
   const set = (patch: Partial<Kept>) => keep({ ...kept, ...patch })
 
-  const [draft, setDraft] = useState(kept.ask || '')
-  const [files, setFiles] = useState<Attached[]>([])
+  const [draft, setDraft] = useState(kept.ask || unsent.draft)
+  const [files, setFiles] = useState<Attached[]>(unsent.files)
+  useEffect(() => {
+    unsent = { draft, files }
+  }, [draft, files])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState<Source | null>(null)

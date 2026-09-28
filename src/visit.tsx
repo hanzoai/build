@@ -2,7 +2,7 @@
  * The page to a visitor: the product's header over New.
  *
  * Signed out there are no runs to list, so the rail gives way to a header —
- * Features (under New, pitch.tsx), Resources, Enterprise, Pricing — and the two
+ * Download (Hanzo Dev, under New, pitch.tsx), Resources, Enterprise, Pricing — and the two
  * doors in, which are one door: IAM's page offers both. New stays the page, and
  * sending from it asks the visitor to sign in with the sentence kept
  * (landing.tsx). Below md the four places fold into one menu beside Log in.
@@ -18,7 +18,7 @@ import { useHost } from './host.tsx'
 const SITE = 'https://hanzo.ai'
 
 export const PLACES = [
-  { label: 'Features', href: '/#features' },
+  { label: 'Download', href: '/#features' },
   { label: 'Enterprise', href: `${SITE}/enterprise` },
   { label: 'Pricing', href: `${SITE}/pricing` },
 ] as const

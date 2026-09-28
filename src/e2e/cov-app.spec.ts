@@ -70,7 +70,7 @@ const nothing = (page: Page) => serve(page, () => undefined)
 const stored = (page: Page, key: string) => page.evaluate((k) => window.localStorage.getItem(k), key)
 
 /** The account has arrived: the rail names who is signed in. The exchange and userinfo take a moment. */
-const arrived = (page: Page, who = 'dave@acme.test') => expect(page.getByRole('button', { name: `Account: ${who}` })).toBeVisible({ timeout: 20_000 })
+const arrived = (page: Page, who = 'Dave · acme') => expect(page.getByRole('button', { name: `Account: ${who}` })).toBeVisible({ timeout: 20_000 })
 
 test.describe('signing in', () => {
   test('a popup signs in and the page, with what was typed, stays', async ({ page, baseURL }) => {
@@ -79,7 +79,7 @@ test.describe('signing in', () => {
     await page.goto('/')
     const ask = page.getByRole('textbox', { name: 'Describe a task or ask a question' })
     await ask.fill('Add a cart to the shop')
-    const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByRole('button', { name: 'Account: Sign in' }).click()])
+    const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByRole('banner').getByRole('button', { name: 'Log in' }).click()])
     await popup.waitForEvent('close')
     await arrived(page)
     await expect(ask).toHaveValue('Add a cart to the shop')
@@ -103,7 +103,7 @@ test.describe('signing in', () => {
     const asked = await issuer(page.context())
     await nothing(page)
     await page.goto('/-/codebases')
-    await page.getByRole('button', { name: 'Account: Sign in' }).click()
+    await page.getByRole('banner').getByRole('button', { name: 'Log in' }).click()
     await arrived(page)
     expect(page.url()).toBe(new URL('/', baseURL).href)
     expect(asked.authorize).toHaveLength(1)
@@ -118,7 +118,7 @@ test.describe('signing in', () => {
     await issuer(page.context(), { token: { status: 400, json: { error: 'invalid_grant' } } })
     await nothing(page)
     await page.goto('/')
-    await page.getByRole('button', { name: 'Account: Sign in' }).click()
+    await page.getByRole('banner').getByRole('button', { name: 'Log in' }).click()
     await expect(page.getByText('Token exchange failed (400): {"error":"invalid_grant"}')).toBeVisible({ timeout: 20_000 })
     await expect(page.getByText('Try signing in again.')).toBeVisible()
     expect(await stored(page, 'hanzo_iam_access_token')).toBeNull()
@@ -172,7 +172,7 @@ test.describe('signing in', () => {
     })
     await nothing(page)
     await page.goto('/')
-    await page.getByRole('button', { name: 'Account: Sign in' }).click()
+    await page.getByRole('banner').getByRole('button', { name: 'Log in' }).click()
     // The trip to hanzo.id and back loads the page twice.
     await expect(page.getByText('Completing sign-in…')).toBeVisible({ timeout: 20_000 })
     await expect(page.getByText('One moment.')).toBeVisible()
@@ -196,7 +196,7 @@ test.describe('who is signed in', () => {
       return r.fulfill({ status: 204 })
     })
     await page.goto('/')
-    await page.getByRole('button', { name: 'Account: dave@acme.test' }).click()
+    await page.getByRole('button', { name: 'Account: Dave · acme' }).click()
     await page.getByRole('menuitem', { name: 'Log out' }).click()
     await expect.poll(() => ended.length).toBe(1)
     expect(ended[0]!.searchParams.get('post_logout_redirect_uri')).toBe(new URL('/', baseURL).href)
@@ -215,7 +215,7 @@ test.describe('who is signed in', () => {
     })
     await nothing(page)
     await page.goto('/')
-    await expect(page.getByRole('button', { name: 'Account: Sign in' })).toBeVisible()
+    await expect(page.getByRole('banner').getByRole('button', { name: 'Log in' })).toBeVisible()
     expect(await stored(page, 'hanzo:who')).toBeNull()
     expect(await stored(page, 'hanzo.build.slack')).toBeNull()
     expect(await stored(page, 'hanzo.build.new.acme')).toBeNull()
@@ -245,7 +245,7 @@ test.describe('who is signed in', () => {
 
   test('an account hanzo.id names nothing about is still signed in', async ({ page }) => {
     await account(page, {})
-    await expect(page.getByRole('button', { name: 'Account:', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: `Account: ${ORG}`, exact: true })).toBeVisible()
     await expect(page.getByLabel('Full name')).toHaveValue('')
   })
 })
@@ -443,7 +443,7 @@ test.describe('a host that draws its own rail', () => {
     await runs(page)
     await page.route('**/v1/pref', (r) => r.fulfill({ json: { prefs: { theme: 'light' }, updatedAt: 1 } }))
     await page.goto(`${HOST}?at=-/settings`)
-    await expect(page.getByText('How Hanzo Build looks and listens', { exact: false })).toBeVisible()
+    await expect(page.getByText('How Hanzo looks and listens', { exact: false })).toBeVisible()
     // No theme to choose on this host, and the saved one is not forced on it.
     await expect(page.getByRole('button', { name: /^Theme: / })).toHaveCount(0)
     await expect(page.locator('html')).toHaveClass(/\bt_dark\b/)
@@ -791,14 +791,22 @@ test.describe('the person’s own settings', () => {
   test('a browser that refuses storage keeps a choice for this page only', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
+    // Storage refuses the page's own kept choices; the session IAM keeps is still there, so the rail is.
     await page.addInitScript(() => {
-      Object.defineProperty(window, 'localStorage', {
-        get() {
-          throw new DOMException('The operation is insecure.', 'SecurityError')
-        },
-      })
+      const refuse = (key: string) => {
+        if (key.startsWith('hanzo.build.')) throw new DOMException('The operation is insecure.', 'SecurityError')
+      }
+      const { getItem, setItem } = Storage.prototype
+      Storage.prototype.getItem = function (key: string) {
+        refuse(key)
+        return getItem.call(this, key)
+      }
+      Storage.prototype.setItem = function (key: string, value: string) {
+        refuse(key)
+        setItem.call(this, key, value)
+      }
     })
-    await serve(page, () => undefined)
+    await signIn(page, () => undefined)
     await page.goto('/')
     const rail = page.getByRole('navigation', { name: 'Runs' }).first()
     await expect(rail).toHaveAttribute('data-collapsed', 'false')

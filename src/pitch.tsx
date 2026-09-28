@@ -71,14 +71,14 @@ export function Pitch({ onStart }: { onStart: () => void }) {
           Powered by Zen 6 · routed by Enso
         </SizableText>
         <SizableText role="heading" aria-level={2} size="$9" color="$ink" style={{ textAlign: 'center' }}>
-          Bring Hanzo to your computer.
+          Hanzo Dev
         </SizableText>
         <SizableText size="$4" color="$soft" maxW={620} style={{ textAlign: 'center' }}>
-          The agent that builds here also runs in your terminal, on any codebase, in any language. Hand it a task, or open it and talk.
+          The agent. It runs in your terminal, on any codebase, in any language. This page is that same agent in the browser.
         </SizableText>
         <Line text={INSTALL} />
         <SizableText size="$2" color="$soft" fontFamily="$mono">
-          then hanzo "fix the failing test", or hanzo code
+          dev opens it. dev "fix the failing test" hands it a task.
         </SizableText>
         <a href={DOCS} style={{ color: 'inherit', textDecoration: 'none' }}>
           <XStack items="center" height={34} px="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>

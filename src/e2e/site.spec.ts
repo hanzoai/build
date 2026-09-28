@@ -22,7 +22,7 @@ const SCREENS: [string, string, RegExp][] = [
   ['run', '/sess_0992f90537264a6b154ebff799f38e1c', /Sign in to follow this run/],
 ]
 
-const BAR = ['Features', 'Resources', 'Enterprise', 'Pricing', 'Log in', 'Sign up']
+const BAR = ['Download', 'Resources', 'Enterprise', 'Pricing', 'Log in', 'Sign up']
 
 /** The IAM client this host signs in as: hanzo.app is the Hanzo App's. */
 const client = (base: string) => (new URL(base).hostname === 'hanzo.app' ? 'hanzo-app' : 'hanzo-build')
@@ -58,7 +58,7 @@ test('the header leads to the product’s pages, and both doors open IAM beside 
   const bar = page.getByRole('banner')
   const site = bar.getByRole('navigation', { name: 'Site' })
   for (const [label, href] of [
-    ['Features', 'https://hanzo.ai/app'],
+    ['Download', '/#features'],
     ['Enterprise', 'https://hanzo.ai/enterprise'],
     ['Pricing', 'https://hanzo.ai/pricing'],
   ]) {
@@ -132,7 +132,7 @@ test('a phone gets every screen whole, with the header folded into one menu', as
   }
   await page.getByRole('button', { name: 'Menu' }).click()
   const menu = page.getByRole('menu', { name: 'Menu' })
-  for (const label of ['Features', 'Enterprise', 'Pricing', 'Docs', 'Sign up']) await expect(menu.getByText(label, { exact: true })).toBeVisible()
+  for (const label of ['Download', 'Enterprise', 'Pricing', 'Docs', 'Sign up']) await expect(menu.getByText(label, { exact: true })).toBeVisible()
 })
 
 test('a run asks a visitor to sign in, not for an API key', async ({ page }) => {

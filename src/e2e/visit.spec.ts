@@ -85,7 +85,8 @@ test('on a phone the places fold into one menu, which leaves and signs in', asyn
   await bar.getByRole('button', { name: 'Menu' }).click()
   const menu = page.getByRole('menu', { name: 'Menu' })
   await page.screenshot({ path: info.outputPath('visit-phone-menu.png') })
-  expect(await leaves(page, () => menu.getByText('Features', { exact: true }).click())).toBe('https://hanzo.ai/app')
+  await menu.getByText('Download', { exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Hanzo Dev' })).toBeVisible()
   await page.keyboard.press('Escape')
 
   await bar.getByRole('button', { name: 'Menu' }).click()
