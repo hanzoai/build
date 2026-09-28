@@ -33,6 +33,7 @@ import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useEffect, useMemo, useState } from 'react'
 
+import { safe } from './api/projects.ts'
 import { pinBoard } from './choice.ts'
 import { Customize } from './customize/index.tsx'
 import { useKept, useRecents } from './data.ts'
@@ -119,7 +120,7 @@ function Shell() {
         }
         collapsed={collapsed}
         onCollapse={setCollapsed}
-        mark={<Brand org={host.org} />}
+        mark={<Brand org={host.org} logo={host.logo} />}
         pt={collapsed ? undefined : 92}
         open={drawer}
         onOpenChange={setDrawer}
@@ -245,8 +246,10 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   )
 }
 
-/** The Hanzo mark on a personal account. An organization shows its own initial. */
-function Brand({ org }: { org: string | null }) {
+/** The org's mark: the logo it chose; else the Hanzo mark for Hanzo or a personal account, and an organization's initial. */
+function Brand({ org, logo }: { org: string | null; logo?: string }) {
+  const chosen = logo ? safe(logo) : ''
+  if (chosen) return <img src={chosen} alt="" width={18} height={18} style={{ borderRadius: 4, objectFit: 'cover' }} />
   if (!org || org === 'hanzo') return <HanzoMark size={18} />
   const letter = org.charAt(0).toUpperCase()
   return (

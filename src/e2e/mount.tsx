@@ -36,6 +36,7 @@ function Page() {
     api: window.location.origin,
     token: () => m.token,
     org: m.org,
+    logo: m.logo,
     memberships: m.memberships,
     theme: m.theme,
     person: m.person,
@@ -51,7 +52,7 @@ function Page() {
   }
   return (
     <div style={{ height: '100dvh', display: 'flex' }}>
-      <Builder host={host} rail={false} />
+      <Builder host={host} rail={m.rail ?? false} />
     </div>
   )
 }

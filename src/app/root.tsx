@@ -12,9 +12,10 @@
 
 import { IamProvider, useIam } from '@hanzo/iam/react'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router'
 
+import { logo as mark } from '../api/members.ts'
 import { Builder } from '../builder.tsx'
 import type { Host, Person } from '../host.tsx'
 import { hold } from '../landing.tsx'
@@ -55,6 +56,20 @@ export function Mount() {
   }, [out])
 
   const scoped = org()
+  // The scoped org's own logo, read from IAM's record of it; none until it answers.
+  const [logo, setLogo] = useState('')
+  useEffect(() => {
+    setLogo('')
+    if (!scoped || !isAuthenticated) return
+    let live = true
+    mark({ api: api(import.meta.env), token: bearer, org: scoped }, scoped).then(
+      (l) => live && setLogo(l),
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [scoped, isAuthenticated])
   const person: Person | null = useMemo(() => {
     if (!isAuthenticated || !user) return null
     const u = user as { displayName?: string; name?: string; email?: string; avatar?: string }
@@ -72,6 +87,7 @@ export function Mount() {
     api: api(import.meta.env),
     token: bearer,
     org: scoped,
+    logo,
     memberships: orgs(),
     chooseOrg: (next) => {
       if (!selectOrg(next)) return

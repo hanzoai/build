@@ -6,6 +6,7 @@
  *   GET    /v1/iam/invitations?owner=            {invitations, total} (org admin)
  *   POST   /v1/iam/invitations                   issue one (org admin)
  *   DELETE /v1/iam/invitations/{owner}/{name}    withdraw one (org admin)
+ *   GET    /v1/iam/organizations/admin/{org}     the org's record, whose `logo` is its mark (member)
  *
  * IAM decides the scope from the credential: a member reads the roster of an org
  * they belong to, and only an admin of the org reads or writes its invitations.
@@ -119,4 +120,10 @@ export async function invite(t: Target, org: string, email: string): Promise<Inv
 
 export async function revoke(t: Target, i: Pick<Invitation, 'owner' | 'name'>): Promise<void> {
   await call<unknown>(t, 'DELETE', `/v1/iam/invitations/${seg(i.owner)}/${seg(i.name)}`)
+}
+
+/** The org's own logo address as IAM holds it, or '' when it has none. */
+export async function logo(t: Target, org: string): Promise<string> {
+  const raw = obj(await call<unknown>(t, 'GET', `/v1/iam/organizations/admin/${encodeURIComponent(org)}`))
+  return str(obj(raw.data ?? raw).logo)
 }

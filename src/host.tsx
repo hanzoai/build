@@ -28,6 +28,8 @@ export interface Host {
   token: () => string | null
   /** The org every call is scoped to. */
   org: string | null
+  /** The org's own logo, an https address, when it has chosen one; its mark is drawn from it. */
+  logo?: string
   /** The organizations this person belongs to. The switcher lists these and no others. */
   memberships?: readonly string[]
   /** Stay on this page and scope every read to `org`. */

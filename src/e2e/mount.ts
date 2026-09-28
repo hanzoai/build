@@ -17,6 +17,10 @@ export interface Mount {
   person: Person | null
   token: string | null
   memberships?: string[]
+  /** The org's own logo, as a host that has one hands it over. */
+  logo?: string
+  /** The builder draws its own rail, as its own app does. */
+  rail?: boolean
   theme?: Theme
   /** The host signs people in: its sign-in is written into `went` as 'sign in'. */
   signIn?: boolean

@@ -6,6 +6,7 @@
 import type { Page } from '@playwright/test'
 
 import { cramped, expect, test } from './fixture.ts'
+import { mounted } from './mount.ts'
 import { rail as platform } from './stubs.ts'
 
 /** Choose a row of the menu that is open. */
@@ -323,4 +324,24 @@ test('the account menu switches the organization, and the row says which', async
   await Promise.all([page.waitForEvent('load'), orgs.getByText('lux', { exact: true }).click()])
   await expect(page.getByRole('button', { name: 'Account: Dave · lux' })).toBeVisible({ timeout: 15_000 })
   expect(await page.evaluate(() => localStorage.getItem('hanzo_iam_current_org'))).toBe('lux')
+})
+
+test('collapsed, its mark is the org’s own logo, else the Hanzo mark for Hanzo, else the org’s initial', async ({ page }) => {
+  await platform(page)
+  await page.route('https://logo.test/**', (r) => r.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1" fill="red"/></svg>' }))
+  const person = { name: 'Dave', email: 'dave@acme.test', avatar: '' }
+  const mark = () => page.getByRole('button', { name: 'Expand sidebar' })
+  for (const [org, logo] of [['acme', 'https://logo.test/acme.svg'], ['hanzo', undefined], ['acme', undefined], ['acme', 'http://logo.test/acme.svg']] as const) {
+    await mounted(page, { path: '', org, logo, rail: true, admin: false, person })
+    // The rail stays as it was left, so only the first mount collapses it.
+    const collapse = page.getByRole('button', { name: /Collapse sidebar/ }).first()
+    await expect(collapse.or(mark())).toBeVisible()
+    if (await collapse.isVisible()) await collapse.click()
+    if (logo?.startsWith('https:')) await expect(mark().locator('img')).toHaveAttribute('src', logo)
+    else if (org === 'hanzo') await expect(mark().getByRole('img', { name: 'Hanzo' })).toBeVisible()
+    else {
+      await expect(mark().locator('img')).toHaveCount(0)
+      await expect(mark().getByText('A', { exact: true })).toBeVisible()
+    }
+  }
 })

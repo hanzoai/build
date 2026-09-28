@@ -282,6 +282,14 @@ describe('spend caps', () => {
 })
 
 describe('members', () => {
+  it('reads the org’s logo off its IAM record, enveloped or bare, and none when it has none', async () => {
+    const seen = answer(200, { status: 'ok', data: { name: 'acme', logo: 'https://cdn.acme.test/mark.png' } }, { name: 'acme', logo: 'https://x.test/l.svg' }, { status: 'ok', data: { name: 'acme' } })
+    expect(await members.logo(T, 'acme')).toBe('https://cdn.acme.test/mark.png')
+    expect(seen[0]).toMatchObject({ url: 'https://api.hanzo.ai/v1/iam/organizations/admin/acme', method: 'GET' })
+    expect(await members.logo(T, 'acme')).toBe('https://x.test/l.svg')
+    expect(await members.logo(T, 'acme')).toBe('')
+  })
+
   it('reads the org’s roster, owners first, people only', async () => {
     const seen = answer(200, {
       status: 'ok',
