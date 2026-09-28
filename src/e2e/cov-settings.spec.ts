@@ -1217,7 +1217,7 @@ test('Usage on the Free plan says it is limited and pooled, with what is left an
       window: 'hour',
       resets: Math.floor(hour.getTime() / 1000),
       pooled: true,
-      pool: { state: 'busy', keys: 3, ready: 2 },
+      pool: { state: 'busy' },
     }
   })
   await page.goto('/-/settings/usage')
@@ -1226,7 +1226,7 @@ test('Usage on the Free plan says it is limited and pooled, with what is left an
   await expect(page.getByText('7 of 10 left this hour')).toBeVisible()
   await expect(page.getByText(today(hour) ? `3 used · Refills at ${hhmm(hour)}` : /^3 used · Refills /)).toBeVisible()
   await expect(page.getByText('Shared pool')).toBeVisible()
-  await expect(page.getByText('2 of 3 accounts serving')).toBeVisible()
+  await expect(page.getByText('Try again in a minute')).toBeVisible()
   await expect(page.getByText('Busy', { exact: true })).toBeVisible()
 
   // Spent for the day, and the pool used up until midnight: both said, from the platform's numbers.
@@ -1238,12 +1238,12 @@ test('Usage on the Free plan says it is limited and pooled, with what is left an
     spent: true,
     window: 'day',
     resets: midnight.getTime() / 1000,
-    pool: { state: 'exhausted', keys: 3, ready: 0, resets: midnight.getTime() / 1000 },
+    pool: { state: 'exhausted', resets: midnight.getTime() / 1000 },
   }
   await page.reload()
   await expect(page.getByText('0 of 50 left today')).toBeVisible()
-  await expect(page.getByText('Exhausted', { exact: true })).toBeVisible()
-  await expect(page.getByText(/^0 of 3 accounts serving · Refills /)).toBeVisible()
+  await expect(page.getByText('Used up', { exact: true })).toBeVisible()
+  await expect(page.getByText(/^Refills [A-Z][a-z]{2} \d+, \d{4}, 00:00 UTC$/)).toBeVisible()
   await expect(page.getByRole('progressbar').first()).toHaveAttribute('aria-valuenow', '100')
 
   // The way up is the Plans screen.

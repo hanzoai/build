@@ -416,10 +416,7 @@ export async function spend(t: Target): Promise<Spend> {
 export interface Pool {
   /** available, busy or exhausted. */
   state: string
-  /** Accounts in the pool, and how many take a free request now. */
-  keys: number
-  ready: number
-  /** RFC 3339: when the first account that is out comes back; '' when none is out. */
+  /** RFC 3339: when the pool refills, where the platform says; ''. */
   resets: string
 }
 
@@ -455,7 +452,7 @@ export async function allowance(t: Target): Promise<Allowance> {
     window: str(r.window),
     resets: stamp(r.resets),
     pooled: r.pooled === true,
-    pool: p && str(p.state) ? { state: str(p.state), keys: num(p.keys), ready: num(p.ready), resets: stamp(p.resets) } : null,
+    pool: p && str(p.state) ? { state: str(p.state), resets: stamp(p.resets) } : null,
   }
 }
 

@@ -78,7 +78,12 @@ function resets(iso: string): string {
   return `Resets ${day(iso)}`
 }
 
-const POOL: Record<string, string> = { available: 'Available', busy: 'Busy', exhausted: 'Exhausted' }
+const POOL: Record<string, string> = { available: 'Available', busy: 'Busy', exhausted: 'Used up' }
+const POOL_SAYS: Record<string, (refill: string) => string> = {
+  available: () => 'Every free request is being served',
+  busy: () => 'Try again in a minute',
+  exhausted: (refill) => refill || 'Refills when the accounts reset',
+}
 
 /** `Refills at 16:00 UTC`, for a window or the pool: the UTC time it opens again, with the date when not today. */
 function refills(iso: string): string {
@@ -188,9 +193,7 @@ export function Usage() {
             {free.value.pool ? (
               <Row
                 title="Shared pool"
-                detail={`${free.value.pool.ready} of ${free.value.pool.keys} accounts serving${
-                  free.value.pool.state === 'exhausted' && refills(free.value.pool.resets) ? ` · ${refills(free.value.pool.resets)}` : ''
-                }`}
+                detail={POOL_SAYS[free.value.pool.state]?.(refills(free.value.pool.resets)) ?? ''}
                 trailing={
                   <SizableText size="$2" color={free.value.pool.state === 'exhausted' ? '$red10' : '$ink'}>
                     {POOL[free.value.pool.state] ?? free.value.pool.state}
