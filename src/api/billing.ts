@@ -18,6 +18,7 @@
  *   POST   /v1/billing/topup                     charge a saved card into the balance
  *   GET    /v1/billing/usage/rollup              the plan's month: included spend and request windows
  *   GET    /v1/usage/summary?range=month         this month's spend, by category
+ *   GET    /v1/allowance                         the Free plan's allowance, and the pool it is served from
  *   GET    /v1/billing/alerts                    spend caps (bare array)
  *   POST   /v1/billing/alerts                    open a cap (org admin)
  *   PATCH  /v1/billing/alerts/{id}               change one (org admin)
@@ -406,6 +407,55 @@ export async function spend(t: Target): Promise<Spend> {
       .map(obj)
       .map((c) => ({ name: str(c.category) || 'Uncategorized', cents: num(c.cents) }))
       .filter((c) => c.cents > 0),
+  }
+}
+
+// ── the Free plan ────────────────────────────────────────────────────────────
+
+/** The pool every free user shares, as its vendor accounts last said. */
+export interface Pool {
+  /** available, busy or exhausted. */
+  state: string
+  /** Accounts in the pool, and how many take a free request now. */
+  keys: number
+  ready: number
+  /** RFC 3339: when the first account that is out comes back; '' when none is out. */
+  resets: string
+}
+
+/**
+ * What the caller has left of the Free plan: limited usage, from a pool shared
+ * by all free users. `pooled` is false for a paid plan, whose usage is its spend.
+ */
+export interface Allowance {
+  plan: string
+  /** Requests allowed in `window`; 0 is no bound. */
+  limit: number
+  used: number
+  spent: boolean
+  /** hour or day. */
+  window: string
+  /** RFC 3339. */
+  resets: string
+  pooled: boolean
+  /** Absent when the platform could not read it. */
+  pool: Pool | null
+}
+
+const stamp = (unix: unknown): string => (num(unix) > 0 ? new Date(num(unix) * 1000).toISOString() : '')
+
+export async function allowance(t: Target): Promise<Allowance> {
+  const r = obj(await call<unknown>(t, 'GET', '/v1/allowance'))
+  const p = r.pool && typeof r.pool === 'object' ? obj(r.pool) : null
+  return {
+    plan: str(r.plan),
+    limit: num(r.limit),
+    used: num(r.used),
+    spent: r.spent === true,
+    window: str(r.window),
+    resets: stamp(r.resets),
+    pooled: r.pooled === true,
+    pool: p && str(p.state) ? { state: str(p.state), keys: num(p.keys), ready: num(p.ready), resets: stamp(p.resets) } : null,
   }
 }
 

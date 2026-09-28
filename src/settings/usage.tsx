@@ -9,6 +9,7 @@ import { Button, Input } from '@hanzo/ui'
 import { useState } from 'react'
 
 import {
+  allowance,
   balance,
   caps,
   cents,
@@ -23,6 +24,7 @@ import {
   monthly,
   spend,
   topup,
+  type Allowance,
   type Cap,
   type Method,
   type Month,
@@ -76,11 +78,22 @@ function resets(iso: string): string {
   return `Resets ${day(iso)}`
 }
 
+const POOL: Record<string, string> = { available: 'Available', busy: 'Busy', exhausted: 'Exhausted' }
+
+/** `Refills at 16:00 UTC`, for a window or the pool: the UTC time it opens again, with the date when not today. */
+function refills(iso: string): string {
+  const at = iso ? new Date(iso) : null
+  if (!at || Number.isNaN(at.getTime())) return ''
+  const hhmm = `${String(at.getUTCHours()).padStart(2, '0')}:${String(at.getUTCMinutes()).padStart(2, '0')} UTC`
+  return at.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? `Refills at ${hhmm}` : `Refills ${day(iso)}, ${hhmm}`
+}
+
 export function Usage() {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
   const plan = useRead(signed ? () => month(t) : null, null as Month | null, [t, signed])
+  const free = useRead(signed ? () => allowance(t) : null, null as Allowance | null, [t, signed])
   const left = useRead(signed ? () => balance(t) : null, 0, [t, signed])
   const granted = useRead(signed ? () => credit(t) : null, 0, [t, signed])
   const spent = useRead(signed ? () => spend(t) : null, null as Spend | null, [t, signed])
@@ -151,6 +164,43 @@ export function Usage() {
   return (
     <YStack gap="$6">
       <Heading title="Usage" detail={`What ${host.org ?? 'this organization'} has used, has left, and may spend.`} />
+
+      {free.value?.pooled && free.value.limit > 0 ? (
+        <Group
+          title="Free plan"
+          detail="Free — limited usage, from a pool shared by all free users."
+          action={
+            <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'plans' }))}>
+              Upgrade
+            </Button>
+          }
+        >
+          <Card>
+            <Meter
+              first
+              title={`${Math.max(0, free.value.limit - free.value.used).toLocaleString()} of ${free.value.limit.toLocaleString()} left ${
+                free.value.window === 'hour' ? 'this hour' : free.value.window === 'day' ? 'today' : 'this period'
+              }`}
+              used={free.value.used}
+              of={free.value.limit}
+              says={[`${free.value.used.toLocaleString()} used`, refills(free.value.resets)].filter(Boolean).join(' · ')}
+            />
+            {free.value.pool ? (
+              <Row
+                title="Shared pool"
+                detail={`${free.value.pool.ready} of ${free.value.pool.keys} accounts serving${
+                  free.value.pool.state === 'exhausted' && refills(free.value.pool.resets) ? ` · ${refills(free.value.pool.resets)}` : ''
+                }`}
+                trailing={
+                  <SizableText size="$2" color={free.value.pool.state === 'exhausted' ? '$red10' : '$ink'}>
+                    {POOL[free.value.pool.state] ?? free.value.pool.state}
+                  </SizableText>
+                }
+              />
+            ) : null}
+          </Card>
+        </Group>
+      ) : null}
 
       <Group title="Plan usage limits" detail={m?.plan ? `Included with ${m.plan}.` : 'What the plan includes.'}>
         {plan.error ? (

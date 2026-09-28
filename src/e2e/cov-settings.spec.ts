@@ -83,6 +83,8 @@ function fresh() {
     } as Row,
     spend: { spend: { available: true, mtdCents: 5250, byCategory: [{ category: 'LLM', cents: 4000 }] } } as Row,
     caps: [] as Row[],
+    // GET /v1/allowance: the paid plan above bounds nothing and is not pooled.
+    allowance: { plan: 'max', limit: 0, used: 0, spent: false, resets: 0, pooled: false } as Row,
     roster: [
       { user: `${ORG}/dave`, org: ORG, role: 'owner', createdTime: '2026-08-01T00:00:00Z' },
       { user: 'hanzo/zed', org: ORG, role: 'member', createdTime: '2026-09-02T00:00:00Z' },
@@ -201,6 +203,8 @@ function answer(w: World, s: Sent): Reply | undefined {
     }
     case 'GET /v1/usage/summary':
       return { json: w.spend }
+    case 'GET /v1/allowance':
+      return { json: w.allowance }
     case 'GET /v1/billing/alerts':
       return { json: w.caps }
     case 'POST /v1/billing/alerts': {
@@ -1196,6 +1200,68 @@ test('Usage draws every kind of window and limit, buys more after a refusal, and
   p.w.rollup = { plan: 'free', included: { monthlyCents: 0 }, windows: [] }
   await page.reload()
   await expect(page.getByText('This plan sets no usage limits. Usage is paid from the balance.')).toBeVisible()
+})
+
+test('Usage on the Free plan says it is limited and pooled, with what is left and the pool’s state, and a paid plan says neither', async ({ page }) => {
+  const now = Math.floor(Date.now() / 1000)
+  const hour = new Date((now + 40 * 60) * 1000)
+  const hhmm = (d: Date) => `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`
+  const today = (d: Date) => d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10)
+  const p = await platform(page, (w) => {
+    w.subs = []
+    w.allowance = {
+      plan: 'free',
+      limit: 10,
+      used: 3,
+      spent: false,
+      window: 'hour',
+      resets: Math.floor(hour.getTime() / 1000),
+      pooled: true,
+      pool: { state: 'busy', keys: 3, ready: 2 },
+    }
+  })
+  await page.goto('/-/settings/usage')
+  await expect(page.getByText('Free plan', { exact: true })).toBeVisible()
+  await expect(page.getByText('Free — limited usage, from a pool shared by all free users.')).toBeVisible()
+  await expect(page.getByText('7 of 10 left this hour')).toBeVisible()
+  await expect(page.getByText(today(hour) ? `3 used · Refills at ${hhmm(hour)}` : /^3 used · Refills /)).toBeVisible()
+  await expect(page.getByText('Shared pool')).toBeVisible()
+  await expect(page.getByText('2 of 3 accounts serving')).toBeVisible()
+  await expect(page.getByText('Busy', { exact: true })).toBeVisible()
+
+  // Spent for the day, and the pool used up until midnight: both said, from the platform's numbers.
+  const midnight = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1))
+  p.w.allowance = {
+    ...p.w.allowance,
+    limit: 50,
+    used: 50,
+    spent: true,
+    window: 'day',
+    resets: midnight.getTime() / 1000,
+    pool: { state: 'exhausted', keys: 3, ready: 0, resets: midnight.getTime() / 1000 },
+  }
+  await page.reload()
+  await expect(page.getByText('0 of 50 left today')).toBeVisible()
+  await expect(page.getByText('Exhausted', { exact: true })).toBeVisible()
+  await expect(page.getByText(/^0 of 3 accounts serving · Refills /)).toBeVisible()
+  await expect(page.getByRole('progressbar').first()).toHaveAttribute('aria-valuenow', '100')
+
+  // The way up is the Plans screen.
+  await page.getByRole('button', { name: 'Upgrade', exact: true }).click()
+  await expect(page).toHaveURL(/\/-\/plans$/)
+
+  // A pool the platform could not read is not drawn; the allowance still is.
+  p.w.allowance = { ...p.w.allowance, pool: undefined }
+  await page.goto('/-/settings/usage')
+  await expect(page.getByText('0 of 50 left today')).toBeVisible()
+  await expect(page.getByText('Shared pool')).toHaveCount(0)
+
+  // A paid plan is metered in money: no Free plan, no pool.
+  p.w.allowance = { plan: 'max', limit: 0, used: 0, spent: false, resets: 0, pooled: false }
+  await page.reload()
+  await expect(page.getByText('Included with max.')).toBeVisible()
+  await expect(page.getByText('Free plan', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Shared pool')).toHaveCount(0)
 })
 
 test('Usage sends someone with no card to Billing, and says it is reading the cards until they come', async ({ page }) => {
