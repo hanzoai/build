@@ -13,15 +13,23 @@
  * and lands on New.
  */
 export interface Door {
-  login: () => Promise<unknown>
+  login: (params?: { additionalParams?: Record<string, string> }) => Promise<unknown>
 }
 
 const KEY = 'signin.destination'
 
+/** Noted, with the time, when this tab followed a sign-out made in another. */
+const FORM = 'signin.form'
+/** How long the note holds: the reload that follows the sign-out reaches `enter` well inside it. */
+const FORM_MS = 10_000
+
 /** Where a return with nowhere written down lands: New. */
 const HOME = '/'
 
-/** Write down where this tab is, and leave for hanzo.id. */
+/**
+ * Write down where this tab is, and leave for hanzo.id: for the sign-in form
+ * (`prompt=login`) when this tab has just followed a sign-out (`form`).
+ */
 export function enter(door: Door): void {
   try {
     const { pathname, search, hash } = window.location
@@ -29,7 +37,32 @@ export function enter(door: Door): void {
   } catch {
     /* nowhere to write it; the return lands on New */
   }
-  void door.login()
+  void door.login(formed() ? { additionalParams: { prompt: 'login' } } : undefined)
+}
+
+/**
+ * This tab followed a sign-out made in another. The sign-out is still on its
+ * way to hanzo.id, and until it lands the session there answers an ordinary
+ * trip with a code and signs this tab straight back in, so this tab's next trip
+ * asks for the sign-in form instead.
+ */
+export function form(): void {
+  try {
+    window.sessionStorage.setItem(FORM, String(Date.now()))
+  } catch {
+    /* nowhere to note it; the trip is an ordinary one */
+  }
+}
+
+/** Read-once: whether `form` was noted moments ago in this tab. */
+function formed(): boolean {
+  try {
+    const at = Number(window.sessionStorage.getItem(FORM))
+    window.sessionStorage.removeItem(FORM)
+    return Date.now() - at < FORM_MS
+  } catch {
+    return false
+  }
 }
 
 /**

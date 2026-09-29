@@ -132,5 +132,29 @@ export function selectOrg(next: string): boolean {
   }
 }
 
+/**
+ * Follow the session every tab of this page shares.
+ *
+ * The SDK in each tab keeps its own copy of who is signed in and is told
+ * nothing when another tab changes the store, so a tab that missed a sign-out
+ * goes on drawing the person it was opened for while every call it makes
+ * carries no bearer. `moved` runs when the stored access token stops naming
+ * `was` (removed, or naming someone else; a cleared store, `key` null, is read
+ * the same way) and is handed who it names now. A token for the same subject is
+ * a refresh in another tab and moves nothing. A tab on the sign-in callback is
+ * finishing its own sign-in and is left to it. Returns the unsubscribe.
+ */
+export function watch(was: string | undefined, moved: (now: string | undefined) => void): () => void {
+  const on = (e: StorageEvent) => {
+    if (e.storageArea !== window.localStorage) return
+    if (e.key !== null && e.key !== ACCESS) return
+    if (window.location.pathname.startsWith('/auth/callback')) return
+    const now = subject()
+    if (now !== was) moved(now)
+  }
+  window.addEventListener('storage', on)
+  return () => window.removeEventListener('storage', on)
+}
+
 /** Whether the stored token says this person administers `o`. */
 export const administers = (o: string | null): boolean => admins(bearer(), o)

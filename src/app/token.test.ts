@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { administers, bearer, org, orgs, own, selectOrg, subject } from './token.ts'
+import { administers, bearer, org, orgs, own, selectOrg, subject, watch } from './token.ts'
 
 /** Web Storage as a browser has it: the kept keys are the object's own. */
 class Kept {
@@ -166,5 +166,80 @@ describe('the organizations', () => {
     expect(administers('acme')).toBe(true)
     expect(administers('beta')).toBe(false)
     expect(administers(null)).toBe(false)
+  })
+})
+
+describe('following the session other tabs share', () => {
+  const dave = jwt({ sub: 'acme/dave' })
+
+  /** A tab at `path` whose storage holds `seed`; `other` is another tab writing `key` (null clears the store). */
+  function tab(seed: Record<string, string>, path = '/') {
+    const store = new Kept()
+    for (const [k, v] of Object.entries(seed)) store.setItem(k, v)
+    const heard = new Set<(e: StorageEvent) => void>()
+    vi.stubGlobal('window', {
+      localStorage: store,
+      location: { pathname: path },
+      addEventListener: (_: string, fn: (e: StorageEvent) => void) => heard.add(fn),
+      removeEventListener: (_: string, fn: (e: StorageEvent) => void) => heard.delete(fn),
+    })
+    const other = (key: string | null, value: string | null = null) => {
+      if (key === null) for (const k of Object.keys(store)) store.removeItem(k)
+      else if (value === null) store.removeItem(key)
+      else store.setItem(key, value)
+      for (const fn of [...heard]) fn({ storageArea: store, key } as unknown as StorageEvent)
+    }
+    return { other, heard }
+  }
+
+  it('moves, to nobody, when another tab signs out', () => {
+    const { other } = tab({ [ACCESS]: dave })
+    const moved = vi.fn()
+    watch(subject(), moved)
+    other(ACCESS)
+    expect(moved).toHaveBeenCalledExactlyOnceWith(undefined)
+  })
+
+  it('reads a cleared store as a sign-out', () => {
+    const { other } = tab({ [ACCESS]: dave })
+    const moved = vi.fn()
+    watch(subject(), moved)
+    other(null)
+    expect(moved).toHaveBeenCalledExactlyOnceWith(undefined)
+  })
+
+  it('moves to whoever signs in in another tab', () => {
+    const { other } = tab({ [ACCESS]: dave })
+    const moved = vi.fn()
+    watch(subject(), moved)
+    other(ACCESS, jwt({ sub: 'acme/erin' }))
+    expect(moved).toHaveBeenCalledExactlyOnceWith('acme/erin')
+  })
+
+  it('stays for a refresh in another tab, and for keys that are not the token', () => {
+    const { other } = tab({ [ACCESS]: dave })
+    const moved = vi.fn()
+    watch(subject(), moved)
+    other(ACCESS, jwt({ sub: 'acme/dave', exp: 2 }))
+    other(ORG, 'acme')
+    other('hanzo_iam_refresh_lease')
+    expect(moved).not.toHaveBeenCalled()
+  })
+
+  it('leaves a tab on the sign-in callback to finish its own sign-in', () => {
+    const { other } = tab({}, '/auth/callback')
+    const moved = vi.fn()
+    watch(subject(), moved)
+    other(ACCESS, dave)
+    expect(moved).not.toHaveBeenCalled()
+  })
+
+  it('stops following once let go', () => {
+    const { other, heard } = tab({ [ACCESS]: dave })
+    const moved = vi.fn()
+    watch(subject(), moved)()
+    expect(heard.size).toBe(0)
+    other(ACCESS)
+    expect(moved).not.toHaveBeenCalled()
   })
 })

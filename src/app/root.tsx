@@ -19,9 +19,9 @@ import { logo as mark } from '../api/members.ts'
 import { Builder } from '../builder.tsx'
 import type { Host, Person } from '../host.tsx'
 import { hold } from '../landing.tsx'
-import { enter } from './enter.ts'
+import { enter, form } from './enter.ts'
 import { follow } from './stay.ts'
-import { administers, bearer, org, orgs, own, selectOrg, subject } from './token.ts'
+import { administers, bearer, org, orgs, own, selectOrg, subject, watch } from './token.ts'
 import { api, origin } from './where.ts'
 
 export function Mount() {
@@ -34,6 +34,21 @@ export function Mount() {
   useEffect(() => {
     if (!isLoading) own(subject())
   }, [isLoading, isAuthenticated])
+
+  // Another tab's sign-out or sign-in is this tab's too (token.ts `watch`). A
+  // reload settles the page on what the store now holds: someone else is drawn
+  // as themselves, and a tab left with nobody leaves for hanzo.id's sign-in
+  // form (enter.ts `form`). Followed from the first render, while the SDK is
+  // still settling on the token it read then, and again after this tab's own
+  // sign-in.
+  useEffect(
+    () =>
+      watch(subject(), (now) => {
+        if (!now) form()
+        window.location.reload()
+      }),
+    [isAuthenticated],
+  )
 
   // Words carried on arrival are New's draft, and leave the address: a reload
   // or a shared link must not carry them again.

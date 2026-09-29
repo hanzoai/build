@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { back, enter } from './enter.ts'
+import { back, enter, form } from './enter.ts'
 
 /** A tab at `href` with a sessionStorage of its own. */
 function tab(href: string) {
@@ -53,5 +53,24 @@ describe('signing in is one trip, in this tab', () => {
     enter(door)
     expect(door.login).toHaveBeenCalledOnce()
     expect(back()).toBe('/')
+  })
+})
+
+describe('a tab that followed a sign-out made in another', () => {
+  it('asks hanzo.id for the sign-in form on its next trip, and only that one', () => {
+    tab('http://localhost:3200/-/codebases')
+    const door = { login: vi.fn(async () => undefined) }
+    form()
+    enter(door)
+    expect(door.login).toHaveBeenLastCalledWith({ additionalParams: { prompt: 'login' } })
+    enter(door)
+    expect(door.login).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('does not honour a note from long ago', () => {
+    tab('http://localhost:3200/').set('signin.form', String(Date.now() - 60_000))
+    const door = { login: vi.fn(async () => undefined) }
+    enter(door)
+    expect(door.login).toHaveBeenLastCalledWith(undefined)
   })
 })
