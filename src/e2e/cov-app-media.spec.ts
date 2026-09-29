@@ -9,7 +9,7 @@ import type { Page } from '@playwright/test'
 
 import { ask, composer, status } from './composer.ts'
 import { expect, test } from './fixture.ts'
-import { serve } from './signed.ts'
+import { signIn } from './signed.ts'
 
 test.use({
   launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--host-resolver-rules=MAP build.test [::1]'] },
@@ -102,7 +102,7 @@ test('leaving New while recording stops the microphone and still hears what was 
 })
 
 test('a page that is not a secure context has no microphone to offer, and says so', async ({ page, baseURL }) => {
-  await serve(page, () => undefined)
+  await signIn(page, () => undefined)
   await page.goto(`http://build.test:${new URL(baseURL!).port}/`)
   const mic = page.getByRole('button', { name: 'Dictation needs a microphone this page can record' })
   await expect(mic).toHaveAttribute('aria-disabled', 'true')
