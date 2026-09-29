@@ -16,6 +16,7 @@ import { ChipSelect } from '@hanzo/ui/product'
 import { useEffect, useMemo, useState } from 'react'
 
 import { agents, ALL, create, draft, EMPTY, fromPreset, one, PERIODS, presets, remove, update, type Agent, type Draft, type Period, type Preset } from '../api/agents.ts'
+import { Access } from '../access.tsx'
 import { label as named, models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useRead } from '../data.ts'
@@ -189,7 +190,7 @@ function Editor({
   }, [on.value, d.tools])
   const shownTools = choices.filter((x) => matches(find, x.name, x.source, x.description))
   const items = useMemo(() => {
-    const list = [{ id: DEFAULT, label: 'Default', hint: 'the deployment’s' }, ...catalog.value.map((m) => ({ id: m.id, label: m.label }))]
+    const list = [{ id: DEFAULT, label: 'Default', hint: 'the deployment’s' }, ...catalog.value]
     if (d.model && !list.some((m) => m.id === d.model)) list.splice(1, 0, { id: d.model, label: named(d.model) })
     return agent ? list.filter((m) => m.id !== DEFAULT) : list
   }, [catalog.value, d.model, agent])
@@ -232,6 +233,7 @@ function Editor({
                 label={chosen?.label ?? 'Default'}
                 chosen={chosen}
                 items={items}
+                footer={<Access items={items} />}
                 onChange={(m) => set({ model: m.id === DEFAULT ? '' : m.id })}
                 placeholder="Search models…"
                 placement="bottom-start"

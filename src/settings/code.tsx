@@ -10,6 +10,7 @@ import { ChipSelect } from '@hanzo/ui/product'
 import { useState } from 'react'
 
 import { unhonoured } from '../api/coding.ts'
+import { Access } from '../access.tsx'
 import { ENSO, models } from '../api/models.ts'
 import { SANDBOX } from '../api/places.ts'
 import type { Code as Defaults } from '../api/pref.ts'
@@ -73,6 +74,7 @@ export function Code() {
                 label={model.label}
                 chosen={model}
                 items={catalog.value}
+                footer={<Access items={catalog.value} />}
                 onChange={(m) => keep({ model: m.id })}
                 placeholder="Search models…"
                 placement="bottom-end"

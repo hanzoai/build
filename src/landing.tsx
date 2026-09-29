@@ -23,6 +23,7 @@ import { start, unhonoured, type Mode } from './api/coding.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
 import { read, SETUP, type Environment } from './api/environment.ts'
 import { SetupDialog } from './environment.tsx'
+import { Access } from './access.tsx'
 import { ENSO, models } from './api/models.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
 import { isForge } from './choice.ts'
@@ -329,6 +330,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         label={catalog.value.find((m) => m.id === kept.model)?.label ?? 'Enso'}
         chosen={catalog.value.find((m) => m.id === kept.model) ?? null}
         items={catalog.value}
+        footer={<Access items={catalog.value} />}
         onChange={(m) => set({ model: m.id })}
         placeholder="Search models…"
         placement="top-end"

@@ -337,6 +337,7 @@ describe('models', () => {
       { id: 'enso', label: 'Enso' },
       { id: 'zen5-coder', label: 'Zen5 Coder' },
       { id: 'anthropic/claude-opus-5.5', label: 'Claude Opus 5.5' },
+      { id: 'zen7', label: 'Zen 7', disabled: true, hint: 'Research preview', request: 'https://hanzo.ai/research-access' },
     ])
   })
 })

@@ -30,6 +30,7 @@ import { Composer } from '@hanzo/ui/chat'
 import { ChipSelect } from '@hanzo/ui/product'
 import { useEffect, useMemo, useState } from 'react'
 
+import { Access } from './access.tsx'
 import { approve, followUp, headline, retry, start, type Ask, type Earlier } from './api/coding.ts'
 import { ENSO, label as named, models } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
@@ -306,6 +307,7 @@ export function Run({ id }: { id: string }) {
         label={catalog.value.find((m) => m.id === model)?.label ?? named(model)}
         chosen={catalog.value.find((m) => m.id === model) ?? null}
         items={catalog.value}
+        footer={<Access items={catalog.value} />}
         onChange={(m) => choose({ ...chose, model: m.id })}
         placeholder="Search models…"
         placement="top-end"

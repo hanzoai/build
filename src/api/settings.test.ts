@@ -251,10 +251,12 @@ describe('webhooks', () => {
 
 describe('models', () => {
   it('offers Enso alone when the catalog lists nothing it can read', async () => {
+    // What can be chosen; the research preview is listed after it and never is.
+    const callable = async () => (await models(T)).filter((m) => !m.disabled)
     answer(200, {})
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }])
+    expect(await callable()).toEqual([{ id: 'enso', label: 'Enso' }])
     answer(200, { data: [null, 'zen5', { id: 7 }, { id: 'zen5:batch' }, { id: 'zen5' }] })
-    expect((await models(T)).map((m) => m.id)).toEqual(['enso', 'zen5'])
+    expect((await callable()).map((m) => m.id)).toEqual(['enso', 'zen5'])
   })
 })
 

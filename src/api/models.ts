@@ -5,12 +5,23 @@
  *
  * `enso` is the router: it picks a model per step, which is why it is the
  * default and why it is not a model a person has to understand to use.
+ *
+ * After what the gateway serves come the models nobody can call yet, from
+ * @hanzo/ui's `RESEARCH`: listed so a person knows they exist, disabled so no
+ * run is ever started on one, with where to ask for access.
  */
+import { RESEARCH } from '@hanzo/ui/models/catalog'
+
 import { call, type Target } from './call.ts'
 
 export interface Model {
   id: string
   label: string
+  /** Listed and never chosen. */
+  disabled?: boolean
+  hint?: string
+  /** Where a person asks for access to a model they cannot call. */
+  request?: string
 }
 
 export const ENSO = 'enso'
@@ -32,5 +43,14 @@ export async function models(t: Target): Promise<Model[]> {
     .map((r) => (r && typeof r === 'object' && typeof (r as { id?: unknown }).id === 'string' ? (r as { id: string }).id : ''))
     .filter((id) => id && !id.endsWith(':batch'))
   const out = [...new Set([ENSO, ...ids])]
-  return out.map((id) => ({ id, label: label(id) }))
+  return [
+    ...out.map((id) => ({ id, label: label(id) })),
+    ...RESEARCH.filter((m) => !out.includes(m.id)).map((m) => ({
+      id: m.id,
+      label: m.label ?? label(m.id),
+      disabled: true,
+      hint: 'Research preview',
+      request: m.request,
+    })),
+  ]
 }

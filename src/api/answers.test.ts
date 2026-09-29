@@ -426,13 +426,22 @@ describe('models', () => {
     expect(label('zen5.8--coder')).toBe('Zen5.8 Coder')
   })
 
+  const ZEN7 = { id: 'zen7', label: 'Zen 7', disabled: true, hint: 'Research preview', request: 'https://hanzo.ai/research-access' }
+
   it('offers the router alone when the catalog lists nothing it can name', async () => {
     answer(200, { data: [null, { id: 42 }, 'zen5.8'] })
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }])
+    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, ZEN7])
     answer(200, { data: 'zen5.8' })
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }])
+    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, ZEN7])
     answer(204, undefined)
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }])
+    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, ZEN7])
+  })
+
+  it('lists a model nobody can call yet after what the gateway serves, disabled, until the gateway serves it', async () => {
+    answer(200, { data: [{ id: 'zen6' }] })
+    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, { id: 'zen6', label: 'Zen6' }, ZEN7])
+    answer(200, { data: [{ id: 'zen7' }] })
+    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, { id: 'zen7', label: 'Zen7' }])
   })
 })
 
