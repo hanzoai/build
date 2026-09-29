@@ -10,8 +10,8 @@ catalogs:
       specifier: 1.9.3
       version: 1.9.3
     '@hanzo/iam':
-      specifier: 0.21.18
-      version: 0.21.18
+      specifier: 0.21.21
+      version: 0.21.21
     '@hanzo/ui':
       specifier: 8.27.16
       version: 8.27.16
@@ -92,7 +92,7 @@ importers:
         version: 8.3.5(react-dom@19.2.8(react@19.2.8))(react-native@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)
       '@hanzo/iam':
         specifier: 'catalog:'
-        version: 0.21.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 0.21.21(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@hanzo/ui':
         specifier: 'catalog:'
         version: 8.27.16(84c1fc078ffaf56981bdc3d5cb44ca34)
@@ -726,8 +726,8 @@ packages:
     peerDependencies:
       react: '>=19.2.8'
 
-  '@hanzo/iam@0.21.18':
-    resolution: {integrity: sha512-IQNxp9xO3X5ZBizzstWPmRneMk4sV4wpMNmvpV3+u/Y0n54PITLFMdiNkJr43GeFy/YH0oRefe9HXgUd9VOghw==}
+  '@hanzo/iam@0.21.21':
+    resolution: {integrity: sha512-N+IR0HnveLCQS3wfmkQQ7cnL+rG0cWQxADXi1B4yKE9e+TZt5FB3ooqhcsqVhaCnKXjK9RsQwnMKECaH9Leseg==}
     engines: {node: '>=18'}
     peerDependencies:
       react: '>=17'
@@ -4017,7 +4017,7 @@ snapshots:
       - react-dom
       - react-native
 
-  '@hanzo/iam@0.21.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@hanzo/iam@0.21.21(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       jose: 6.2.12
       libphonenumber-js: 1.13.12
