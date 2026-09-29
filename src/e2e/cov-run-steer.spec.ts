@@ -187,6 +187,26 @@ test('a stopped run waits to say where it kept its work, then follows up from th
   expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ after: SESSION, prompt: expect.stringMatching(/^finish it\n\nThis follows an earlier run/) })
 })
 
+test('a failed run opens its error, and Try again starts its ask again where it ran', async ({ page: p }, info) => {
+  const why = 'coding: lease sandbox: a desktop lease costs 9 cents for its first hour and this wallet holds 0, and its 6 free sandboxes this hour are used; top up to lease more'
+  const { sent } = await rig(p, {
+    record: { ...finished(), status: 'error', mode: 'plan', branch: '' },
+    events: [ev('status', { status: 'started', repo: 'universe', base: 'main', mode: 'plan' }), ev('status', { status: 'error', error: why })],
+  })
+  await p.goto(`/${SESSION}`)
+  const t = p.getByLabel('Transcript')
+  await expect(t.getByText('This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.')).toBeVisible()
+  // The reason is open without a click.
+  await expect(t.getByRole('button', { name: /^Error/ })).toHaveAttribute('aria-expanded', 'true')
+  await expect(t.getByText(why)).toBeVisible()
+  // The terminal says why it holds no command.
+  await expect(desk(p).getByText(`This run stopped before its first command: ${why}`)).toBeVisible()
+  await p.screenshot({ path: info.outputPath('failed.png') })
+  await p.getByRole('button', { name: 'Try again' }).click()
+  await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
+  expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Add the widget', repo: 'hanzoai/universe', base: 'main', mode: 'plan' })
+})
+
 test('a run the feed says paused before its record is read cannot be carried on yet, and its verdicts name no project', async ({ page: p }) => {
   const frames = [ev('tool-call', { message: 'running the task' }), ev('log', { message: 'codex\nHalf done.\n' }), ev('status', { status: 'paused', changed: false })]
   const { sent } = await rig(p, { record: running(), frames: frames.map((e) => `event: event\ndata: ${JSON.stringify({ event: e })}\n\n`).join('') })

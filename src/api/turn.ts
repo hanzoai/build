@@ -89,7 +89,8 @@ function status(b: Record<string, unknown>, mode: string): string {
 export function plain(error: string): string {
   if (!error) return 'The run hit an error'
   const ours = /providers_exhausted|every provider refused|temporarily unavailable/i.test(error)
-  if (!ours && /\b402 Payment Required|insufficient (credit|balance)/i.test(error)) return 'Your balance is out of credit. Add credit, then try again.'
+  if (/free sandboxes .*are used/i.test(error)) return 'This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.'
+  if (!ours && /\b402 Payment Required|insufficient (credit|balance)|top up/i.test(error)) return 'Your balance is out of credit. Add credit, then try again.'
   if (ours || /\b(429 Too Many Requests|503 Service Unavailable)|stream disconnected|retries exhausted|rate limit/i.test(error))
     return 'The model did not answer. Try again in a moment, or pick another model.'
   return 'The run stopped with an error. Try again, or follow up with what to change.'
@@ -218,6 +219,18 @@ export function outcome(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): Outc
     out.status = str(b.status) || out.status
     out.problem = str(b.prError) || out.problem
     if (str(b.live)) out.published = e.seq
+  }
+  return out
+}
+
+/** Why the run failed, as its last status says it, or '' when that status is not a failure. */
+export function failure(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): string {
+  let out = ''
+  for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
+    if (e.kind !== 'status') continue
+    const b = decode(e.payload)
+    if (!b || typeof b === 'string' || !str(b.status)) continue
+    out = str(b.status) === 'error' ? str(b.error) || 'The run hit an error' : ''
   }
   return out
 }

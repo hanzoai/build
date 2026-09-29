@@ -112,11 +112,16 @@ export interface Earlier {
   pushed: boolean
 }
 
-/** The earlier run's ask, without the codebase its title leads with (`universe: add the widget`). */
+/**
+ * The earlier run's ask, without the codebase its title leads with (`universe:
+ * add the widget`), or the `new project:` the platform titles a run that made its
+ * codebase with (apps/coding start.go).
+ */
 export function headline(title: string, repo: string): string {
   const name = repo.split('/').filter(Boolean).pop() ?? ''
   const t = title.trim()
-  return name && t.startsWith(`${name}: `) ? t.slice(name.length + 2).trim() : t
+  for (const lead of [name, 'new project']) if (lead && t.startsWith(`${lead}: `)) return t.slice(lead.length + 2).trim()
+  return t
 }
 
 /**
@@ -163,4 +168,13 @@ export function approve(e: Earlier, plan: string): Ask {
   const head = headline(e.title, e.repo)
   const ask = `Carry out this plan:\n\n${plan.trim()}`
   return { ...from(e), prompt: head ? `${head}\n\n${ask}` : ask, mode: 'build' }
+}
+
+/**
+ * The same ask again, where the earlier run worked and in its mode: what a failed
+ * run's Try again starts. `ask` is the person's words as the run recorded them;
+ * with none recorded, its title's.
+ */
+export function retry(e: Earlier, ask: string): Ask {
+  return { ...from(e), prompt: ask.trim() || headline(e.title, e.repo), mode: modeOf(e.mode) }
 }

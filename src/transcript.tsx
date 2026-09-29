@@ -138,8 +138,14 @@ export function Transcript({
             )
           case 'step':
             return (
-              <Step key={c.key} name={c.name} detail={c.detail} status={state(c.ran)} aria-label={`${c.name} ${c.detail}`.trim()}>
-                {c.output.trim() ? (
+              // The run's own error opens by default: it is the reason, and the line above it only says what to do.
+              <Step key={c.key} name={c.name} detail={c.detail} status={state(c.ran)} defaultOpen={c.name === 'Error'} aria-label={`${c.name} ${c.detail}`.trim()}>
+                {c.name === 'Error' ? (
+                  // The reason is read whole, wrapped, never scrolled sideways.
+                  <SizableText size="$2" color="$ink" style={{ ...mono, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                    {c.output}
+                  </SizableText>
+                ) : c.output.trim() ? (
                   <Code language="output" value={c.output}>
                     {tail(c.output.replace(/\n+$/, ''))}
                   </Code>

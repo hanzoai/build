@@ -30,7 +30,7 @@ import { Composer } from '@hanzo/ui/chat'
 import { ChipSelect } from '@hanzo/ui/product'
 import { useEffect, useMemo, useState } from 'react'
 
-import { approve, followUp, start, type Ask, type Earlier } from './api/coding.ts'
+import { approve, followUp, retry, start, type Ask, type Earlier } from './api/coding.ts'
 import { ENSO, label as named, models } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
@@ -120,6 +120,10 @@ export function Run({ id }: { id: string }) {
       }
     : null
   const planned = mode === 'plan' && finished && state === 'done' ? answer(events) : ''
+  // A failed run is tried again with the person's words as it recorded them.
+  const failed = finished && state === 'error'
+  const asked = shown.find((c) => c.kind === 'said' && c.who === 'person')
+  const again = asked && asked.kind === 'said' ? asked.text : ''
   // What the recorded read left out: it carries the latest fifty turns.
   const hidden = Math.max(0, (detail.value?.events ?? 0) - (detail.value?.recent.length ?? 0))
   // Only a run still working is on a step.
@@ -165,9 +169,10 @@ export function Run({ id }: { id: string }) {
   const tuned = (a: Ask): Ask => ({ ...a, model: model === ENSO ? undefined : model, effort: pace.id })
 
   /** A new run from this one's work, opened. A paused run it carries on is let go once the new one is admitted. */
-  const carry = async (said: string, how: 'follow' | 'approve' = 'follow'): Promise<string> => {
+  const carry = async (said: string, how: 'follow' | 'approve' | 'retry' = 'follow'): Promise<string> => {
     if (!earlier) throw new Error('This run is still being read')
-    const run = await start(t, tuned(how === 'approve' ? approve(earlier, said) : followUp(earlier, said)))
+    const ask = how === 'approve' ? approve(earlier, said) : how === 'retry' ? retry(earlier, said) : followUp(earlier, said)
+    const run = await start(t, tuned(ask))
     if (paused) await stop(t, id, 'Continued in a follow-up run').catch(() => undefined)
     setDraft('')
     host.go(run.session)
@@ -414,6 +419,13 @@ export function Run({ id }: { id: string }) {
             <SizableText size="$1" color="$soft" role="status">
               {note || refused}
             </SizableText>
+          ) : null}
+          {failed ? (
+            <XStack items="center" gap="$2">
+              <Button size="sm" disabled={busy} onPress={() => void act(() => carry(again, 'retry'))}>
+                {busy ? 'Starting…' : 'Try again'}
+              </Button>
+            </XStack>
           ) : null}
           {plan.length ? (
             // One line until it is opened, so the steps never crowd the transcript.

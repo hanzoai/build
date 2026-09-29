@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { answer, cards, decode, merge, outcome, said, settled, shell, steps, who, type Card } from './turn.ts'
+import { answer, cards, decode, failure, merge, outcome, said, settled, shell, steps, who, type Card } from './turn.ts'
 
 const ev = (seq: number, kind: string, payload: unknown) => ({ id: `e${seq}`, seq, kind, payload })
 const status = (payload: Record<string, unknown>, mode = '') => said({ kind: 'status', payload }, mode)
@@ -62,6 +62,15 @@ describe('said', () => {
       'The model did not answer. Try again in a moment, or pick another model.',
     )
     expect(status({ status: 'error', error: 'panic at line 503 of main.go' })).toBe('The run stopped with an error. Try again, or follow up with what to change.')
+    expect(
+      status({
+        status: 'error',
+        error: 'coding: lease sandbox: a desktop lease costs 9 cents for its first hour and this wallet holds 0, and its 20 free sandboxes this day are used; top up to lease more',
+      }),
+    ).toBe('This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.')
+    expect(status({ status: 'error', error: 'coding: a sandbox needs at least 15 minutes of funded compute (0.04); top up to start a run' })).toBe(
+      'Your balance is out of credit. Add credit, then try again.',
+    )
     expect(status({ status: 'stopped', branch: 'agent/x', changed: true })).toBe('Stopped — work kept on agent/x')
     expect(status({ status: 'stopped', branch: 'agent/x', changed: false })).toBe('Stopped')
     expect(status({ status: 'stopped', changed: true })).toBe('Stopped')
@@ -165,6 +174,16 @@ describe('outcome', () => {
       ]),
     ).toEqual({ status: 'done', problem: '', published: 9 })
     expect(outcome([ev(3, 'status', { status: 'done', live: '' })]).published).toBe(0)
+  })
+})
+
+describe('failure', () => {
+  it('says why the run failed while its last status is a failure, and nothing once it is not', () => {
+    expect(failure([ev(1, 'status', { status: 'started' }), ev(2, 'status', { status: 'error', error: 'clone failed' })])).toBe('clone failed')
+    expect(failure([ev(2, 'status', { status: 'error' })])).toBe('The run hit an error')
+    expect(failure([ev(1, 'status', { status: 'error', error: 'x' }), ev(2, 'status', { status: 'done' })])).toBe('')
+    expect(failure([ev(1, 'status', { status: 'error', error: 'x' }), ev(2, 'status', {}), ev(3, 'log', { status: 'done' })])).toBe('x')
+    expect(failure([])).toBe('')
   })
 })
 

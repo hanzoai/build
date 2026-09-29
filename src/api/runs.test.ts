@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Target } from './call.ts'
 import * as changes from './changes.ts'
-import { approve, followUp, headline, start, unhonoured, type Earlier } from './coding.ts'
+import { approve, followUp, headline, retry, start, unhonoured, type Earlier } from './coding.ts'
 import { environment, environments, read as readEnvironment } from './environment.ts'
 import * as sandbox from './sandbox.ts'
 import * as sessions from './sessions.ts'
@@ -204,6 +204,17 @@ describe('coding', () => {
     expect(followUp(earlier, 'and tests')).toEqual({ repo: undefined, project: undefined, targetId: undefined, base: undefined, prompt: 'and tests\n\nThis follows an earlier run on this codebase: “Add the widget”.', mode: 'build' })
     expect(followUp({ ...earlier, title: '' }, 'and tests').prompt).toBe('and tests\n\nThis follows an earlier run on this codebase.')
     expect(followUp({ ...earlier, title: '' }, '').prompt).toBe('Continue where the earlier run left off.')
+  })
+
+  it('reads the ask out of the title the platform gives a run that made its codebase', () => {
+    expect(headline('new project: talk to me', 'aworring98/talk-to-me')).toBe('talk to me')
+  })
+
+  it('tries a failed run again with the same ask, where and how it ran', () => {
+    const failed: Earlier = { ...earlier, title: 'new project: talk to me', repo: 'aworring98/talk-to-me', base: 'main', mode: 'plan' }
+    expect(retry(failed, '')).toEqual({ repo: 'aworring98/talk-to-me', project: undefined, targetId: undefined, base: 'main', prompt: 'talk to me', mode: 'plan' })
+    expect(retry(failed, ' talk to me, and say hello ').prompt).toBe('talk to me, and say hello')
+    expect(retry({ ...failed, pushed: true }, '')).toMatchObject({ after: 'sess_1', prompt: 'talk to me', mode: 'plan' })
   })
 
   it('builds a plan whose run had no title from the plan alone', () => {

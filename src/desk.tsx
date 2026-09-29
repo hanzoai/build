@@ -9,7 +9,7 @@ import { Button, DropdownMenu, type DropdownMenuProps } from '@hanzo/ui'
 import { PreviewFrame, type PreviewHandle } from '@hanzo/ui/agents'
 import { useRef, useState } from 'react'
 
-import { shell, type ShellLine } from './api/turn.ts'
+import { failure, shell, type ShellLine } from './api/turn.ts'
 import type { Event } from './api/sessions.ts'
 import { Door } from './door.tsx'
 import { Environment } from './environment.tsx'
@@ -74,6 +74,7 @@ export function Desk({
   const tab = picked ?? (mode === 'setup' ? 'environment' : site ? 'browser' : 'terminal')
   const name = repo.split('/').filter(Boolean).pop() || repo
   const lines = shell(events)
+  const failed = failure(events)
   const bleed = BLEED.includes(tab)
 
   return (
@@ -144,7 +145,7 @@ export function Desk({
         {tab === 'git' ? <Git session={id} title={title} live={live} /> : null}
         {tab === 'desktop' ? <Door which="screen" sandbox={sandbox} live={live} session={id} /> : null}
         {tab === 'terminal' ? (
-          <Terminal id={id} sandbox={sandbox} lines={lines} live={live} refused={refused} retry={retry} onRetry={onRetry} />
+          <Terminal id={id} sandbox={sandbox} lines={lines} live={live} failed={failed} refused={refused} retry={retry} onRetry={onRetry} />
         ) : null}
         {tab === 'artifacts' ? (
           <Artifacts repo={repo} branch={branch} mode={mode} project={project} site={site} pr={pr} onEnvironment={() => setTab('environment')} />
@@ -243,6 +244,7 @@ function Terminal({
   sandbox,
   lines,
   live,
+  failed,
   refused,
   retry,
   onRetry,
@@ -251,6 +253,8 @@ function Terminal({
   sandbox: string
   lines: ShellLine[]
   live: boolean
+  /** Why the run failed, as its last status says it, or ''. */
+  failed: string
   refused: string
   retry: string
   onRetry: () => void
@@ -275,7 +279,7 @@ function Terminal({
           </SizableText>
         </XStack>
       </XStack>
-      {showShell ? <Door which="terminal" sandbox={sandbox} live={live} session={`run-${id.replace(/^sess_/, '').slice(0, 12)}`} /> : <Log lines={lines} live={live} refused={refused} retry={retry} onRetry={onRetry} />}
+      {showShell ? <Door which="terminal" sandbox={sandbox} live={live} session={`run-${id.replace(/^sess_/, '').slice(0, 12)}`} /> : <Log lines={lines} live={live} failed={failed} refused={refused} retry={retry} onRetry={onRetry} />}
     </YStack>
   )
 }
@@ -283,12 +287,14 @@ function Terminal({
 function Log({
   lines,
   live,
+  failed,
   refused,
   retry,
   onRetry,
 }: {
   lines: ShellLine[]
   live: boolean
+  failed: string
   refused: string
   retry: string
   onRetry: () => void
@@ -301,7 +307,7 @@ function Log({
         {idle ? (
           <YStack flex={1} items="center" justify="center" gap="$3" py="$8">
             <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
-              {refused || 'This run finished without writing a command.'}
+              {refused || (failed ? `This run stopped before its first command: ${failed}` : 'This run finished without writing a command.')}
             </SizableText>
             {refused ? (
               <Button size="sm" variant="outline" onPress={onRetry}>
