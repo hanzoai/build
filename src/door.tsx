@@ -1,6 +1,7 @@
 /**
  * One door into a run's sandbox — its screen or its shell — framed from cloud's
- * own page with a fresh ticket in its address.
+ * own page with a fresh ticket in its address, while the sandbox runs. A
+ * suspended sandbox is resumed from the pane's bar, never by looking at it.
  *
  * The page says when its socket is up. A page that says it failed, or silence
  * past the deadline, is a failed connection, and Retry mints a new ticket: a
@@ -11,7 +12,7 @@ import { SizableText, YStack } from '@hanzo/gui'
 import { Button } from '@hanzo/ui'
 import { useEffect, useRef, useState } from 'react'
 
-import { door, type Door as Which } from './api/sandbox.ts'
+import { door, type Door as Which, type State as Held } from './api/sandbox.ts'
 import { useTarget } from './host.tsx'
 
 /** What each page signs its messages to the window that frames it with. */
@@ -21,14 +22,18 @@ const DEADLINE = 20_000
 
 type State = 'opening' | 'open' | 'failed'
 
-export function Door({ which, sandbox, live, session }: { which: Which; sandbox: string; live: boolean; session: string }) {
+/**
+ * `held` is where the run's sandbox is in its life, '' until it has been read. Only
+ * a running sandbox has an open door.
+ */
+export function Door({ which, sandbox, held, session }: { which: Which; sandbox: string; held: Held | ''; session: string }) {
   const t = useTarget()
   const frame = useRef<HTMLIFrameElement>(null)
   const [src, setSrc] = useState('')
   const [state, setState] = useState<State>('opening')
   const [why, setWhy] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const up = live && Boolean(sandbox)
+  const up = Boolean(sandbox) && held === 'running'
 
   useEffect(() => {
     if (!up) return
@@ -75,11 +80,17 @@ export function Door({ which, sandbox, live, session }: { which: Which; sandbox:
     }
   }, [src, which])
 
-  if (!live) {
-    return <Shut title="Not running" body={`This run’s ${WHAT[which]} closed when the run stopped.`} />
-  }
-  if (!sandbox) {
+  if (!sandbox || held === '' || held === 'pending') {
     return <Shut title="Starting" body={`The ${WHAT[which]} opens once the run’s sandbox is up.`} />
+  }
+  if (held === 'parked') {
+    return <Shut title="Suspended" body={`This run’s sandbox is suspended with its files kept. Resume it from the bar above to open its ${WHAT[which]}.`} />
+  }
+  if (held === 'gone') {
+    return <Shut title="Ended" body="This run’s sandbox has ended. Its work is on its branch and in its artifacts." />
+  }
+  if (held === 'error') {
+    return <Shut title="Unavailable" body={`This run’s sandbox could not start, so it has no ${WHAT[which]}.`} />
   }
   if (state === 'failed') {
     return (

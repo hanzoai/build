@@ -61,17 +61,19 @@ test('the Files tab reads the sandbox live and the branch, and lists the artifac
   await p.getByRole('button', { name: 'Branch', exact: true }).click()
   await expect(p.getByRole('button', { name: 'Read widget.go' })).toBeVisible()
   await desk(p).getByRole('button', { name: 'Artifacts', exact: true }).click()
+  await expect(desk(p).getByRole('button', { name: 'widget.go' })).toBeVisible()
+  await expect(desk(p).getByRole('button', { name: 'changes.patch' })).toBeVisible()
   await expect(p.getByText('Pull request #7')).toBeVisible()
   await expect(p.getByText('agent/ab12', { exact: true })).toBeVisible()
   await expect(p.getByText('widgets', { exact: true })).toBeVisible()
   await p.screenshot({ path: info.outputPath('artifacts.png') })
 })
 
-test('a finished run’s desktop and shell say they closed', async ({ page: p }) => {
+test('a finished run keeps its sandbox suspended, and its terminal keeps the agent’s log', async ({ page: p }) => {
   await platform(p, 'done')
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
-  await expect(p.getByText('This run’s desktop closed when the run stopped.')).toBeVisible()
+  await expect(desk(p).getByLabel('Sandbox').getByText(/Sandbox suspended · its files are kept until/)).toBeVisible()
+  await expect(desk(p).getByRole('button', { name: 'Resume' })).toBeVisible()
   await tab(p, 'Terminal').click()
   await expect(desk(p).getByRole('button', { name: 'Shell' })).toHaveCount(0)
   await expect(desk(p).getByText('ok  widgets 0.2s')).toBeVisible()

@@ -75,7 +75,7 @@ import { start, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
 import { deployments, name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
-import { outcome, pull, said, who } from './api/turn.ts'
+import { decode, outcome, pull, said, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Merge } from './git.tsx'
@@ -303,12 +303,17 @@ export function Project({ slug }: { slug: string }) {
     () => [
       ...run.events
         .filter((e) => e.kind === 'log' || e.kind === 'tool-call' || e.kind === 'status')
-        .map((e): Line => ({
-          id: `r${e.seq || e.id}`,
-          level: e.kind === 'status' && /error/.test(said(e, run.record?.mode).toLowerCase()) ? 'error' : e.kind === 'tool-call' ? 'info' : 'log',
-          text: said(e, run.record?.mode),
-          source: e.kind === 'status' ? 'run' : who(e.actor),
-        }))
+        .map((e): Line => {
+          // The console is where a run's error is read whole; the chat says it in one plain line.
+          const body = decode(e.payload)
+          const error = e.kind === 'status' && body && typeof body === 'object' && typeof body.error === 'string' ? body.error : ''
+          return {
+            id: `r${e.seq || e.id}`,
+            level: error || (e.kind === 'status' && /error/.test(said(e, run.record?.mode).toLowerCase())) ? 'error' : e.kind === 'tool-call' ? 'info' : 'log',
+            text: error || said(e, run.record?.mode),
+            source: e.kind === 'status' ? 'run' : who(e.actor),
+          }
+        })
         .filter((l) => l.text),
       ...pageLines,
     ],

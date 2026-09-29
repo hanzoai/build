@@ -2,9 +2,11 @@
  * A run's side pane on a stubbed platform (cov-run.ts): its desktop and shell,
  * framed from the sandbox's own pages with a fresh ticket each time — refused,
  * answered with no address, reported failed, asked to retry, silent past the
- * deadline, lied to by other windows, and left before the ticket came back —
- * the agent's log beside the shell, the pane's menu, and what the Environment
- * tab says about a run with nothing to name.
+ * deadline, lied to by other windows, left before the ticket came back, and
+ * asked of a suspended or retired sandbox — the sandbox bar that suspends and
+ * resumes it, the Browser over what it serves, the Artifacts it left, the
+ * agent's log beside the shell, the pane's menu, and what the Environment tab
+ * says about a run with nothing to name.
  */
 import type { Page } from '@playwright/test'
 
@@ -18,15 +20,134 @@ const SCREEN = `/v1/sandbox/${BOX}/screen/ticket`
 const TERM = `/v1/sandbox/${BOX}/terminal/ticket`
 const screen = (p: Page) => p.frameLocator('iframe[title="The run’s desktop"]')
 
-test('the desktop waits for a sandbox, and says it closed once the run stops', async ({ page: p }) => {
-  const { world } = await rig(p, { record: { ...finished(), status: 'running' } })
+test('the desktop waits for a sandbox, opens only while it runs, and says an ended one is gone', async ({ page: p }) => {
+  const { world, sent } = await rig(p, { record: { ...finished(), status: 'running' } })
   await p.goto(`/${SESSION}`)
   await tab(p, 'Desktop').click()
   await expect(desk(p).getByText('Starting', { exact: true })).toBeVisible()
   await expect(desk(p).getByText('The desktop opens once the run’s sandbox is up.')).toBeVisible()
-  world.record.status = 'done'
-  await expect(desk(p).getByText('Not running')).toBeVisible()
-  await expect(desk(p).getByText('This run’s desktop closed when the run stopped.')).toBeVisible()
+  // The run ends and its sandbox parks: looking at it does not wake it.
+  world.record = { ...finished(), sandbox: BOX }
+  world.held = { status: 'parked', expiresAt: 1790726400 }
+  await p.reload()
+  await tab(p, 'Desktop').click()
+  await expect(desk(p).getByText('Suspended', { exact: true })).toBeVisible()
+  await p.evaluate(() => new Promise((r) => setTimeout(r, 500)))
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(0)
+  expect(to(sent, 'POST', SCREEN)).toHaveLength(0)
+  // Resumed from the bar, it opens.
+  await desk(p).getByLabel('Sandbox').getByRole('button', { name: 'Resume' }).click()
+  await expect(screen(p).getByText(/the screen \?ticket=t\d+/)).toBeVisible()
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(1)
+  world.held = { status: 'gone' }
+  await p.reload()
+  await tab(p, 'Desktop').click()
+  await expect(desk(p).getByText('Ended', { exact: true })).toBeVisible()
+})
+
+test('a door asked of a sandbox that stopped as it was asked resumes it once', async ({ page: p }) => {
+  const { sent } = await rig(p, { record: live() })
+  let parked = true
+  await p.route(
+    (u) => u.pathname === SCREEN,
+    (r) => {
+      if (!parked) return r.fallback()
+      parked = false
+      return r.fulfill({ status: 409, json: { detail: 'the sandbox is parked' } })
+    },
+  )
+  await p.goto(`/${SESSION}`)
+  await tab(p, 'Desktop').click()
+  await expect(screen(p).getByText(/the screen \?ticket=t\d+/)).toBeVisible()
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(1)
+})
+
+test('the sandbox bar suspends a kept sandbox and resumes it, and never one a run is working in', async ({ page: p }, info) => {
+  const { world, sent } = await rig(p, { record: live() })
+  await p.goto(`/${SESSION}`)
+  const bar = desk(p).getByLabel('Sandbox')
+  await expect(bar.getByText('Sandbox running')).toBeVisible()
+  await expect(bar.getByRole('button', { name: 'Suspend' })).toHaveCount(0)
+  world.record = { ...finished(), sandbox: BOX }
+  await p.reload()
+  await bar.getByRole('button', { name: 'Suspend' }).click()
+  await expect(bar.getByText(/Sandbox suspended · its files are kept until/)).toBeVisible()
+  await p.screenshot({ path: info.outputPath('suspended.png') })
+  await bar.getByRole('button', { name: 'Resume' }).click()
+  await expect(bar.getByText('Sandbox running')).toBeVisible()
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/pause`).length).toBe(1)
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`).length).toBe(1)
+})
+
+test('the Browser frames what the sandbox serves, opens it again when its sandbox stopped, and in a tab of its own', async ({ page: p }, info) => {
+  const { world, sent } = await rig(p, { record: live() })
+  world.ports = [
+    { port: 3000, host: `sandbox-${BOX}-preview-3000.hanzo.app` },
+    { port: 5173, host: `sandbox-${BOX}-preview-5173.hanzo.app` },
+  ]
+  let served = 0
+  await p.route(/-preview-\d+\.hanzo\.app\//, (r) => {
+    served += 1
+    const says = served === 1 ? `parent.postMessage({ source: 'hanzo-preview', status: 409 }, '*')` : ''
+    return r.fulfill({ contentType: 'text/html', body: `<!doctype html><body><p>the app on ${new URL(r.request().url()).host}</p><script>${says}</script></body>` })
+  })
+  await p.goto(`/${SESSION}`)
+  await tab(p, 'Browser').click()
+  const frame = p.frameLocator(`iframe[title="What the run serves on port 3000"]`)
+  await expect(frame.getByText(`the app on sandbox-${BOX}-preview-3000.hanzo.app`)).toBeVisible()
+  await expect.poll(() => to(sent, 'POST', `/v1/sandbox/${BOX}/preview`).length).toBe(2)
+  await expect(desk(p).locator('iframe[title="What the run serves on port 3000"]')).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups')
+  await desk(p).getByRole('button', { name: 'Port 5173' }).click()
+  await expect(p.frameLocator(`iframe[title="What the run serves on port 5173"]`).getByText(/preview-5173/)).toBeVisible()
+  await p.screenshot({ path: info.outputPath('browser.png') })
+  const opened = p.waitForEvent('popup')
+  await desk(p).getByRole('button', { name: 'Open in a new tab' }).click()
+  await expect.poll(async () => (await opened).url()).toMatch(/^https:\/\/sandbox-.+-preview-5173\.hanzo\.app\//)
+})
+
+test('a preview that keeps saying it cannot serve is not opened again and again', async ({ page: p }) => {
+  const { world, sent } = await rig(p, { record: live() })
+  world.ports = [{ port: 3000, host: `sandbox-${BOX}-preview-3000.hanzo.app` }]
+  await p.route(/-preview-\d+\.hanzo\.app\//, (r) =>
+    r.fulfill({ contentType: 'text/html', body: `<!doctype html><body><script>parent.postMessage({ source: 'hanzo-preview', status: 401 }, '*')</script></body>` }),
+  )
+  await p.goto(`/${SESSION}`)
+  await tab(p, 'Browser').click()
+  await expect(desk(p).getByText('This browser keeps the preview’s cookie out of a frame. Open it in a new tab.')).toBeVisible()
+  await p.evaluate(() => new Promise((r) => setTimeout(r, 1000)))
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/preview`)).toHaveLength(1)
+})
+
+test('the Browser shows where a run published when nothing serves', async ({ page: p }) => {
+  await rig(p, { record: live() })
+  await p.goto(`/${SESSION}`)
+  await tab(p, 'Browser').click()
+  await expect(desk(p).getByText('Nothing is serving yet', { exact: true }).first()).toBeVisible()
+  await expect(desk(p).getByText('When the run starts a server in its sandbox, the page opens here.')).toBeVisible()
+})
+
+test('the Artifacts tab saves what the run left and opens its previews', async ({ page: p }) => {
+  const { world, sent } = await rig(p, { record: live() })
+  world.left = {
+    session: SESSION,
+    saved: '2026-09-29T19:00:00Z',
+    artifacts: [
+      { name: 'src/a.ts', kind: 'file', size: 2048 },
+      { name: 'changes.patch', kind: 'patch', size: 40 },
+      { name: 'preview 3000', kind: 'preview', port: 3000, url: `sandbox-${BOX}-preview-3000.hanzo.app` },
+    ],
+  }
+  await p.route((u) => u.pathname === `/v1/agent/coding/${SESSION}/artifacts/src/a.ts`, (r) => r.fulfill({ contentType: 'text/plain', body: 'export const a = 1\n' }))
+  await p.goto(`/${SESSION}`)
+  await tab(p, 'Artifacts').click()
+  await expect(desk(p).getByText('Changed file · 2.0 KB')).toBeVisible()
+  const saved = p.waitForEvent('download')
+  await desk(p).getByRole('button', { name: 'src/a.ts' }).click()
+  expect((await saved).suggestedFilename()).toBe('a.ts')
+  const opened = p.waitForEvent('popup')
+  await desk(p).getByRole('button', { name: 'preview 3000' }).click()
+  await expect.poll(async () => (await opened).url()).toMatch(/-preview-3000\.hanzo\.app\//)
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/preview`).length).toBe(1)
 })
 
 test('a refused ticket says why, and Retry mints a new one that opens', async ({ page: p }, info) => {
@@ -195,11 +316,10 @@ test('the pane’s menu does what the title’s does, and Details opens the run�
     ['Branch', '—'],
     ['Base', '—'],
     ['Runs on', 'sandbox'],
+    ['Sandbox', '—'],
     ['Mode', 'build'],
   ])
     await expect(desk(p).getByText(label, { exact: true }).locator('..').getByText(value, { exact: true })).toBeVisible()
-  await tab(p, 'Subscriptions').click()
-  await expect(desk(p).getByText('Ask an agent to subscribe to a Slack channel or thread, a pull request, or a timer.')).toBeVisible()
 })
 
 test('the Environment tab names the run’s codebase by its name, and what it runs on', async ({ page: p }) => {

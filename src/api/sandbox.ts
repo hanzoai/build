@@ -1,28 +1,139 @@
 /**
- * A run's sandbox while the run holds it: a door into its screen or its shell,
- * and its working tree as it is right now.
+ * A run's sandbox. It outlives the run: kept after the run ends, parked (its pod
+ * stopped, its disk and working tree kept) while nobody watches, and retired a
+ * day after it parks; a free plan's sandbox is not parked, and ends within the
+ * hour. Resume gives a parked one a pod again under the same id and tree.
  *
- *   POST /v1/sandbox/{id}/{screen|terminal}/ticket  one ticket, spent when the page's socket opens (30 s)
- *   POST /v1/sandbox/read {id, path}               a directory's names, or a file's bytes
+ *   GET  /v1/sandbox/{id}                              its status and when its lease ends
+ *   POST /v1/sandbox/{id}/pause                        park it: stop the pod, keep the disk
+ *   POST /v1/sandbox/{id}/resume                       a pod again, same id and /work
+ *   POST /v1/sandbox/{id}/{screen|terminal}/ticket     one ticket, spent when the page's socket opens (30 s)
+ *   GET  /v1/sandbox/{id}/ports                        what listens in it, each with its preview host
+ *   POST /v1/sandbox/{id}/preview {port}               an address that opens that port in a browser
+ *   POST /v1/sandbox/read {id, path}                   a directory's names, or a file's bytes
  *
- * The door is cloud's own page — noVNC for the screen, xterm for the shell — so
- * the builder frames it and never speaks the socket itself. The sandbox is gone
- * when the run ends, and every call here then answers 404.
+ * A door or a preview asked of a sandbox that stopped as it was asked is 409: it
+ * is resumed, and asked again once.
  */
 import { call, Refusal, seg, type Target } from './call.ts'
 
 export type Door = 'screen' | 'terminal'
 
+/** Where a sandbox is in its life. */
+export type State = 'pending' | 'running' | 'parked' | 'error' | 'gone'
+
+export interface Box {
+  id: string
+  state: State
+  /** When its lease ends, or a parked sandbox is retired; 0 when unknown. Unix ms. */
+  ends: number
+  /** Why it could not come up, with state `error`. */
+  error: string
+}
+
+const STATES: State[] = ['pending', 'running', 'parked', 'error']
+
+function box(raw: unknown, id: string): Box {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  // A parked sandbox is also said to be paused; a status this does not know is not one to open.
+  const state = STATES.find((s) => s === (o.status === 'paused' ? 'parked' : o.status)) ?? 'error'
+  const ends = typeof o.expiresAt === 'number' && o.expiresAt > 0 ? o.expiresAt * 1000 : 0
+  return { id, state, ends, error: typeof o.error === 'string' ? o.error : '' }
+}
+
+/** The sandbox as it stands. One the caller no longer holds is gone. */
+export async function sandbox(t: Target, id: string): Promise<Box> {
+  try {
+    return box(await call(t, 'GET', `/v1/sandbox/${seg(id)}`), id)
+  } catch (e) {
+    if (e instanceof Refusal && e.status === 404) return { id, state: 'gone', ends: 0, error: '' }
+    throw e
+  }
+}
+
+/** Park it: its pod stops, its disk and working tree stay. */
+export async function park(t: Target, id: string): Promise<Box> {
+  return box(await call(t, 'POST', `/v1/sandbox/${seg(id)}/pause`), id)
+}
+
+/** Give it a pod again, under the same id and tree. */
+export async function wake(t: Target, id: string): Promise<Box> {
+  return box(await call(t, 'POST', `/v1/sandbox/${seg(id)}/resume`), id)
+}
+
+/** How long a resumed sandbox is waited on to run. */
+const UP = 90_000
+
+/** Resume it and wait until it runs. */
+async function up(t: Target, id: string): Promise<void> {
+  let b = await wake(t, id)
+  const until = Date.now() + UP
+  while (b.state === 'pending' && Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 1500))
+    b = await sandbox(t, id)
+  }
+  if (b.state !== 'running') throw new Refusal(503, b.error || 'The sandbox did not start again. Try again.')
+}
+
+/** Asks what needs a running sandbox; a parked one is resumed first. */
+async function running<T>(t: Target, id: string, ask: () => Promise<T>): Promise<T> {
+  try {
+    return await ask()
+  } catch (e) {
+    if (!(e instanceof Refusal) || e.status !== 409) throw e
+    await up(t, id)
+    return ask()
+  }
+}
+
 /** A shell's tmux session name: the sandbox reattaches to it when the door opens again. */
 export const NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 
 /** Where to frame one door, with a fresh ticket in its address. */
-export async function door(t: Target, sandbox: string, which: Door, session = ''): Promise<string> {
-  const r = await call<{ url?: unknown }>(t, 'POST', `/v1/sandbox/${seg(sandbox)}/${which}/ticket`)
+export async function door(t: Target, id: string, which: Door, session = ''): Promise<string> {
+  const r = await running(t, id, () => call<{ url?: unknown }>(t, 'POST', `/v1/sandbox/${seg(id)}/${which}/ticket`))
   const path = typeof r?.url === 'string' ? r.url : ''
   if (!path.startsWith('/v1/')) throw new Refusal(502, 'The sandbox answered with no address to open')
   const arg = which === 'terminal' && NAME.test(session) ? `&arg=${session}` : ''
   return `${t.api}${path}${arg}`
+}
+
+export interface Port {
+  port: number
+  host: string
+}
+
+/** What listens in the sandbox, ascending. */
+export async function ports(t: Target, id: string): Promise<Port[]> {
+  const r = await call<{ ports?: unknown }>(t, 'GET', `/v1/sandbox/${seg(id)}/ports`)
+  const list = Array.isArray(r?.ports) ? r.ports : []
+  return list
+    .map((p) => (p && typeof p === 'object' ? (p as Record<string, unknown>) : {}))
+    .filter((p) => typeof p.port === 'number' && p.port > 0 && p.port < 65536)
+    .map((p) => ({
+      port: p.port as number,
+      host: typeof p.host === 'string' ? p.host : '',
+    }))
+}
+
+/**
+ * An address that opens one port in a browser: its own origin, with a single-use
+ * ticket that sets the preview's cookie and lands on its root.
+ */
+export async function preview(t: Target, id: string, port: number): Promise<string> {
+  const r = await running(t, id, () =>
+    call<{ url?: unknown }>(t, 'POST', `/v1/sandbox/${seg(id)}/preview`, {
+      port,
+    }),
+  )
+  let url: URL
+  try {
+    url = new URL(typeof r?.url === 'string' ? r.url : '')
+  } catch {
+    throw new Refusal(502, 'The sandbox answered with no address to open')
+  }
+  if (url.protocol !== 'https:') throw new Refusal(502, 'The sandbox answered with no address to open')
+  return url.href
 }
 
 export interface Node {

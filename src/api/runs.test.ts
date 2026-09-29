@@ -200,8 +200,8 @@ describe('coding', () => {
     expect(headline('  Add the widget ', '')).toBe('Add the widget')
   })
 
-  it('follows up a run with no codebase and nothing kept from where it started', () => {
-    expect(followUp(earlier, 'and tests')).toEqual({ repo: undefined, project: undefined, targetId: undefined, base: undefined, prompt: 'and tests\n\nThis follows an earlier run on this codebase: “Add the widget”.', mode: 'build' })
+  it('follows up a run with no codebase in the sandbox it kept', () => {
+    expect(followUp(earlier, 'and tests')).toEqual({ repo: undefined, project: undefined, targetId: undefined, after: earlier.id, prompt: 'and tests\n\nThis follows an earlier run on this codebase: “Add the widget”.', mode: 'build' })
     expect(followUp({ ...earlier, title: '' }, 'and tests').prompt).toBe('and tests\n\nThis follows an earlier run on this codebase.')
     expect(followUp({ ...earlier, title: '' }, '').prompt).toBe('Continue where the earlier run left off.')
   })
@@ -212,9 +212,9 @@ describe('coding', () => {
 
   it('tries a failed run again with the same ask, where and how it ran', () => {
     const failed: Earlier = { ...earlier, title: 'new project: talk to me', repo: 'aworring98/talk-to-me', base: 'main', mode: 'plan' }
-    expect(retry(failed, '')).toEqual({ repo: 'aworring98/talk-to-me', project: undefined, targetId: undefined, base: 'main', prompt: 'talk to me', mode: 'plan' })
+    expect(retry(failed, '')).toEqual({ repo: 'aworring98/talk-to-me', project: undefined, targetId: undefined, after: 'sess_1', prompt: 'talk to me', mode: 'plan' })
     expect(retry(failed, ' talk to me, and say hello ').prompt).toBe('talk to me, and say hello')
-    expect(retry({ ...failed, pushed: true }, '')).toMatchObject({ after: 'sess_1', prompt: 'talk to me', mode: 'plan' })
+    expect(retry({ ...failed, environment: 'tgt_1' }, '')).toMatchObject({ base: 'main', targetId: 'tgt_1', prompt: 'talk to me', mode: 'plan' })
   })
 
   it('builds a plan whose run had no title from the plan alone', () => {
@@ -223,6 +223,6 @@ describe('coding', () => {
 
   it('starts a run whose answer names nothing but its session', async () => {
     answer(202, { sessionId: 'sess_2', routed: 'yes' })
-    expect(await start(T, { prompt: 'go' })).toEqual({ session: 'sess_2', repo: '', branch: '', project: '', routed: false, target: '' })
+    expect(await start(T, { prompt: 'go' })).toEqual({ session: 'sess_2', repo: '', branch: '', routed: false, target: '' })
   })
 })

@@ -513,6 +513,20 @@ export function run(p: Page, status = 'running') {
       }
     }
     if (path === '/v1/agent/sessions/stream') return { text: '', type: 'text/event-stream' }
+    if (path === `/v1/sandbox/${BOX}`) return { json: { id: BOX, status: status === 'running' ? 'running' : 'parked', expiresAt: 1790726400 } }
+    if (path === `/v1/sandbox/${BOX}/ports`) return { json: { ports: [] } }
+    if (path === `/v1/agent/coding/${SESSION}/artifacts`) {
+      return {
+        json: {
+          session: SESSION,
+          saved: '2026-09-27T10:06:00Z',
+          artifacts: [
+            { name: 'widget.go', kind: 'file', size: 30 },
+            { name: 'changes.patch', kind: 'patch', size: 120 },
+          ],
+        },
+      }
+    }
     if (path === `/v1/sandbox/${BOX}/screen/ticket`) return { status: 201, json: { ticket: 's', expiresIn: 30, url: `/v1/sandbox/${BOX}/screen?ticket=s` } }
     if (path === `/v1/sandbox/${BOX}/terminal/ticket`) return { status: 201, json: { ticket: 't', expiresIn: 30, url: `/v1/sandbox/${BOX}/terminal?ticket=t` } }
     if (path === `/v1/sandbox/${BOX}/screen`) return { text: framed('hanzo-screen', 'the desktop'), type: 'text/html' }
@@ -545,40 +559,18 @@ export function run(p: Page, status = 'running') {
 
 export const NEXT = `sess_${'b'.repeat(32)}`
 
-/** What `dev exec` printed, as the sandbox narrated it. */
+/** One line of the agent's own narration, as the harness streams it. */
+const said = (id: string, item: Record<string, unknown>) => ({ type: 'item.completed', item: { id, ...item } })
+
+/** What the agent narrated for one short turn. */
 const OUT = [
-  'Hanzo Dev v0.6.94',
-  '--------',
-  'workdir: /work/universe',
-  '--------',
-  'user',
-  'Add the widget',
-  'codex',
-  'I will read the widget first.',
-  'exec',
-  `/bin/bash -lc 'sed -n '"'"'1,40p'"'"' widget.go' in /work/universe`,
-  ' succeeded in 4ms:',
-  'package widget',
-  'exec',
-  `/bin/bash -lc 'go test ./...' in /work/universe`,
-  ' exited 1 in 900ms:',
-  'FAIL widgets',
-  'apply patch',
-  'patch: completed',
-  '/work/universe/widget.go',
-  'diff --git a/widget.go b/widget.go',
-  '@@ -1 +1,2 @@',
-  ' package widget',
-  '+func New() {}',
-  'codex',
-  'Added **New** to `widget.go`:',
-  '',
-  '- it returns a widget',
-  '- the tests pass',
-  'tokens used',
-  '1,234',
-  '',
-].join('\n')
+  said('i0', { type: 'reasoning', text: '**Reading** the widget before changing it' }),
+  said('i1', { type: 'agent_message', text: 'I will read the widget first.' }),
+  said('i2', { type: 'command_execution', command: "sed -n '1,40p' widget.go", aggregated_output: 'package widget', exit_code: 0, status: 'completed' }),
+  said('i3', { type: 'command_execution', command: 'go test ./...', aggregated_output: 'FAIL widgets', exit_code: 1, status: 'failed' }),
+  said('i4', { type: 'file_change', changes: [{ path: '/work/widget.go', kind: 'update' }], status: 'completed' }),
+  said('i5', { type: 'agent_message', text: 'Added **New** to `widget.go`:\n\n- it returns a widget\n- the tests pass' }),
+]
 
 export const PLAN = '1. Read `widget.go`\n2. Add **New**'
 
@@ -601,11 +593,10 @@ function events({ mode = 'build', last = { status: 'done', changed: true, branch
     ev(4, 'tool-call', { step: 'clone', message: 'cloning the codebase', status: 'running' }),
     ev(5, 'log', { message: 'Cloning into universe…\n' }),
     ev(6, 'tool-call', { step: 'exit', message: 'exit 0' }),
-    ev(7, 'tool-call', { step: '', message: 'running the task', status: 'running' }),
-    ev(8, 'log', { message: mode === 'plan' ? `codex\n${PLAN}\n` : OUT }),
-    ev(9, 'tool-call', { step: 'exit', message: 'exit 0' }),
+    ev(7, 'message', { role: 'user', text: 'Add the widget' }),
+    ...(mode === 'plan' ? [said('p0', { type: 'agent_message', text: PLAN })] : OUT).map((line, i) => ev(8 + i, 'event', line)),
   ]
-  if (last) list.push(ev(10, 'status', mode === 'plan' ? { status: 'done', mode: 'plan', changed: false, plan: PLAN } : last))
+  if (last) list.push(ev(20, 'status', mode === 'plan' ? { status: 'done', mode: 'plan', changed: false, plan: PLAN } : last))
   return list
 }
 

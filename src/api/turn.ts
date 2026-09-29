@@ -10,22 +10,24 @@
  * Every string here is rendered as TEXT by the transcript. Nothing is HTML.
  *
  * The coding plane's vocabulary (apps/coding): `status` for a lifecycle move
- * (started, routed, done, error, stopped, paused), `tool-call` for a step,
- * `log` for a free line. A person's steering is a `control` {command, message}.
- * A run on a project with a site ends `done` with `live` when it published what
- * it pushed, or `unpublished` saying why it did not.
+ * (started, routed, done, error, stopped, paused), `tool-call` for a step of the
+ * run itself, `event` for one line of the agent's own structured narration (the
+ * harness's JSON stream: its messages, reasoning, commands, edits, tool calls and
+ * plan), and `log` for raw output, which only the Terminal's log shows. A
+ * person's steering is a `control` {command, message}. A run on a project with a
+ * site ends `done` with `live` when it published what it pushed, or `unpublished`
+ * saying why it did not.
  *
- * `cards` is the transcript as it is drawn: the run's steps, and the agent's own
- * output read by what each part is (harness.ts). The output a card shows is what
- * the run's Terminal log already prints; a command's working directory, which is
- * the sandbox's layout, is dropped.
+ * `cards` is the transcript as it is drawn: the run's steps and the agent's
+ * items, never its log.
  */
-import { harness } from './harness.ts'
 import type { Event } from './sessions.ts'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 type Said = Extract<Card, { kind: 'said' }>
+
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
 
 /** The payload as an object. A live frame may carry it as a JSON string. */
 export function decode(payload: unknown): Record<string, unknown> | string | null {
@@ -271,51 +273,100 @@ export type Ran = 'running' | 'done' | 'error' | 'cancelled'
  * One piece of the transcript, drawn by what it is.
  *
  *   said   prose: the agent's messages (markdown), or a person's steering words
+ *   think  the agent's reasoning, folded until opened
  *   shell  a command the agent ran, and what it printed
- *   edit   files the agent changed, with the diff when the harness printed one
- *   read   a file the agent read, drawn as a chip
+ *   edit   files the agent changed; the diff is the run's Git tab
  *   step   a step of the run itself (lease, clone, install, push), or a tool the agent called
+ *   todo   the agent's plan, as a checklist it ticks
  *   note   a lifecycle line: started, pushed, stopped
  *   plan   a plan run's answer, which can be approved into a build
  */
 export type Card =
   | { kind: 'said'; key: string; who: 'person' | 'agent'; text: string }
+  | { kind: 'think'; key: string; text: string }
   | { kind: 'shell'; key: string; command: string; output: string; ran: Ran }
-  | { kind: 'edit'; key: string; files: string[]; patch: string; ran: Ran }
-  | { kind: 'read'; key: string; file: string; ran: Ran }
+  | { kind: 'edit'; key: string; files: string[]; ran: Ran }
   | { kind: 'step'; key: string; name: string; detail: string; output: string; ran: Ran }
+  | { kind: 'todo'; key: string; items: { text: string; done: boolean }[] }
   | { kind: 'note'; key: string; text: string }
   | { kind: 'plan'; key: string; text: string }
-
-/** The platform's own words for the step that starts the agent (apps/coding sandboxrunner.go). */
-const TASK = 'running the task'
 
 /** What the run's own steps are called on a card. */
 const NAMES: Record<string, string> = {
   lease: 'Sandbox',
+  workspace: 'Workspace',
   clone: 'Clone',
+  branch: 'Branch',
   secrets: 'Secrets',
   install: 'Install',
   start: 'Start',
+  skills: 'Skills',
+  artifacts: 'Save artifacts',
   push: 'Push',
-  keep: 'Keep the work',
+  kept: 'Keep the sandbox',
 }
 
-/** Steps another card already says: `leased` finishes the lease, `done` is the final status, `ended` is housekeeping. */
-const QUIET = new Set(['leased', 'done', 'ended'])
+/** Steps another card already says: `leased` finishes the lease, `done` is the final status, `ended` and `exit` are housekeeping. */
+const QUIET = new Set(['leased', 'done', 'ended', 'exit'])
 
 const ranOf = (status: string): Ran => (status === 'ok' || status === 'done' ? 'done' : status === 'error' ? 'error' : 'running')
+
+/** How an agent's item went: in progress, finished, or failed or declined. */
+function itemRan(item: Record<string, unknown>): Ran {
+  switch (str(item.status)) {
+    case 'in_progress':
+      return 'running'
+    case 'failed':
+      return 'error'
+    case 'declined':
+      return 'cancelled'
+  }
+  return typeof item.exit_code === 'number' && item.exit_code !== 0 ? 'error' : 'done'
+}
+
+/** A path in the workspace, without the sandbox's working directory above it. */
+const rel = (path: string): string => path.replace(/^\/work\//, '')
+
+/**
+ * One item of the agent's narration as a card, or null when it says nothing a
+ * person reads. `key` is the card's, kept as the item is updated.
+ */
+function item(it: Record<string, unknown>, key: string): Card | null {
+  switch (str(it.type)) {
+    case 'agent_message':
+      return str(it.text) ? { kind: 'said', key, who: 'agent', text: str(it.text) } : null
+    case 'reasoning':
+      return str(it.text) ? { kind: 'think', key, text: str(it.text) } : null
+    case 'command_execution':
+      return { kind: 'shell', key, command: str(it.command), output: str(it.aggregated_output), ran: itemRan(it) }
+    case 'file_change': {
+      const changes = Array.isArray(it.changes) ? it.changes : []
+      return { kind: 'edit', key, files: changes.map((c) => rel(str(obj(c).path))).filter(Boolean), ran: itemRan(it) }
+    }
+    case 'mcp_tool_call':
+      return { kind: 'step', key, name: str(it.tool) || 'Tool', detail: str(it.server), output: '', ran: itemRan(it) }
+    case 'web_search':
+      return { kind: 'step', key, name: 'Search', detail: str(it.query), output: '', ran: 'done' }
+    case 'todo_list': {
+      const items = Array.isArray(it.items) ? it.items : []
+      return { kind: 'todo', key, items: items.map((x) => ({ text: str(obj(x).text), done: obj(x).completed === true })).filter((x) => x.text) }
+    }
+  }
+  return null
+}
 
 /**
  * A run's events, as the cards its transcript draws. `mode` is the run's, from
  * its record: a plan's final status is its plan, and nothing else draws a plan.
  *
- * The run's own steps arrive as `tool-call` {step, message, status}; each
- * command in the sandbox narrates its output as `log` {message} chunks and ends
- * with `tool-call` {step: "exit"}. The output after the step that starts the
- * agent is the agent's, read by its harness's grammar (harness.ts); after any
- * other step it is that step's. Once the agent has exited, the commands the run
- * runs before it pushes commit its work.
+ * The run's own steps arrive as `tool-call` {step, message, status}. The agent
+ * narrates itself as `event` lines: an item is started, updated and completed
+ * under one id, and its card is drawn once and kept current. Ids count from zero
+ * in each agent process, so an id is the agent's within the thread it started. A
+ * turn that fails is one plain line with the detail folded beneath it, drawn once
+ * however many times it is said; an `error` on its own is the agent retrying and
+ * is drawn only if the turn then fails. The final status carries the agent's
+ * answer, drawn once. `log` is never drawn here.
  */
 export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = ''): Card[] {
   const out: Card[] = []
@@ -323,25 +374,22 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
   let n = 0
   const mint = () => `${seq}.${n++}`
   let phase: Extract<Card, { kind: 'step' }> | null = null
-  let agent: ReturnType<typeof harness> | null = null
-  // The agent has run and exited: output with no step of its own is the run's.
-  let exited = false
-  const settle = () => {
-    agent?.end()
-    agent = null
-    phase = null
-  }
+  const items = new Map<string, number>()
+  let thread = 0
+  let said = ''
   const answers = new Set<string>()
-  // What the person said in an event of its own. The harness prints their ask
-  // too (harness.ts); an event saying the same words is the one drawn. Words
-  // that steered the run are not its ask.
-  const told = new Set<Said>()
   const steered = new Set<Said>()
   const person = (text: string) => {
     const c: Said = { kind: 'said', key: mint(), who: 'person', text }
     out.push(c)
-    told.add(c)
     return c
+  }
+  const failures = new Set<string>()
+  const failed = (message: string) => {
+    if (failures.has(message)) return
+    failures.add(message)
+    out.push({ kind: 'note', key: mint(), text: plain(message) })
+    if (message) out.push({ kind: 'step', key: mint(), name: 'Error', detail: '', output: message, ran: 'error' })
   }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     seq = e.seq
@@ -349,18 +397,22 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
     const body = decode(e.payload)
     const b = body && typeof body === 'object' ? body : null
     switch (e.kind) {
-      case 'log': {
-        const text = typeof body === 'string' ? body : str(b?.message) || str(b?.text)
-        if (!text) break
-        if (agent) agent.feed(text)
-        else if (phase) phase.output += text
-        else if (exited) {
-          phase = { kind: 'step', key: mint(), name: 'Commit', detail: 'committing the work', output: text, ran: 'running' }
-          out.push(phase)
-        } else {
-          agent = harness(out, mint)
-          agent.feed(text)
-        }
+      case 'event': {
+        if (!b) break
+        const type = str(b.type)
+        if (type === 'thread.started') thread++
+        if (type === 'error') said = str(b.message)
+        if (type === 'turn.failed') failed(str(obj(b.error).message) || said)
+        if (type !== 'item.started' && type !== 'item.updated' && type !== 'item.completed') break
+        const it = obj(b.item)
+        const id = str(it.id) && `${thread}:${str(it.id)}`
+        const at = id ? items.get(id) : undefined
+        const card = item(it, at === undefined ? mint() : out[at]!.key)
+        if (!card) break
+        if (at === undefined) {
+          if (id) items.set(id, out.length)
+          out.push(card)
+        } else out[at] = card
         break
       }
       case 'tool-call': {
@@ -369,16 +421,7 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
         const message = str(b.message)
         if (step === 'exit') {
           // One command in the sandbox ended: `exit 0`, `exit 1`, or `ended: …`.
-          if (agent) {
-            settle()
-            exited = true
-          } else if (phase && phase.ran === 'running') phase.ran = message === 'exit 0' ? 'done' : 'error'
-          break
-        }
-        if (message === TASK) {
-          settle()
-          exited = false
-          agent = harness(out, mint)
+          if (phase && phase.ran === 'running') phase.ran = message === 'exit 0' ? 'done' : 'error'
           break
         }
         if (step === 'leased') {
@@ -392,23 +435,31 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
           if (message) phase.detail = message
           break
         }
-        settle()
         phase = { kind: 'step', key: mint(), name, detail: message, output: '', ran: ranOf(str(b.status)) }
         out.push(phase)
         break
       }
       case 'status': {
-        settle()
+        phase = null
         if (!b) break
-        const text = str(b.plan)
-        if (str(b.status) === 'done' && (mode === 'plan' || mode === 'setup') && text) {
+        const done = str(b.status) === 'done'
+        const text = str(b.plan) || str(b.answer)
+        if (done && (mode === 'plan' || mode === 'setup') && text) {
           answers.add(text.trim())
           out.push(mode === 'plan' ? { kind: 'plan', key: mint(), text } : { kind: 'said', key: mint(), who: 'agent', text })
           break
         }
+        const answer = str(b.answer).trim()
+        if (answer) {
+          answers.add(answer)
+          out.push({ kind: 'said', key: mint(), who: 'agent', text: answer })
+        }
+        if (str(b.status) === 'error') {
+          failed(str(b.error))
+          break
+        }
         const line = status(b, mode)
         if (line) out.push({ kind: 'note', key: mint(), text: line })
-        if (str(b.status) === 'error' && str(b.error)) out.push({ kind: 'step', key: mint(), name: 'Error', detail: '', output: str(b.error), ran: 'error' })
         break
       }
       case 'control': {
@@ -430,21 +481,18 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
       }
     }
   }
-  settle()
-  // The answer the final status carries is also the agent's last message: draw it once, as the answer.
-  let kept = false
+  // The answer a status carries is also the agent's last message: each is drawn once, as the answer.
+  const kept = new Set<string>()
   for (let i = out.length - 1; i >= 0; i--) {
     const c = out[i]!
     if (!((c.kind === 'said' && c.who === 'agent') || c.kind === 'plan') || !answers.has(c.text.trim())) continue
-    if (kept) out.splice(i, 1)
-    kept = true
+    if (kept.has(c.text.trim())) out.splice(i, 1)
+    kept.add(c.text.trim())
   }
-  const heard = new Set([...told].map((c) => c.text.trim()))
-  const drawn = out.filter((c) => !(c.kind === 'said' && c.who === 'person' && !told.has(c) && heard.has(c.text.trim())))
   // The ask opens the conversation, ahead of the steps that set the run up.
-  const ask = drawn.findIndex((c) => c.kind === 'said' && c.who === 'person' && !steered.has(c))
-  if (ask > 0) drawn.unshift(...drawn.splice(ask, 1))
-  return drawn
+  const ask = out.findIndex((c) => c.kind === 'said' && c.who === 'person' && !steered.has(c))
+  if (ask > 0) out.unshift(...out.splice(ask, 1))
+  return out
 }
 
 /** The plan a plan run answered with, from its final status, or ''. */

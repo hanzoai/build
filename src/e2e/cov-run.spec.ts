@@ -11,16 +11,14 @@ import { browser, ev, finished, NEXT, ORG, PR, rig, SESSION, to } from './cov-ru
 
 const transcript = (p: Page) => p.getByLabel('Transcript')
 
-/** What `dev exec` printed for one short turn: the ask, a reply, and the end. */
-const TURN = ['user', 'Add the widget', '', 'with a test', 'codex', 'Added **New** to `widget.go`.', 'tokens used', '12', ''].join('\n')
-
+/** One short turn: the ask, the agent's reply, and the end that carries it as the answer. */
 const told = () => [
   ev('status', { status: 'started', branch: 'agent/ab12' }),
   ev('tool-call', { step: 'clone', message: 'cloning the codebase', status: 'ok' }),
-  ev('tool-call', { message: 'running the task', status: 'running' }),
-  ev('log', { message: TURN }),
-  ev('tool-call', { step: 'exit', message: 'exit 0' }),
-  ev('status', { status: 'done', changed: true, branch: 'agent/ab12' }),
+  ev('message', { role: 'user', text: 'Add the widget\n\nwith a test' }),
+  ev('event', { type: 'item.completed', item: { id: 'm0', type: 'agent_message', text: 'Added **New** to `widget.go`.' } }),
+  ev('log', { message: 'tokens used\n12\n' }),
+  ev('status', { status: 'done', changed: true, branch: 'agent/ab12', answer: 'Added **New** to `widget.go`.' }),
 ]
 
 test('the ask opens the conversation as the person’s own message, once', async ({ page: p }, info) => {

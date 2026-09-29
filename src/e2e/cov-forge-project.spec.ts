@@ -216,7 +216,7 @@ test.describe('the workspace', () => {
     // Another run's steps, and its console with the error it hit.
     // The conversation runs oldest first: the stopped run, the one that erred, then the open one.
     await chat.getByText('Show steps').nth(1).click()
-    await expect(chat.getByText('The build hit an error in cart.js')).toBeVisible()
+    await expect(chat.getByText('The run stopped with an error. Try again, or follow up with what to change.').first()).toBeVisible()
     const dock = page.getByRole('region', { name: 'Console' })
     if (await dock.getByRole('button', { name: 'Expand console' }).isVisible()) await dock.getByRole('button', { name: 'Expand console' }).click()
     await expect(dock.locator('[data-level="error"]')).toContainText('The build hit an error in cart.js')

@@ -1,7 +1,9 @@
 /**
- * Starting a coding run.
+ * Starting a coding run, and what it left.
  *
- *   POST /v1/agent/coding → 202 {sessionId, repo, branch, project, routed, targetId}
+ *   POST /v1/agent/coding → 202 {sessionId, repo, branch, routed, targetId}
+ *   GET  /v1/agent/coding/{session}/artifacts          {session, saved, artifacts}
+ *   GET  /v1/agent/coding/{session}/artifacts/{name}   one stored artifact's bytes
  *
  * 202 is ADMITTED, not finished: the answer is the session the run narrates
  * itself in, and the session stream is how it is watched.
@@ -22,8 +24,11 @@
  * `setup` is a plan's shape put to one question: how this codebase is installed,
  * started and checked. Its agent may install and run things in its sandbox, and
  * its answer is kept as the codebase's proposed environment (environment.ts).
+ *
+ * A sandbox run keeps its sandbox after it ends, so `after` continues the earlier
+ * run in that same sandbox and working tree, resumed if it parked.
  */
-import { call, Refusal, type Target } from './call.ts'
+import { call, headers, reason, Refusal, seg, type Target } from './call.ts'
 
 export type Mode = 'build' | 'plan' | 'setup'
 
@@ -59,7 +64,6 @@ export interface Run {
   session: string
   repo: string
   branch: string
-  project: string
   routed: boolean
   target: string
 }
@@ -90,7 +94,6 @@ export async function start(t: Target, ask: Ask): Promise<Run> {
     session: s('sessionId'),
     repo: s('repo'),
     branch: s('branch'),
-    project: s('project'),
     routed: r?.routed === true,
     target: s('targetId'),
   }
@@ -125,11 +128,11 @@ export function headline(title: string, repo: string): string {
 }
 
 /**
- * The same codebase, place and project as the earlier run, starting from its
- * branch when it pushed one. `after` IS that branch as the base (BaseOf,
- * apps/coding coding.go), so it is named only then: a plan, a setup, or a build
- * that changed nothing pushed no branch to clone, and its follow-up starts where
- * it did.
+ * The same codebase, place and project as the earlier run. In the sandbox it goes
+ * on in the earlier run's own sandbox and working tree (`after`), whatever that
+ * run pushed. A machine keeps no sandbox: there `after` is the branch the earlier
+ * run pushed, named only when it pushed one, and otherwise the follow-up starts
+ * where it did.
  */
 function from(e: Earlier): Omit<Ask, 'prompt'> {
   const place = e.environment && e.environment !== 'sandbox' ? e.environment : undefined
@@ -137,7 +140,7 @@ function from(e: Earlier): Omit<Ask, 'prompt'> {
     repo: e.repo || undefined,
     project: e.project || undefined,
     targetId: place,
-    ...(e.pushed ? { after: e.id } : { base: e.base || undefined }),
+    ...(!place || e.pushed ? { after: e.id } : { base: e.base || undefined }),
   }
 }
 
@@ -177,4 +180,53 @@ export function approve(e: Earlier, plan: string): Ask {
  */
 export function retry(e: Earlier, ask: string): Ask {
   return { ...from(e), prompt: ask.trim() || headline(e.title, e.repo), mode: modeOf(e.mode) }
+}
+
+/** What a run left: a changed file, the whole change as a patch, or a link. */
+export type Kind = 'file' | 'patch' | 'preview' | 'pull' | 'deploy'
+
+export interface Artifact {
+  /** A changed file's path in the workspace, `changes.patch`, or a link's name. */
+  name: string
+  kind: Kind
+  /** A stored artifact's length in bytes; 0 for a link. */
+  size: number
+  /** Where a link points: a preview's host, a pull request, a deployment. */
+  url: string
+  /** A preview's port in the run's sandbox. */
+  port: number
+}
+
+export interface Left {
+  /** When the artifacts were saved, or '' while the run has saved none. */
+  saved: string
+  artifacts: Artifact[]
+}
+
+const KINDS: Kind[] = ['file', 'patch', 'preview', 'pull', 'deploy']
+
+/** What a run left, kept after its sandbox is gone. */
+export async function artifacts(t: Target, session: string): Promise<Left> {
+  const r = (await call<Record<string, unknown>>(t, 'GET', `/v1/agent/coding/${seg(session)}/artifacts`)) ?? {}
+  const list = Array.isArray(r.artifacts) ? r.artifacts : []
+  return {
+    saved: typeof r.saved === 'string' ? r.saved : '',
+    artifacts: list.flatMap((raw) => {
+      const a = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+      const kind = KINDS.find((k) => k === a.kind)
+      const name = typeof a.name === 'string' ? a.name : ''
+      if (!kind || !name) return []
+      return [{ name, kind, size: typeof a.size === 'number' ? a.size : 0, url: typeof a.url === 'string' ? a.url : '', port: typeof a.port === 'number' ? a.port : 0 }]
+    }),
+  }
+}
+
+/** One stored artifact's bytes. */
+export async function artifact(t: Target, session: string, name: string): Promise<Blob> {
+  const parts = name.split('/')
+  if (parts.some((p) => p === '' || p === '.' || p === '..')) throw new Refusal(400, 'That artifact has no name to fetch it by')
+  const res = await fetch(`${t.api}/v1/agent/coding/${seg(session)}/artifacts/${parts.map(seg).join('/')}`, { headers: headers(t), cache: 'no-store' })
+  if (!res.ok) throw new Refusal(res.status, (await reason(res)) || `The artifact answered ${res.status}`)
+  // Bytes, whatever type the store named: a page is saved, never opened here.
+  return new Blob([await res.arrayBuffer()], { type: 'application/octet-stream' })
 }

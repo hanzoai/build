@@ -188,7 +188,7 @@ describe('coding', () => {
     const seen = answer(202, { sessionId: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', project: 'cloud', routed: false, targetId: '' })
     const run = await coding.start(T, { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main' })
     expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/coding', body: { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main', desktop: true } })
-    expect(run).toEqual({ session: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', project: 'cloud', routed: false, target: '' })
+    expect(run).toEqual({ session: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', routed: false, target: '' })
   })
 
   it('sends a plan to the sandbox with its model and effort', async () => {

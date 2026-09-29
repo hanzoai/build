@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { blocks, spans } from '../markdown.ts'
 import type { Target } from './call.ts'
 import { approve, followUp, headline, type Earlier } from './coding.ts'
-import { reads, sections, unwrap, words } from './harness.ts'
 import * as sessions from './sessions.ts'
 import { answer, cards, settled, steps, type Card } from './turn.ts'
 
@@ -99,10 +98,16 @@ describe('a follow-up', () => {
     expect(ask.prompt).toBe('now add tests\n\nThis follows an earlier run on this codebase: “Add the widget”. Its work so far is on this branch; build on it.')
   })
 
-  it('starts where the run started when it pushed nothing — `after` would name a branch that does not exist', () => {
+  it('goes on in the sandbox the run kept, whether it pushed or not', () => {
     const ask = followUp({ ...EARLIER, pushed: false, mode: 'plan' }, 'go on')
+    expect(ask).toMatchObject({ after: 'sess_1', mode: 'plan' })
+    expect(ask.base).toBeUndefined()
+  })
+
+  it('on a machine, which keeps no sandbox, starts where the run started when it pushed nothing', () => {
+    const ask = followUp({ ...EARLIER, environment: 'tgt_1', pushed: false }, 'go on')
     expect(ask.after).toBeUndefined()
-    expect(ask).toMatchObject({ base: 'main', mode: 'plan' })
+    expect(ask).toMatchObject({ base: 'main', targetId: 'tgt_1' })
   })
 
   it('goes on with nothing said as the platform does: the ask, and carry on', () => {
@@ -115,10 +120,9 @@ describe('a follow-up', () => {
     expect(followUp({ ...EARLIER, environment: 'tgt_1', project: 'widgets' }, 'x')).toMatchObject({ targetId: 'tgt_1', project: 'widgets' })
   })
 
-  it('builds an approved plan from where the plan read, titled by its ask', () => {
+  it('builds an approved plan in the sandbox the plan read, titled by its ask', () => {
     const ask = approve({ ...EARLIER, mode: 'plan', pushed: false }, '1. Read it\n2. Change it\n')
-    expect(ask).toMatchObject({ mode: 'build', base: 'main', repo: 'hanzoai/universe' })
-    expect(ask.after).toBeUndefined()
+    expect(ask).toMatchObject({ mode: 'build', after: 'sess_1', repo: 'hanzoai/universe' })
     expect(ask.prompt).toBe('Add the widget\n\nCarry out this plan:\n\n1. Read it\n2. Change it')
   })
 
@@ -128,146 +132,86 @@ describe('a follow-up', () => {
   })
 })
 
-describe('the harness grammar', () => {
-  it('splits a command as a shell does', () => {
-    expect(words(`/bin/bash -lc 'sed -n '"'"'1,40p'"'"' src/a.ts'`)).toEqual(['/bin/bash', '-lc', "sed -n '1,40p' src/a.ts"])
-    expect(words('echo "a \\"b\\"" c\\ d')).toEqual(['echo', 'a "b"', 'c d'])
-  })
-
-  it('takes a command out of the shell it ran in', () => {
-    expect(unwrap(`bash -lc 'ls -la'`)).toBe('ls -la')
-    expect(unwrap('go test ./...')).toBe('go test ./...')
-  })
-
-  it('knows a command that only reads one file', () => {
-    expect(reads(`/bin/bash -lc 'sed -n '"'"'1,200p'"'"' src/main.go'`)).toBe('src/main.go')
-    expect(reads(`bash -lc 'cat README.md'`)).toBe('README.md')
-    expect(reads('head -n 40 a.ts')).toBe('a.ts')
-    expect(reads('nl -ba a.ts')).toBe('a.ts')
-    expect(reads(`bash -lc 'cat a.ts | wc -l'`)).toBe('')
-    expect(reads('cat a.ts b.ts')).toBe('')
-    expect(reads('rg foo')).toBe('')
-  })
-
-  it('splits a diff by the file each section changes', () => {
-    const d = sections('diff --git a/a.ts b/a.ts\nindex 1..2\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-x\n+y\ndiff --git a/b.ts b/b.ts\n@@ -0,0 +1 @@\n+z')
-    expect([...d.entries()]).toEqual([
-      ['a.ts', '@@ -1 +1 @@\n-x\n+y'],
-      ['b.ts', '@@ -0,0 +1 @@\n+z'],
-    ])
-  })
-})
-
 const ev = (seq: number, kind: string, payload: unknown) => ({ id: `e${seq}`, sessionId: 's', seq, kind, actor: 'a', payload, createdAt: '' })
 
-/** What `dev exec` printed for one short turn, as the sandbox narrated it. */
-const OUT = [
-  'Hanzo Dev v0.6.94',
-  '--------',
-  'workdir: /work/universe',
-  'model: zen6-coder',
-  '--------',
-  'user',
-  'Add the widget',
-  'codex',
-  'I will look at the code first.',
-  'exec',
-  `/bin/bash -lc 'sed -n '"'"'1,40p'"'"' widget.go' in /work/universe`,
-  ' succeeded in 4ms:',
-  'package widget',
-  'exec',
-  `/bin/bash -lc 'go test ./...' in /work/universe`,
-  ' exited 1 in 900ms:',
-  'FAIL widgets',
-  'apply patch',
-  'patch: completed',
-  '/work/universe/widget.go',
-  'diff --git a/widget.go b/widget.go',
-  '@@ -1 +1,2 @@',
-  ' package widget',
-  '+func New() {}',
-  'mcp: run/ask_user started',
-  'mcp: run/ask_user (completed)',
-  'web search: go table tests',
-  'codex',
-  'Added **New**. See `widget.go`.',
-  'tokens used',
-  '1,234',
-  'Added **New**. See `widget.go`.',
-  '',
-].join('\n')
+/** One line of the agent's own narration, as the harness streams it. */
+const line = (type: string, item?: Record<string, unknown>) => ({ type, ...(item ? { item } : {}) })
 
 describe('cards', () => {
   const run = [
-    ev(1, 'status', { status: 'started', branch: 'agent/ab12' }),
-    ev(2, 'tool-call', { step: 'lease', message: 'leasing a dev sandbox', status: 'running' }),
-    ev(3, 'tool-call', { step: 'leased', message: 'sandbox m_1 (dev)', status: 'running' }),
-    ev(4, 'tool-call', { step: 'clone', message: 'cloning the codebase', status: 'running' }),
-    ev(5, 'log', { message: 'Cloning into universe…\n' }),
-    ev(6, 'tool-call', { step: 'exit', message: 'exit 0' }),
-    ev(7, 'tool-call', { step: '', message: 'running the task', status: 'running' }),
-    // Cut by a clock, mid-line, as the sandbox cuts it.
-    ev(8, 'log', { message: OUT.slice(0, 200) }),
-    ev(9, 'control', { command: 'message', message: 'use table tests' }),
-    ev(10, 'log', { message: OUT.slice(200) }),
-    ev(11, 'tool-call', { step: 'exit', message: 'exit 0' }),
-    // The run commits what the agent left before it pushes.
-    ev(12, 'log', { message: '1a2b3c4\n' }),
-    ev(13, 'tool-call', { step: 'exit', message: 'exit 0' }),
-    ev(14, 'log', { message: ' widget.go | 1 +\n' }),
-    ev(15, 'tool-call', { step: 'exit', message: 'exit 0' }),
-    ev(16, 'tool-call', { step: 'push', message: 'pushing agent/ab12', status: 'running' }),
-    ev(17, 'tool-call', { step: 'done', message: 'finished', status: 'ok' }),
-    ev(18, 'status', { status: 'done', changed: true, branch: 'agent/ab12' }),
+    ev(1, 'message', { role: 'user', text: 'Add the widget' }),
+    ev(2, 'status', { status: 'started', branch: 'agent/ab12' }),
+    ev(3, 'tool-call', { step: 'lease', message: 'leasing a dev sandbox', status: 'running' }),
+    ev(4, 'tool-call', { step: 'leased', message: 'sandbox m_1 (dev)', status: 'running' }),
+    ev(5, 'tool-call', { step: 'clone', message: 'cloning the codebase', status: 'running' }),
+    ev(6, 'log', { message: 'Cloning into universe…\n' }),
+    ev(7, 'tool-call', { step: 'exit', message: 'exit 0' }),
+    ev(8, 'event', line('thread.started')),
+    ev(9, 'event', line('item.completed', { id: 'i0', type: 'reasoning', text: '**Reading** the widget' })),
+    ev(10, 'event', line('item.completed', { id: 'i1', type: 'agent_message', text: 'I will look at the code first.' })),
+    ev(11, 'event', line('item.started', { id: 'i2', type: 'command_execution', command: 'go test ./...', aggregated_output: '', status: 'in_progress' })),
+    ev(12, 'log', { message: 'FAIL widgets\n' }),
+    ev(13, 'control', { command: 'message', message: 'use table tests' }),
+    ev(14, 'event', line('item.completed', { id: 'i2', type: 'command_execution', command: 'go test ./...', aggregated_output: 'FAIL widgets', exit_code: 1, status: 'failed' })),
+    ev(15, 'event', line('item.completed', { id: 'i3', type: 'file_change', changes: [{ path: '/work/widget.go', kind: 'update' }], status: 'completed' })),
+    ev(16, 'event', line('item.started', { id: 'i4', type: 'todo_list', items: [{ text: 'Read', completed: true }, { text: 'Test', completed: false }] })),
+    ev(17, 'event', line('item.completed', { id: 'i5', type: 'mcp_tool_call', server: 'run', tool: 'ask_user', status: 'completed' })),
+    ev(18, 'event', line('item.completed', { id: 'i6', type: 'web_search', query: 'go table tests' })),
+    ev(19, 'event', line('item.completed', { id: 'i7', type: 'agent_message', text: 'Added **New**. See `widget.go`.' })),
+    ev(20, 'event', line('turn.completed')),
+    ev(21, 'tool-call', { step: 'push', message: 'pushing agent/ab12', status: 'running' }),
+    ev(22, 'tool-call', { step: 'done', message: 'finished', status: 'ok' }),
+    ev(23, 'status', { status: 'done', changed: true, branch: 'agent/ab12', answer: 'Added **New**. See `widget.go`.' }),
   ]
   const got = cards(run, 'build')
   const of = <K extends Card['kind']>(k: K) => got.filter((c): c is Extract<Card, { kind: K }> => c.kind === k)
 
-  it('draws the run’s own steps, each with its output', () => {
-    expect(of('step').slice(0, 2).map((s) => [s.name, s.ran, s.output])).toEqual([
-      ['Sandbox', 'done', ''],
-      ['Clone', 'done', 'Cloning into universe…\n'],
+  it('draws the run’s own steps and the agent’s tools, and never its log', () => {
+    expect(of('step').map((s) => [s.name, s.detail, s.ran])).toEqual([
+      ['Sandbox', 'leasing a dev sandbox', 'done'],
+      ['Clone', 'cloning the codebase', 'done'],
+      ['ask_user', 'run', 'done'],
+      ['Search', 'go table tests', 'done'],
+      ['Push', 'pushing agent/ab12', 'running'],
     ])
-    expect(of('step').map((s) => s.name)).toEqual(['Sandbox', 'Clone', 'run/ask_user', 'Web search', 'Commit', 'Push'])
-    expect(of('step').find((s) => s.name === 'Commit')).toMatchObject({ output: '1a2b3c4\n widget.go | 1 +\n', ran: 'done' })
+    expect(JSON.stringify(got)).not.toContain('Cloning into')
   })
 
-  it('reads the agent’s output by what each part is, and drops the sandbox’s directory', () => {
-    expect(of('read')).toMatchObject([{ file: 'widget.go', ran: 'done' }])
+  it('draws each item once, as it last stood', () => {
     expect(of('shell')).toMatchObject([{ command: 'go test ./...', output: 'FAIL widgets', ran: 'error' }])
-    expect(of('edit')).toMatchObject([{ files: ['widget.go'], patch: '@@ -1 +1,2 @@\n package widget\n+func New() {}', ran: 'done' }])
-    expect(JSON.stringify(got)).not.toContain('/work/universe')
-    expect(JSON.stringify(got)).not.toContain('zen6-coder')
+    expect(of('edit')).toMatchObject([{ files: ['widget.go'], ran: 'done' }])
+    expect(of('think')).toMatchObject([{ text: '**Reading** the widget' }])
+    expect(of('todo')).toMatchObject([{ items: [{ text: 'Read', done: true }, { text: 'Test', done: false }] }])
+    expect(JSON.stringify(got)).not.toContain('/work/')
   })
 
-  it('draws what the agent said once, and a person’s words as theirs', () => {
+  it('draws what the agent said once, the answer last, and a person’s words as theirs', () => {
     const said = of('said')
     expect(said.filter((s) => s.who === 'agent').map((s) => s.text)).toEqual(['I will look at the code first.', 'Added **New**. See `widget.go`.'])
-    // The ask opens the transcript, then the person's steering.
+    expect(got.findLast((c) => c.kind === 'said')).toMatchObject({ text: 'Added **New**. See `widget.go`.' })
     expect(said.filter((s) => s.who === 'person').map((s) => s.text)).toEqual(['Add the widget', 'use table tests'])
+    expect(got[0]).toMatchObject({ kind: 'said', who: 'person', text: 'Add the widget' })
     expect(of('note').map((n) => n.text)).toEqual(['Started on agent/ab12', 'Pushed agent/ab12'])
   })
 
-  it('reads the same output the same way however it was cut', () => {
-    const whole = cards([ev(7, 'tool-call', { message: 'running the task' }), ev(8, 'log', { message: OUT })], 'build')
-    const bytes = cards([ev(7, 'tool-call', { message: 'running the task' }), ...OUT.split('').map((c, i) => ev(8 + i, 'log', { message: c }))], 'build')
-    const strip = (cs: Card[]) => cs.map(({ key: _, ...c }) => c)
-    expect(strip(bytes)).toEqual(strip(whole))
+  it('says a failed turn in one plain line, its detail folded beneath', () => {
+    const failed = cards([ev(1, 'event', { type: 'turn.failed', error: { message: 'unexpected status 503 Service Unavailable: this model is temporarily unavailable' } })])
+    expect(failed.map((c) => c.kind)).toEqual(['note', 'step'])
+    expect(failed[0]).toMatchObject({ text: 'The model did not answer. Try again in a moment, or pick another model.' })
+    expect(failed[1]).toMatchObject({ name: 'Error', ran: 'error' })
   })
 
   it('draws a plan run’s answer as its plan, once', () => {
     const plan = '1. Read widget.go\n2. Add New'
     const got = cards(
       [
-        ev(1, 'tool-call', { message: 'running the task' }),
-        ev(2, 'log', { message: `codex\n${plan}\n` }),
-        ev(3, 'tool-call', { step: 'exit', message: 'exit 0' }),
-        ev(4, 'status', { status: 'done', mode: 'plan', changed: false, plan }),
+        ev(1, 'event', line('item.completed', { id: 'i0', type: 'agent_message', text: plan })),
+        ev(2, 'status', { status: 'done', mode: 'plan', changed: false, plan, answer: plan }),
       ],
       'plan',
     )
     expect(got.map((c) => c.kind)).toEqual(['plan'])
-    expect(answer([ev(4, 'status', { status: 'done', plan })])).toBe(plan)
+    expect(answer([ev(2, 'status', { status: 'done', plan })])).toBe(plan)
   })
 
   it('never draws a plan for a run whose record is not a plan', () => {

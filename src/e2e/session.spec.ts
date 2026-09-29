@@ -13,18 +13,18 @@ import { landing, NEXT, PLAN, session as platform } from './stubs.ts'
 const posted = (sent: Sent[], path: string) => sent.filter((s) => s.method === 'POST' && s.path === path)
 const transcript = (p: Page) => p.getByLabel('Transcript')
 
-test('a run’s transcript draws what the agent said, ran, read and changed', async ({ page: p }, info) => {
+test('a run’s transcript draws what the agent said, thought, ran and changed', async ({ page: p }, info) => {
   await platform(p)
   await p.goto(`/${SESSION}`)
   const t = transcript(p)
   await expect(t.getByText('I will read the widget first.')).toBeVisible()
-  // The read is a chip; the command is a card that opens onto its output.
-  await expect(t.getByLabel('Read widget.go')).toBeVisible()
+  // Its reasoning is folded; a command is a card that opens onto its output.
+  await expect(t.getByLabel('Thought').getByText('Reading the widget before changing it')).toBeVisible()
   await expect(t.getByText('FAIL widgets')).toHaveCount(0)
   await t.getByText('go test ./...').first().click()
   await expect(t.getByText(/FAIL widgets/)).toBeVisible()
   await t.getByText('Edited', { exact: true }).click()
-  await expect(t.getByText('+func New() {}')).toBeVisible()
+  await expect(t.getByText(/widget\.go\s+The diff is in the run’s Git tab/)).toBeVisible()
   // The agent's markdown: bold, code and a list, as text.
   await expect(t.getByText('New', { exact: true })).toBeVisible()
   await expect(t.getByText('the tests pass')).toBeVisible()
@@ -91,7 +91,7 @@ test('a paused machine run is resumed where it runs', async ({ page: p }) => {
   expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
 })
 
-test('a plan is approved into a build of it', async ({ page: p }, info) => {
+test('a plan is approved into a build of it, in the sandbox the plan read', async ({ page: p }, info) => {
   const sent = await platform(p, { mode: 'plan' })
   await p.goto(`/${SESSION}`)
   const plan = p.getByLabel('Plan', { exact: true })
@@ -100,8 +100,8 @@ test('a plan is approved into a build of it', async ({ page: p }, info) => {
   await plan.getByRole('button', { name: 'Approve and build' }).click()
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   const body = posted(sent, '/v1/agent/coding')[0]?.body as Record<string, unknown>
-  expect(body).toMatchObject({ mode: 'build', base: 'main', repo: `hanzoai/${REPO}` })
-  expect(body.after).toBeUndefined()
+  expect(body).toMatchObject({ mode: 'build', after: SESSION, repo: `hanzoai/${REPO}` })
+  expect(body.base).toBeUndefined()
   expect(body.prompt).toBe(`Add the widget\n\nCarry out this plan:\n\n${PLAN}`)
 })
 

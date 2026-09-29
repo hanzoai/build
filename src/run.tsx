@@ -30,7 +30,7 @@ import { Composer } from '@hanzo/ui/chat'
 import { ChipSelect } from '@hanzo/ui/product'
 import { useEffect, useMemo, useState } from 'react'
 
-import { approve, followUp, retry, start, type Ask, type Earlier } from './api/coding.ts'
+import { approve, followUp, headline, retry, start, type Ask, type Earlier } from './api/coding.ts'
 import { ENSO, label as named, models } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
@@ -75,7 +75,13 @@ export function Run({ id }: { id: string }) {
   const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
 
   const mode = record?.mode ?? ''
-  const shown = useMemo(() => cards(events, mode), [events, mode])
+  // A run that narrated no ask of its own opens with the one its title records, once it has said anything.
+  const shown = useMemo(() => {
+    const drawn = cards(events, mode)
+    const ask = record ? headline(record.title, record.repo) : ''
+    const opens = drawn[0]?.kind === 'said' && drawn[0].who === 'person'
+    return ask && drawn.length && !opens ? [{ kind: 'said' as const, key: 'ask', who: 'person' as const, text: ask }, ...drawn] : drawn
+  }, [events, mode, record])
   const end = outcome(events)
   const plan = useMemo(() => steps(events), [events])
   const kept = useMemo(() => settled(events), [events])
@@ -168,12 +174,15 @@ export function Run({ id }: { id: string }) {
   /** A new run's ask with the model and effort the foot shows. The router is the platform's default, so it is not named. */
   const tuned = (a: Ask): Ask => ({ ...a, model: model === ENSO ? undefined : model, effort: pace.id })
 
-  /** A new run from this one's work, opened. A paused run it carries on is let go once the new one is admitted. */
+  /**
+   * A new run from this one's work, opened. A paused run it carries on is let go
+   * first: the new run works in the same sandbox, where nothing else may be at work.
+   */
   const carry = async (said: string, how: 'follow' | 'approve' | 'retry' = 'follow'): Promise<string> => {
     if (!earlier) throw new Error('This run is still being read')
+    if (paused) await stop(t, id, 'Continued in a follow-up run').catch(() => undefined)
     const ask = how === 'approve' ? approve(earlier, said) : how === 'retry' ? retry(earlier, said) : followUp(earlier, said)
     const run = await start(t, tuned(ask))
-    if (paused) await stop(t, id, 'Continued in a follow-up run').catch(() => undefined)
     setDraft('')
     host.go(run.session)
     return ''

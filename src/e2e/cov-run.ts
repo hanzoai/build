@@ -1,7 +1,8 @@
 /**
  * One run on a stubbed platform the cov-run specs change as they go: its record
  * and events, what its side pane reads (the environment, the pushed changes,
- * the branch and the sandbox), and what each write answers. The page re-reads
+ * the branch, the sandbox, what it serves and what the run left), and what each
+ * write answers. The page re-reads
  * the run each time its stream reconnects, about every second, so a change to
  * `world` shows up the way the platform's own would.
  *
@@ -30,6 +31,12 @@ export interface World {
   blob: Record<string, Record<string, unknown>>
   /** A path in the sandbox, by path. */
   box: Record<string, Record<string, unknown>>
+  /** The sandbox as GET /v1/sandbox/{id} answers it; a pause parks it and a resume runs it. */
+  held: Record<string, unknown>
+  /** What listens in the sandbox. */
+  ports: { port: number; host: string }[]
+  /** What the run left. */
+  left: Record<string, unknown>
   /** What the list of runs answers. */
   list: Record<string, unknown>
   /** What each door's page does once framed: the script it runs. */
@@ -75,6 +82,9 @@ export async function rig(p: Page, shape: Partial<World> = {}, over: Answer = ()
     tree: { '': [] },
     blob: {},
     box: { '': { path: '/work', dir: true, entries: [] } },
+    held: { status: 'running', expiresAt: 1790726400 },
+    ports: [],
+    left: { session: SESSION, saved: '', artifacts: [] },
     list: { sessions: [], next: '' },
     page: { screen: tells('hanzo-screen', { ready: true }), terminal: tells('hanzo-term', { ready: true }) },
     ...shape,
@@ -119,6 +129,18 @@ export async function rig(p: Page, shape: Partial<World> = {}, over: Answer = ()
       if (path === '/v1/sandbox/read') {
         const at = world.box[(body as { path: string }).path]
         return at ? { json: at } : { status: 404, json: { detail: 'No such path in the sandbox' } }
+      }
+      if (path === `/v1/agent/coding/${SESSION}/artifacts`) return { json: world.left }
+      const held = /^\/v1\/sandbox\/([^/]+)(\/pause|\/resume|\/ports|\/preview)?$/.exec(path)
+      if (held && held[1] !== 'read') {
+        if (held[2] === '/pause') world.held = { ...world.held, status: 'parked' }
+        if (held[2] === '/resume') world.held = { ...world.held, status: 'running' }
+        if (held[2] === '/ports') return { json: { ports: world.ports } }
+        if (held[2] === '/preview') {
+          const port = (body as { port: number }).port
+          return { status: 201, json: { url: `https://sandbox-${held[1]}-preview-${port}.hanzo.app/_hanzo/enter?ticket=p${sent.filter((x) => x.path === path).length}`, port, expiresIn: 30 } }
+        }
+        return world.held.status === 'gone' ? { status: 404, json: { detail: 'not found' } } : { json: { id: held[1], ...world.held } }
       }
       const ticket = /^\/v1\/sandbox\/([^/]+)\/(screen|terminal)\/ticket$/.exec(path)
       if (ticket) return { status: 201, json: { ticket: 't', expiresIn: 30, url: `/v1/sandbox/${ticket[1]}/${ticket[2]}?ticket=t${sent.filter((x) => x.path === path).length}` } }

@@ -565,7 +565,8 @@ test.describe('a host that draws its own rail', () => {
 const ev = (id: string, seq: number, kind: string, payload: unknown, sessionId = SESSION) => ({ id, sessionId, seq, kind, actor: `${ORG}/dave`, payload, createdAt: '' })
 
 /** What the agent said, as the sandbox narrates it. */
-const said = (text: string) => ({ message: `codex\n${text}\n` })
+/** What the agent said, as one line of its narration. */
+const said = (text: string) => ({ type: 'item.completed', item: { id: text, type: 'agent_message', text } })
 
 const DETAIL = {
   id: SESSION,
@@ -578,7 +579,7 @@ const DETAIL = {
   branch: 'agent/ab12',
   environment: 'sandbox',
   mode: 'build',
-  recentEvents: [ev('e1', 1, 'status', { status: 'started', branch: 'agent/ab12' }), ev('e2', 2, 'log', said('Reading the widget first.'))],
+  recentEvents: [ev('e1', 1, 'status', { status: 'started', branch: 'agent/ab12' }), ev('e2', 2, 'event', said('Reading the widget first.'))],
 }
 
 test.describe('one run, read and followed', () => {
@@ -615,9 +616,9 @@ test.describe('one run, read and followed', () => {
   test('the feed adds this run’s turns and record, and nothing from the runs under it', async ({ page }, info) => {
     const { reads } = followed(page, {
       feed: [
-        frame('event', ev('c1', 1, 'log', said('Noise from a sub-agent.'), CHILD)) +
+        frame('event', ev('c1', 1, 'event', said('Noise from a sub-agent.'), CHILD)) +
           frame('session', { id: CHILD, status: 'error', title: 'A sub-agent' }) +
-          frame('event', ev('e3', 3, 'log', said('Live from the feed.'))) +
+          frame('event', ev('e3', 3, 'event', said('Live from the feed.'))) +
           // A frame from before the run had a title, a branch or a mode keeps the ones the record has.
           frame('session', { ...DETAIL, recentEvents: undefined, title: '', branch: '', pr: '', mode: '' }),
         frame('session', { ...DETAIL, recentEvents: undefined, status: 'done', title: 'Widget added', branch: 'agent/ab13', pr: 'https://git.hanzo.ai/hanzoai/universe/pulls/9' }),
@@ -688,7 +689,7 @@ test('the markdown an agent writes is drawn as text: headings, emphasis, links, 
     '  - nested',
   ].join('\n')
   await signIn(page, ({ path }) => {
-    if (path === `/v1/agent/sessions/${SESSION}`) return { json: { ...DETAIL, status: 'done', recentEvents: [ev('e1', 1, 'log', said(md))] } }
+    if (path === `/v1/agent/sessions/${SESSION}`) return { json: { ...DETAIL, status: 'done', recentEvents: [ev('e1', 1, 'event', said(md))] } }
     if (path === '/v1/agent/sessions/stream') return stream('')
     return undefined
   })

@@ -1,19 +1,22 @@
 /**
  * A run's Files tab: its working tree, live from the sandbox while the run holds
  * one — every edit the agent has made, committed or not — and its branch on the
- * forge otherwise. And its Artifacts tab: what the run produced — its published
- * site, its pull request, its branch, its environment proposal and its project.
+ * forge otherwise. And its Artifacts tab: what the run left — every file it added
+ * or changed and the whole change as a patch, kept after its sandbox is gone; its
+ * previews, pull request and deployments — then its published site, its branch,
+ * its environment proposal and its project.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ExternalLink, File, Folder, Globe, GitBranch, GitPullRequest, Layers, Settings2 } from '@hanzogui/lucide-icons-2'
+import { Download, ExternalLink, File, FileDiff, Folder, Globe, GitBranch, GitPullRequest, Layers, MonitorPlay, Rocket, Settings2 } from '@hanzogui/lucide-icons-2'
 import { useState, type ReactNode } from 'react'
 
 import { blob, tree } from './api/changes.ts'
+import { artifact, artifacts, type Artifact } from './api/coding.ts'
 import type { Blob, Entry } from './api/git.ts'
-import { read as look, type Node } from './api/sandbox.ts'
+import { preview, read as look, type Node } from './api/sandbox.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
-import { Out } from './out.tsx'
+import { away, Out } from './out.tsx'
 
 type Source = 'live' | 'branch'
 
@@ -33,8 +36,9 @@ export function Files({
   live: boolean
 }) {
   const reachable = live && Boolean(sandbox)
-  const [source, setSource] = useState<Source>(reachable ? 'live' : 'branch')
-  const from: Source = reachable ? source : 'branch'
+  // Live once the sandbox is reachable, unless the branch was picked.
+  const [source, setSource] = useState<Source | null>(null)
+  const from: Source = reachable ? (source ?? 'live') : 'branch'
 
   return (
     <YStack gap="$3">
@@ -216,7 +220,21 @@ function Listing({
   )
 }
 
+/** A stored artifact's size, as a person reads it. */
+const size = (n: number): string => (n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(1)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`)
+
+/** What each kind of artifact is drawn with, and says it is. */
+const KIND: Record<Artifact['kind'], { icon: ReactNode; note: (a: Artifact) => string }> = {
+  file: { icon: <File size={16} />, note: (a) => `Changed file · ${size(a.size)}` },
+  patch: { icon: <FileDiff size={16} />, note: (a) => `The whole change as a patch · ${size(a.size)}` },
+  preview: { icon: <MonitorPlay size={16} />, note: (a) => `What the run served on port ${a.port}` },
+  pull: { icon: <GitPullRequest size={16} />, note: () => 'Pull request' },
+  deploy: { icon: <Rocket size={16} />, note: () => 'Deployment' },
+}
+
 export function Artifacts({
+  session,
+  sandbox,
   repo,
   branch,
   mode,
@@ -225,6 +243,9 @@ export function Artifacts({
   pr,
   onEnvironment,
 }: {
+  session: string
+  /** The run's sandbox, which serves its previews while it is kept. */
+  sandbox: string
   repo: string
   branch: string
   mode: string
@@ -235,43 +256,84 @@ export function Artifacts({
   onEnvironment: () => void
 }) {
   const host = useHost()
-  const items: { key: string; icon: ReactNode; title: string; note: string; href?: string; onPress?: () => void }[] = []
+  const t = useTarget()
+  const left = useRead(host.person ? () => artifacts(t, session) : null, { saved: '', artifacts: [] }, [t, session, host.person])
+  const [note, setNote] = useState('')
+
+  // Bytes come with the person's bearer, so a stored artifact is fetched, then saved.
+  const save = async (a: Artifact) => {
+    try {
+      const url = URL.createObjectURL(await artifact(t, session, a.name))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = a.name.split('/').pop() || a.name
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch (e) {
+      setNote((e as Error).message)
+    }
+  }
+  // A preview is opened with a fresh ticket, in a tab of its own.
+  const open = (a: Artifact) => away(preview(t, sandbox, a.port)).catch((e: Error) => setNote(e.message))
+
+  const items: { key: string; icon: ReactNode; title: string; note: string; href?: string; onPress?: () => void; action?: ReactNode }[] = []
+  for (const a of left.value.artifacts) {
+    const stored = a.kind === 'file' || a.kind === 'patch'
+    const link = a.kind === 'pull' || a.kind === 'deploy'
+    if ((a.kind === 'preview' && !sandbox) || (link && !/^https:\/\//.test(a.url))) continue
+    items.push({
+      key: `${a.kind}:${a.name}`,
+      icon: KIND[a.kind].icon,
+      title: link ? a.url.replace(/^https:\/\//, '') : a.name,
+      note: KIND[a.kind].note(a),
+      href: link ? a.url : undefined,
+      onPress: stored ? () => void save(a) : a.kind === 'preview' ? () => void open(a) : undefined,
+      action: stored ? <Download size={14} /> : a.kind === 'preview' ? <ExternalLink size={14} /> : undefined,
+    })
+  }
   if (site) items.push({ key: 'site', icon: <Globe size={16} />, title: site.replace(/^https:\/\//, ''), note: 'Where this run is published', href: site })
   if (pr.href) items.push({ key: 'pr', icon: <GitPullRequest size={16} />, title: `Pull request ${pr.label}`, note: 'Opened on the forge', href: pr.href })
   if (branch) items.push({ key: 'branch', icon: <GitBranch size={16} />, title: branch, note: repo ? `The branch this run pushes to in ${repo}` : 'The branch this run pushes to' })
   if (mode === 'setup') items.push({ key: 'environment', icon: <Settings2 size={16} />, title: 'Environment proposal', note: 'The install and start scripts this run found', onPress: onEnvironment })
   if (project) items.push({ key: 'project', icon: <Layers size={16} />, title: project, note: 'The project this run builds', onPress: () => host.go(project) })
 
-  if (!items.length) return <Soft>This run has produced no artifacts yet.</Soft>
+  if (!items.length) return <Soft>{left.error?.message || (left.loading ? 'Reading what this run left…' : 'This run has produced no artifacts yet.')}</Soft>
   return (
-    <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-      {items.map((a, i) => {
-        const row = (
-          <XStack items="center" gap="$3" px="$3" py="$2.5" borderTopWidth={i ? 1 : 0} borderColor="$borderColor" hoverStyle={a.href || a.onPress ? { bg: '$hover' } : undefined}>
-            {a.icon}
-            <YStack flex={1} minW={0} style={{ textAlign: 'left' }}>
-              <SizableText size="$2" color="$ink" numberOfLines={1}>
-                {a.title}
-              </SizableText>
-              <SizableText size="$1" color="$soft" numberOfLines={1}>
-                {a.note}
-              </SizableText>
+    <YStack gap="$2">
+      {note ? (
+        <SizableText size="$1" color="$soft" role="status">
+          {note}
+        </SizableText>
+      ) : null}
+      <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
+        {items.map((a, i) => {
+          const row = (
+            <XStack items="center" gap="$3" px="$3" py="$2.5" borderTopWidth={i ? 1 : 0} borderColor="$borderColor" hoverStyle={a.href || a.onPress ? { bg: '$hover' } : undefined}>
+              {a.icon}
+              <YStack flex={1} minW={0} style={{ textAlign: 'left' }}>
+                <SizableText size="$2" color="$ink" numberOfLines={1}>
+                  {a.title}
+                </SizableText>
+                <SizableText size="$1" color="$soft" numberOfLines={1}>
+                  {a.note}
+                </SizableText>
+              </YStack>
+              {a.action ?? (a.href ? <ExternalLink size={14} /> : null)}
+            </XStack>
+          )
+          return a.href ? (
+            <Out key={a.key} href={a.href} label={a.title}>
+              <YStack width="100%">{row}</YStack>
+            </Out>
+          ) : a.onPress ? (
+            <YStack key={a.key} render="button" aria-label={a.title} onPress={a.onPress}>
+              {row}
             </YStack>
-            {a.href ? <ExternalLink size={14} /> : null}
-          </XStack>
-        )
-        return a.href ? (
-          <Out key={a.key} href={a.href} label={a.title}>
-            <YStack width="100%">{row}</YStack>
-          </Out>
-        ) : a.onPress ? (
-          <YStack key={a.key} render="button" aria-label={a.title} onPress={a.onPress}>
-            {row}
-          </YStack>
-        ) : (
-          <YStack key={a.key}>{row}</YStack>
-        )
-      })}
+          ) : (
+            <YStack key={a.key}>{row}</YStack>
+          )
+        })}
+      </YStack>
     </YStack>
   )
 }

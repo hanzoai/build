@@ -246,8 +246,34 @@ describe('cards', () => {
     expect(cards([ev(1, 'tool-call', { step: 'exit', message: 'exit 0' })])).toEqual([])
   })
 
-  it('reads a bare log line as the agent’s, and drops an empty one', () => {
-    expect(bare(cards([ev(1, 'log', 'codex\nhi\n'), ev(2, 'log', { text: 'there\n' }), ev(3, 'log', {})]))).toEqual([{ kind: 'said', who: 'agent', text: 'hi\nthere' }])
+  it('never draws a log line: raw output is the Terminal’s', () => {
+    expect(cards([ev(1, 'log', 'codex\nhi\n'), ev(2, 'log', { text: 'there\n' }), ev(3, 'log', {})])).toEqual([])
+  })
+
+  it('keeps each agent process’s items apart, though their ids start again', () => {
+    const msg = (seq: number, text: string) => ev(seq, 'event', { type: 'item.completed', item: { id: 'item_0', type: 'agent_message', text } })
+    const got = cards([ev(1, 'event', { type: 'thread.started' }), msg(2, 'first'), ev(3, 'control', { command: 'message', message: 'go on' }), ev(4, 'event', { type: 'thread.started' }), msg(5, 'second')])
+    expect(bare(got).map((c) => (c.kind === 'said' ? c.text : c.kind))).toEqual(['first', 'go on', 'second'])
+  })
+
+  it('draws an error the agent retried past as nothing, and a failed turn once', () => {
+    const retried = cards([ev(1, 'event', { type: 'error', message: 'Reconnecting… 1/5' }), ev(2, 'event', { type: 'item.completed', item: { id: 'a', type: 'agent_message', text: 'done' } })])
+    expect(bare(retried).map((c) => c.kind)).toEqual(['said'])
+    const failed = cards([
+      ev(1, 'event', { type: 'error', message: 'stream disconnected - retries exhausted' }),
+      ev(2, 'event', { type: 'turn.failed', error: {} }),
+      ev(3, 'status', { status: 'error', error: 'stream disconnected - retries exhausted' }),
+    ])
+    expect(bare(failed).map((c) => c.kind)).toEqual(['note', 'step'])
+  })
+
+  it('draws each answer once, whichever status carried it', () => {
+    const got = cards([ev(1, 'status', { status: 'paused', answer: 'A1' }), ev(2, 'status', { status: 'done', answer: 'A2' })])
+    expect(bare(got).filter((c) => c.kind === 'said').map((c) => (c.kind === 'said' ? c.text : ''))).toEqual(['A1', 'A2'])
+  })
+
+  it('draws nothing for a line of narration it cannot read', () => {
+    expect(cards([ev(1, 'event', 'prose'), ev(2, 'event', { type: 'item.completed', item: { type: 'unknown' } }), ev(3, 'event', { type: 'turn.completed' })])).toEqual([])
   })
 
   it('draws a setup run’s answer as what the agent said, once', () => {
@@ -270,20 +296,17 @@ describe('cards', () => {
     ])
   })
 
-  it('draws the person’s ask once: from their own message when there is one, else from the harness', () => {
-    const task = (seq: number, words: string) => [ev(seq, 'tool-call', { message: 'running the task' }), ev(seq + 1, 'log', { message: `user\n${words}\ncodex\nOn it.\n` })]
-    const heard = cards([ev(1, 'message', { role: 'user', text: 'Add the widget' }), ...task(2, 'Add the widget')])
-    expect(bare(heard).map((c) => (c.kind === 'said' ? `${c.who}: ${c.text}` : c.kind))).toEqual(['person: Add the widget', 'agent: On it.'])
-    const steered = cards([...task(1, 'Add the widget'), ev(3, 'control', { command: 'message', message: 'and tests' }), ...task(4, 'and tests')])
-    expect(bare(steered).map((c) => (c.kind === 'said' ? `${c.who}: ${c.text}` : c.kind))).toEqual(['person: Add the widget', 'agent: On it.', 'person: and tests', 'agent: On it.'])
+  it('draws the person’s ask once, and each steer where it was said', () => {
+    const on = (seq: number) => ev(seq, 'event', { type: 'item.completed', item: { id: `i${seq}`, type: 'agent_message', text: 'On it.' } })
+    const got = cards([ev(1, 'message', { role: 'user', text: 'Add the widget' }), on(2), ev(3, 'control', { command: 'message', message: 'and tests' }), on(4)])
+    expect(bare(got).map((c) => (c.kind === 'said' ? `${c.who}: ${c.text}` : c.kind))).toEqual(['person: Add the widget', 'agent: On it.', 'person: and tests', 'agent: On it.'])
   })
 
   it('opens with the ask, ahead of the steps that set the run up, and leaves a steer where it was said', () => {
     const asked = cards([
       ev(1, 'status', { status: 'started' }),
       ev(2, 'tool-call', { step: 'clone', status: 'ok' }),
-      ev(3, 'tool-call', { message: 'running the task' }),
-      ev(4, 'log', { message: 'user\nAdd the widget\n' }),
+      ev(3, 'message', { role: 'user', text: 'Add the widget' }),
     ])
     expect(bare(asked).map((c) => c.kind + (c.kind === 'said' ? `:${c.who}` : ''))).toEqual(['said:person', 'note', 'step'])
     const steered = cards([ev(1, 'status', { status: 'started' }), ev(2, 'control', { command: 'message', message: 'faster' })])
