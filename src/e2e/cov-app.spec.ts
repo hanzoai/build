@@ -370,7 +370,7 @@ test.describe('a host that draws its own rail', () => {
     await runs(page)
     await page.goto(`${HOST}?label=Dev`)
     const surface = await page.evaluate((at) => import(at).then((m: object) => Object.keys(m).sort()), '/src/index.ts')
-    expect(surface).toEqual(['Builder', 'DOTS', 'DevSection', 'HostProvider', 'SESSION', 'SLUG', 'Slack', 'Who', 'administers', 'nav', 'path', 'route', 'useSessions', 'useWho'])
+    expect(surface).toEqual(['Builder', 'DOTS', 'DevSection', 'Grip', 'HostProvider', 'SESSION', 'SLUG', 'Slack', 'Who', 'administers', 'nav', 'path', 'route', 'useSessions', 'useWho'])
 
     const r = rail(page)
     await expect(r.getByText('Dev', { exact: true })).toBeVisible()
@@ -381,6 +381,44 @@ test.describe('a host that draws its own rail', () => {
     await expect(row(page, 'Untitled run').locator('[data-status]')).toHaveAttribute('data-status', 'idle')
     await expect(row(page, 'New run')).toHaveAttribute('aria-current', 'page')
     await page.screenshot({ path: info.outputPath('host-rail.png') })
+  })
+
+  test('the host sizes its rail with the builder’s edge, and a pull past its floor puts the rail away', async ({ page }) => {
+    await runs(page)
+    await page.goto(`${HOST}?label=Dev`)
+    const edge = page.getByRole('separator', { name: 'Resize the rail' })
+    await expect(edge).toHaveAttribute('aria-valuenow', '264')
+    await expect(edge).toHaveAttribute('aria-valuemin', '200')
+    await expect(edge).toHaveAttribute('aria-valuemax', '480')
+    const width = () => rail(page).evaluate((el) => Math.round(el.getBoundingClientRect().width))
+    await edge.focus()
+    await edge.press('ArrowRight')
+    await edge.press('Shift+ArrowRight')
+    await expect(edge).toHaveAttribute('aria-valuenow', '304')
+    expect(await width()).toBe(304)
+    await edge.press('End')
+    await expect(edge).toHaveAttribute('aria-valuenow', '480')
+    await edge.dblclick()
+    await expect(edge).toHaveAttribute('aria-valuenow', '264')
+    // Keyed at the floor, it holds; one step past it, the rail is put away.
+    await edge.press('Home')
+    await expect(edge).toHaveAttribute('aria-valuenow', '200')
+    await edge.press('ArrowLeft')
+    await expect(rail(page)).toHaveCount(0)
+    await page.getByRole('button', { name: 'Show the rail' }).click()
+    await expect(rail(page)).toBeVisible()
+
+    // Dragged: it follows the pointer, and a deliberate pull past the floor puts it away.
+    const e = (await edge.boundingBox())!
+    await page.mouse.move(e.x + e.width / 2, 300)
+    await page.mouse.down()
+    await page.mouse.move(e.x + e.width / 2 + 40, 300, { steps: 4 })
+    await expect.poll(width).toBe(240)
+    await page.mouse.move(e.x + e.width / 2 - 20, 300, { steps: 4 })
+    await expect.poll(width).toBe(200)
+    await page.mouse.move(e.x + e.width / 2 - 140, 300, { steps: 4 })
+    await page.mouse.up()
+    await expect(rail(page)).toHaveCount(0)
   })
 
   test('every row moves the builder through the host, and says which one is open', async ({ page }) => {

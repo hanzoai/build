@@ -468,7 +468,12 @@ test.describe('the workspace', () => {
     await expect(page.getByText('This project has no repository yet. Its first run creates one.')).toBeVisible()
     await page.getByRole('tab', { name: 'Layers' }).click()
     await expect(page.getByText(/^Layers are read through the preview bridge/)).toBeVisible()
+    // The preview's own controls are beside it: reloaded, a project with nothing deployed says so still, and has no page to open.
+    await expect(page.getByRole('button', { name: 'Reload the preview' })).toBeHidden()
+    await page.getByRole('tab', { name: 'Preview' }).click()
     await page.getByRole('button', { name: 'Reload the preview' }).click()
+    await expect(page.getByText('Nothing deployed yet')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Open in a new tab' })).toHaveCount(0)
     await page.getByRole('button', { name: 'Share' }).click()
     await expect(page.getByText(`Copied ${new URL('/blog', baseURL).href}`)).toBeVisible()
     await page.getByRole('button', { name: 'All runs' }).click()
@@ -532,6 +537,197 @@ test.describe('the workspace', () => {
     await expect(box(page)).toBeHidden()
     await page.getByRole('tab', { name: 'Chat' }).click()
     await expect(box(page)).toBeVisible()
+  })
+})
+
+/** A box on the page, or a failure naming what was not drawn. */
+async function drawn(page: Page, selector: string) {
+  const b = await page.locator(selector).first().boundingBox({ timeout: 5000 })
+  if (!b) throw new Error(`${selector} is not drawn`)
+  return b
+}
+
+/** The chat's width, the work's, and the framed page's, as drawn. */
+async function measured(page: Page) {
+  const [chat, work, frame, iframe] = await Promise.all([
+    drawn(page, '[data-slot="workspace-chat"]'),
+    drawn(page, '[data-slot="workspace-main"]'),
+    drawn(page, '[data-slot="preview-frame"]'),
+    drawn(page, 'iframe[title="Shop preview"]'),
+  ])
+  return { chat, work, frame, iframe }
+}
+
+test.describe('the split and the preview', () => {
+  test('the edge between the chat and the work sizes the chat: dragged, keyed, kept across a reload, and reset by a double-click', async ({ page }, info) => {
+    await studio(page)
+    await page.goto('/shop')
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
+    const edge = page.getByRole('separator', { name: 'Resize the chat' })
+    await expect(edge).toHaveAttribute('aria-orientation', 'vertical')
+    await expect(edge).toHaveAttribute('aria-valuenow', '360')
+    await expect(edge).toHaveAttribute('aria-valuemin', '300')
+    await expect(edge).toHaveAttribute('aria-valuemax', '640')
+    const before = await measured(page)
+    expect(before.chat.width).toBe(360)
+
+    // Dragged 120px to the right, across the framed page: the chat takes it, and the page gives it up.
+    const e = (await edge.boundingBox())!
+    await page.mouse.move(e.x + e.width / 2, 400)
+    await page.mouse.down()
+    for (let x = 10; x <= 120; x += 10) await page.mouse.move(e.x + e.width / 2 + x, 400)
+    await page.mouse.up()
+    await expect(edge).toHaveAttribute('aria-valuenow', '480')
+    const after = await measured(page)
+    expect(after.chat.width).toBe(480)
+    expect(after.work.x - before.work.x).toBe(120)
+    expect(before.work.width - after.work.width).toBe(120)
+    // The framed page fills the work, beside the chat and under the bar, however wide.
+    expect(after.frame.x).toBe(after.work.x)
+    expect(after.frame.width).toBe(after.work.width)
+    expect(after.iframe.width).toBeGreaterThan(after.frame.width - 4)
+    await page.screenshot({ path: info.outputPath('split-dragged.png') })
+
+    // Kept across a load.
+    await page.reload()
+    await expect(page.getByRole('separator', { name: 'Resize the chat' })).toHaveAttribute('aria-valuenow', '480')
+    expect((await drawn(page, '[data-slot="workspace-chat"]')).width).toBe(480)
+
+    // The keys a separator answers: 8px a step, 32 with Shift, the floor and the ceiling.
+    await edge.focus()
+    await edge.press('ArrowLeft')
+    await edge.press('ArrowLeft')
+    await expect(edge).toHaveAttribute('aria-valuenow', '464')
+    await edge.press('Shift+ArrowRight')
+    await expect(edge).toHaveAttribute('aria-valuenow', '496')
+    await edge.press('Home')
+    await expect(edge).toHaveAttribute('aria-valuenow', '300')
+    await edge.press('ArrowLeft')
+    await expect(edge).toHaveAttribute('aria-valuenow', '300')
+    await edge.press('End')
+    await expect(edge).toHaveAttribute('aria-valuenow', '640')
+    expect((await drawn(page, '[data-slot="workspace-chat"]')).width).toBe(640)
+
+    // A drag past either bound stops at it.
+    const far = (await edge.boundingBox())!
+    await page.mouse.move(far.x + far.width / 2, 400)
+    await page.mouse.down()
+    await page.mouse.move(far.x - 600, 400, { steps: 8 })
+    await page.mouse.up()
+    await expect(edge).toHaveAttribute('aria-valuenow', '300')
+
+    // A double-click puts it back.
+    await edge.dblclick()
+    await expect(edge).toHaveAttribute('aria-valuenow', '360')
+    expect((await drawn(page, '[data-slot="workspace-chat"]')).width).toBe(360)
+    expect(await page.evaluate(() => localStorage.getItem('hanzo.build.split'))).toBe('360')
+  })
+
+  test('the work keeps its room in a narrow window, and the edge is gone with the chat and on a phone', async ({ page }) => {
+    await studio(page)
+    await page.addInitScript(() => localStorage.setItem('hanzo.build.split', '640'))
+    await page.setViewportSize({ width: 1024, height: 800 })
+    await page.goto('/shop')
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
+    const edge = page.getByRole('separator', { name: 'Resize the chat' })
+    // 640 asked for; 1024 leaves the chat 600 and the work its 400.
+    await expect(edge).toHaveAttribute('aria-valuemax', '600')
+    await expect(edge).toHaveAttribute('aria-valuenow', '600')
+    const { chat, work } = await measured(page)
+    expect(chat.width).toBe(600)
+    expect(work.width).toBeGreaterThanOrEqual(400)
+    // Wider again, it is what was asked for.
+    await page.setViewportSize({ width: 1440, height: 800 })
+    await expect(edge).toHaveAttribute('aria-valuenow', '640')
+
+    // Hidden, the chat takes its edge with it and the work takes the width.
+    await page.getByRole('button', { name: 'Hide the chat' }).click()
+    await expect(edge).toHaveCount(0)
+    await expect(page.locator('[data-slot="workspace-chat"]')).toBeHidden()
+    expect((await drawn(page, '[data-slot="workspace-main"]')).x).toBeLessThan(8)
+    await page.getByRole('button', { name: 'Show the chat' }).click()
+    await expect(edge).toHaveAttribute('aria-valuenow', '640')
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(edge).toHaveCount(0)
+  })
+
+  // 800 is the workspace beside the Hanzo app's widest sidebar in a 1280 window.
+  for (const width of [800, 1280, 1440, 1920]) {
+    test(`at ${width} the framed page fills the work, and every control above it is whole and clear of the others`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 900 })
+      await studio(page)
+      await page.goto('/shop')
+      await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
+      const { chat, work, frame, iframe } = await measured(page)
+      const bar = await drawn(page, '[data-slot="preview-bar"]')
+      const dock = await drawn(page, '[data-slot="console"]')
+      expect(work.x).toBeGreaterThanOrEqual(chat.x + chat.width)
+      expect(frame.x).toBe(work.x)
+      expect(frame.width).toBe(work.width)
+      expect(bar.width).toBe(work.width)
+      expect(frame.y).toBeGreaterThanOrEqual(bar.y + bar.height)
+      expect(frame.y + frame.height).toBeLessThanOrEqual(dock.y + 1)
+      expect(iframe.width).toBeGreaterThan(frame.width - 4)
+      expect(iframe.height).toBeGreaterThan(frame.height - 4)
+      // The page scrolls inside its frame; the window itself never scrolls.
+      expect(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([width, 900])
+
+      // Every control in the workspace's bar and the preview's is whole, inside its bar, and clear of its neighbours.
+      const controls = await page.evaluate(() =>
+        ['[data-slot="workspace-bar"]', '[data-slot="preview-bar"]'].flatMap((selector) => {
+          const bar = document.querySelector(selector)!
+          const r = bar.getBoundingClientRect()
+          return [...bar.querySelectorAll('button, a[href], [role="tab"]')]
+            .filter((el) => !el.parentElement?.closest('button, a[href], [role="tab"]') && el.checkVisibility())
+            .map((el) => {
+              const b = el.getBoundingClientRect()
+              return { name: el.getAttribute('aria-label') || el.textContent?.trim() || el.tagName, l: b.left, r: b.right, t: b.top, b: b.bottom, inside: b.left >= r.left - 1 && b.right <= r.right + 1 }
+            })
+        }),
+      )
+      for (const name of ['Reload the preview', 'Page: Homepage', 'Desktop', 'Mobile', 'Open in a new tab', 'Share', 'Publish'])
+        expect(controls.map((c) => c.name), `${name} is drawn`).toContain(name)
+      for (const c of controls) expect(c.inside, `${c.name} is inside its bar`).toBe(true)
+      for (const a of controls)
+        for (const b of controls)
+          if (a !== b) expect(a.r <= b.l + 0.5 || b.r <= a.l + 0.5 || a.b <= b.t + 0.5 || b.b <= a.t + 0.5, `${a.name} and ${b.name} overlap`).toBe(true)
+      await page.screenshot({ path: info.outputPath(`preview-${width}.png`) })
+    })
+  }
+
+  test('the preview stays loaded while another view is open, and comes back as it was left', async ({ page }) => {
+    const { world } = await studio(page)
+    await page.goto('/shop')
+    const frame = page.frameLocator('iframe[title="Shop preview"]')
+    await expect(frame.getByRole('heading', { name: 'Shop' })).toBeVisible()
+    const served = world.served
+    await page.getByRole('tab', { name: 'Files' }).click()
+    await expect(page.getByLabel('shop at agent/cart')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Reload the preview' })).toBeHidden()
+    await page.getByRole('tab', { name: 'Code' }).click()
+    await page.getByRole('tab', { name: 'Preview' }).click()
+    await expect(frame.getByRole('heading', { name: 'Shop' })).toBeVisible()
+    expect(world.served).toBe(served)
+    // Reloaded, it is loaded again, once.
+    await page.getByRole('button', { name: 'Reload the preview' }).click()
+    await expect.poll(() => world.served).toBe(served + 1)
+  })
+
+  test('Open in a new tab opens the page the preview frames, in a tab of its own', async ({ page, context }) => {
+    await studio(page)
+    await context.route(`${LIVE}/**`, (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Shop</title><h1>Shop</h1>' }))
+    await page.goto('/shop')
+    await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
+    const opened = context.waitForEvent('page')
+    await page.getByRole('link', { name: 'Open in a new tab' }).click()
+    const tab = await opened
+    await tab.waitForLoadState()
+    expect(tab.url()).toBe(`${LIVE}/`)
+    await expect(tab.getByRole('heading', { name: 'Shop' })).toBeVisible()
+    // Nothing of the builder's reaches it.
+    expect(await tab.evaluate(() => window.opener)).toBeNull()
+    await tab.close()
   })
 })
 

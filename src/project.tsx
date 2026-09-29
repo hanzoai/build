@@ -2,12 +2,18 @@
  * A project's workspace, in the same window: the chat on the left, what it
  * built on the right.
  *
- *   bar     mark · project · history · chat toggle | Preview Files Code Layers ·
- *           device · reload · page · open | Share · Publish
+ *   bar     mark · project · history · chat toggle | Preview Files Code Layers |
+ *           Share · Publish
  *   left    the project's runs as a conversation, suggestions, and the ask
- *   right   the deployed page, framed; the repository at the run's branch as a
- *           tree and as read-only code; the element a person picked
+ *   right   the deployed page, framed under its own bar (reload · page · device
+ *           · open), and kept loaded while another view is open; the repository
+ *           at the run's branch as a tree and as read-only code; the element a
+ *           person picked
  *   dock    the run's console — its steps and its log, as they stream
+ *
+ * The edge between left and right is dragged, or moved with the arrow keys, to
+ * size the chat, and the width is kept per browser; the right side keeps room
+ * for a page whatever the chat asked for.
  *
  * A chat turn IS a coding run: `POST /v1/agent/coding` with the project, the
  * mode, and the previous run as `after`, so the next ask builds on the branch
@@ -73,6 +79,7 @@ import { outcome, pull, said, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Merge } from './git.tsx'
+import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { MODES } from './landing.tsx'
 import { Out } from './out.tsx'
@@ -85,6 +92,15 @@ const LIVE = new Set(['running', 'paused'])
 
 /** How often a project being published is read again, ms. */
 const AGAIN = 5000
+
+/** The chat's width beside the work, px: its default, and the two it is kept between. */
+const CHAT_WIDTH = 360
+const CHAT_FLOOR = 300
+const CHAT_CEIL = 640
+/** The Workspace's gutter between the chat and the work, and its margin right of the work, px ($3). */
+const GUTTER = 12
+/** What the work keeps beside the chat however wide the chat was asked to be, px. */
+const WORK = 400 + 2 * GUTTER
 
 /** One run in the conversation: what was asked, and what it came to. */
 function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onOpen: () => void; project: string }) {
@@ -171,6 +187,11 @@ export function Project({ slug }: { slug: string }) {
   const [view, setView] = useKept<ViewId>(`hanzo.build.view.${slug}`, 'preview')
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [collapsed, setCollapsed] = useKept('hanzo.build.chat', false)
+  const [split, setSplit] = useKept('hanzo.build.split', CHAT_WIDTH)
+  // The workspace's width, which bounds the chat so the work keeps its room.
+  const [room, setRoom] = useState(0)
+  const most = room ? Math.max(CHAT_FLOOR, Math.min(CHAT_CEIL, room - WORK)) : CHAT_CEIL
+  const across = Math.min(most, Math.max(CHAT_FLOOR, split))
   // Below md the chat and the work take turns, and Chat is one more view to switch back to.
   const [pane, setPane] = useState<'chat' | 'view'>('chat')
   const wide = useMedia().md
@@ -393,7 +414,7 @@ export function Project({ slug }: { slug: string }) {
   }
 
   const chat = (
-    <YStack flex={1} minH={0}>
+    <YStack flex={1} minH={0} position="relative">
       <YStack flex={1} minH={0} overflow="scroll" px="$3" py="$4" gap="$4">
         {ordered.length === 0 ? (
           <SizableText size="$2" color="$ink" px="$2">
@@ -475,11 +496,43 @@ export function Project({ slug }: { slug: string }) {
           <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} onNote={setNote} />
         </Composer>
       </YStack>
+      {/* In the gutter between the chat and the work. */}
+      {wide && !collapsed ? (
+        <Grip
+          side="left"
+          span={across}
+          floor={CHAT_FLOOR}
+          ceil={most}
+          reset={CHAT_WIDTH}
+          onSpan={setSplit}
+          label="Resize the chat"
+          r={-GUTTER}
+          width={GUTTER}
+        />
+      ) : null}
     </YStack>
   )
 
-  const body =
-    view === 'preview' ? (
+  // The preview stays loaded while another view is open, so coming back to it
+  // is the page as it was left.
+  const preview = (
+    <YStack data-slot="preview" flex={1} minH={0} minW={0} gap="$2" display={view === 'preview' ? 'flex' : 'none'}>
+      {/* The framed page's own controls, beside it: reload, the page, the width, and the page in a tab of its own. */}
+      <XStack data-slot="preview-bar" items="center" gap="$1.5" minW={0} shrink={0} $max-md={{ px: '$2' }}>
+        <XStack render="button" aria-label="Reload the preview" onPress={() => frame.current?.reload()} p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
+          <RefreshCcw size={16} />
+        </XStack>
+        <PageSelect pages={pages} value={page} onChange={setPage} shrink={1} />
+        <XStack flex={1} />
+        <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label="Device" labels="none" />
+        {src ? (
+          <Out href={src} label="Open in a new tab">
+            <XStack p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
+              <ExternalLink size={16} />
+            </XStack>
+          </Out>
+        ) : null}
+      </XStack>
       <PreviewFrame
         ref={frame}
         src={src}
@@ -515,7 +568,11 @@ export function Project({ slug }: { slug: string }) {
           ) : undefined
         }
       />
-    ) : view === 'files' ? (
+    </YStack>
+  )
+
+  const body =
+    view === 'preview' ? null : view === 'files' ? (
       repo ? (
         <FileTree
           key={round}
@@ -593,30 +650,16 @@ export function Project({ slug }: { slug: string }) {
           </XStack>
         }
         middle={
-          <XStack items="center" gap="$2">
-            <Views
-              views={[...VIEWS, CHAT]}
-              value={pane === 'chat' && !wide ? 'chat' : view}
-              onChange={(v) => {
-                if (v === 'chat') return setPane('chat')
-                setView(v as ViewId)
-                setPane('view')
-              }}
-              label="View"
-            />
-            <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label="Device" labels="none" />
-            <XStack render="button" aria-label="Reload the preview" onPress={() => frame.current?.reload()} p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
-              <RefreshCcw size={16} />
-            </XStack>
-            <PageSelect pages={pages} value={page} onChange={setPage} />
-            {src ? (
-              <Out href={src} label="Open in a new tab">
-                <XStack p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
-                  <ExternalLink size={16} />
-                </XStack>
-              </Out>
-            ) : null}
-          </XStack>
+          <Views
+            views={[...VIEWS, CHAT]}
+            value={pane === 'chat' && !wide ? 'chat' : view}
+            onChange={(v) => {
+              if (v === 'chat') return setPane('chat')
+              setView(v as ViewId)
+              setPane('view')
+            }}
+            label="View"
+          />
         }
         end={
           <XStack items="center" gap="$2">
@@ -651,7 +694,10 @@ export function Project({ slug }: { slug: string }) {
         }
         collapsed={collapsed}
         pane={pane}
+        width={across}
+        onLayout={(e) => setRoom(e.nativeEvent.layout.width)}
       >
+        {preview}
         {body}
       </Workspace>
 
