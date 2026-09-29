@@ -1,11 +1,11 @@
 /**
- * A run's Files tab. Files is its working tree: live from the sandbox while the
- * run holds one — every edit the agent has made, committed or not — and its
- * branch on the forge otherwise. Artifacts is what the run produced: its pull
- * request, its branch, its environment proposal and the project it built.
+ * A run's Files tab: its working tree, live from the sandbox while the run holds
+ * one — every edit the agent has made, committed or not — and its branch on the
+ * forge otherwise. And its Artifacts tab: what the run produced — its published
+ * site, its pull request, its branch, its environment proposal and its project.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ExternalLink, File, Folder, GitBranch, GitPullRequest, Layers, Settings2 } from '@hanzogui/lucide-icons-2'
+import { ExternalLink, File, Folder, Globe, GitBranch, GitPullRequest, Layers, Settings2 } from '@hanzogui/lucide-icons-2'
 import { useState, type ReactNode } from 'react'
 
 import { blob, tree } from './api/changes.ts'
@@ -15,7 +15,6 @@ import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { Out } from './out.tsx'
 
-type Pane = 'files' | 'artifacts'
 type Source = 'live' | 'branch'
 
 const monoWrap = { whiteSpace: 'pre-wrap' as const, fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
@@ -26,55 +25,30 @@ export function Files({
   branch,
   sandbox,
   live,
-  mode,
-  project,
-  pr,
-  onEnvironment,
 }: {
   session: string
   repo: string
   branch: string
   sandbox: string
   live: boolean
-  mode: string
-  project: string
-  pr: { href: string; label: string }
-  onEnvironment: () => void
 }) {
-  const [pane, setPane] = useState<Pane>('files')
   const reachable = live && Boolean(sandbox)
   const [source, setSource] = useState<Source>(reachable ? 'live' : 'branch')
   const from: Source = reachable ? source : 'branch'
 
   return (
     <YStack gap="$3">
-      {/* In a narrow pane, where the files are read from goes under what is shown. */}
-      <XStack gap="$1" items="center" flexWrap="wrap">
-        <Pick on={pane === 'files'} onPress={() => setPane('files')}>
-          Files
-        </Pick>
-        <Pick on={pane === 'artifacts'} onPress={() => setPane('artifacts')}>
-          Artifacts
-        </Pick>
-        <XStack flex={1} />
-        {pane === 'files' && reachable ? (
-          <>
-            <Pick on={from === 'live'} onPress={() => setSource('live')}>
-              Live
-            </Pick>
-            <Pick on={from === 'branch'} onPress={() => setSource('branch')}>
-              Branch
-            </Pick>
-          </>
-        ) : null}
-      </XStack>
-      {pane === 'artifacts' ? (
-        <Artifacts repo={repo} branch={branch} mode={mode} project={project} pr={pr} onEnvironment={onEnvironment} />
-      ) : from === 'live' ? (
-        <Live sandbox={sandbox} />
-      ) : (
-        <Branch session={session} label={`${repo}${branch ? `@${branch}` : ''}`} />
-      )}
+      {reachable ? (
+        <XStack gap="$1" items="center" flexWrap="wrap">
+          <Pick on={from === 'live'} onPress={() => setSource('live')}>
+            Live
+          </Pick>
+          <Pick on={from === 'branch'} onPress={() => setSource('branch')}>
+            Branch
+          </Pick>
+        </XStack>
+      ) : null}
+      {from === 'live' ? <Live sandbox={sandbox} /> : <Branch session={session} label={`${repo}${branch ? `@${branch}` : ''}`} />}
     </YStack>
   )
 }
@@ -242,11 +216,12 @@ function Listing({
   )
 }
 
-function Artifacts({
+export function Artifacts({
   repo,
   branch,
   mode,
   project,
+  site,
   pr,
   onEnvironment,
 }: {
@@ -254,11 +229,14 @@ function Artifacts({
   branch: string
   mode: string
   project: string
+  /** Where the run's work is published, or ''. */
+  site: string
   pr: { href: string; label: string }
   onEnvironment: () => void
 }) {
   const host = useHost()
   const items: { key: string; icon: ReactNode; title: string; note: string; href?: string; onPress?: () => void }[] = []
+  if (site) items.push({ key: 'site', icon: <Globe size={16} />, title: site.replace(/^https:\/\//, ''), note: 'Where this run is published', href: site })
   if (pr.href) items.push({ key: 'pr', icon: <GitPullRequest size={16} />, title: `Pull request ${pr.label}`, note: 'Opened on the forge', href: pr.href })
   if (branch) items.push({ key: 'branch', icon: <GitBranch size={16} />, title: branch, note: repo ? `The branch this run pushes to in ${repo}` : 'The branch this run pushes to' })
   if (mode === 'setup') items.push({ key: 'environment', icon: <Settings2 size={16} />, title: 'Environment proposal', note: 'The install and start scripts this run found', onPress: onEnvironment })

@@ -1,23 +1,26 @@
 /**
- * The pane beside a run's transcript: its codebase's environment, what it
- * pushed, its sandbox's desktop and shell, its files, and what it listens to.
+ * The pane beside a run's transcript, as tabs: the Browser showing where the run
+ * is published, its sandbox's Desktop and Terminal, what it produced, its files,
+ * what it pushed, and its codebase's environment.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Info, MoreHorizontal, PanelRightClose } from '@hanzogui/lucide-icons-2'
+import { ExternalLink, Info, MoreHorizontal, PanelRightClose, RefreshCcw } from '@hanzogui/lucide-icons-2'
 import { Button, DropdownMenu, type DropdownMenuProps } from '@hanzo/ui'
-import { useState } from 'react'
+import { PreviewFrame, type PreviewHandle } from '@hanzo/ui/agents'
+import { useRef, useState } from 'react'
 
 import { shell, type ShellLine } from './api/turn.ts'
 import type { Event } from './api/sessions.ts'
 import { Door } from './door.tsx'
 import { Environment } from './environment.tsx'
-import { Files } from './files.tsx'
+import { Artifacts, Files } from './files.tsx'
 import { Git } from './git.tsx'
+import { Out } from './out.tsx'
 
-type Tab = 'environment' | 'git' | 'desktop' | 'terminal' | 'files' | 'subscriptions'
+type Tab = 'browser' | 'desktop' | 'terminal' | 'artifacts' | 'files' | 'git' | 'environment'
 
 /** The tabs that are a surface of their own, drawn edge to edge. */
-const BLEED: Tab[] = ['desktop', 'terminal']
+const BLEED: Tab[] = ['browser', 'desktop', 'terminal']
 
 export function Desk({
   id,
@@ -30,6 +33,8 @@ export function Desk({
   title,
   project,
   sandbox,
+  site,
+  published,
   events,
   live,
   menu,
@@ -49,6 +54,10 @@ export function Desk({
   project: string
   /** The sandbox the run holds, or '' before it leases one and on a machine. */
   sandbox: string
+  /** Where the run's work is published, or '' before it is. */
+  site: string
+  /** The run's latest publish, which loads the page again. */
+  published: number
   events: Event[]
   live: boolean
   /** What can be done to the run — rename, share, copy its id — as its header offers it. */
@@ -59,10 +68,10 @@ export function Desk({
   onRetry: () => void
   onHide: () => void
 }) {
-  // Until a tab is picked it follows the run's mode, which is known once the run
-  // is read: a setup run's work IS the environment, so it opens there.
+  // Until a tab is picked it follows the run: a setup run's work IS the
+  // environment, a published run opens on its site, any other on its terminal.
   const [picked, setTab] = useState<Tab | null>(null)
-  const tab = picked ?? (mode === 'setup' ? 'environment' : 'terminal')
+  const tab = picked ?? (mode === 'setup' ? 'environment' : site ? 'browser' : 'terminal')
   const name = repo.split('/').filter(Boolean).pop() || repo
   const lines = shell(events)
   const bleed = BLEED.includes(tab)
@@ -82,11 +91,8 @@ export function Desk({
       <XStack px="$2" pt="$2" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
         {/* The tabs scroll sideways in a narrow pane; hiding the pane and its menu stay put. */}
         <XStack flex={1} minW={0} gap="$1" overflow="scroll">
-          <TabButton id="environment" tab={tab} onPick={setTab}>
-            Environment
-          </TabButton>
-          <TabButton id="git" tab={tab} onPick={setTab}>
-            Git
+          <TabButton id="browser" tab={tab} onPick={setTab}>
+            Browser
           </TabButton>
           <TabButton id="desktop" tab={tab} onPick={setTab}>
             Desktop
@@ -94,11 +100,17 @@ export function Desk({
           <TabButton id="terminal" tab={tab} onPick={setTab}>
             Terminal
           </TabButton>
+          <TabButton id="artifacts" tab={tab} onPick={setTab}>
+            Artifacts
+          </TabButton>
           <TabButton id="files" tab={tab} onPick={setTab}>
             Files
           </TabButton>
-          <TabButton id="subscriptions" tab={tab} onPick={setTab}>
-            Subscriptions
+          <TabButton id="git" tab={tab} onPick={setTab}>
+            Git
+          </TabButton>
+          <TabButton id="environment" tab={tab} onPick={setTab}>
+            Environment
           </TabButton>
         </XStack>
         <XStack render="button" aria-label="Hide the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={onHide}>
@@ -128,32 +140,60 @@ export function Desk({
             <Fact label="Mode" value={mode || 'build'} />
           </YStack>
         ) : null}
+        {tab === 'browser' ? <Browser key={published} site={site} live={live} /> : null}
         {tab === 'git' ? <Git session={id} title={title} live={live} /> : null}
         {tab === 'desktop' ? <Door which="screen" sandbox={sandbox} live={live} session={id} /> : null}
         {tab === 'terminal' ? (
           <Terminal id={id} sandbox={sandbox} lines={lines} live={live} refused={refused} retry={retry} onRetry={onRetry} />
         ) : null}
-        {tab === 'files' ? (
-          <Files
-            session={id}
-            repo={repo}
-            branch={branch}
-            sandbox={sandbox}
-            live={live}
-            mode={mode}
-            project={project}
-            pr={pr}
-            onEnvironment={() => setTab('environment')}
-          />
+        {tab === 'artifacts' ? (
+          <Artifacts repo={repo} branch={branch} mode={mode} project={project} site={site} pr={pr} onEnvironment={() => setTab('environment')} />
         ) : null}
-        {tab === 'subscriptions' ? (
-          <YStack flex={1} items="center" justify="center" px="$6">
-            <SizableText size="$2" color="$soft" style={{ textAlign: 'center', maxWidth: 320 }}>
-              Ask an agent to subscribe to a Slack channel or thread, a pull request, or a timer.
+        {tab === 'files' ? <Files session={id} repo={repo} branch={branch} sandbox={sandbox} live={live} /> : null}
+      </YStack>
+    </YStack>
+  )
+}
+
+/**
+ * The Browser tab: the page where the run published its work, framed, with its
+ * address, a reload and the page in a tab of its own.
+ */
+function Browser({ site, live }: { site: string; live: boolean }) {
+  const frame = useRef<PreviewHandle | null>(null)
+  return (
+    <YStack flex={1} minH={0}>
+      <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
+        <XStack render="button" aria-label="Reload the page" onPress={() => frame.current?.reload()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+          <RefreshCcw size={14} />
+        </XStack>
+        <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
+          {site || 'Not published yet'}
+        </SizableText>
+        {site ? (
+          <Out href={site} label="Open in a new tab">
+            <XStack p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+              <ExternalLink size={14} />
+            </XStack>
+          </Out>
+        ) : null}
+      </XStack>
+      <PreviewFrame
+        ref={frame}
+        src={site}
+        title="Where this run is published"
+        device="desktop"
+        empty={
+          <YStack items="center" gap="$2" p="$6">
+            <SizableText size="$3" color="$ink">
+              {live ? 'Not published yet' : 'Nothing was published'}
+            </SizableText>
+            <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+              {live ? 'The page appears here once the run publishes its site.' : 'This run published no site. Its work is on its branch.'}
             </SizableText>
           </YStack>
-        ) : null}
-      </YStack>
+        }
+      />
     </YStack>
   )
 }

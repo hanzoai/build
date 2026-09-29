@@ -127,9 +127,9 @@ function run(status: 'running' | 'done'): State[] {
     ['git-diff', both(press('Git'), (p) => p.getByRole('button', { name: 'Show widget.go' }).click())],
     ['git-review', both(press('Git'), press('Review'))],
     ['git-commits', both(press('Git'), press('Commits'))],
+    ['browser', press('Browser')],
     ['desktop', press('Desktop')],
-    ['files-artifacts', both(press('Files'), press('Artifacts'))],
-    ['subscriptions', press('Subscriptions')],
+    ['artifacts', press('Artifacts')],
   ]
   // A live run holds its sandbox: a shell beside the agent's log, and its files as they are beside its branch.
   if (status === 'running') {

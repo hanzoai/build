@@ -70,7 +70,7 @@ function status(b: Record<string, unknown>, mode: string): string {
       return branch ? `Pushed ${branch}${tail}${site}` : `Done${tail}${site}`
     }
     case 'error':
-      return str(b.error) || 'The run hit an error'
+      return plain(str(b.error))
     case 'stopped':
       return branch && b.changed ? `Stopped — work kept on ${branch}` : 'Stopped'
     case 'paused':
@@ -80,6 +80,19 @@ function status(b: Record<string, unknown>, mode: string): string {
       return str(b.next) ? 'Continued in a follow-up run' : 'The follow-up run could not start'
   }
   return str(b.status)
+}
+
+/**
+ * A run's error as one plain line with what to do, never the log it came from:
+ * that goes in the Error step beside it (cards).
+ */
+export function plain(error: string): string {
+  if (!error) return 'The run hit an error'
+  const ours = /providers_exhausted|every provider refused|temporarily unavailable/i.test(error)
+  if (!ours && /\b402 Payment Required|insufficient (credit|balance)/i.test(error)) return 'Your balance is out of credit. Add credit, then try again.'
+  if (ours || /\b(429 Too Many Requests|503 Service Unavailable)|stream disconnected|retries exhausted|rate limit/i.test(error))
+    return 'The model did not answer. Try again in a moment, or pick another model.'
+  return 'The run stopped with an error. Try again, or follow up with what to change.'
 }
 
 /**
@@ -382,6 +395,7 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
         }
         const line = status(b, mode)
         if (line) out.push({ kind: 'note', key: mint(), text: line })
+        if (str(b.status) === 'error' && str(b.error)) out.push({ kind: 'step', key: mint(), name: 'Error', detail: '', output: str(b.error), ran: 'error' })
         break
       }
       case 'control': {

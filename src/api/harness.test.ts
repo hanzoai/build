@@ -210,15 +210,12 @@ describe('harness', () => {
     expect(got.map((c) => (c.kind === 'step' ? c.detail : c.kind))).toEqual(['go', 'said', 'rust'])
   })
 
-  it('draws warnings and errors as notes, and says an interruption and a compaction', () => {
+  it('files warnings and errors in the agent log, and says an interruption and a compaction', () => {
     const got = read('warning: slow\nERROR: it broke\ndeprecated: old flag\nmodel rerouted: to zen\nturn interrupted\ncontext compacted\nhook: ran a hook\n')
-    expect(got.map((c) => (c.kind === 'note' ? c.text : c.kind))).toEqual([
-      'warning: slow',
-      'it broke',
-      'deprecated: old flag',
-      'model rerouted: to zen',
-      'The agent was interrupted',
-      'The agent compacted its context',
+    expect(got).toEqual([
+      { kind: 'step', name: 'Agent log', detail: '', output: 'warning: slow\nERROR: it broke\ndeprecated: old flag\nmodel rerouted: to zen', ran: 'done' },
+      { kind: 'note', text: 'The agent was interrupted' },
+      { kind: 'note', text: 'The agent compacted its context' },
     ])
   })
 
@@ -250,5 +247,117 @@ describe('harness', () => {
 
   it('reads a line cut across chunks once it is whole', () => {
     expect(read('cod', 'ex\nhel', 'lo\n')).toEqual([{ kind: 'said', who: 'agent', text: 'hello' }])
+  })
+})
+
+describe('a stamped harness', () => {
+  const stamp = (l: string) => `[2026-09-29T16:07:35] ${l}`
+  const banner = [
+    stamp('Hanzo Dev v0.6.94'),
+    '--------',
+    stamp('binary: /usr/local/bin/dev'),
+    '--------',
+    'workdir: /work',
+    'model: zen6-coder',
+    '--------',
+    stamp('User instructions:'),
+    'When a decision needs the person you are working for, call ask_user with the options rather than guessing.',
+    '',
+    'whats homepage say',
+  ]
+  const run = (...lines: string[]) => read([...banner, ...lines, ''].join('\n'))
+  const ask = { kind: 'said', who: 'person', text: 'whats homepage say' }
+
+  it('reads the ask, a command that read a file, and the answer, with diagnostics in the log', () => {
+    expect(
+      run(
+        stamp('WARNING: Model metadata for `zen6-coder` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.'),
+        stamp("exec bash -lc 'cat index.html' in /work"),
+        stamp("bash -lc 'cat index.html' succeeded in 14ms:"),
+        '<h1>Hello</h1>',
+        stamp('dev'),
+        '',
+        'The homepage says Hello.',
+        stamp('tokens used: 1,234'),
+      ),
+    ).toEqual([
+      ask,
+      { kind: 'step', name: 'Agent log', detail: '', output: 'WARNING: Model metadata for `zen6-coder` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.', ran: 'done' },
+      { kind: 'read', file: 'index.html', ran: 'done' },
+      { kind: 'said', who: 'agent', text: 'The homepage says Hello.' },
+    ])
+  })
+
+  it('closes a command that ran over a minute, keeps its output and a failed one’s stderr, and never speaks them', () => {
+    const got = run(
+      stamp("exec bash -lc 'npm test' in /work"),
+      stamp("bash -lc 'npm test' exited 1 in 1m 05s:"),
+      'FAIL src/a.test.ts',
+      'warning: something is deprecated',
+      '',
+      'ERROR',
+      'Error: expected 2, got 3',
+      stamp('dev'),
+      'The test fails.',
+    )
+    expect(got.slice(1)).toEqual([
+      { kind: 'shell', command: 'npm test', output: 'FAIL src/a.test.ts\nwarning: something is deprecated\n\nERROR\nError: expected 2, got 3', ran: 'error' },
+      { kind: 'said', who: 'agent', text: 'The test fails.' },
+    ])
+  })
+
+  it('reads a patch by its files and the turn’s diff, and ends it by its exit', () => {
+    const got = run(
+      stamp('apply_patch auto_approved=true:'),
+      'M /work/src/a.ts',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+      stamp('apply_patch(auto_approved=true) exited 0 in 5ms:'),
+      'Success. Updated the following files:',
+      'M src/a.ts',
+      stamp('turn diff:'),
+      'diff --git a/src/a.ts b/src/a.ts',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+      stamp('dev'),
+      'Changed it.',
+    )
+    expect(got.slice(1)).toEqual([
+      { kind: 'edit', files: ['src/a.ts'], patch: '@@ -1 +1 @@\n-old\n+new', ran: 'done' },
+      { kind: 'said', who: 'agent', text: 'Changed it.' },
+    ])
+  })
+
+  it('reads a tool call, custom or MCP, with its params and result as one step', () => {
+    expect(run(stamp('tool web_fetch'), '{', '  "url": "https://hanzo.ai"', '}', stamp('tool web_fetch success'), '<html>').slice(1)).toEqual([
+      { kind: 'step', name: 'web_fetch', detail: 'tool', output: '{\n  "url": "https://hanzo.ai"\n}\n<html>', ran: 'done' },
+    ])
+    expect(run(stamp('tool run.ask_user({})'), stamp('run.ask_user({}) success in 2.1s:'), '{"answer":"yes"}').slice(1)).toEqual([
+      { kind: 'step', name: 'run.ask_user({})', detail: 'tool', output: '{"answer":"yes"}', ran: 'done' },
+    ])
+  })
+
+  it('files every error, retry and continuation in one log, and says nothing of them', () => {
+    const got = run(
+      stamp('ERROR: [transport] failed to start stream: unexpected status 402 Payment Required: {'),
+      '  "error": "Insufficient credits"',
+      '}',
+      stamp('stream error: server error 503; retrying in 181ms…'),
+      stamp('ERROR: stream disconnected - retries exhausted'),
+    )
+    expect(got.filter((c) => c.kind === 'said' && c.who === 'agent')).toEqual([])
+    const log = got.find((c) => c.kind === 'step' && c.name === 'Agent log')
+    expect(log && log.kind === 'step' ? log.output.split('\n') : []).toHaveLength(5)
+  })
+
+  it('says an interruption and cuts what was running', () => {
+    expect(run(stamp("exec bash -lc 'sleep 9' in /work"), stamp('task interrupted')).slice(1)).toEqual([
+      { kind: 'shell', command: 'sleep 9', output: '', ran: 'cancelled' },
+      { kind: 'note', text: 'The agent was interrupted' },
+    ])
   })
 })

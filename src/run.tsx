@@ -35,7 +35,7 @@ import { ENSO, label as named, models } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
-import { useKept, useRead, useRun } from './data.ts'
+import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Desk } from './desk.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { EFFORTS } from './landing.tsx'
@@ -80,6 +80,14 @@ export function Run({ id }: { id: string }) {
   const plan = useMemo(() => steps(events), [events])
   const kept = useMemo(() => settled(events), [events])
   const state = status || end.status
+  // Where the run's work is published: its project's own address, read again when
+  // the run says it went live, never an address an event names.
+  const built = useProjects(t, signed && Boolean(record?.project))
+  const rebuilt = built.reload
+  useEffect(() => {
+    if (end.published) rebuilt()
+  }, [end.published, rebuilt])
+  const site = built.value.find((p) => p.slug === record?.project)?.live ?? ''
   const pr = pull(record?.pr ?? '', record?.repo ?? '')
   const live = LIVE.has(state)
   const running = signed && live && !detail.error
@@ -501,6 +509,8 @@ export function Run({ id }: { id: string }) {
           title={title}
           project={record?.project ?? ''}
           sandbox={record?.sandbox ?? ''}
+          site={site}
+          published={end.published}
           events={events}
           live={running}
           menu={[...manage, ...sharing]}

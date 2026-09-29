@@ -15,6 +15,17 @@
  *     ✓ step / → step / • step            its plan
  *   tokens used / <n>                     the end; the final message follows once more, bare
  *
+ * The sandbox's older harness (dev 0.6.94) prints another grammar: it stamps
+ * each item `[2026-09-29T16:07:35] ` and spells its headers its own way —
+ * `User instructions:`, `dev`, `thinking`, `exec <command> in <dir>`,
+ * `<command> succeeded in 1m 05s:`, `tool <call>`, `🌐 Search: <query>`,
+ * `apply_patch auto_approved=true:`, `turn diff:`, `tokens used: <n>`. A stamped
+ * line starts an item and says where the unstamped lines after it belong
+ * (`stamped`). Every stamped line no header owns is the harness's diagnostics.
+ *
+ * Warnings, errors, retries and diagnostics are the agent's log, one collapsed
+ * step, never the conversation; token counts are dropped.
+ *
  * The chunks are cut by a clock, not by line, so a line is read only once it
  * is whole. Lines no header owns — reasoning, or the tail of output from before
  * the recorded events begin — are prose. Everything here becomes TEXT on the
@@ -152,6 +163,13 @@ export function sections(diff: string): Map<string, string> {
 }
 
 const HEAD = /^(exec|codex|thinking|user|apply patch|tokens used|turn interrupted|context compacted)$/
+/** The older harness's stamp on each item it starts. */
+const STAMP = /^\[\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z?\] /
+/** How long a stamped command or tool took: `14ms`, `2.1s`, `1m 05s`, `1h 02m`. */
+const TOOK = '(?: in [\\dhms. ]+)?'
+const RAN = new RegExp(`^(.+) (succeeded|exited (-?\\d+))${TOOK}:$`)
+const CALLED = new RegExp(`^(.+) (success|failed)${TOOK}:$`)
+const PATCHED = new RegExp(`^apply_patch\\(.*\\) exited (-?\\d+)${TOOK}:$`)
 const LEAD = /^(patch|mcp|web search|warning|ERROR|deprecated|model rerouted|hook): /
 const RESULT = /^\s*(succeeded|exited (-?\d+)|declined|in progress)( in [\d.]+m?s)?:$/
 
@@ -195,8 +213,174 @@ export function harness(out: Card[], mint: () => string) {
     return c
   }
 
+  // The agent's log: its warnings, errors and diagnostics, one step for the run.
+  let log: Step | null = null
+  const logged = (text: string) => {
+    if (!log) log = step('Agent log', '', 'done')
+    log.output += log.output ? `\n${text}` : text
+  }
+
+  // THE STAMPED GRAMMAR. Where the unstamped lines after the last stamped one go.
+  type Sink = 'none' | 'drop' | 'banner' | 'task' | 'said' | 'out' | 'patch' | 'diff' | 'log'
+  let stamped = false
+  let sink: Sink = 'none'
+  let into: Said | Shell | Step | null = null
+  // A stamped command or tool is ended by name: its text as the harness printed it.
+  const running = new Map<string, Shell | Step>()
+  const begin = (item: Shell | Step, name: string) => {
+    running.set(name, item)
+  }
+  const end = (name: string, ok: boolean): Shell | Step | null => {
+    const item = running.get(name)
+    if (!item) return null
+    running.delete(name)
+    item.ran = ok ? 'done' : 'error'
+    return item
+  }
+  const stamp = (l: string) => {
+    settle()
+    into = null
+    sink = 'none'
+    if (/^Hanzo Dev v\S+$/.test(l)) {
+      rules = 0
+      sink = 'banner'
+      return
+    }
+    if (l.startsWith('binary: ')) {
+      sink = 'banner'
+      return
+    }
+    if (l === 'User instructions:') {
+      const c: Said = { kind: 'said', key: mint(), who: 'person', text: '' }
+      out.push(c)
+      tasks.push({ card: c, lines: [] })
+      sink = 'task'
+      return
+    }
+    if (l === 'dev') {
+      into = said('')
+      sink = 'said'
+      return
+    }
+    if (l === 'thinking') {
+      into = step('Thinking', '', 'done')
+      sink = 'out'
+      return
+    }
+    const exec = /^exec (.+) in (\S+)$/.exec(l)
+    if (exec) {
+      const file = reads(exec[1]!)
+      const c: Shell = file
+        ? { kind: 'read', key: mint(), file: shown(file), ran: 'running' }
+        : { kind: 'shell', key: mint(), command: unwrap(exec[1]!), output: '', ran: 'running' }
+      out.push(c)
+      begin(c, exec[1]!)
+      return
+    }
+    const ran = RAN.exec(l)
+    if (ran) {
+      const c = end(ran[1]!, ran[2] === 'succeeded')
+      if (c) {
+        // A read's output is the file it read, which the chip already names.
+        into = c
+        sink = c.kind === 'shell' ? 'out' : 'drop'
+        return
+      }
+    }
+    const custom = /^tool (.+) (success|failed)$/.exec(l)
+    if (custom) {
+      into = end(custom[1]!, custom[2] === 'success') ?? step(custom[1]!, 'tool', custom[2] === 'success' ? 'done' : 'error')
+      sink = 'out'
+      return
+    }
+    const tool = /^tool (.+)$/.exec(l)
+    if (tool) {
+      into = step(tool[1]!, 'tool', 'running')
+      begin(into, tool[1]!)
+      sink = 'out'
+      return
+    }
+    const called = CALLED.exec(l)
+    if (called && running.has(called[1]!)) {
+      into = end(called[1]!, called[2] === 'success')
+      sink = 'out'
+      return
+    }
+    const search = /^🌐 Search: (.*)$/.exec(l)
+    if (search) {
+      step('Web search', search[1]!, 'done')
+      return
+    }
+    if (/^apply_patch auto_approved=\w+:$/.test(l)) {
+      patch()
+      sink = 'patch'
+      return
+    }
+    const patched = PATCHED.exec(l)
+    if (patched) {
+      if (edit) edit.card.ran = patched[1] === '0' ? 'done' : 'error'
+      sink = 'drop'
+      return
+    }
+    if (l === 'turn diff:') {
+      diff = []
+      sink = 'diff'
+      return
+    }
+    if (/^tokens used: [\d,]+$/.test(l)) return
+    if (/^task (interrupted|aborted)/.test(l)) {
+      for (const item of running.values()) item.ran = 'cancelled'
+      running.clear()
+      out.push({ kind: 'note', key: mint(), text: 'The agent was interrupted' })
+      return
+    }
+    logged(l)
+    sink = 'log'
+  }
+  // An unstamped line of the stamped grammar, where the last stamped line said.
+  const under = (l: string) => {
+    switch (sink) {
+      case 'banner':
+        if (l === '--------' && ++rules === 3) sink = 'none'
+        return
+      case 'task':
+        tasks[tasks.length - 1]!.lines.push(l)
+        return
+      case 'said':
+        if (into && into.kind === 'said') into.text += into.text ? `\n${l}` : l
+        return
+      case 'out':
+        if (into && (into.kind === 'shell' || into.kind === 'step')) into.output += into.output ? `\n${l}` : l
+        return
+      case 'patch': {
+        const file = /^[AMD] (.+?)(?: -> (.+))?$/.exec(l)
+        if (file && edit) edit.paths.push(file[2] ?? file[1]!)
+        return
+      }
+      case 'diff':
+        diff!.push(l)
+        return
+      case 'log':
+        if (l.trim()) logged(l)
+        return
+      case 'drop':
+        return
+    }
+    if (l.trim()) logged(l)
+  }
+
   const line = (raw: string) => {
     const l = raw.replace(ANSI, '').replace(/\r$/, '')
+    const at = STAMP.exec(l)
+    if (at) {
+      stamped = true
+      stamp(l.slice(at[0].length))
+      return
+    }
+    if (stamped) {
+      under(l)
+      return
+    }
     if (mode === 'config') {
       if (l === '--------' && ++rules === 2) mode = 'prose'
       return
@@ -309,10 +493,10 @@ export function harness(out: Card[], mint: () => string) {
       mode = 'prose'
       return
     }
-    const warn = /^(warning|ERROR|deprecated|model rerouted): ?(.*)$/.exec(l)
+    const warn = mode === 'output' || mode === 'agent' ? null : /^(warning|ERROR|deprecated|model rerouted): ?(.*)$/.exec(l)
     if (warn) {
       settle()
-      out.push({ kind: 'note', key: mint(), text: warn[1] === 'ERROR' ? warn[2]! : `${warn[1]}: ${warn[2]}` })
+      logged(l)
       card = null
       mode = 'prose'
       return

@@ -54,6 +54,14 @@ describe('said', () => {
 
   it('says an error, a stop, a pause and a follow-up, with the work kept only when it was', () => {
     expect(status({ status: 'error' })).toBe('The run hit an error')
+    expect(status({ status: 'error', error: 'the dev harness exited 1: ERROR stream disconnected - retries exhausted' })).toBe(
+      'The model did not answer. Try again in a moment, or pick another model.',
+    )
+    expect(status({ status: 'error', error: 'unexpected status 402 Payment Required: insufficient balance' })).toBe('Your balance is out of credit. Add credit, then try again.')
+    expect(status({ status: 'error', error: 'model "enso-flash": every provider refused — tried enso (402)' })).toBe(
+      'The model did not answer. Try again in a moment, or pick another model.',
+    )
+    expect(status({ status: 'error', error: 'panic at line 503 of main.go' })).toBe('The run stopped with an error. Try again, or follow up with what to change.')
     expect(status({ status: 'stopped', branch: 'agent/x', changed: true })).toBe('Stopped — work kept on agent/x')
     expect(status({ status: 'stopped', branch: 'agent/x', changed: false })).toBe('Stopped')
     expect(status({ status: 'stopped', changed: true })).toBe('Stopped')
@@ -187,6 +195,15 @@ describe('answer and settled', () => {
 })
 
 describe('cards', () => {
+  it('says a run’s error in one line, with what it said folded into an Error step', () => {
+    const raw = 'the dev harness exited 1: 2026-09-29T16:08:00Z ERROR code_core::codex::streaming: stream disconnected - retries exhausted'
+    const got = cards([ev(1, 'status', { status: 'error', error: raw })]).map(({ key: _, ...c }) => c)
+    expect(got).toEqual([
+      { kind: 'note', text: 'The model did not answer. Try again in a moment, or pick another model.' },
+      { kind: 'step', name: 'Error', detail: '', output: raw, ran: 'error' },
+    ])
+  })
+
   it('draws the run’s own steps as they move, naming a step it does not know', () => {
     const got = cards([
       ev(1, 'tool-call', 'prose'),

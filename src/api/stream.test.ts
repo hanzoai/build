@@ -95,7 +95,7 @@ describe('turns', () => {
     // An event that SAYS plan on a run the record says built is not an answer.
     expect(said(planned, 'build')).toBe('Done — nothing to change')
     expect(said(planned)).toBe('Done — nothing to change')
-    expect(said({ kind: 'status', payload: { status: 'error', error: 'clone failed' } })).toBe('clone failed')
+    expect(said({ kind: 'status', payload: { status: 'error', error: 'clone failed' } })).toBe('The run stopped with an error. Try again, or follow up with what to change.')
     expect(said({ kind: 'event', payload: { type: 'done', changed: ['/home/runner/work/a.ts', '/tmp/b.ts'] } })).toBe('Done — changed a.ts, b.ts')
     expect(said({ kind: 'log', payload: { host: 'box', cwd: '/secret' } })).toBe('')
   })
