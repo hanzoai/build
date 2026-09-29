@@ -117,7 +117,7 @@ test('a running run is steered, paused and stopped, and each refusal says why', 
   await expect(status(p).getByText('Pause requested — the run keeps its work on its branch and waits')).toBeVisible()
 })
 
-test('a pausing sandbox run waits for its work to be kept, then goes on in a new run from where it started', async ({ page: p }) => {
+test('a pausing sandbox run waits for its work to be kept, then goes on in a new run in its sandbox', async ({ page: p }) => {
   const { sent, world } = await rig(p, { record: { ...running(), status: 'paused' } }, ({ path }) =>
     path === `/v1/agent/sessions/${SESSION}/stop` ? refusal('Already let go', 409) : undefined,
   )
@@ -133,10 +133,10 @@ test('a pausing sandbox run waits for its work to be kept, then goes on in a new
   await box(p, 'Follow up on this run').press('Enter')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   const body = to(sent, 'POST', '/v1/agent/coding')[0]?.body as Record<string, unknown>
-  expect(body).toMatchObject({ repo: 'hanzoai/universe', base: 'main', mode: 'build', effort: 'medium', desktop: true })
+  expect(body).toMatchObject({ repo: 'hanzoai/universe', after: SESSION, mode: 'build', effort: 'medium', desktop: true })
   expect(body.model).toBeUndefined()
-  expect(body.after).toBeUndefined()
-  // The paused run is let go, and its refusal to be is not the person's problem.
+  expect(body.base).toBeUndefined()
+  // The paused run is let go first, and its refusal to be is not the person's problem.
   expect(to(sent, 'POST', `/v1/agent/sessions/${SESSION}/stop`)[0]?.body).toEqual({ message: 'Continued in a follow-up run' })
 })
 
@@ -204,11 +204,11 @@ test('a failed run opens its error, and Try again starts its ask again where it 
   await p.screenshot({ path: info.outputPath('failed.png') })
   await p.getByRole('button', { name: 'Try again' }).click()
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
-  expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Add the widget', repo: 'hanzoai/universe', base: 'main', mode: 'plan' })
+  expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Add the widget', repo: 'hanzoai/universe', after: SESSION, mode: 'plan' })
 })
 
 test('a run the feed says paused before its record is read cannot be carried on yet, and its verdicts name no project', async ({ page: p }) => {
-  const frames = [ev('tool-call', { message: 'running the task' }), ev('log', { message: 'codex\nHalf done.\n' }), ev('status', { status: 'paused', changed: false })]
+  const frames = [ev('event', { type: 'item.completed', item: { id: 'i0', type: 'agent_message', text: 'Half done.' } }), ev('status', { status: 'paused', changed: false })]
   const { sent } = await rig(p, { record: running(), frames: frames.map((e) => `event: event\ndata: ${JSON.stringify({ event: e })}\n\n`).join('') })
   const go = await hold(p, `/v1/agent/sessions/${SESSION}`)
   await p.goto(`/${SESSION}`)
@@ -352,7 +352,7 @@ test.describe('a plan run', () => {
     await expect(p.getByRole('button', { name: 'Starting the build…' })).toBeDisabled()
     go()
     await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
-    expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ mode: 'build', base: 'main', prompt: `Add the widget\n\nCarry out this plan:\n\n${PLAN}` })
+    expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ mode: 'build', after: SESSION, prompt: `Add the widget\n\nCarry out this plan:\n\n${PLAN}` })
   })
 
   test('that cannot start its build says why', async ({ page: p }) => {
