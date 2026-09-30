@@ -273,13 +273,14 @@ function Screens({ rail }: { rail: boolean }) {
  * The builder. Mount it under a gui root (`<Hanzo>`), in a box with a height.
  *
  * `rail={false}` leaves the left column to the host, which lists the builder's
- * places and runs in its own rail with `DevSection`.
+ * places and runs in its own rail with `DevSection`, and the ground to it too:
+ * the builder is then a pane of the host's, and paints no background of its own.
  */
 export function Builder({ host, rail = true }: { host: Host; rail?: boolean }) {
   return (
     <HostProvider host={host}>
       <PrefsProvider>
-        <YStack flex={1} minH={0} minW={0} height="100%" bg="$background">
+        <YStack flex={1} minH={0} minW={0} height="100%" bg={rail ? '$background' : undefined}>
           <Screens rail={rail} />
         </YStack>
       </PrefsProvider>

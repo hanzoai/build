@@ -28,7 +28,7 @@ import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type D
 import { Steer, type Command } from '@hanzo/ui/agents'
 import { Composer } from '@hanzo/ui/chat'
 import { ChipSelect } from '@hanzo/ui/product'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { Access } from './access.tsx'
 import { approve, followUp, headline, retry, start, type Ask, type Earlier } from './api/coding.ts'
@@ -38,6 +38,7 @@ import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Desk } from './desk.tsx'
+import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { EFFORTS } from './landing.tsx'
 import { Out } from './out.tsx'
@@ -51,6 +52,31 @@ const text = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 type MenuItems = NonNullable<DropdownMenuProps['items']>
 
+/** The side pane's width, px: its default, the floor a drag holds, and what the transcript keeps beside it. */
+const DESK_WIDTH = 480
+const DESK_FLOOR = 240
+const TALK_FLOOR = 300
+/** The most the side pane is drawn at before its row is measured, px. */
+const DESK_CEIL = 960
+
+/**
+ * How wide an element is drawn, px, read before the first paint and again as it
+ * changes, so what depends on it is right on the first frame. 0 until it is drawn.
+ */
+function useWidth(): [number, (el: unknown) => void] {
+  const [width, setWidth] = useState(0)
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    if (!el) return
+    setWidth(el.getBoundingClientRect().width)
+    if (typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 0))
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [el])
+  return [width, (node) => setEl(node instanceof HTMLElement ? node : null)]
+}
+
 export function Run({ id }: { id: string }) {
   const host = useHost()
   const t = useTarget()
@@ -62,6 +88,15 @@ export function Run({ id }: { id: string }) {
   const [busy, setBusy] = useState(false)
   const [notify, setNotify] = useState(false)
   const [desk, setDesk] = useKept('hanzo.build.desk', true)
+  // The side pane's width is the reader's, kept, and gives way so the
+  // transcript keeps its floor: bounded by the row it is drawn in once that is
+  // measured, and by its own `maxWidth` until then.
+  const [side, setSide] = useKept('hanzo.build.desk.span', DESK_WIDTH)
+  const [room, measure] = useWidth()
+  const most = room ? Math.max(DESK_FLOOR, room - TALK_FLOOR) : DESK_CEIL
+  const across = Math.round(Math.min(most, Math.max(DESK_FLOOR, typeof side === 'number' ? side : DESK_WIDTH)))
+  // A drag repaints the pane's width directly and tells React once, on letting go.
+  const deskBox = useRef<HTMLElement | null>(null)
   // Stop was pressed here: the run keeps its work after it answers, and says so with its status.
   const [stopping, setStopping] = useState(false)
   const [naming, setNaming] = useState(false)
@@ -328,8 +363,8 @@ export function Run({ id }: { id: string }) {
   ) : undefined
 
   return (
-    <XStack flex={1} minH={0} minW={0} width="100%">
-      <YStack flex={1} minH={0} minW={0} width="100%" px="$6" $max-md={{ px: '$4' }}>
+    <XStack ref={measure} data-slot="run-split" flex={1} minH={0} minW={0} width="100%">
+      <YStack data-slot="run" flex={1} minH={0} minW={0} width="100%" px="$6" $max-md={{ px: '$4' }}>
         <XStack pt="$3" pb="$2" gap="$3" items="center" minH={44}>
           <YStack flex={1} minW={0} items="flex-start">
             <DropdownMenu
@@ -348,7 +383,7 @@ export function Run({ id }: { id: string }) {
             </SizableText>
           </YStack>
           {desk ? null : (
-            // The side pane is drawn from md up (desk.tsx), so below it there is nothing to show.
+            // The side pane is drawn from md up, so below it there is nothing to show.
             <XStack render="button" aria-label="Show the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={() => setDesk(true)} $max-md={{ display: 'none' }}>
               <PanelRight size={16} />
             </XStack>
@@ -521,6 +556,29 @@ export function Run({ id }: { id: string }) {
         </YStack>
       </YStack>
       {desk ? (
+        <YStack
+          data-slot="desk"
+          ref={(el: unknown) => {
+            deskBox.current = el instanceof HTMLElement ? el : null
+          }}
+          position="relative"
+          shrink={0}
+          minH={0}
+          display="none"
+          $md={{ display: 'flex' }}
+          style={{ width: across, maxWidth: `calc(100% - ${TALK_FLOOR}px)`, minWidth: DESK_FLOOR }}
+        >
+          <Grip
+            side="right"
+            span={across}
+            floor={DESK_FLOOR}
+            ceil={most}
+            reset={Math.min(most, DESK_WIDTH)}
+            onSpan={(n) => deskBox.current?.style.setProperty('width', `${n}px`)}
+            onKeep={setSide}
+            onShut={() => setDesk(false)}
+            label="Resize the side pane"
+          />
         <Desk
           id={id}
           repo={record?.repo ?? ''}
@@ -542,6 +600,7 @@ export function Run({ id }: { id: string }) {
           onRetry={signed ? detail.reload : () => host.signIn?.()}
           onHide={() => setDesk(false)}
         />
+        </YStack>
       ) : null}
       <Dialog open={naming} onOpenChange={setNaming}>
         <DialogContent maxW={480}>

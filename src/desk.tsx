@@ -92,18 +92,8 @@ export function Desk({
   const held = box.value?.state ?? ''
 
   return (
-    <YStack
-      role="complementary"
-      aria-label="Run details"
-      flex={1}
-      minW={0}
-      minH={0}
-      borderLeftWidth={1}
-      borderColor="$borderColor"
-      display="none"
-      $md={{ display: 'flex' }}
-    >
-      <XStack px="$2" pt="$2" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
+    <YStack role="complementary" aria-label="Run details" flex={1} minW={0} minH={0} borderLeftWidth={1} borderColor="$borderColor">
+      <XStack px="$2" py="$2" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
         {/* The tabs scroll sideways in a narrow pane; hiding the pane and its menu stay put. */}
         <XStack flex={1} minW={0} gap="$1" overflow="scroll">
           <TabButton id="browser" tab={tab} onPick={setTab}>
@@ -471,11 +461,14 @@ function TabButton({ id, tab, onPick, children }: { id: Tab; tab: Tab; onPick: (
     <XStack
       render="button"
       aria-label={children}
+      aria-pressed={on}
       onPress={() => onPick(id)}
-      px="$2"
-      py="$2"
-      borderBottomWidth={2}
-      borderColor={on ? '$ink' : 'transparent'}
+      px="$3"
+      py="$1.5"
+      rounded={999}
+      shrink={0}
+      bg={on ? '$edge' : 'transparent'}
+      hoverStyle={{ bg: '$hover' }}
     >
       <SizableText size="$2" color={on ? '$ink' : '$soft'}>
         {children}

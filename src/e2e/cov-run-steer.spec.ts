@@ -436,6 +436,27 @@ test('the side pane is hidden and shown again, and this browser keeps which', as
   expect(await p.evaluate(() => localStorage.getItem('hanzo.build.desk'))).toBe('true')
 })
 
+test('the side pane is sized by its edge — keyed, kept and double-clicked back — and shut by keying past its floor', async ({ page: p }) => {
+  await rig(p)
+  await p.goto(`/${SESSION}`)
+  const edge = p.getByRole('separator', { name: 'Resize the side pane' })
+  await expect(edge).toHaveAttribute('aria-valuenow', '480')
+  await edge.focus()
+  await p.keyboard.press('Shift+ArrowLeft')
+  await expect(edge).toHaveAttribute('aria-valuenow', '512')
+  expect(Math.round((await desk(p).boundingBox())!.width)).toBe(512)
+  expect(await p.evaluate(() => localStorage.getItem('hanzo.build.desk.span'))).toBe('512')
+  await p.reload()
+  await expect(p.getByRole('separator', { name: 'Resize the side pane' })).toHaveAttribute('aria-valuenow', '512')
+  await p.getByRole('separator', { name: 'Resize the side pane' }).dblclick()
+  await expect(p.getByRole('separator', { name: 'Resize the side pane' })).toHaveAttribute('aria-valuenow', '480')
+  await p.getByRole('separator', { name: 'Resize the side pane' }).focus()
+  await p.keyboard.press('Home')
+  await p.keyboard.press('ArrowRight')
+  await expect(desk(p)).toHaveCount(0)
+  expect(await p.evaluate(() => localStorage.getItem('hanzo.build.desk'))).toBe('false')
+})
+
 test('a side pane hidden before stays hidden', async ({ page: p }) => {
   await rig(p, {}, undefined, { 'hanzo.build.desk': false })
   await p.goto(`/${SESSION}`)
