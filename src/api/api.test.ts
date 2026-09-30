@@ -90,7 +90,7 @@ describe('call', () => {
 describe('github', () => {
   it('pages repositories by cursor, with the search trimmed', async () => {
     const seen = answer(200, {
-      repos: [{ owner: 'hanzo-inc', name: 'cloud', full_name: 'hanzo-inc/cloud', private: true, default_branch: 'main', pushed_at: '2026-09-24T00:00:00Z', installation_id: 7 }],
+      repos: [{ owner: 'acme', name: 'cloud', full_name: 'acme/cloud', private: true, default_branch: 'main', pushed_at: '2026-09-24T00:00:00Z', installation_id: 7 }],
       next: 'c2',
       total: 180,
       unread: ['hanzo-labs'],
@@ -99,7 +99,7 @@ describe('github', () => {
     const page = await github.repos(T, { q: ' clo ', after: 'c1' })
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/provider/github/repos?q=clo&limit=50&after=c1')
     expect(page).toEqual({
-      repos: [{ owner: 'hanzo-inc', name: 'cloud', full_name: 'hanzo-inc/cloud', private: true, default_branch: 'main', pushed_at: '2026-09-24T00:00:00Z', installation_id: 7 }],
+      repos: [{ owner: 'acme', name: 'cloud', full_name: 'acme/cloud', private: true, default_branch: 'main', pushed_at: '2026-09-24T00:00:00Z', installation_id: 7 }],
       next: 'c2',
       total: 180,
       unread: ['hanzo-labs'],
@@ -174,9 +174,9 @@ describe('github', () => {
 
 describe('coding', () => {
   it('sends only what was asked', () => {
-    expect(coding.body({ prompt: ' fix it ', repo: 'hanzo-inc/cloud', base: 'main', targetId: '', mode: 'build' })).toEqual({
+    expect(coding.body({ prompt: ' fix it ', repo: 'acme/cloud', base: 'main', targetId: '', mode: 'build' })).toEqual({
       prompt: 'fix it',
-      repo: 'hanzo-inc/cloud',
+      repo: 'acme/cloud',
       base: 'main',
       mode: 'build',
       desktop: true,
@@ -185,10 +185,10 @@ describe('coding', () => {
   })
 
   it('starts a run and answers its session', async () => {
-    const seen = answer(202, { sessionId: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', project: 'cloud', routed: false, targetId: '' })
-    const run = await coding.start(T, { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main' })
-    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/coding', body: { prompt: 'fix the auth test', repo: 'hanzo-inc/cloud', base: 'main', desktop: true } })
-    expect(run).toEqual({ session: 'sess_1', repo: 'hanzo-inc/cloud', branch: 'agent/sess_1', routed: false, target: '' })
+    const seen = answer(202, { sessionId: 'sess_1', repo: 'acme/cloud', branch: 'agent/sess_1', project: 'cloud', routed: false, targetId: '' })
+    const run = await coding.start(T, { prompt: 'fix the auth test', repo: 'acme/cloud', base: 'main' })
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/coding', body: { prompt: 'fix the auth test', repo: 'acme/cloud', base: 'main', desktop: true } })
+    expect(run).toEqual({ session: 'sess_1', repo: 'acme/cloud', branch: 'agent/sess_1', routed: false, target: '' })
   })
 
   it('sends a plan to the sandbox with its model and effort', async () => {
@@ -255,8 +255,8 @@ describe('places, projects, git, platform', () => {
     expect(safe('http://localhost:3000/x', false)).toBe('')
     expect(safe('javascript:alert(1)')).toBe('')
     expect(safe('http://evil.example')).toBe('')
-    expect(project({ slug: 'a', liveUrl: 'data:text/html,x', repo: { url: 'http://hanzo-git.hanzo.svc/hanzoai/font.git', branch: 'main' } })).toMatchObject({ live: '', repo: 'http://hanzo-git.hanzo.svc/hanzoai/font.git', branch: 'main' })
-    expect(name('http://hanzo-git.hanzo.svc/hanzoai/font.git')).toBe('font')
+    expect(project({ slug: 'a', liveUrl: 'data:text/html,x', repo: { url: 'http://git.example.com/hanzoai/font.git', branch: 'main' } })).toMatchObject({ live: '', repo: 'http://git.example.com/hanzoai/font.git', branch: 'main' })
+    expect(name('http://git.example.com/hanzoai/font.git')).toBe('font')
   })
 
   it('lists projects most recently changed first', async () => {
@@ -441,11 +441,11 @@ describe('automations', () => {
 describe('ours', () => {
   it('keeps a project to the runs on its own repository', async () => {
     const { address, ours } = await import('./projects.ts')
-    expect(address('https://github.com/hanzo-inc/Cloud.git')).toBe('hanzo-inc/Cloud')
-    expect(address('http://hanzo-git.hanzo.svc/hanzoai/font')).toBe('hanzoai/font')
-    expect(ours('hanzo-inc/cloud', 'https://github.com/hanzo-inc/Cloud.git')).toBe(true)
-    expect(ours('font', 'http://hanzo-git.hanzo.svc/hanzoai/font')).toBe(true)
-    expect(ours('mallory/cloud', 'https://github.com/hanzo-inc/cloud.git')).toBe(false)
+    expect(address('https://github.com/acme/Cloud.git')).toBe('acme/Cloud')
+    expect(address('http://git.example.com/hanzoai/font')).toBe('hanzoai/font')
+    expect(ours('acme/cloud', 'https://github.com/acme/Cloud.git')).toBe(true)
+    expect(ours('font', 'http://git.example.com/hanzoai/font')).toBe(true)
+    expect(ours('mallory/cloud', 'https://github.com/acme/cloud.git')).toBe(false)
     expect(ours('anything', '')).toBe(true)
   })
 })

@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { outcome, said, shell, steps } from '../api/turn.ts'
 
 const LIVE = process.env.HANZO_E2E === '1'
-const POOL = process.env.HANZO_POOL || 'http://10.0.0.19:1235/v1'
+const POOL = process.env.HANZO_POOL || 'http://localhost:1235/v1'
 const LOCAL = process.env.HANZO_LOCAL_AGENT || 'http://127.0.0.1:11434'
 const MODEL = process.env.HANZO_E2E_MODEL || 'qwen3:0.6b'
 

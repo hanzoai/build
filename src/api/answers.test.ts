@@ -571,7 +571,7 @@ describe('projects', () => {
 
   it('names no address for a clone URL with one segment', () => {
     expect(projects.address('cloud')).toBe('')
-    expect(projects.ours('hanzo-inc/cloud', '')).toBe(true)
+    expect(projects.ours('acme/cloud', '')).toBe(true)
   })
 
   it('takes a starter as a copy that answers building until it is published', async () => {

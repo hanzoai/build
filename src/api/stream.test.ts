@@ -154,11 +154,11 @@ describe('who', () => {
 describe('pull', () => {
   it('draws a pull request in the same repository as the run, on GitHub or the platform git, and nothing else', async () => {
     const { pull } = await import('./turn.ts')
-    expect(pull('https://github.com/hanzo-inc/cloud/pull/42', 'hanzo-inc/cloud')).toEqual({ href: 'https://github.com/hanzo-inc/cloud/pull/42', label: '#42' })
+    expect(pull('https://github.com/acme/cloud/pull/42', 'acme/cloud')).toEqual({ href: 'https://github.com/acme/cloud/pull/42', label: '#42' })
     expect(pull('https://git.hanzo.ai/hanzo/site/pulls/7', 'Hanzo/Site')).toEqual({ href: 'https://git.hanzo.ai/hanzo/site/pulls/7', label: '#7' })
     for (const [bad, repo] of [
-      ['https://github.com/mallory/cloud/pull/1', 'hanzo-inc/cloud'],
-      ['https://github.com/hanzo-inc/cloud/pull/1', ''],
+      ['https://github.com/mallory/cloud/pull/1', 'acme/cloud'],
+      ['https://github.com/acme/cloud/pull/1', ''],
       ['https://github.com.evil.example/a/b/pull/1', 'a/b'],
       ['https://evil.example/a/b/pull/1', 'a/b'],
       ['javascript:alert(1)', 'a/b'],
