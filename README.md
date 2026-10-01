@@ -79,6 +79,12 @@ import { Builder, DevSection } from '@hanzo/build'
 <Builder host={host} rail={false} />
 ```
 
+A run draws its own panes — the transcript, the side pane a gutter beside it
+with the resize edge in that gutter, and each composer — from @hanzo/design's
+pane tokens: `--pane-fill`, `--pane-round`, `--pane-edge`, `--pane-blur`,
+`--pane-gap`, and `--shadow-sheet-2` for the drop. A host retunes the tokens;
+it writes no rule against the builder's slots.
+
 `DevSection` is rows of `@hanzo/ui/chat`'s Sidebar; `useSessions(host)` is its
 data — the org's coding runs, kept live by the org's feed — for a host that
 draws the rows itself. `administers(token, org)` reads the org-admin bit off a
@@ -260,6 +266,7 @@ src/
   transcript.tsx  a run's transcript, as cards
   prose.tsx     markdown, drawn as text (markdown.ts reads it)
   desk.tsx      the pane beside a run
+  pane.ts       how a pane is cut, from the --pane-* tokens
   door.tsx      a run's desktop or shell, framed
   git.tsx       what a run pushed
   files.tsx     a run's files and artifacts

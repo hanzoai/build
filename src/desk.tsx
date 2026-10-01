@@ -92,7 +92,8 @@ export function Desk({
   const held = box.value?.state ?? ''
 
   return (
-    <YStack role="complementary" aria-label="Run details" flex={1} minW={0} minH={0} borderLeftWidth={1} borderColor="$borderColor">
+    // The pane around it is the edge; this takes its corner and cuts what scrolls to it.
+    <YStack role="complementary" aria-label="Run details" flex={1} minW={0} minH={0} overflow="hidden" style={{ borderRadius: 'inherit' }}>
       <XStack px="$2" py="$2" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
         {/* The tabs scroll sideways in a narrow pane; hiding the pane and its menu stay put. */}
         <XStack flex={1} minW={0} gap="$1" overflow="scroll">

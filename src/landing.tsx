@@ -29,6 +29,7 @@ import { ready, SANDBOX, type Place } from './api/places.ts'
 import { isForge } from './choice.ts'
 import { useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { pane } from './pane.ts'
 import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
@@ -387,6 +388,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           ) : null}
           <Composer
             inline
+            {...pane}
             value={draft}
             onChange={setDraft}
             onSend={() => void send()}

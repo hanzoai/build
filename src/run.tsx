@@ -42,6 +42,7 @@ import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { EFFORTS } from './landing.tsx'
 import { Out } from './out.tsx'
+import { gap, pane } from './pane.ts'
 import { usePrefs } from './prefs.tsx'
 import { Transcript } from './transcript.tsx'
 
@@ -364,7 +365,7 @@ export function Run({ id }: { id: string }) {
 
   return (
     <XStack ref={measure} data-slot="run-split" flex={1} minH={0} minW={0} width="100%">
-      <YStack data-slot="run" flex={1} minH={0} minW={0} width="100%" px="$6" $max-md={{ px: '$4' }}>
+      <YStack data-slot="run" {...pane} flex={1} minH={0} minW={0} width="100%" px="$6" $max-md={{ px: '$4' }}>
         <XStack pt="$3" pb="$2" gap="$3" items="center" minH={44}>
           <YStack flex={1} minW={0} items="flex-start">
             <DropdownMenu
@@ -542,6 +543,7 @@ export function Run({ id }: { id: string }) {
           ) : null}
           <Composer
             inline
+            {...pane}
             value={draft}
             onChange={setDraft}
             onSend={send}
@@ -561,6 +563,9 @@ export function Run({ id }: { id: string }) {
           ref={(el: unknown) => {
             deskBox.current = el instanceof HTMLElement ? el : null
           }}
+          {...pane}
+          // A pane of its own beside the run's, the gutter between them.
+          ml={gap}
           position="relative"
           shrink={0}
           minH={0}
@@ -578,6 +583,9 @@ export function Run({ id }: { id: string }) {
             onKeep={setSide}
             onShut={() => setDesk(false)}
             label="Resize the side pane"
+            // In the gutter between the two panes; `left` is measured inside the pane's 1px edge.
+            l={`calc(-1 * ${gap} - ${pane.borderWidth}px)`}
+            width={gap}
           />
         <Desk
           id={id}

@@ -83,6 +83,7 @@ import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { MODES } from './landing.tsx'
 import { Out } from './out.tsx'
+import { pane as cut } from './pane.ts'
 import { Publish, type Source } from './publish.tsx'
 import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
 
@@ -478,6 +479,7 @@ export function Project({ slug }: { slug: string }) {
           </XStack>
         ) : null}
         <Composer
+          {...cut}
           value={draft}
           onChange={setDraft}
           onSend={() => void (current && running ? steer(current) : send())}

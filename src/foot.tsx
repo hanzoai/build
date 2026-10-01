@@ -18,7 +18,8 @@ export const DOCS = 'https://docs.hanzo.ai/docs/dev'
 /** Hanzo in Slack is set up under Settings; the card goes there, and once dismissed stays gone. */
 export function Slack({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: () => void }) {
   return (
-    <XStack items="center" gap="$2.5" px="$3" py="$2.5" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$panel">
+    // A card on the rail's card: glass, a corner a step inside the rail's.
+    <XStack items="center" gap="$2.5" px="$3" py="$2.5" rounded="var(--radius-lg)" borderWidth={1} borderColor="$borderColor" bg="var(--glass)">
       <Mark size={16} />
       <YStack flex={1} minW={0} gap="$0.5">
         <SizableText size="$2" color="$ink" numberOfLines={1}>
