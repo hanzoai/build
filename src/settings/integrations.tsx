@@ -2,9 +2,11 @@
  * Integrations: your own GitHub connection, the GitHub accounts the
  * organization has installed the platform's App on, and its Slack workspace.
  *
- * Connecting leaves this page once, for GitHub's or Slack's own consent screen.
- * Anyone connects their own GitHub; installing the App and connecting Slack are
- * an org admin's, which is the platform's rule.
+ * Connecting leaves this page once, for GitHub's or Slack's own consent screen,
+ * and the platform's callback brings the person back here with the answer
+ * (../back.ts), which this page finishes and reports. Anyone connects their own
+ * GitHub; installing the App and connecting Slack are an org admin's, which is
+ * the platform's rule.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Github, Hash, Lock, Slack } from '@hanzogui/lucide-icons-2'
@@ -13,6 +15,7 @@ import { useState } from 'react'
 
 import { connect, connection, disconnect as unlinkGithub, installations, type Connection, type Installation } from '../api/github.ts'
 import { authorize, channels, disconnect, read, type Channels, type Connector } from '../api/provider.ts'
+import { here, useBack } from '../back.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Card, day, Group, Heading, Note, Row, Soft } from './ui.tsx'
@@ -28,6 +31,11 @@ export function Integrations() {
   const rooms = useRead(signed && joined ? () => channels(t) : null, { channels: [], next: '' } as Channels, [t, signed, joined])
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
+  useBack(t, signed, setNote, () => {
+    mine.reload()
+    installed.reload()
+    slack.reload()
+  })
 
   if (!signed) {
     return (
@@ -95,7 +103,7 @@ export function Integrations() {
                     Disconnect
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => connect(t))}>
+                  <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => connect(t, here()))}>
                     Connect
                   </Button>
                 )
@@ -125,7 +133,7 @@ export function Integrations() {
         </Card>
         {host.admin ? (
           <XStack>
-            <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(t, 'github'))}>
+            <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(t, 'github', here()))}>
               Install on a GitHub account
             </Button>
           </XStack>
@@ -160,7 +168,7 @@ export function Integrations() {
                     Disconnect
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(t, 'slack'))}>
+                  <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(t, 'slack', here()))}>
                     Connect
                   </Button>
                 )

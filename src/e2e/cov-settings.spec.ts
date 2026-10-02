@@ -223,6 +223,11 @@ function answer(w: World, s: Sent): Reply | undefined {
       return { json: w.github }
     case 'POST /v1/provider/github/user/connect':
       return { json: { authorizeUrl: 'https://github.com/login/oauth/authorize?client_id=1&state=signed' } }
+    case 'POST /v1/provider/github/user/complete':
+      // The grant GitHub's return parked for dave; any other is no grant of his.
+      if (b.grant !== 'g-dave') return { status: 404, json: { detail: 'no pending GitHub connection with that grant' } }
+      w.github = { configured: true, connected: true, login: 'dave-gh' }
+      return { json: w.github }
     case 'POST /v1/provider/github/user/disconnect':
       w.github = { configured: true, connected: false }
       return { json: { disconnected: true } }
@@ -373,7 +378,8 @@ async function platform(page: Page, seed: (w: World) => void = () => {}): Promis
         release()
       }
     },
-    writes: () => sent.filter((s) => s.method !== 'GET').map((s) => [`${s.method} ${s.path}${s.query}`, s.body]),
+    // The page's analytics beacon (POST /v1/send) records a view, not a change.
+    writes: () => sent.filter((s) => s.method !== 'GET' && s.path !== '/v1/send').map((s) => [`${s.method} ${s.path}${s.query}`, s.body]),
   }
 }
 
@@ -1451,6 +1457,8 @@ test('Integrations connects GitHub and Slack at their own consent pages, and ins
     return r.fulfill({ status: 204 })
   })
   await page.goto('/-/settings/integrations')
+  // Each connect names this page as the one its return lands on.
+  const back = page.url()
   await expect(page.getByText('Not connected').first()).toBeVisible()
   await expect(page.getByText('User · selected repositories')).toBeVisible()
   await expect(page.getByText('Removed on GitHub')).toBeVisible()
@@ -1472,10 +1480,48 @@ test('Integrations connects GitHub and Slack at their own consent pages, and ins
   await page.getByRole('button', { name: 'Install on a GitHub account' }).click()
   await expect.poll(() => left.at(-1)).toBe('https://github.com/apps/hanzo/installations/new?state=signed')
   expect(p.writes()).toEqual([
-    ['POST /v1/provider/slack/connect', {}],
-    ['POST /v1/provider/slack/connect', {}],
-    ['POST /v1/provider/github/user/connect', null],
-    ['POST /v1/provider/github/connect', {}],
+    ['POST /v1/provider/slack/connect', { return: back }],
+    ['POST /v1/provider/slack/connect', { return: back }],
+    ['POST /v1/provider/github/user/connect', { return: back }],
+    ['POST /v1/provider/github/connect', { return: back }],
+  ])
+})
+
+test('Integrations finishes what a consent page returned: a GitHub grant, a stale one, a connector connected and a refusal', async ({ page }) => {
+  const p = await platform(page, (w) => {
+    w.github = { configured: true, connected: false }
+    w.slack = { id: 'slack', name: 'Slack', available: true, connected: false }
+  })
+  const carried = /[?&](complete|grant|connected|account|error|reason)=/
+
+  // GitHub's return lands here with the grant: the page completes it, says who, and the address forgets it.
+  await page.goto('/-/settings/integrations?complete=github&grant=g-dave')
+  await expect(page.getByRole('status').filter({ hasText: 'Connected as @dave-gh' })).toBeVisible()
+  await expect(page.getByText('Connected as @dave-gh').first()).toBeVisible()
+  await expect.poll(() => page.url()).not.toMatch(carried)
+  expect(new URL(page.url()).pathname).toBe('/-/settings/integrations')
+  // A reload does not complete it again.
+  await page.reload()
+  await expect(page.getByText('Connected as @dave-gh')).toBeVisible()
+  expect(p.writes()).toEqual([['POST /v1/provider/github/user/complete', { grant: 'g-dave' }]])
+
+  // A grant the platform does not hold is the platform's own sentence, and the page goes on.
+  p.w.github = { configured: true, connected: false }
+  await page.goto('/-/settings/integrations?complete=github&grant=stale')
+  await expect(page.getByRole('status').filter({ hasText: 'no pending GitHub connection with that grant' })).toBeVisible()
+  await expect(page.getByText('Not connected').first()).toBeVisible()
+  await expect.poll(() => page.url()).not.toMatch(carried)
+
+  await page.goto('/-/settings/integrations?connected=slack&account=Acme%2C+LLC')
+  await expect(page.getByRole('status').filter({ hasText: 'Slack is connected as Acme, LLC' })).toBeVisible()
+  await expect.poll(() => page.url()).not.toMatch(carried)
+
+  await page.goto('/-/settings/integrations?error=github&reason=authorization+denied')
+  await expect(page.getByRole('status').filter({ hasText: 'GitHub: authorization denied' })).toBeVisible()
+  await expect.poll(() => page.url()).not.toMatch(carried)
+  expect(p.writes()).toEqual([
+    ['POST /v1/provider/github/user/complete', { grant: 'g-dave' }],
+    ['POST /v1/provider/github/user/complete', { grant: 'stale' }],
   ])
 })
 

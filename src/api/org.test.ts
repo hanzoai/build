@@ -363,6 +363,9 @@ describe('connectors', () => {
     await expect(provider.authorize(T, 'slack')).rejects.toThrow('did not name a slack address')
     answer(200, { authorizeUrl: 'https://github.com/apps/hanzo/installations/new?state=s' })
     expect(await provider.authorize(T, 'github')).toContain('https://github.com/apps/hanzo/installations/new')
+    const back = answer(200, { authorizeUrl: 'https://slack.com/oauth/v2/authorize?client_id=1&state=s' })
+    await provider.authorize(T, 'slack', 'https://hanzo.ai/?at=-/settings/integrations')
+    expect(back[0]).toMatchObject({ body: { return: 'https://hanzo.ai/?at=-/settings/integrations' } })
   })
 
   it('disconnects, and lists the workspace’s channels', async () => {

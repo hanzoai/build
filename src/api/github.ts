@@ -4,7 +4,8 @@
  *   GET  /v1/provider/github/repos?q=&owner=&limit=&after=           most recently pushed first
  *   GET  /v1/provider/github/repos/{owner}/{repo}/branches?q=&limit=&after=   default first
  *   GET  /v1/provider/github/user              the person's own connection
- *   POST /v1/provider/github/user/connect      → {authorizeUrl}
+ *   POST /v1/provider/github/user/connect      {return} → {authorizeUrl}
+ *   POST /v1/provider/github/user/complete     {grant} → the connection
  *   POST /v1/provider/github/user/disconnect
  *   GET  /v1/provider/github/installations     the accounts this org has bound the App on
  *
@@ -14,8 +15,9 @@
  *
  * `connected` false with repositories is an org admin seeing the org's
  * installations; false with none is the cue to connect. GitHub returns a
- * connecting person to the console's /connectors?complete=github&grant=<id>,
- * which completes it.
+ * connecting person to the page the connect named as its return (a Hanzo app
+ * page; the console's /connectors otherwise) with `?complete=github&grant=<id>`,
+ * and that page completes it (`complete`, and `landed` in ../back.ts).
  */
 import { call, query, seg, type Target } from './call.ts'
 
@@ -144,17 +146,30 @@ export async function branches(
   }
 }
 
-export async function connection(t: Target): Promise<Connection> {
-  const raw = obj(await call<unknown>(t, 'GET', '/v1/provider/github/user'))
-  return { configured: raw.configured === true, connected: raw.connected === true, login: str(raw.login) }
+function own(raw: unknown): Connection {
+  const c = obj(raw)
+  return { configured: c.configured === true, connected: c.connected === true, login: str(c.login) }
 }
 
-/** Where to send the person to authorize the platform's GitHub App — github.com only. */
-export async function connect(t: Target): Promise<string> {
-  const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/user/connect'))
+export async function connection(t: Target): Promise<Connection> {
+  return own(await call<unknown>(t, 'GET', '/v1/provider/github/user'))
+}
+
+/**
+ * Where to send the person to authorize the platform's GitHub App — github.com
+ * only. `back` is the page GitHub's return lands on; the platform keeps it only
+ * when it is a Hanzo app page.
+ */
+export async function connect(t: Target, back?: string): Promise<string> {
+  const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/user/connect', back ? { return: back } : undefined))
   const url = str(raw.authorizeUrl)
   if (!/^https:\/\/github\.com\//.test(url)) throw new Error('The platform did not name a GitHub address to connect at')
   return url
+}
+
+/** Finish the connect GitHub's return handed this page as `grant`. */
+export async function complete(t: Target, grant: string): Promise<Connection> {
+  return own(await call<unknown>(t, 'POST', '/v1/provider/github/user/complete', { grant }))
 }
 
 export async function disconnect(t: Target): Promise<void> {

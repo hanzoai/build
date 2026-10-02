@@ -3,7 +3,7 @@
  * platform's GitHub App is installed on.
  *
  *   GET  /v1/provider/{id}              one connector and this org's connection to it
- *   POST /v1/provider/{id}/connect      {} → {authorizeUrl}: the provider's own consent page (org admin)
+ *   POST /v1/provider/{id}/connect      {return} → {authorizeUrl}: the provider's own consent page (org admin)
  *   POST /v1/provider/{id}/disconnect   forget the org's connection (org admin)
  *   GET  /v1/provider/slack/channels    the connected workspace's channels, a page at a time
  *
@@ -53,9 +53,9 @@ const CONSENT: Record<string, RegExp> = {
   github: /^https:\/\/github\.com\//,
 }
 
-/** The provider's consent page for this org. */
-export async function authorize(t: Target, id: string): Promise<string> {
-  const url = str(obj(await call<unknown>(t, 'POST', `/v1/provider/${seg(id)}/connect`, {})).authorizeUrl)
+/** The provider's consent page for this org; its return lands on `back` when that is a Hanzo app page. */
+export async function authorize(t: Target, id: string, back?: string): Promise<string> {
+  const url = str(obj(await call<unknown>(t, 'POST', `/v1/provider/${seg(id)}/connect`, back ? { return: back } : {})).authorizeUrl)
   const host = CONSENT[id]
   if (!host || !host.test(url)) throw new Error(`The platform did not name a ${id} address to connect at`)
   return url

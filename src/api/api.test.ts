@@ -131,6 +131,17 @@ describe('github', () => {
     await expect(github.connect(T)).rejects.toThrow('did not name a GitHub address')
   })
 
+  it('names the page GitHub returns to, and finishes the grant it hands back', async () => {
+    const seen = answer(200, { authorizeUrl: 'https://github.com/login/oauth/authorize?client_id=x&state=y' })
+    await github.connect(T, 'https://hanzo.ai/?at=-/settings/integrations')
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/github/user/connect', body: { return: 'https://hanzo.ai/?at=-/settings/integrations' } })
+    const done = answer(200, { configured: true, connected: true, login: 'octocat' })
+    expect(await github.complete(T, '9f2c')).toEqual({ configured: true, connected: true, login: 'octocat' })
+    expect(done[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/github/user/complete', body: { grant: '9f2c' } })
+    answer(404, { detail: 'no pending GitHub connection with that grant' })
+    await expect(github.complete(T, 'stale')).rejects.toThrow('no pending GitHub connection with that grant')
+  })
+
   it('reads a grant and the accounts it could not', async () => {
     answer(200, {
       repos: [
