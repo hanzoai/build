@@ -25,7 +25,9 @@
  * template taken there reads `building` until its copy is `live` or failed, and
  * is read again until then; a run that publishes what it pushed says so on its
  * final status, which reads the project again and loads the preview again. Its
- * pull request is merged from beside its link.
+ * pull request is merged from beside its link. A build that failed, or that has
+ * run past STALL, says so in the preview with the platform's reason and offers
+ * Publish again, which builds the project's repository at its branch.
  *
  * Derived from the Hanzo App v2 editor (github.com/hanzoai/build-v2), itself
  * derived from OSW Studio and DeepSite (MIT). See NOTICE.
@@ -73,6 +75,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { read as pushed, type Pull } from './api/changes.ts'
 import { start, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
+import { declare } from './api/platform.ts'
 import { deployments, name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
 import { decode, outcome, pull, said, who } from './api/turn.ts'
@@ -93,6 +96,9 @@ const LIVE = new Set(['running', 'paused'])
 
 /** How often a project being published is read again, ms. */
 const AGAIN = 5000
+
+/** How long a build may run before the builder offers to publish again, s. A template's build takes a few minutes. */
+const STALL = 10 * 60
 
 /** The chat's width beside the work, px: its default, and the two it is kept between. */
 const CHAT_WIDTH = 360
@@ -165,13 +171,36 @@ export function Project({ slug }: { slug: string }) {
   const building = project?.status === 'building'
   const failed = project?.status === 'error'
   const { reload: again } = all
+  // The clock a build is measured against, moved each time the project is read again.
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!building) return
-    const every = setInterval(again, AGAIN)
+    const every = setInterval(() => {
+      again()
+      setNow(Date.now())
+    }, AGAIN)
     return () => clearInterval(every)
   }, [building, again])
-  // Why the build failed is its latest deployment's to say.
-  const failure = useRead(failed ? () => deployments(t, slug) : null, [], [t, slug, failed, project?.updated])
+  // When the build began, and why it failed, are its latest deployment's to say.
+  const failure = useRead(building || failed ? () => deployments(t, slug) : null, [], [t, slug, building, failed, project?.updated])
+  const latest = failure.value[0]
+  const began = latest?.status === 'building' ? latest.created : 0
+  const ran = began ? Math.max(0, Math.floor(now / 1000) - began) : 0
+  const stalled = building && ran > STALL
+  // Publish again: the project's repository, built at its branch, the way Publish builds it.
+  const [redo, setRedo] = useState<{ busy: boolean; error: string }>({ busy: false, error: '' })
+  const retry = async () => {
+    if (!project?.repo || redo.busy) return
+    setRedo({ busy: true, error: '' })
+    try {
+      await declare(t, { repo: project.repo, ref: project.branch || 'main', name: slug, project: slug, mode: 'branch' })
+      setNow(Date.now())
+      again()
+      setRedo({ busy: false, error: '' })
+    } catch (e) {
+      setRedo({ busy: false, error: (e as Error).message })
+    }
+  }
 
   const listed = useRead(signed ? () => list(t, { kind: 'coding', project: slug, limit: 50 }) : null, [] as Session[], [t, signed, slug])
   // Only the runs on this project's own repository: a record can be moved into
@@ -428,7 +457,11 @@ export function Project({ slug }: { slug: string }) {
               ? 'Reading this project’s runs…'
               : project?.live
                 ? `${project.name} is loaded — it is in the preview, and every run on it is under the clock above. Say what to change and it gets built.`
-                : building
+                : stalled
+                  ? `${project?.name} has been publishing for ${Math.floor(ran / 60)} minutes without finishing. Publish it again from the preview, or say what to change and it gets built.`
+                  : failed
+                    ? `${project?.name} could not be published. Publish it again from the preview, or say what to change and it gets built.`
+                    : building
                   ? `${project?.name} is being published — it appears in the preview when its build finishes. Say what to change and it gets built.`
                   : starter
                     ? `${project?.name} is loaded — the preview shows the ${starter.title} starter until your copy is published. Say what to change and it gets built.`
@@ -549,11 +582,35 @@ export function Project({ slug }: { slug: string }) {
         empty={
           <YStack items="center" gap="$2" p="$6">
             <SizableText size="$3" color="$ink">
-              {building ? (project?.forked ? 'Publishing your copy…' : 'Publishing…') : failed ? 'Publishing failed' : 'Nothing deployed yet'}
+              {stalled
+                ? 'Publishing is taking too long'
+                : building
+                  ? project?.forked
+                    ? 'Publishing your copy…'
+                    : 'Publishing…'
+                  : failed
+                    ? 'Publishing failed'
+                    : 'Nothing deployed yet'}
             </SizableText>
             <SizableText size="$2" color="$soft" text="center">
-              {building ? 'Its page appears here when the build finishes.' : failed ? why : 'Publish this project and its page appears here.'}
+              {stalled
+                ? `Its build started ${Math.floor(ran / 60)} minutes ago and has not finished.`
+                : building
+                  ? 'Its page appears here when the build finishes.'
+                  : failed
+                    ? why
+                    : 'Publish this project and its page appears here.'}
             </SizableText>
+            {(stalled || failed) && project?.repo ? (
+              <Button variant="outline" disabled={redo.busy} onPress={() => void retry()}>
+                Publish again
+              </Button>
+            ) : null}
+            {redo.error ? (
+              <SizableText size="$2" color="$soft" text="center" role="alert">
+                {redo.error}
+              </SizableText>
+            ) : null}
           </YStack>
         }
         toolbar={

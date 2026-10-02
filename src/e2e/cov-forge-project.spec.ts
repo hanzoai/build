@@ -752,11 +752,48 @@ test.describe('publishing and merging', () => {
     await expect(page.getByText(WHY)).toBeVisible()
     await expect(page.getByText('an older failure')).toHaveCount(0)
     await expect(page.locator('iframe')).toHaveCount(0)
-    await expect(page.getByText('Synapse is loaded and nothing is published yet.', { exact: false })).toBeVisible()
+    await expect(page.getByText('Synapse could not be published.', { exact: false })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Publish again' })).toBeVisible()
     // Ended, it is not read again.
     const was = reads(sent, '/v1/projects')
     await page.waitForTimeout(6000)
     expect(reads(sent, '/v1/projects')).toBe(was)
+  })
+
+  test('a copy still building ten minutes on says so, and Publish again builds it from its repository, saying the platform’s reason when it is refused', async ({ page }) => {
+    const started = Math.floor(Date.now() / 1000) - 11 * 60
+    const { sent, world } = await studio(page, {
+      projects: [...PROJECTS(), { ...COPY, updatedAt: started }],
+      deployments: { synapse: [{ id: 'dep_1', version: 1, status: 'building', source: 'build', createdAt: started, updatedAt: started }] },
+      declared: {
+        app: { name: 'synapse', org: ORG, partOf: 'synapse', hosts: [] },
+        build: { id: 'dep_2', status: 'building' },
+        declaration: { mode: 'commit', ref: 'main', live: true },
+        notice: 'Building synapse from main in a sandbox.',
+      },
+    })
+    await page.goto('/synapse')
+    await expect(page.getByText('Publishing is taking too long')).toBeVisible()
+    await expect(page.getByText('Its build started 11 minutes ago and has not finished.')).toBeVisible()
+    await expect(page.getByText('Synapse has been publishing for 11 minutes without finishing.', { exact: false })).toBeVisible()
+    await expect(page.locator('iframe')).toHaveCount(0)
+
+    world.down['POST /v1/platform/apps'] = 'Builds are resting'
+    await page.getByRole('button', { name: 'Publish again' }).click()
+    await expect(page.getByText('Builds are resting')).toBeVisible()
+
+    delete world.down['POST /v1/platform/apps']
+    const now = Math.floor(Date.now() / 1000)
+    world.deployments.synapse = [{ id: 'dep_2', version: 2, status: 'building', source: 'build', createdAt: now, updatedAt: now }, ...world.deployments.synapse!]
+    world.projects = [...PROJECTS(), { ...COPY, updatedAt: now }]
+    await page.getByRole('button', { name: 'Publish again' }).click()
+    await expect(page.getByText('Publishing your copy…')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Publish again' })).toHaveCount(0)
+    await expect(page.getByText('Builds are resting')).toHaveCount(0)
+    expect(posted(sent, '/v1/platform/apps').map((s) => s.body)).toEqual([
+      { repo: COPY.repo.url, ref: 'main', name: 'synapse', partOf: 'synapse', mode: 'branch' },
+      { repo: COPY.repo.url, ref: 'main', name: 'synapse', partOf: 'synapse', mode: 'branch' },
+    ])
   })
 
   test('a failed build with nothing to say says so, a refused read of why says that, and a project that is not a copy is only publishing', async ({ page }) => {
