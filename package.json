@@ -1,6 +1,6 @@
 {
   "name": "@hanzo/build",
-  "version": "0.2.36",
+  "version": "0.2.37",
   "type": "module",
   "license": "Apache-2.0 OR MIT",
   "description": "Hanzo Build — say what you want, watch it built, deployed and running. The builder as a component, mounted by the Hanzo app at hanzo.ai.",

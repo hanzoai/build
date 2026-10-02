@@ -21,6 +21,9 @@ describe('a return from a consent page', () => {
 
   it('cleans only the answer off the address', () => {
     expect(clean('https://hanzo.ai/?at=-%2Fsettings%2Fintegrations&complete=github&grant=9f2c')).toBe('https://hanzo.ai/?at=-%2Fsettings%2Fintegrations')
+    // The return the platform answers with: the page's own pair stays as written, slashes and all.
+    expect(clean('https://hanzo.ai/?at=-/settings/integrations&complete=github&grant=9f2c')).toBe('https://hanzo.ai/?at=-/settings/integrations')
+    expect(clean('https://hanzo.ai/?at=-/settings/integrations&error=slack&reason=token+exchange+failed')).toBe('https://hanzo.ai/?at=-/settings/integrations')
     expect(clean('https://hanzo.ai/?connected=slack&account=Acme')).toBe('https://hanzo.ai/')
     // An address with no answer is handed back exactly as written.
     expect(clean('https://hanzo.ai/?at=-/settings/integrations')).toBe('https://hanzo.ai/?at=-/settings/integrations')

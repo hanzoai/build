@@ -38,11 +38,22 @@ export function landed(search: string): Landing | null {
   return null
 }
 
-/** `href` without the answer keys; `href` itself when it carries none. */
+/** The decoded key of one `k=v` pair, or '' when it does not decode. */
+function key(pair: string): string {
+  try {
+    return decodeURIComponent(pair.split('=')[0].replace(/\+/g, ' '))
+  } catch {
+    return ''
+  }
+}
+
+/** `href` without the answer keys, every other pair exactly as written; `href` itself when it carries none. */
 export function clean(href: string): string {
   const url = new URL(href)
-  if (!ANSWER.some((k) => url.searchParams.has(k))) return href
-  for (const k of ANSWER) url.searchParams.delete(k)
+  const pairs = url.search.slice(1).split('&').filter(Boolean)
+  const kept = pairs.filter((p) => !(ANSWER as readonly string[]).includes(key(p)))
+  if (kept.length === pairs.length) return href
+  url.search = kept.length ? `?${kept.join('&')}` : ''
   return url.href
 }
 
