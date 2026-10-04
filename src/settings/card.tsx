@@ -149,7 +149,7 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
             </>
           )}
           {note ? (
-            <SizableText size="$1" color="$soft" role="status">
+            <SizableText size="$2" color="$red10" role="alert">
               {note}
             </SizableText>
           ) : null}

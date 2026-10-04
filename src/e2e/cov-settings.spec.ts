@@ -1174,7 +1174,7 @@ test('the card form says a processor that is not set up, one that does not load,
     ;(window as unknown as { tokenized: unknown }).tokenized = { status: 'Invalid', errors: [{ message: 'Card number is not valid' }, {}, { message: 'CVV is required' }] }
   })
   await dialog.getByRole('button', { name: 'Save card' }).click()
-  await expect(dialog.getByText('Card number is not valid; CVV is required')).toBeVisible()
+  await expect(dialog.getByRole('alert')).toHaveText('Card number is not valid; CVV is required')
   await page.evaluate(() => {
     ;(window as unknown as { tokenized: unknown }).tokenized = { status: 'Invalid' }
   })
@@ -1185,7 +1185,7 @@ test('the card form says a processor that is not set up, one that does not load,
   })
   p.fail('POST /v1/billing/methods', refusal('The card was declined', 402))
   await dialog.getByRole('button', { name: 'Save card' }).click()
-  await expect(dialog.getByText('The card was declined')).toBeVisible()
+  await expect(dialog.getByRole('alert')).toHaveText('The card was declined')
   p.pass('POST /v1/billing/methods')
   await dialog.getByRole('button', { name: 'Save card' }).click()
   await expect(dialog).toHaveCount(0)
