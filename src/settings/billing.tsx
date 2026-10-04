@@ -117,7 +117,7 @@ export function Billing() {
               </SizableText>
             </YStack>
             {host.admin ? (
-              <Button onPress={() => setAdding(true)}>
+              <Button variant="primary" onPress={() => setAdding(true)}>
                 <Plus size={16} /> Add card
               </Button>
             ) : null}
