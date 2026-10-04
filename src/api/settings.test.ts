@@ -13,7 +13,7 @@ import { consentOf } from './consent.ts'
 import { environment, environments } from './environment.ts'
 import * as github from './github.ts'
 import { keys, mint } from './keys.ts'
-import { add, KINDS, live, machine, machines } from './machines.ts'
+import { add, KINDS, machine, machines, state } from './machines.ts'
 import * as members from './members.ts'
 import { memories, memoryOf } from './memory.ts'
 import { models } from './models.ts'
@@ -141,11 +141,11 @@ describe('machines', () => {
     expect(none).toEqual([])
   })
 
-  it('reads a machine as up only once it has beaten', () => {
-    expect(live(machine({ id: 't', status: 'online', metricsAt: '2026-10-04T06:00:00Z' }))).toBe(true)
-    expect(live(machine({ id: 't', status: 'online' }))).toBe(false)
-    expect(live(machine({ id: 't', status: 'offline', metricsAt: '2026-10-04T06:00:00Z' }))).toBe(false)
-    expect(live(machine({ id: 't', status: 'draining', metricsAt: '2026-10-04T06:00:00Z' }))).toBe(false)
+  it('reads a machine as online only once it has beaten', () => {
+    expect(state(machine({ id: 't', status: 'online', metricsAt: '2026-10-04T06:00:00Z' }))).toBe('online')
+    expect(state(machine({ id: 't', status: 'online' }))).toBe('not seen yet')
+    expect(state(machine({ id: 't', status: 'offline', metricsAt: '2026-10-04T06:00:00Z' }))).toBe('offline')
+    expect(state(machine({ id: 't', status: 'draining' }))).toBe('draining')
   })
 })
 

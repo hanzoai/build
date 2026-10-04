@@ -34,7 +34,7 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
   const world: World = {
     prefs: {},
     machines: [
-      { id: 'tgt_1', label: 'dave-laptop', kind: 'laptop', status: 'online', capacity: '10 vCPU / 32G' },
+      { id: 'tgt_1', label: 'dave-laptop', kind: 'laptop', status: 'online', capacity: '10 vCPU / 32G', metricsAt: '2026-09-27T11:59:40Z' },
       { id: 'tgt_2', label: 'rack', kind: 'cluster', status: 'offline' },
     ],
     models: ['zen5.8', 'zen5.8-coder'],

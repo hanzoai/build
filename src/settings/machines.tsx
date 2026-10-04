@@ -11,7 +11,7 @@ import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input } from 
 import { CopyButton } from '@hanzo/ui/product'
 import { useEffect, useState } from 'react'
 
-import { add, change, KINDS, key, live, machines, remove, type Kind, type Machine } from '../api/machines.ts'
+import { add, change, KINDS, key, machines, remove, state, type Kind, type Machine } from '../api/machines.ts'
 import { Confirm, Rename } from '../ask.tsx'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
@@ -31,12 +31,11 @@ const UNREAD: Machine[] = []
 /** The line under a machine: what it is, where, how big, and what it is doing. */
 function about(m: Machine): string {
   const load = m.running ? `${m.running} running` : m.sessions ? `${m.sessions} runs` : ''
-  const state = m.status === 'online' && !live(m) ? 'not seen yet' : m.status || 'unknown'
-  return [state, m.kind, m.host && m.host !== m.label ? m.host : '', m.capacity, load].filter(Boolean).join(' · ')
+  return [state(m) || 'unknown', m.kind, m.host && m.host !== m.label ? m.host : '', m.capacity, load].filter(Boolean).join(' · ')
 }
 
 function Dot({ m }: { m: Machine }) {
-  const on = live(m)
+  const on = state(m) === 'online'
   return (
     <YStack
       width={8}
@@ -109,10 +108,8 @@ export function Machines() {
       </Group>
 
       <Group title="Linked">
-        {list.error ? (
-          <Soft>{list.error.message}</Soft>
-        ) : list.value === UNREAD ? (
-          <Soft>Reading machines…</Soft>
+        {list.value === UNREAD ? (
+          <Soft>{list.error ? list.error.message : 'Reading machines…'}</Soft>
         ) : list.value.length === 0 ? (
           <Soft>No machine is linked yet.</Soft>
         ) : (
@@ -146,6 +143,7 @@ export function Machines() {
             ))}
           </Card>
         )}
+        {list.error && list.value !== UNREAD ? <Soft>{list.error.message}</Soft> : null}
       </Group>
       <Note>{note}</Note>
 

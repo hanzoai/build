@@ -8,7 +8,7 @@
  * can take a run only while it is online.
  */
 import type { Target } from './call.ts'
-import { machines } from './machines.ts'
+import { machines, state } from './machines.ts'
 
 export interface Place {
   /** `tgt_…`, or '' for the sandbox. */
@@ -16,7 +16,7 @@ export interface Place {
   label: string
   /** laptop | gpu | cloud | … as the platform names it; 'sandbox' for the sandbox. */
   kind: string
-  /** online | offline | draining; the sandbox is always online. */
+  /** online | offline | draining | not seen yet, as machines.ts `state` reads it; the sandbox is always online. */
   status: string
   /** "10 vCPU / 122G / 1× GB10", when the machine reported one. */
   capacity: string
@@ -26,7 +26,7 @@ export const SANDBOX: Place = { id: '', label: 'Hanzo sandbox', kind: 'sandbox',
 
 export async function places(t: Target): Promise<Place[]> {
   const list = await machines(t)
-  return [SANDBOX, ...list.map(({ id, label, kind, status, capacity }) => ({ id, label, kind, status, capacity }))]
+  return [SANDBOX, ...list.map((m) => ({ id: m.id, label: m.label, kind: m.kind, status: state(m), capacity: m.capacity }))]
 }
 
 /** Whether a run sent here now would be taken. */

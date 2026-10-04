@@ -453,6 +453,14 @@ describe('places', () => {
     expect(sandbox).toBe(SANDBOX)
     expect(ready(dgx!)).toBe(false)
   })
+
+  it('takes no run on a machine nothing has reached yet, however it was registered', async () => {
+    answer(200, { targets: [{ id: 'tgt_1', label: 'workshop', status: 'online' }, { id: 'tgt_2', label: 'dgx', status: 'online', metricsAt: '2026-10-04T06:00:00Z' }] })
+    const [, workshop, dgx] = await places(T)
+    expect(workshop).toMatchObject({ status: 'not seen yet' })
+    expect(ready(workshop!)).toBe(false)
+    expect(ready(dgx!)).toBe(true)
+  })
 })
 
 describe('platform', () => {

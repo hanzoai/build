@@ -82,11 +82,12 @@ export async function add(t: Target, what: { label: string; kind: Kind; host?: s
 }
 
 /**
- * Whether a machine is up. The platform reports a hand-registered machine at its
- * registered status until a heartbeat arrives, so `online` counts only once one has.
+ * A machine's status as a person reads it. The platform reports a hand-registered
+ * machine at its registered status until a heartbeat arrives, so `online` holds only
+ * once one has; before that it is `not seen yet`, and nothing is there to take a run.
  */
-export function live(m: Machine): boolean {
-  return m.status === 'online' && m.seen !== ''
+export function state(m: Machine): string {
+  return m.status === 'online' && !m.seen ? 'not seen yet' : m.status
 }
 
 /** Rename a machine, or drain it (`draining`) and bring it back (`online`). */

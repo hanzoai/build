@@ -239,7 +239,7 @@ export function landing(page: Page) {
   return signIn(
     page,
     ({ path }) => {
-      if (path === '/v1/agent/targets') return { json: { targets: [{ id: 'tgt_1', label: 'dave-laptop', status: 'online', capacity: '10 vCPU / 32G' }] } }
+      if (path === '/v1/agent/targets') return { json: { targets: [{ id: 'tgt_1', label: 'dave-laptop', status: 'online', capacity: '10 vCPU / 32G', metricsAt: '2026-09-27T11:59:40Z' }] } }
       if (path === '/v1/git/repos') return { json: { data: [{ name: REPO, org: ORG, defaultBranch: 'main' }] } }
       if (path === `/v1/environment/${REPO}`) return { json: { repo: REPO, install: 'pnpm i', start: '', secrets: [], state: 'ready' } }
       return undefined
@@ -678,7 +678,7 @@ export async function you(page: Page, seed: Partial<World> = {}, kept: Record<st
       }
       if (path === '/v1/pref') return { json: { prefs: world.prefs, updatedAt: 1 } }
       if (path === '/v1/models') return { json: { data: [{ id: 'zen5.8' }, { id: 'zen5.8-coder' }] } }
-      if (path === '/v1/agent/targets') return { json: { targets: [{ id: 'tgt_1', label: 'dgx', kind: 'gpu', status: 'online', capacity: '' }] } }
+      if (path === '/v1/agent/targets') return { json: { targets: [{ id: 'tgt_1', label: 'dgx', kind: 'gpu', status: 'online', capacity: '', metricsAt: '2026-09-27T11:59:40Z' }] } }
       if (path === '/v1/tool/activation' && method === 'PUT') {
         const on = (b.activate as string[]) ?? []
         const off = (b.deactivate as string[]) ?? []

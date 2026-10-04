@@ -254,7 +254,7 @@ describe('sessions', () => {
 
 describe('places, projects, git, platform', () => {
   it('puts the sandbox first and keeps every machine the org registered', async () => {
-    const seen = answer(200, { targets: [{ id: 'tgt_1', label: 'dgx', kind: 'gpu', status: 'online', capacity: '1× GB10' }, { host: 'no-id' }] })
+    const seen = answer(200, { targets: [{ id: 'tgt_1', label: 'dgx', kind: 'gpu', status: 'online', capacity: '1× GB10', metricsAt: '2026-09-27T11:59:40Z' }, { host: 'no-id' }] })
     const list = await places(T)
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/agent/targets')
     expect(list).toEqual([SANDBOX, { id: 'tgt_1', label: 'dgx', kind: 'gpu', status: 'online', capacity: '1× GB10' }])

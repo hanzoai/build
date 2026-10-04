@@ -848,23 +848,23 @@ test('Register a machine: the fields hold only what is typed, every kind registe
   await expect(add.getByRole('status')).toHaveText('A machine needs a name or a hostname')
   expect(p.writes()).toEqual([])
 
-  // Josh's form, typed key by key: Name, Kind cloud, Hostname m.
-  await add.getByLabel('Machine name').pressSequentially('workshop')
+  // Josh's form as he left it: Name untouched, Kind cloud, Hostname m. The hostname names it, as hanzo link does.
   await add.getByRole('radio', { name: 'cloud' }).click()
   await add.getByLabel('Hostname').pressSequentially('m')
   await add.getByRole('button', { name: 'Register', exact: true }).click()
   await expect(add).toHaveCount(0)
-  await expect(page.getByRole('status').filter({ hasText: 'workshop is registered' })).toBeVisible()
-  await expect(page.getByText('not seen yet · cloud · m', { exact: true })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'm is registered' })).toBeVisible()
+  await expect(page.getByText('not seen yet · cloud', { exact: true })).toBeVisible()
 
-  // A hostname alone names the machine, as hanzo link does.
+  // A name typed key by key is the name sent.
   add = await open()
   await expect(add.getByRole('status')).toHaveCount(0)
+  await add.getByLabel('Machine name').pressSequentially('workshop')
   await add.getByRole('radio', { name: 'gpu' }).click()
   await add.getByLabel('Hostname').fill('gpu-01')
   await add.getByRole('button', { name: 'Register', exact: true }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'gpu-01 is registered' })).toBeVisible()
-  await expect(page.getByText('not seen yet · gpu', { exact: true })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'workshop is registered' })).toBeVisible()
+  await expect(page.getByText('not seen yet · gpu · gpu-01', { exact: true })).toBeVisible()
 
   for (const kind of ['laptop', 'cluster', 'machine']) {
     add = await open()
@@ -875,8 +875,8 @@ test('Register a machine: the fields hold only what is typed, every kind registe
     await expect(page.getByText(`not seen yet · ${kind}`, { exact: true })).toBeVisible()
   }
   expect(p.writes()).toEqual([
-    ['POST /v1/agent/targets', { label: 'workshop', kind: 'cloud', host: 'm' }],
-    ['POST /v1/agent/targets', { label: 'gpu-01', kind: 'gpu', host: 'gpu-01' }],
+    ['POST /v1/agent/targets', { label: 'm', kind: 'cloud', host: 'm' }],
+    ['POST /v1/agent/targets', { label: 'workshop', kind: 'gpu', host: 'gpu-01' }],
     ['POST /v1/agent/targets', { label: 'laptop-box', kind: 'laptop' }],
     ['POST /v1/agent/targets', { label: 'cluster-box', kind: 'cluster' }],
     ['POST /v1/agent/targets', { label: 'machine-box', kind: 'machine' }],
@@ -887,19 +887,44 @@ test('Register a machine: the fields hold only what is typed, every kind registe
   p.w.targets.unshift({ id: 'tgt_20', label: 'dgx', kind: 'gpu', status: 'online', host: 'dgx', metricsAt: '2026-09-27T12:00:00Z' })
   await page.clock.runFor(31_000)
   await expect(page.getByText('dgx', { exact: true })).toBeVisible()
-  await expect(page.getByText('online · cloud · m', { exact: true })).toBeVisible()
-  await expect(page.getByText('Reading machines…')).toHaveCount(0)
+  await expect(page.getByText('online · gpu · gpu-01', { exact: true })).toBeVisible()
 
   // The one registered here is the newer workshop, so it is listed first.
   await page.getByRole('button', { name: 'Actions for workshop' }).first().click()
   await page.getByRole('menuitem', { name: 'Remove' }).click()
   await page.getByRole('dialog', { name: 'Remove workshop?' }).getByRole('button', { name: 'Remove' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'workshop is removed' })).toBeVisible()
-  await expect(page.getByText('online · cloud · m', { exact: true })).toHaveCount(0)
-  expect(p.writes().at(-1)).toEqual(['DELETE /v1/agent/targets/tgt_4', null])
+  await expect(page.getByText('online · gpu · gpu-01', { exact: true })).toHaveCount(0)
+  expect(p.writes().at(-1)).toEqual(['DELETE /v1/agent/targets/tgt_5', null])
   await page.reload()
   await expect(page.getByText('dgx', { exact: true })).toBeVisible()
-  await expect(page.getByText('online · cloud · m', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('online · gpu · gpu-01', { exact: true })).toHaveCount(0)
+})
+
+test('Machines re-reads on the beat without a flash: an empty list stays empty while it reads, and a failed re-read keeps the rows', async ({ page }) => {
+  const p = await platform(page, (w) => {
+    w.targets = []
+  })
+  await page.clock.install()
+  await page.goto('/-/settings/machines')
+  await expect(page.getByText('No machine is linked yet.')).toBeVisible()
+  const release = p.hold((s) => s.method === 'GET' && s.path === '/v1/agent/targets')
+  await page.clock.runFor(31_000)
+  await expect.poll(() => p.sent.filter((s) => s.method === 'GET' && s.path === '/v1/agent/targets').length).toBe(2)
+  await expect(page.getByText('No machine is linked yet.')).toBeVisible()
+  await expect(page.getByText('Reading machines…')).toHaveCount(0)
+  p.w.targets = [{ id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', host: 'spark', metricsAt: '2026-09-27T12:00:00Z' }]
+  release()
+  await expect(page.getByText('online · gpu · spark', { exact: true })).toBeVisible()
+
+  p.fail('GET /v1/agent/targets', refusal('The machine registry is down', 503))
+  await page.clock.runFor(31_000)
+  await expect(page.getByText('The machine registry is down')).toBeVisible()
+  await expect(page.getByText('online · gpu · spark', { exact: true })).toBeVisible()
+  p.pass('GET /v1/agent/targets')
+  await page.clock.runFor(31_000)
+  await expect(page.getByText('The machine registry is down')).toHaveCount(0)
+  await expect(page.getByText('online · gpu · spark', { exact: true })).toBeVisible()
 })
 
 test('API keys: a secret created after a refusal, a publishable rotated with a limit, and a secret revoked, each across a reload', async ({ page }) => {
