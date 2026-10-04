@@ -20,10 +20,10 @@ import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { ago } from './ago.ts'
-import { automation, automations, changes, create, remove, runs, save, start, words, type Automation, type Draft, type Kind, type Run, type Schedule } from './api/auto.ts'
+import { automation, automations, changes, create, remove, runs, save, start, starters, words, type Automation, type Draft, type Kind, type Run, type Schedule, type Starter } from './api/auto.ts'
 import { Refusal } from './api/call.ts'
 import { ENSO, limits as readLimits, models } from './api/models.ts'
-import { Choice, Confirm, Field, Line } from './customize/ui.tsx'
+import { Choice, Confirm, Field, Line, Sheet } from './customize/ui.tsx'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { path } from './route.ts'
@@ -125,11 +125,10 @@ function rebase(cur: Draft, was: Draft, next: Draft): Draft {
   return out
 }
 
-/** A refusal in the platform's words; out of credit names where to add some. */
-function said(e: unknown): string {
-  if (e instanceof Refusal && e.status === 402) return `${e.message || 'This organization is out of credit.'} Add credit in Settings → Billing.`
-  return (e as Error).message
-}
+/** A run refused for want of credit. */
+const broke = (e: unknown): boolean => e instanceof Refusal && e.status === 402
+const BROKE = 'This organization has no credit for a run. Add credit, then Run now again.'
+
 
 export function Automations() {
   const host = useHost()
@@ -148,7 +147,7 @@ export function Automations() {
       await save(t, a.id, { enabled: on })
       list.reload()
     } catch (e) {
-      setProblem(`${a.name}: ${said(e)}`)
+      setProblem(`${a.name}: ${(e as Error).message}`)
     }
   }
 
@@ -282,6 +281,11 @@ export function Editor({ id }: { id: string }) {
   const [busy, setBusy] = useState('')
   const [note, setNote] = useState('')
   const [asking, setAsking] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [credit, setCredit] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const asksRef = useRef<HTMLTextAreaElement>(null)
+  const offered = useRead(signed && fresh ? () => starters(t) : null, [] as Starter[], [t, signed, fresh])
   const here = useRef(true)
   useEffect(() => {
     here.current = true
@@ -295,7 +299,7 @@ export function Editor({ id }: { id: string }) {
   const switchesAlone = Boolean(a && !a.draft)
   const change = changes(base, d)
   if (switchesAlone) delete change.enabled
-  const dirty = fresh ? Boolean(d.name.trim() || d.instructions.trim()) : Object.keys(change).length > 0
+  const dirty = Object.keys(change).length > 0
 
   // What is saved now becomes the form's start, unless the person is mid-edit: then
   // their edit stands, and what they did not touch is not sent back over it.
@@ -319,8 +323,13 @@ export function Editor({ id }: { id: string }) {
     return () => clearInterval(timer)
   }, [every])
 
-  const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }))
-  const setWhen = (p: Partial<Schedule>) => setD((x) => ({ ...x, schedule: { ...x.schedule, ...p } }))
+  // An edit answers what the last line asked for, so the line goes with it.
+  const set = (p: Partial<Draft>) => {
+    setNote('')
+    setCredit(false)
+    setD((x) => ({ ...x, ...p }))
+  }
+  const setWhen = (p: Partial<Schedule>) => set({ schedule: { ...d.schedule, ...p } })
   const wrong = unready(d.schedule)
 
   const zones = useMemo(() => {
@@ -331,16 +340,41 @@ export function Editor({ id }: { id: string }) {
     }
   }, [])
 
+  // A draft waits on its instructions: they have the focus when it opens.
+  const drafty = Boolean(a?.draft)
+  useEffect(() => {
+    if (ready && drafty) asksRef.current?.focus()
+  }, [ready, drafty])
+
   const act = async (what: string, work: () => Promise<void>) => {
     setBusy(what)
     setNote('')
+    setCredit(false)
     try {
       await work()
     } catch (e) {
-      setNote(said(e))
+      // Wanting credit is said in these words only where a run was asked for.
+      const run = what === 'run' && broke(e)
+      setNote(run ? BROKE : (e as Error).message)
+      setCredit(run)
     } finally {
       setBusy('')
     }
+  }
+
+  /** What a save still needs, said, with the focus on where to give it; true when nothing. */
+  const complete = (): boolean => {
+    const ask = !d.name.trim() ? (['Name it first.', nameRef] as const) : !d.instructions.trim() ? (['Add instructions first.', asksRef] as const) : null
+    if (ask) {
+      setNote(ask[0])
+      ask[1].current?.focus()
+      return false
+    }
+    if (wrong) {
+      setNote(wrong)
+      return false
+    }
+    return true
   }
 
   const keep = () =>
@@ -351,13 +385,13 @@ export function Editor({ id }: { id: string }) {
         if (here.current) host.go(path({ kind: 'automation', id: made.id }), { replace: true })
         return
       }
-      const sent = tidy(d)
-      const send = changes(base, sent)
+      const snap = d
+      const send = changes(base, tidy(snap))
       if (switchesAlone) delete send.enabled
       const now = Object.keys(send).length ? await save(t, id, send) : a!
       // What was typed while the save was in flight stands.
       setBase(drafted(now))
-      setD((cur) => rebase(cur, sent, drafted(now)))
+      setD((cur) => rebase(cur, snap, drafted(now)))
       setTick((n) => n + 1)
       setNote('Saved.')
     })
@@ -377,128 +411,55 @@ export function Editor({ id }: { id: string }) {
       if (run.status === 'skipped') setNote('Not started: the previous run is still going.')
     })
 
-  const back = (how?: { replace?: boolean }) => host.go(path({ kind: 'screen', screen: 'automations' }), how)
+  const leave = (how?: { replace?: boolean }) => host.go(path({ kind: 'screen', screen: 'automations' }), how)
+  // Unsaved work is not left without a word.
+  const back = () => (dirty ? setLeaving(true) : leave())
+  const begin = (x: Starter) => {
+    const tz = x.schedule.kind === 'manual' ? undefined : zone()
+    set({ name: x.name, instructions: x.instructions, schedule: tz ? { ...x.schedule, tz } : { kind: 'manual' } })
+    asksRef.current?.focus()
+  }
 
-  if (!signed) return <Page title="Automation" onBack={() => back()} says="Sign in to see this organization's automations." />
-  if (!fresh && saved.error && !a) return <Page title="Automation" onBack={() => back()} says={saved.error.message} />
-  if (!ready) return <Page title="Automation" onBack={() => back()} says="Reading the automation…" />
+  if (!signed) return <Page title="Automation" onBack={() => leave()} says="Sign in to see this organization's automations." />
+  if (!fresh && saved.error && !a) return <Page title="Automation" onBack={() => leave()} says={saved.error.message} />
+  if (!ready) return <Page title="Automation" onBack={() => leave()} says="Reading the automation…" />
 
   const s = d.schedule
-  const on = switchesAlone ? Boolean(a?.enabled) : d.enabled
+  // A new automation or a draft has nothing to switch on until it says what to do.
+  const can = switchesAlone || Boolean(d.instructions.trim())
+  const on = switchesAlone ? Boolean(a?.enabled) : can && d.enabled
+  const says = switchesAlone ? (on ? 'On' : 'Off') : !can ? 'Add instructions first' : on ? 'On when saved' : 'Off when saved'
+  const state = fresh ? 'Not created yet' : dirty ? 'Unsaved changes' : ''
+  const sayId = `${id}-switch`
   return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6">
-      <YStack width="100%" maxW={760} mx="auto" gap="$5">
-        <XStack items="center" gap="$3">
-          <Button size="sm" variant="ghost" onPress={() => back()} aria-label="All automations">
+    <YStack flex={1} minH={0}>
+      <YStack shrink={0} px="$6" pt="$4" pb="$3" borderBottomWidth={1} borderColor="$borderColor">
+        <XStack width="100%" maxW={760} mx="auto" items="center" gap="$3" flexWrap="wrap" rowGap="$2">
+          <Button size="sm" variant="ghost" onPress={back} aria-label="All automations">
             <ChevronLeft size={14} />
             Automations
           </Button>
+          <SizableText size="$1" color="$soft" role="status">
+            {state}
+          </SizableText>
           <XStack flex={1} />
           <XStack items="center" gap="$2">
-            <SizableText size="$2" color="$soft">
-              {switchesAlone ? (on ? 'On' : 'Off') : on ? 'On when saved' : 'Off when saved'}
+            <SizableText id={sayId} size="$2" color="$soft">
+              {says}
             </SizableText>
-            <Switch checked={on} disabled={busy === 'switch'} onCheckedChange={flip} aria-label={switchesAlone ? `${a!.name} on` : 'On when saved'} />
+            <Switch
+              checked={on}
+              disabled={busy === 'switch' || !can}
+              onCheckedChange={flip}
+              aria-label={switchesAlone ? `${a!.name} on` : 'On when saved'}
+              aria-describedby={sayId}
+            />
           </XStack>
           {a && !a.draft ? (
             <Button size="sm" variant="outline" disabled={Boolean(busy) || dirty} onPress={() => void go()}>
               {busy === 'run' ? 'Starting…' : 'Run now'}
             </Button>
           ) : null}
-        </XStack>
-        <YStack gap="$1">
-          <SizableText render="h1" size="$6" color="$ink" numberOfLines={1}>
-            {fresh ? 'New automation' : a?.name}
-          </SizableText>
-          <SizableText size="$2" color="$soft">
-            {fresh
-              ? 'Name it, say what it should do, and when. It runs as you, in this organization.'
-              : a?.draft
-                ? 'A draft: say what it should do and save it, and it runs.'
-                : [words(a!.schedule), a!.next && a!.enabled ? `next ${local(a!.next)}` : a!.schedule.kind === 'manual' ? '' : 'off'].filter(Boolean).join(' · ')}
-          </SizableText>
-        </YStack>
-
-        <Field label="Name">
-          <Input value={d.name} onChangeText={(v: string) => set({ name: v })} placeholder="Morning briefing" aria-label="Automation name" autoFocus={fresh} />
-        </Field>
-        <Field label="Instructions" hint="What the agent does each run. It works in a Dev sandbox with this organization's connectors, MCP servers and skills.">
-          <Textarea
-            value={d.instructions}
-            onChangeText={(v: string) => set({ instructions: v })}
-            placeholder="Summarize what needs my attention today across calendar, email and messages."
-            aria-label="Instructions"
-            rows={7}
-          />
-        </Field>
-        <Field label="When it runs" hint={s.kind === 'cron' ? 'Five fields: minute, hour, day of month, month, day of week.' : undefined}>
-          <XStack gap="$2" flexWrap="wrap" rowGap="$2" items="center">
-            <ChipSelect name="When it runs" label={KINDS.find((k) => k.id === s.kind)!.label} chosen={KINDS.find((k) => k.id === s.kind)} items={KINDS} onChange={(k) => set({ schedule: shaped(k.id, s) })} placement="bottom-start" width={200} />
-            {s.kind === 'weekly' ? <ChipSelect name="Day" label={DAYS.find((x) => x.id === s.day)?.label ?? 'Monday'} chosen={DAYS.find((x) => x.id === s.day)} items={DAYS} onChange={(x) => setWhen({ day: x.id })} placement="bottom-start" width={180} /> : null}
-            {s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly' ? (
-              <YStack width={110}>
-                <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label="Time of day" inputMode="text" />
-              </YStack>
-            ) : null}
-            {s.kind === 'hourly' ? (
-              <XStack items="center" gap="$2">
-                <SizableText size="$2" color="$soft">
-                  at minute
-                </SizableText>
-                <YStack width={70}>
-                  <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label="Minute" inputMode="numeric" />
-                </YStack>
-              </XStack>
-            ) : null}
-            {s.kind === 'cron' ? (
-              <YStack width={200}>
-                <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label="Cron" autoCapitalize="none" />
-              </YStack>
-            ) : null}
-            {s.kind !== 'manual' ? <ChipSelect name="Time zone" label={s.tz || 'UTC'} chosen={{ id: s.tz || 'UTC', label: s.tz || 'UTC' }} items={zones} onChange={(z) => setWhen({ tz: z.id })} placeholder="Search zones…" placement="bottom-start" width={260} /> : null}
-          </XStack>
-        </Field>
-        <Field label="Model">
-          <XStack>
-            <ModelPicker
-              size="sm"
-              name="Model"
-              models={catalog.value}
-              scope="chat"
-              limits={limits}
-              value={d.model ?? ENSO}
-              onChange={(id) => set({ model: id === ENSO ? null : id })}
-              loading={catalog.loading}
-              error={catalog.error?.message ?? null}
-            />
-          </XStack>
-        </Field>
-        <Field
-          label="Permissions"
-          hint={d.permissions === 'auto' ? 'Works and uses connectors without stopping.' : 'Reads and researches, changes nothing, and ends with the actions it would take for you to approve.'}
-        >
-          <Choice label="Permissions" value={d.permissions} options={PERMISSIONS} onChange={(p) => set({ permissions: p })} />
-        </Field>
-        <XStack items="center" gap="$3">
-          <YStack flex={1} minW={0}>
-            <SizableText size="$2" color="$ink">
-              Email me when a run ends
-            </SizableText>
-            <SizableText size="$1" color="$soft">
-              One line on how it went, with a link to the run.
-            </SizableText>
-          </YStack>
-          <Switch checked={d.notify} onCheckedChange={(v: boolean) => set({ notify: v })} aria-label="Email me when a run ends" />
-        </XStack>
-
-        <Line>{note || (dirty ? wrong : '')}</Line>
-        <XStack gap="$2" items="center">
-          {a ? (
-            <Button size="sm" variant="ghost" disabled={Boolean(busy)} onPress={() => setAsking(true)}>
-              Delete
-            </Button>
-          ) : null}
-          <XStack flex={1} />
           {a && dirty ? (
             <Button
               size="sm"
@@ -507,66 +468,208 @@ export function Editor({ id }: { id: string }) {
               onPress={() => {
                 setBase(drafted(a))
                 setD(drafted(a))
+                setNote('')
               }}
             >
               Discard changes
             </Button>
           ) : null}
-          <Button size="sm" disabled={Boolean(busy) || !dirty || !d.name.trim() || !d.instructions.trim() || Boolean(wrong)} onPress={() => void keep()}>
+          <Button size="sm" disabled={Boolean(busy) || !(fresh || drafty || dirty)} onPress={() => complete() && void keep()}>
             {busy === 'save' ? 'Saving…' : fresh ? 'Create' : 'Save'}
           </Button>
         </XStack>
-
-        {a ? (
-          <YStack gap="$2">
-            <SizableText size="$3" color="$ink">
-              Runs
-            </SizableText>
-            {history.error && !history.value.length ? (
-              <Line>{history.error.message}</Line>
-            ) : !history.value.length ? (
-              <SizableText size="$2" color="$soft">
-                {history.loading ? 'Reading its runs…' : a.draft ? 'It runs once its instructions are saved.' : 'No runs yet. Run now starts one.'}
-              </SizableText>
-            ) : (
-              <YStack role="list" borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden" aria-label="Run history">
-                {history.value.map((r, i) => (
-                  <XStack role="listitem" key={r.id} items="flex-start" gap="$3" px="$3" py="$2.5" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
-                    <YStack pt="$1">
-                      <StatusDot status={DOT[r.status] ?? 'idle'} />
-                    </YStack>
-                    <YStack flex={1} minW={0} gap="$0.5">
-                      <SizableText size="$2" color="$ink">
-                        {`${WORD[r.status] ?? r.status} · ${local(r.at)}`}
-                      </SizableText>
-                      <SizableText size="$1" color="$soft" style={{ whiteSpace: 'pre-wrap' }}>
-                        {r.summary || (live(r.status) ? 'Working…' : '')}
-                      </SizableText>
-                    </YStack>
-                    {r.session ? (
-                      <Button size="sm" variant="ghost" onPress={() => host.go(r.session!)} aria-label={`Open the Dev run of ${local(r.at)}`}>
-                        Open run
-                      </Button>
-                    ) : null}
-                  </XStack>
-                ))}
-              </YStack>
-            )}
-          </YStack>
+        {note ? (
+          <XStack width="100%" maxW={760} mx="auto" items="center" gap="$3" pt="$2">
+            <Line>{note}</Line>
+            {credit ? (
+              <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'settings', section: 'billing' }))}>
+                Add credit
+              </Button>
+            ) : null}
+          </XStack>
         ) : null}
       </YStack>
-      {a ? (
-        <Confirm
-          what={a.name}
-          says="It stops running, and its schedule and its runs go with it. A run going now is stopped."
-          open={asking}
-          onOpenChange={setAsking}
-          onYes={async () => {
-            await remove(t, a.id)
-            back({ replace: true })
-          }}
-        />
-      ) : null}
+      <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$5">
+        <YStack width="100%" maxW={760} mx="auto" gap="$5">
+          <YStack gap="$1">
+            <SizableText render="h1" size="$6" color="$ink" numberOfLines={1}>
+              {fresh ? 'New automation' : a?.name}
+            </SizableText>
+            <SizableText size="$2" color="$soft">
+              {fresh
+                ? 'Name it, say what it should do, and when. It runs as you, in this organization.'
+                : a?.draft
+                  ? 'A draft: say what it should do and save it, and it runs.'
+                  : [words(a!.schedule), a!.next && a!.enabled ? `next ${local(a!.next)}` : a!.schedule.kind === 'manual' ? '' : 'off'].filter(Boolean).join(' · ')}
+            </SizableText>
+          </YStack>
+
+          {fresh && offered.value.length && !d.instructions.trim() ? (
+            <XStack gap="$2" flexWrap="wrap" rowGap="$2" items="center">
+              <SizableText size="$2" color="$soft">
+                Start from
+              </SizableText>
+              {offered.value.map((x) => (
+                <Button key={x.key} size="sm" variant="outline" onPress={() => begin(x)} aria-label={`Start from ${x.name}`}>
+                  {x.name}
+                </Button>
+              ))}
+            </XStack>
+          ) : null}
+          <Field label="Name">
+            <Input
+              ref={nameRef}
+              value={d.name}
+              onChangeText={(v: string) => set({ name: v })}
+              onSubmitEditing={() => asksRef.current?.focus()}
+              placeholder="Morning briefing"
+              aria-label="Automation name"
+              autoFocus={fresh}
+            />
+          </Field>
+          <Field label="Instructions (required)" hint="What the agent does each run. It works in a Dev sandbox with this organization's connectors, MCP servers and skills.">
+            <Textarea
+              ref={asksRef}
+              value={d.instructions}
+              onChangeText={(v: string) => set({ instructions: v })}
+              placeholder="What should it do each run? For example: summarize what needs my attention today across calendar, email and messages."
+              aria-label="Instructions"
+              rows={7}
+            />
+          </Field>
+          <Field label="When it runs" hint={s.kind === 'cron' ? 'Five fields: minute, hour, day of month, month, day of week.' : undefined}>
+            <XStack gap="$2" flexWrap="wrap" rowGap="$2" items="center">
+              <ChipSelect name="When it runs" label={KINDS.find((k) => k.id === s.kind)!.label} chosen={KINDS.find((k) => k.id === s.kind)} items={KINDS} onChange={(k) => set({ schedule: shaped(k.id, s) })} placement="bottom-start" width={200} />
+              {s.kind === 'weekly' ? <ChipSelect name="Day" label={DAYS.find((x) => x.id === s.day)?.label ?? 'Monday'} chosen={DAYS.find((x) => x.id === s.day)} items={DAYS} onChange={(x) => setWhen({ day: x.id })} placement="bottom-start" width={180} /> : null}
+              {s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly' ? (
+                <YStack width={110}>
+                  <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label="Time of day" inputMode="text" />
+                </YStack>
+              ) : null}
+              {s.kind === 'hourly' ? (
+                <XStack items="center" gap="$2">
+                  <SizableText size="$2" color="$soft">
+                    at minute
+                  </SizableText>
+                  <YStack width={70}>
+                    <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label="Minute" inputMode="numeric" />
+                  </YStack>
+                </XStack>
+              ) : null}
+              {s.kind === 'cron' ? (
+                <YStack width={200}>
+                  <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label="Cron" autoCapitalize="none" />
+                </YStack>
+              ) : null}
+              {s.kind !== 'manual' ? <ChipSelect name="Time zone" label={s.tz || 'UTC'} chosen={{ id: s.tz || 'UTC', label: s.tz || 'UTC' }} items={zones} onChange={(z) => setWhen({ tz: z.id })} placeholder="Search zones…" placement="bottom-start" width={260} /> : null}
+            </XStack>
+          </Field>
+          <Field label="Model">
+            <XStack>
+              <ModelPicker
+                size="sm"
+                name="Model"
+                models={catalog.value}
+                scope="chat"
+                limits={limits}
+                value={d.model ?? ENSO}
+                onChange={(id) => set({ model: id === ENSO ? null : id })}
+                loading={catalog.loading}
+                error={catalog.error?.message ?? null}
+              />
+            </XStack>
+          </Field>
+          <Field
+            label="Permissions"
+            hint={d.permissions === 'auto' ? 'Works and uses connectors without stopping.' : 'Reads and researches, changes nothing, and ends with the actions it would take for you to approve.'}
+          >
+            <Choice label="Permissions" value={d.permissions} options={PERMISSIONS} onChange={(p) => set({ permissions: p })} />
+          </Field>
+          <XStack items="center" gap="$3">
+            <YStack flex={1} minW={0}>
+              <SizableText size="$2" color="$ink">
+                Email me when a run ends
+              </SizableText>
+              <SizableText size="$1" color="$soft">
+                One line on how it went, with a link to the run.
+              </SizableText>
+            </YStack>
+            <Switch checked={d.notify} onCheckedChange={(v: boolean) => set({ notify: v })} aria-label="Email me when a run ends" />
+          </XStack>
+
+          {dirty && wrong && note !== wrong ? <Line>{wrong}</Line> : null}
+          {a ? (
+            <XStack>
+              <Button size="sm" variant="ghost" disabled={Boolean(busy)} onPress={() => setAsking(true)}>
+                Delete
+              </Button>
+            </XStack>
+          ) : null}
+
+          {a ? (
+            <YStack gap="$2">
+              <SizableText size="$3" color="$ink">
+                Runs
+              </SizableText>
+              {history.error && !history.value.length ? (
+                <Line>{history.error.message}</Line>
+              ) : !history.value.length ? (
+                <SizableText size="$2" color="$soft">
+                  {history.loading ? 'Reading its runs…' : a.draft ? 'It runs once its instructions are saved.' : 'No runs yet. Run now starts one.'}
+                </SizableText>
+              ) : (
+                <YStack role="list" borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden" aria-label="Run history">
+                  {history.value.map((r, i) => (
+                    <XStack role="listitem" key={r.id} items="flex-start" gap="$3" px="$3" py="$2.5" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
+                      <YStack pt="$1">
+                        <StatusDot status={DOT[r.status] ?? 'idle'} />
+                      </YStack>
+                      <YStack flex={1} minW={0} gap="$0.5">
+                        <SizableText size="$2" color="$ink">
+                          {`${WORD[r.status] ?? r.status} · ${local(r.at)}`}
+                        </SizableText>
+                        <SizableText size="$1" color="$soft" style={{ whiteSpace: 'pre-wrap' }}>
+                          {r.summary || (live(r.status) ? 'Working…' : '')}
+                        </SizableText>
+                      </YStack>
+                      {r.session ? (
+                        <Button size="sm" variant="ghost" onPress={() => host.go(r.session!)} aria-label={`Open the Dev run of ${local(r.at)}`}>
+                          Open run
+                        </Button>
+                      ) : null}
+                    </XStack>
+                  ))}
+                </YStack>
+              )}
+            </YStack>
+          ) : null}
+        </YStack>
+        {a ? (
+          <Confirm
+            what={a.name}
+            says="It stops running, and its schedule and its runs go with it. A run going now is stopped."
+            open={asking}
+            onOpenChange={setAsking}
+            onYes={async () => {
+              await remove(t, a.id)
+              leave({ replace: true })
+            }}
+          />
+        ) : null}
+        <Sheet title="Leave without saving?" open={leaving} onOpenChange={setLeaving} width={420}>
+          <SizableText size="$2" color="$soft">
+            {fresh ? 'This automation is not created yet.' : 'Your changes to this automation are not saved.'}
+          </SizableText>
+          <XStack gap="$2" justify="flex-end">
+            <Button size="sm" variant="ghost" onPress={() => setLeaving(false)}>
+              Keep editing
+            </Button>
+            <Button size="sm" variant="destructive" onPress={() => leave()}>
+              Leave
+            </Button>
+          </XStack>
+        </Sheet>
+      </YStack>
     </YStack>
   )
 }

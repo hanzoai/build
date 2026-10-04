@@ -8,6 +8,7 @@
  *   DELETE /v1/auto/automations/{id}       delete it, its schedule and its runs
  *   POST   /v1/auto/automations/{id}/run   {run: {id, status}}  one run, now
  *   GET    /v1/auto/automations/{id}/runs  {data: [run]}        newest first
+ *   GET    /v1/auto/templates              {data: [starter]}    to start a new one from
  *
  * Each run is one Dev run in this organization, started as the person who last
  * saved what it does. A draft is a flow named and not yet told what to do: it
@@ -190,4 +191,23 @@ export function words(s: Schedule): string {
     case 'cron':
       return `Cron ${s.cron}${zone}`
   }
+}
+
+/** A ready-made automation to start a new one from. Its schedule names no zone: the page fills in the person's. */
+export interface Starter {
+  key: string
+  name: string
+  description: string
+  instructions: string
+  schedule: Schedule
+}
+
+/** The starters, from GET /v1/auto/templates. */
+export async function starters(t: Target): Promise<Starter[]> {
+  return list(await call<unknown>(t, 'GET', '/v1/auto/templates'))
+    .map((raw) => {
+      const o = obj(raw)
+      return { key: str(o.key), name: str(o.name), description: str(o.description), instructions: str(o.instructions), schedule: schedule(o.schedule) }
+    })
+    .filter((x) => x.key && x.name && x.instructions)
 }

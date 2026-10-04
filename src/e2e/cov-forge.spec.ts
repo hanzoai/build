@@ -91,6 +91,16 @@ async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kep
     }
     if (one) return find(one[1]) ? { json: aged(find(one[1])!, now, 'updated', true) } : refused(404, 'automation not found')
     if (path === '/v1/models') return { json: { data: MODELS } }
+    if (path === '/v1/auto/templates') {
+      return {
+        json: {
+          data: [
+            { key: 'briefing', name: 'Daily briefing', description: 'What needs your attention today.', instructions: 'Give me a short briefing on what needs my attention today.', schedule: { kind: 'weekdays', at: '08:00' }, icon: 'sunrise' },
+            { key: 'review', name: 'Weekly review', description: 'A Friday summary of the week.', instructions: 'Summarize my week.', schedule: { kind: 'weekly', day: 'fri', at: '16:00' }, icon: 'list-checks' },
+          ],
+        },
+      }
+    }
     if (path === '/v1/git/repos' && method === 'POST') {
       const r = { name: b.name, org: ORG, description: b.description, defaultBranch: 'trunk', updatedAt: new Date().toISOString() }
       world.repos.push(r)
@@ -199,9 +209,8 @@ test.describe('Automations', () => {
     await expect(page).toHaveURL(/\/-\/automations\/new$/)
     await expect(page.getByRole('heading', { name: 'New automation' })).toBeVisible()
     const create = page.getByRole('button', { name: 'Create' })
-    await expect(create).toBeDisabled()
     await page.getByLabel('Automation name').fill('Inbox triage')
-    await page.getByLabel('Instructions').fill('Sort my inbox and draft replies to anything urgent.')
+    await page.getByLabel('Instructions', { exact: true }).fill('Sort my inbox and draft replies to anything urgent.')
 
     // Every model that holds a conversation is offered, Enso first; an embedding model holds none.
     await page.getByRole('button', { name: 'Model: Enso' }).click()
@@ -230,13 +239,84 @@ test.describe('Automations', () => {
     await expect(page.getByText('No runs yet. Run now starts one.')).toBeVisible()
   })
 
+  test('a new one asks for a name, then its instructions, before it saves or switches on, with Create always in view', async ({ page }, info) => {
+    const { sent } = await forge(page, { autos: [] })
+    await page.setViewportSize({ width: 1280, height: 640 })
+    await page.goto('/-/automations/new')
+    const name = page.getByLabel('Automation name')
+    const asks = page.getByLabel('Instructions', { exact: true })
+    const create = page.getByRole('button', { name: 'Create' })
+    await expect(name).toBeFocused()
+    await expect(page.getByText('Not created yet')).toBeVisible()
+    // The switch cannot read on before there is anything to run.
+    const waiting = page.getByRole('switch', { name: 'On when saved' })
+    await expect(waiting).toBeDisabled()
+    await expect(waiting).not.toBeChecked()
+    await expect(page.getByText('Add instructions first', { exact: true })).toBeVisible()
+    // Create is in view and says what is missing rather than sitting disabled.
+    await expect(create).toBeInViewport()
+    await create.click()
+    await expect(page.getByText('Name it first.')).toBeVisible()
+    await expect(name).toBeFocused()
+    await name.fill('post on socials')
+    await name.press('Enter')
+    await expect(asks).toBeFocused()
+    await create.click()
+    await expect(page.getByText('Add instructions first.')).toBeVisible()
+    await expect(asks).toBeFocused()
+    expect(posted(sent, '/v1/auto/automations')).toHaveLength(0)
+    await asks.fill('Draft one post about our week. Do not publish it.')
+    await expect(page.getByRole('switch', { name: 'On when saved' })).toBeChecked()
+    await page.getByRole('button', { name: 'When it runs: When I run it' }).click()
+    await page.getByRole('option', { name: 'Weekdays' }).click()
+    await page.getByLabel('Time of day').fill('')
+    await expect(create).toBeInViewport()
+    await create.click()
+    await expect(page.getByText('Time of day is HH:MM on a 24-hour clock.')).toBeVisible()
+    await page.getByLabel('Time of day').fill('08:30')
+    await page.screenshot({ path: info.outputPath('automation-new-filled.png') })
+    await create.click()
+    await expect(page.getByRole('heading', { name: 'post on socials' })).toBeVisible()
+    expect(posted(sent, '/v1/auto/automations')).toHaveLength(1)
+    expect(posted(sent, '/v1/auto/automations')[0]!.body).toMatchObject({ name: 'post on socials', enabled: true, schedule: { kind: 'weekdays', at: '08:30' } })
+  })
+
+  test('a starter fills a new one, and leaving unsaved work asks first', async ({ page }) => {
+    await forge(page, { autos: [] })
+    await page.goto('/-/automations/new')
+    await page.getByRole('button', { name: 'Start from Weekly review' }).click()
+    await expect(page.getByLabel('Automation name')).toHaveValue('Weekly review')
+    await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('Summarize my week.')
+    await expect(page.getByRole('button', { name: 'When it runs: Every week' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Day: Friday' })).toBeVisible()
+    await expect(page.getByLabel('Time of day')).toHaveValue('16:00')
+    await page.getByRole('button', { name: 'All automations' }).click()
+    const asked = page.getByRole('dialog', { name: 'Leave without saving?' })
+    await expect(asked).toBeVisible()
+    await asked.getByRole('button', { name: 'Keep editing' }).click()
+    await expect(page).toHaveURL(/\/-\/automations\/new$/)
+    await page.getByRole('button', { name: 'All automations' }).click()
+    await asked.getByRole('button', { name: 'Leave' }).click()
+    await expect(page).toHaveURL(/\/-\/automations$/)
+  })
+
+  test('a run refused for want of credit says so and offers where to add it', async ({ page }) => {
+    await forge(page, { autos: AUTOS(), holds: { [`POST /v1/auto/automations/${ID(1)}/run`]: [{ status: 402, detail: 'Add credits at https://console.hanzo.ai/billing/credits' }] } })
+    await page.goto(`/-/automations/${ID(1)}`)
+    await page.getByRole('button', { name: 'Run now' }).click()
+    await expect(page.getByText('This organization has no credit for a run. Add credit, then Run now again.')).toBeVisible()
+    await expect(page.getByText(/console\.hanzo\.ai/)).toHaveCount(0)
+    await page.getByRole('button', { name: 'Add credit' }).click()
+    await expect(page).toHaveURL(/\/-\/settings\/billing$/)
+  })
+
   test('a row opens its editor; Run now runs it, and its runs say how each went and open the Dev run', async ({ page }, info) => {
     const { sent } = await forge(page, { autos: AUTOS() })
     await page.goto('/-/automations')
     await page.getByRole('button', { name: 'Open Morning briefing' }).click()
     await expect(page).toHaveURL(new RegExp(`/-/automations/${ID(1)}$`))
     await expect(page.getByLabel('Automation name')).toHaveValue('Morning briefing')
-    await expect(page.getByLabel('Instructions')).toHaveValue('What needs my attention today.')
+    await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('What needs my attention today.')
     await expect(page.getByText(/Weekdays at 08:00 · America\/Los_Angeles · next /)).toBeVisible()
     await page.getByRole('button', { name: 'Run now' }).click()
     const runs = page.getByLabel('Run history')
@@ -256,13 +336,14 @@ test.describe('Automations', () => {
     // A time that is not HH:MM is said, and holds the save.
     await page.getByLabel('Time of day').fill('')
     await expect(page.getByText('Time of day is HH:MM on a 24-hour clock.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await page.getByRole('button', { name: 'Save' }).click()
+    expect(patched(sent, ID(2))).toEqual([])
     await page.getByLabel('Time of day').fill('16:00')
-    await page.getByLabel('Instructions').fill('Summarize the week by project.')
+    await page.getByLabel('Instructions', { exact: true }).fill('Summarize the week by project.')
     await expect(page.getByRole('button', { name: 'Run now' })).toBeDisabled()
     await page.getByRole('button', { name: 'Discard changes' }).click()
-    await expect(page.getByLabel('Instructions')).toHaveValue('Summarize the week.')
-    await page.getByLabel('Instructions').fill('Summarize the week by project.')
+    await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('Summarize the week.')
+    await page.getByLabel('Instructions', { exact: true }).fill('Summarize the week by project.')
     await page.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Saved.')).toBeVisible()
     expect(patched(sent, ID(2))).toEqual([{ instructions: 'Summarize the week by project.' }])
@@ -289,14 +370,14 @@ test.describe('Automations', () => {
     await page.goto(`/-/automations/${ID(1)}`)
     await page.getByRole('button', { name: 'Run now' }).click()
     await expect(page.getByLabel('Run history')).toContainText('Running')
-    await page.getByLabel('Instructions').fill('What needs my attention today, and why.')
+    await page.getByLabel('Instructions', { exact: true }).fill('What needs my attention today, and why.')
     // Two reads of the runs go by.
     await page.waitForTimeout(9000)
     expect(sent.filter((x) => x.method === 'GET' && x.path === `/v1/auto/automations/${ID(1)}/runs`).length).toBeGreaterThan(2)
-    await expect(page.getByLabel('Instructions')).toHaveValue('What needs my attention today, and why.')
+    await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('What needs my attention today, and why.')
     await page.getByRole('switch', { name: 'Morning briefing on' }).click()
     await expect(page.getByRole('switch', { name: 'Morning briefing on' })).not.toBeChecked()
-    await expect(page.getByLabel('Instructions')).toHaveValue('What needs my attention today, and why.')
+    await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('What needs my attention today, and why.')
     await page.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Saved.')).toBeVisible()
     expect(patched(sent, ID(1))).toEqual([{ enabled: false }, { instructions: 'What needs my attention today, and why.' }])
@@ -305,15 +386,28 @@ test.describe('Automations', () => {
   test('what is typed while a save is in flight stands, and UTC can be chosen', async ({ page }) => {
     await forge(page, { autos: AUTOS(), holds: { [`PATCH /v1/auto/automations/${ID(2)}`]: [{ wait: 1500 }] } })
     await page.goto(`/-/automations/${ID(2)}`)
-    await page.getByLabel('Instructions').fill('Summarize the week by project.')
+    await page.getByLabel('Instructions', { exact: true }).fill('Summarize the week by project.')
     await page.getByRole('button', { name: 'Save' }).click()
     await page.getByLabel('Automation name').fill('Friday digest')
     await expect(page.getByText('Saved.')).toBeVisible()
     await expect(page.getByLabel('Automation name')).toHaveValue('Friday digest')
-    await expect(page.getByLabel('Instructions')).toHaveValue('Summarize the week by project.')
+    await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('Summarize the week by project.')
     await expect(page.getByRole('button', { name: 'Save' })).toBeEnabled()
     await page.getByRole('button', { name: 'Time zone: UTC' }).click()
     await expect(page.getByRole('option').first()).toHaveText(/^UTC/)
+  })
+
+  test('an hourly schedule saved reads saved', async ({ page }) => {
+    const { sent } = await forge(page, { autos: AUTOS() })
+    await page.goto(`/-/automations/${ID(2)}`)
+    await page.getByRole('button', { name: 'When it runs: Every week' }).click()
+    await page.getByRole('option', { name: 'Every hour' }).click()
+    await page.getByLabel('Minute').fill('5')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('Saved.')).toBeVisible()
+    expect(patched(sent, ID(2)).at(-1)).toMatchObject({ schedule: { kind: 'hourly', at: '00:05' } })
+    await expect(page.getByText('Unsaved changes')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Run now' })).toBeEnabled()
   })
 
   test('a draft opens, cannot run, and is finished in place by saving its instructions', async ({ page }, info) => {
@@ -323,9 +417,18 @@ test.describe('Automations', () => {
     await expect(page.getByText('A draft: say what it should do and save it, and it runs.')).toBeVisible()
     await expect(page.getByLabel('Automation name')).toHaveValue('trial')
     await expect(page.getByRole('button', { name: 'Run now' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+    // Its instructions are what it waits for: focused, and the switch waits on them.
+    await expect(page.getByLabel('Instructions', { exact: true })).toBeFocused()
+    await expect(page.getByRole('switch', { name: 'On when saved' })).toBeDisabled()
+    await expect(page.getByRole('switch', { name: 'On when saved' })).not.toBeChecked()
+    await expect(page.getByText('Add instructions first', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('Add instructions first.')).toBeVisible()
+    expect(patched(sent, ID(3))).toEqual([])
     await page.screenshot({ path: info.outputPath('automation-draft.png') })
-    await page.getByLabel('Instructions').fill('List what changed in our repos today.')
+    await page.getByLabel('Instructions', { exact: true }).fill('List what changed in our repos today.')
+    await expect(page.getByText('Unsaved changes')).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'On when saved' })).toBeChecked()
     await page.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByRole('button', { name: 'Run now' })).toBeVisible()
     await expect(page).toHaveURL(new RegExp(`/-/automations/${ID(3)}$`))

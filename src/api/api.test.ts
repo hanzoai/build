@@ -489,6 +489,13 @@ describe('automations', () => {
     expect(gone[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/auto/automations/flow_1' })
   })
 
+  it('reads the starters from /v1/auto/templates', async () => {
+    const seen = answer(200, { data: [{ key: 'review', name: 'Weekly review', description: 'Fridays.', instructions: 'Summarize my week.', schedule: { kind: 'weekly', day: 'fri', at: '16:00' }, icon: 'list-checks' }, { name: 'no key' }] })
+    const { starters } = await import('./auto.ts')
+    expect(await starters(T)).toEqual([{ key: 'review', name: 'Weekly review', description: 'Fridays.', instructions: 'Summarize my week.', schedule: { kind: 'weekly', day: 'fri', at: '16:00' } }])
+    expect(seen[0].url).toBe('https://api.hanzo.ai/v1/auto/templates')
+  })
+
   it('says a schedule the way a person does', async () => {
     const { words } = await import('./auto.ts')
     expect(words({ kind: 'manual', tz: 'UTC' })).toBe('When you run it')
