@@ -13,8 +13,8 @@ catalogs:
       specifier: 0.21.28
       version: 0.21.28
     '@hanzo/ui':
-      specifier: 8.27.67
-      version: 8.27.67
+      specifier: 8.27.77
+      version: 8.27.77
     '@hanzo/vite':
       specifier: 0.1.4
       version: 0.1.4
@@ -95,7 +95,7 @@ importers:
         version: 0.21.28(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@hanzo/ui':
         specifier: 'catalog:'
-        version: 8.27.67(44df0d66604089f4179a920e71b6a546)
+        version: 8.27.77(44df0d66604089f4179a920e71b6a546)
       '@hanzo/vite':
         specifier: 'catalog:'
         version: 0.1.4(react@19.2.8)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(terser@5.51.2))
@@ -789,8 +789,8 @@ packages:
     peerDependencies:
       react: '>=19'
 
-  '@hanzo/ui@8.27.67':
-    resolution: {integrity: sha512-mPjevz5avFvdiWVz0+vLy1wWlfJiTpfEel9Ya22YyzZT/4mwxK8iDrLHm/s+eaFB5QGYhzhDsGpTAe2pz0Tw7Q==}
+  '@hanzo/ui@8.27.77':
+    resolution: {integrity: sha512-QMdXPwC1XnxwUADJZgHxCn8ohUDpVT7aT57LRvAHi8I2F5pw1uxW4qqk2TVWeX82LDWuZVmZt/Jh9aiqV8bFVA==}
     peerDependencies:
       '@hanzo/canvas': '>=0.2.3'
       '@hanzo/cd': '>=0.1.2'
@@ -4137,7 +4137,7 @@ snapshots:
     dependencies:
       react: 19.2.8
 
-  '@hanzo/ui@8.27.67(44df0d66604089f4179a920e71b6a546)':
+  '@hanzo/ui@8.27.77(44df0d66604089f4179a920e71b6a546)':
     dependencies:
       '@codemirror/commands': 6.11.1
       '@codemirror/lang-json': 6.0.2
