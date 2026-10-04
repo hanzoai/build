@@ -174,6 +174,15 @@ describe('github', () => {
     await expect(github.bring(T, ['  '])).rejects.toThrow('Choose a repository first')
   })
 
+  it('syncs GitHub issues for one project, or every repository, open and closed', async () => {
+    const one = answer(200, { repos: 1, issues: 12, created: 10, updated: 2, failed: 0 })
+    expect(await github.syncIssues(T, ' api ')).toEqual({ repos: 1, issues: 12, created: 10, updated: 2, failed: 0, truncated: false })
+    expect(one[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/github/issues/backfill', body: { state: 'all', repo: 'api' } })
+    const all = answer(200, { repos: 'x', truncated: true })
+    expect(await github.syncIssues(T)).toEqual({ repos: 0, issues: 0, created: 0, updated: 0, failed: 0, truncated: true })
+    expect(all[0]).toMatchObject({ body: { state: 'all' } })
+  })
+
   it('reads the connection and disconnects', async () => {
     answer(200, { configured: true, connected: true, login: 'zeekay', connectedAt: '2026-09-24T12:00:00Z' })
     expect(await github.connection(T)).toEqual({ configured: true, connected: true, login: 'zeekay' })

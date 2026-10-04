@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Target } from './call.ts'
-import { board, boards, issues, work } from './work.ts'
+import { board, boards, closed, inProject, issues, projectOf, work } from './work.ts'
 
 const T: Target = { api: 'https://api.hanzo.ai', token: () => 'tok', org: 'hanzo' }
 
@@ -47,9 +47,9 @@ describe('issues', () => {
   it('reads every board’s issues from the board, filling what a row leaves out', async () => {
     const urls = answer({ issues: [{ title: 'Fix it', projectKey: 'WEB', number: 4 }, { projectKey: 'API', number: 'x' }, { title: 'Loose' }, { number: 9 }] })
     expect(await issues(T)).toEqual([
-      { id: 'WEB#4', identifier: 'WEB#4', project: 'WEB', number: 4, kind: 'issue', title: 'Fix it', status: 'backlog', priority: 'none', assignee: '', repo: '' },
-      { id: 'API#0', identifier: '', project: 'API', number: 0, kind: 'issue', title: 'Untitled', status: 'backlog', priority: 'none', assignee: '', repo: '' },
-      { id: '#0', identifier: '', project: '', number: 0, kind: 'issue', title: 'Loose', status: 'backlog', priority: 'none', assignee: '', repo: '' },
+      { id: 'WEB#4', identifier: 'WEB#4', project: 'WEB', number: 4, kind: 'issue', title: 'Fix it', status: 'backlog', priority: 'none', assignee: '', repo: '', source: '', labels: [], url: '', created: 0, updated: 0 },
+      { id: 'API#0', identifier: '', project: 'API', number: 0, kind: 'issue', title: 'Untitled', status: 'backlog', priority: 'none', assignee: '', repo: '', source: '', labels: [], url: '', created: 0, updated: 0 },
+      { id: '#0', identifier: '', project: '', number: 0, kind: 'issue', title: 'Loose', status: 'backlog', priority: 'none', assignee: '', repo: '', source: '', labels: [], url: '', created: 0, updated: 0 },
     ])
     expect(urls).toEqual(['https://api.hanzo.ai/v1/task/board'])
   })
@@ -57,8 +57,24 @@ describe('issues', () => {
   it('reads one board’s issues at its own address, keeping what each row says', async () => {
     const row = { id: 'i1', identifier: 'WEB-1', projectKey: 'WEB', number: 1, kind: 'bug', title: 'Crash', status: 'todo', priority: 'high', assignee: 'z', repo: 'site' }
     const urls = answer({ data: [row] })
-    expect(await issues(T, 'W B')).toEqual([{ id: 'i1', identifier: 'WEB-1', project: 'WEB', number: 1, kind: 'bug', title: 'Crash', status: 'todo', priority: 'high', assignee: 'z', repo: 'site' }])
+    expect(await issues(T, 'W B')).toEqual([{ id: 'i1', identifier: 'WEB-1', project: 'WEB', number: 1, kind: 'bug', title: 'Crash', status: 'todo', priority: 'high', assignee: 'z', repo: 'site', source: '', labels: [], url: '', created: 0, updated: 0 }])
     expect(urls).toEqual(['https://api.hanzo.ai/v1/task/projects/W%20B/issues'])
     expect(work(undefined)).toBeNull()
+  })
+
+  it('reads where an item came from, its labels, its page upstream and its times', () => {
+    const w = work({ title: 'Flaky test', projectKey: 'GH', number: 7, repo: 'api', source: 'git', labels: ['bug', 3, ''], extRef: 'https://github.com/acme/api/issues/7', createdAt: 1_700_000_000, updatedAt: 1_700_000_500_000, status: 'done' })!
+    expect(w).toMatchObject({ source: 'git', labels: ['bug'], url: 'https://github.com/acme/api/issues/7', created: 1_700_000_000_000, updated: 1_700_000_500_000 })
+    // Only an https page is kept, and `url` wins over `extRef`.
+    expect(work({ title: 'x', url: 'javascript:alert(1)' })!.url).toBe('')
+    expect(work({ title: 'x', url: 'https://git.hanzo.ai/a/b/issues/1', extRef: 'https://github.com/a/b/issues/1' })!.url).toBe('https://git.hanzo.ai/a/b/issues/1')
+    expect(projectOf(w)).toBe('api')
+    expect(projectOf({ ...w, repo: '' })).toBe('GH')
+    expect(inProject(w, 'API')).toBe(true)
+    expect(inProject(w, 'gh')).toBe(true)
+    expect(inProject(w, 'web')).toBe(false)
+    expect(closed(w)).toBe(true)
+    expect(closed({ ...w, status: 'canceled' })).toBe(true)
+    expect(closed({ ...w, status: 'in_progress' })).toBe(false)
   })
 })
