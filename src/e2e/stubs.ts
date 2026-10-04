@@ -261,7 +261,7 @@ export const PROJECTS = [
 export const STARTERS = ['synapse', 'circle', 'metrics', 'folio', 'mint'].map((slug) => ({ slug, title: slug[0]!.toUpperCase() + slug.slice(1), category: 'App', description: '', framework: 'Next.js' }))
 
 const MACHINES = [
-  { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 3, running: 1 },
+  { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 3, running: 1, metricsAt: '2026-09-27T11:59:40Z' },
   { id: 'tgt_2', label: 'laptop', kind: 'laptop', status: 'offline', host: 'mbp' },
 ]
 

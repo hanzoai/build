@@ -9,9 +9,9 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { MoreHorizontal, Plus } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input } from '@hanzo/ui'
 import { CopyButton } from '@hanzo/ui/product'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import { add, change, KINDS, key, machines, remove, type Kind, type Machine } from '../api/machines.ts'
+import { add, change, KINDS, key, live, machines, remove, type Kind, type Machine } from '../api/machines.ts'
 import { Confirm, Rename } from '../ask.tsx'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
@@ -22,14 +22,21 @@ const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 /** What `hanzo link` needs, in the order it is typed on the machine. */
 const LINK = ['hanzo login', 'hanzo link'].join('\n')
 
+/** How often the list is read again, so a machine that comes up or goes quiet shows it: the agent's beat. */
+const BEAT = 30_000
+
+/** The list before its first answer; every answer is a new array, even an empty one. */
+const UNREAD: Machine[] = []
+
 /** The line under a machine: what it is, where, how big, and what it is doing. */
 function about(m: Machine): string {
   const load = m.running ? `${m.running} running` : m.sessions ? `${m.sessions} runs` : ''
-  return [m.status || 'unknown', m.kind, m.host && m.host !== m.label ? m.host : '', m.capacity, load].filter(Boolean).join(' · ')
+  const state = m.status === 'online' && !live(m) ? 'not seen yet' : m.status || 'unknown'
+  return [state, m.kind, m.host && m.host !== m.label ? m.host : '', m.capacity, load].filter(Boolean).join(' · ')
 }
 
-function Dot({ status }: { status: string }) {
-  const on = status === 'online'
+function Dot({ m }: { m: Machine }) {
+  const on = live(m)
   return (
     <YStack
       width={8}
@@ -38,7 +45,7 @@ function Dot({ status }: { status: string }) {
       shrink={0}
       bg={on ? '$green10' : 'transparent'}
       borderWidth={on ? 0 : 1}
-      borderColor={status === 'draining' ? '$yellow10' : '$soft'}
+      borderColor={m.status === 'draining' ? '$yellow10' : '$soft'}
       aria-hidden
     />
   )
@@ -48,13 +55,20 @@ export function Machines() {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
-  const list = useRead(signed ? () => machines(t) : null, [] as Machine[], [t, signed])
+  const list = useRead(signed ? () => machines(t) : null, UNREAD, [t, signed])
   const [adding, setAdding] = useState(false)
   const [renaming, setRenaming] = useState<Machine | null>(null)
   const [removing, setRemoving] = useState<Machine | null>(null)
   const [keying, setKeying] = useState<Machine | null>(null)
   const [minted, setMinted] = useState<{ machine: Machine; key: string } | null>(null)
   const [note, setNote] = useState('')
+  // Read again on the agent's beat; "Reading machines…" stays for the first read only.
+  const again = list.reload
+  useEffect(() => {
+    if (!signed) return
+    const id = setInterval(again, BEAT)
+    return () => clearInterval(id)
+  }, [again, signed])
 
   if (!signed) {
     return (
@@ -97,7 +111,7 @@ export function Machines() {
       <Group title="Linked">
         {list.error ? (
           <Soft>{list.error.message}</Soft>
-        ) : list.loading && list.value.length === 0 ? (
+        ) : list.value === UNREAD ? (
           <Soft>Reading machines…</Soft>
         ) : list.value.length === 0 ? (
           <Soft>No machine is linked yet.</Soft>
@@ -107,7 +121,7 @@ export function Machines() {
               <Row
                 key={m.id}
                 first={i === 0}
-                leading={<Dot status={m.status} />}
+                leading={<Dot m={m} />}
                 title={m.label}
                 detail={about(m)}
                 trailing={
@@ -237,8 +251,8 @@ function Adding({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: 
       <DialogContent maxW={440} showCloseButton={false}>
         <DialogTitle>Register a machine</DialogTitle>
         <YStack gap="$3">
-          <Field label="Name">
-            <Input value={label} onChangeText={setLabel} placeholder="workshop" aria-label="Machine name" autoFocus />
+          <Field label="Name" hint="Left empty, it takes the hostname.">
+            <Input value={label} onChangeText={setLabel} aria-label="Machine name" autoFocus />
           </Field>
           <Field label="Kind">
             <XStack flexWrap="wrap" gap="$1.5" role="radiogroup" aria-label="Kind">
@@ -264,7 +278,7 @@ function Adding({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: 
             </XStack>
           </Field>
           <Field label="Hostname" hint="Optional. What its runs report. hanzo link, signed in as you on a machine with this hostname, takes this row over.">
-            <Input value={hostname} onChangeText={setHostname} placeholder="gpu-01" aria-label="Hostname" autoCapitalize="none" />
+            <Input value={hostname} onChangeText={setHostname} aria-label="Hostname" autoCapitalize="none" />
           </Field>
           {note ? (
             <SizableText size="$1" color="$soft" role="status">

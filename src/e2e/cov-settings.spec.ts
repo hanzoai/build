@@ -66,7 +66,7 @@ function fresh() {
     ] as Row[],
     memories: [{ owner: ORG, name: 'mem_1', content: 'Deploys with pnpm, never npm.', kind: 'user', updatedTime: '2026-09-20T10:00:00Z' }] as Row[],
     models: ['zen5.8', 'zen5.8-coder'],
-    targets: [{ id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 3, running: 1 }] as Row[],
+    targets: [{ id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 3, running: 1, metricsAt: '2026-09-27T11:59:40Z' }] as Row[],
     envs: [{ repo: 'universe', install: 'pnpm install', start: 'pnpm dev', secrets: ['TOKEN'], state: 'ready', updatedAt: '2026-09-20T10:00:00Z' }] as Row[],
     keys: [] as Row[],
     subs: [structuredClone(SUB)] as Row[],
@@ -151,7 +151,7 @@ function answer(w: World, s: Sent): Reply | undefined {
     case 'GET /v1/agent/targets':
       return { json: { targets: w.targets } }
     case 'POST /v1/agent/targets': {
-      const one = { id: `tgt_${w.targets.length + 2}`, status: 'offline', ...b }
+      const one = { id: `tgt_${w.targets.length + 2}`, status: 'online', ...b }
       w.targets = [one, ...w.targets]
       return { status: 201, json: one }
     }
@@ -758,8 +758,8 @@ test('Environments says where each codebase stands, forgets one after a refusal,
 test('Machines says what each is doing, brings a drained one back, says the owner rule, and registers one by hand after a refusal', async ({ page }) => {
   const p = await platform(page, (w) => {
     w.targets = [
-      { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 3, running: 1 },
-      { id: 'tgt_2', label: 'laptop', kind: 'laptop', status: 'draining', host: 'laptop', sessions: 4 },
+      { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 3, running: 1, metricsAt: '2026-09-27T11:59:40Z' },
+      { id: 'tgt_2', label: 'laptop', kind: 'laptop', status: 'draining', host: 'laptop', sessions: 4, metricsAt: '2026-09-27T11:59:40Z' },
       { id: 'tgt_3' },
     ]
   })
@@ -819,6 +819,87 @@ test('Machines says what each is doing, brings a drained one back, says the owne
   await expect(page.getByLabel('Claim key', { exact: true })).toHaveText('tk_live_once')
   await page.keyboard.press('Escape')
   await expect(page.getByText('tk_live_once')).toHaveCount(0)
+})
+
+test('Register a machine: the fields hold only what is typed, every kind registers with and without a hostname, each lands in the list as not seen yet, and one is removed', async ({ page }) => {
+  const p = await platform(page, (w) => {
+    w.targets.push({ id: 'tgt_9', label: 'laptop', kind: 'laptop', status: 'offline', host: 'mbp', metricsAt: '2026-09-20T08:00:00Z' })
+  })
+  await page.clock.install()
+  await page.goto('/-/settings/machines')
+  await expect(page.getByText('online · gpu · spark · 1× GB10 · 1 running')).toBeVisible()
+  await expect(page.getByText('offline · laptop · mbp', { exact: true })).toBeVisible()
+
+  const open = async () => {
+    await page.getByRole('button', { name: 'Register one by hand' }).click()
+    const add = page.getByRole('dialog', { name: 'Register a machine' })
+    await expect(add).toBeVisible()
+    return add
+  }
+
+  // An empty field reads as empty: no sample text a person can take for a value, and no message until one is earned.
+  let add = await open()
+  for (const field of ['Machine name', 'Hostname']) {
+    await expect(add.getByLabel(field)).toHaveValue('')
+    expect(await add.getByLabel(field).getAttribute('placeholder')).toBeFalsy()
+  }
+  await expect(add.getByRole('status')).toHaveCount(0)
+  await add.getByRole('button', { name: 'Register', exact: true }).click()
+  await expect(add.getByRole('status')).toHaveText('A machine needs a name or a hostname')
+  expect(p.writes()).toEqual([])
+
+  // Josh's form, typed key by key: Name, Kind cloud, Hostname m.
+  await add.getByLabel('Machine name').pressSequentially('workshop')
+  await add.getByRole('radio', { name: 'cloud' }).click()
+  await add.getByLabel('Hostname').pressSequentially('m')
+  await add.getByRole('button', { name: 'Register', exact: true }).click()
+  await expect(add).toHaveCount(0)
+  await expect(page.getByRole('status').filter({ hasText: 'workshop is registered' })).toBeVisible()
+  await expect(page.getByText('not seen yet · cloud · m', { exact: true })).toBeVisible()
+
+  // A hostname alone names the machine, as hanzo link does.
+  add = await open()
+  await expect(add.getByRole('status')).toHaveCount(0)
+  await add.getByRole('radio', { name: 'gpu' }).click()
+  await add.getByLabel('Hostname').fill('gpu-01')
+  await add.getByRole('button', { name: 'Register', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'gpu-01 is registered' })).toBeVisible()
+  await expect(page.getByText('not seen yet · gpu', { exact: true })).toBeVisible()
+
+  for (const kind of ['laptop', 'cluster', 'machine']) {
+    add = await open()
+    await add.getByLabel('Machine name').fill(`${kind}-box`)
+    await add.getByRole('radio', { name: kind }).click()
+    await add.getByRole('button', { name: 'Register', exact: true }).click()
+    await expect(page.getByRole('status').filter({ hasText: `${kind}-box is registered` })).toBeVisible()
+    await expect(page.getByText(`not seen yet · ${kind}`, { exact: true })).toBeVisible()
+  }
+  expect(p.writes()).toEqual([
+    ['POST /v1/agent/targets', { label: 'workshop', kind: 'cloud', host: 'm' }],
+    ['POST /v1/agent/targets', { label: 'gpu-01', kind: 'gpu', host: 'gpu-01' }],
+    ['POST /v1/agent/targets', { label: 'laptop-box', kind: 'laptop' }],
+    ['POST /v1/agent/targets', { label: 'cluster-box', kind: 'cluster' }],
+    ['POST /v1/agent/targets', { label: 'machine-box', kind: 'machine' }],
+  ])
+
+  // The list is read again on the agent's beat: a machine hanzo link brought up elsewhere appears, and one that beat comes online.
+  p.w.targets = p.w.targets.map((t) => (t.label === 'workshop' ? { ...t, metricsAt: '2026-09-27T12:00:00Z' } : t))
+  p.w.targets.unshift({ id: 'tgt_20', label: 'dgx', kind: 'gpu', status: 'online', host: 'dgx', metricsAt: '2026-09-27T12:00:00Z' })
+  await page.clock.runFor(31_000)
+  await expect(page.getByText('dgx', { exact: true })).toBeVisible()
+  await expect(page.getByText('online · cloud · m', { exact: true })).toBeVisible()
+  await expect(page.getByText('Reading machines…')).toHaveCount(0)
+
+  // The one registered here is the newer workshop, so it is listed first.
+  await page.getByRole('button', { name: 'Actions for workshop' }).first().click()
+  await page.getByRole('menuitem', { name: 'Remove' }).click()
+  await page.getByRole('dialog', { name: 'Remove workshop?' }).getByRole('button', { name: 'Remove' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'workshop is removed' })).toBeVisible()
+  await expect(page.getByText('online · cloud · m', { exact: true })).toHaveCount(0)
+  expect(p.writes().at(-1)).toEqual(['DELETE /v1/agent/targets/tgt_4', null])
+  await page.reload()
+  await expect(page.getByText('dgx', { exact: true })).toBeVisible()
+  await expect(page.getByText('online · cloud · m', { exact: true })).toHaveCount(0)
 })
 
 test('API keys: a secret created after a refusal, a publishable rotated with a limit, and a secret revoked, each across a reload', async ({ page }) => {

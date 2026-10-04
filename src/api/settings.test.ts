@@ -13,7 +13,7 @@ import { consentOf } from './consent.ts'
 import { environment, environments } from './environment.ts'
 import * as github from './github.ts'
 import { keys, mint } from './keys.ts'
-import { machine, machines } from './machines.ts'
+import { add, KINDS, live, machine, machines } from './machines.ts'
 import * as members from './members.ts'
 import { memories, memoryOf } from './memory.ts'
 import { models } from './models.ts'
@@ -119,6 +119,33 @@ describe('machines', () => {
     expect(await machines(T)).toEqual([])
     answer(200, { targets: 'none' })
     expect(await machines(T)).toEqual([])
+  })
+
+  it('registers a named machine of every kind, with and without a hostname', async () => {
+    for (const kind of KINDS) {
+      const bare = answer(201, { id: 'tgt_1', label: 'workshop', kind, status: 'online' })
+      expect(await add(T, { label: ' workshop ', kind, host: '  ' })).toMatchObject({ id: 'tgt_1', label: 'workshop', kind })
+      expect(bare).toEqual([{ url: 'https://api.hanzo.ai/v1/agent/targets', method: 'POST', body: { label: 'workshop', kind } }])
+      const hosted = answer(201, { id: 'tgt_2', label: 'workshop', kind, status: 'online', host: 'm' })
+      expect(await add(T, { label: 'workshop', kind, host: ' m ' })).toMatchObject({ id: 'tgt_2', host: 'm' })
+      expect(hosted.map((s) => s.body)).toEqual([{ label: 'workshop', kind, host: 'm' }])
+    }
+  })
+
+  it('names a machine left unnamed after its hostname, as hanzo link does, and refuses one with neither before sending', async () => {
+    const seen = answer(201, { id: 'tgt_1', label: 'gpu-01', kind: 'cloud', status: 'online', host: 'gpu-01' })
+    expect(await add(T, { label: '  ', kind: 'cloud', host: 'gpu-01' })).toMatchObject({ label: 'gpu-01' })
+    expect(seen.map((s) => s.body)).toEqual([{ label: 'gpu-01', kind: 'cloud', host: 'gpu-01' }])
+    const none = answer(201, {})
+    await expect(add(T, { label: ' ', kind: 'cloud', host: ' ' })).rejects.toThrow('A machine needs a name or a hostname')
+    expect(none).toEqual([])
+  })
+
+  it('reads a machine as up only once it has beaten', () => {
+    expect(live(machine({ id: 't', status: 'online', metricsAt: '2026-10-04T06:00:00Z' }))).toBe(true)
+    expect(live(machine({ id: 't', status: 'online' }))).toBe(false)
+    expect(live(machine({ id: 't', status: 'offline', metricsAt: '2026-10-04T06:00:00Z' }))).toBe(false)
+    expect(live(machine({ id: 't', status: 'draining', metricsAt: '2026-10-04T06:00:00Z' }))).toBe(false)
   })
 })
 

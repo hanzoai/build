@@ -70,12 +70,23 @@ async function owned<T>(p: Promise<T>): Promise<T> {
   }
 }
 
-/** Register a machine by hand. `hanzo link` on a machine with this hostname takes the row over. */
+/**
+ * Register a machine by hand. One left unnamed takes its hostname, the name `hanzo
+ * link` gives it; `hanzo link` on a machine with this hostname takes the row over.
+ */
 export async function add(t: Target, what: { label: string; kind: Kind; host?: string }): Promise<Machine> {
-  const label = what.label.trim()
-  if (!label) throw new Error('A machine needs a name')
   const host = (what.host ?? '').trim()
+  const label = what.label.trim() || host
+  if (!label) throw new Error('A machine needs a name or a hostname')
   return machine(await call<unknown>(t, 'POST', '/v1/agent/targets', { label, kind: what.kind, ...(host ? { host } : {}) }))
+}
+
+/**
+ * Whether a machine is up. The platform reports a hand-registered machine at its
+ * registered status until a heartbeat arrives, so `online` counts only once one has.
+ */
+export function live(m: Machine): boolean {
+  return m.status === 'online' && m.seen !== ''
 }
 
 /** Rename a machine, or drain it (`draining`) and bring it back (`online`). */
