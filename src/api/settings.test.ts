@@ -16,7 +16,6 @@ import { keys, mint } from './keys.ts'
 import { add, KINDS, machine, machines, state } from './machines.ts'
 import * as members from './members.ts'
 import { memories, memoryOf } from './memory.ts'
-import { models } from './models.ts'
 import { merge } from './pref.ts'
 import { photo, rename } from './profile.ts'
 import { address, project, projects, safe, templates } from './projects.ts'
@@ -273,17 +272,6 @@ describe('webhooks', () => {
     answer(200, {})
     expect(await webhooks.endpoints(T)).toEqual([])
     expect(await webhooks.deliveries(T, 'wh_1')).toEqual([])
-  })
-})
-
-describe('models', () => {
-  it('offers Enso alone when the catalog lists nothing it can read', async () => {
-    // What can be chosen; the research preview is listed after it and never is.
-    const callable = async () => (await models(T)).filter((m) => !m.disabled)
-    answer(200, {})
-    expect(await callable()).toEqual([{ id: 'enso', label: 'Enso' }])
-    answer(200, { data: [null, 'zen5', { id: 7 }, { id: 'zen5:batch' }, { id: 'zen5' }] })
-    expect((await callable()).map((m) => m.id)).toEqual(['enso', 'zen5'])
   })
 })
 

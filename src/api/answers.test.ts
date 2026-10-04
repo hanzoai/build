@@ -15,7 +15,7 @@ import * as connectors from './connectors.ts'
 import { consent, consentOf, setConsent } from './consent.ts'
 import * as git from './git.ts'
 import { natives, nativesOf } from './mcp.ts'
-import { label, models } from './models.ts'
+import { models } from './models.ts'
 import { places, ready, SANDBOX } from './places.ts'
 import * as platform from './platform.ts'
 import * as plugins from './plugins.ts'
@@ -421,27 +421,27 @@ describe('mcp', () => {
 })
 
 describe('models', () => {
-  it('names an id by its last segment without a lane suffix', () => {
-    expect(label('openai/gpt-5.6-sol:priority')).toBe('Gpt 5.6 Sol')
-    expect(label('zen5.8--coder')).toBe('Zen5.8 Coder')
+  it('reads every row the gateway lists, with the fields it publishes, and nothing it cannot read', async () => {
+    answer(200, {
+      data: [
+        null,
+        { id: 42 },
+        'zen5.8',
+        { id: 'enso-auto', owned_by: 'hanzo', family: 'enso', class: 'ours' },
+        { id: 'anthropic/claude-sonnet-4.5', owned_by: 'anthropic', class: 'premium', name: 'Claude Sonnet 4.5' },
+      ],
+    })
+    expect(await models(T)).toEqual([
+      { id: 'enso-auto', owned_by: 'hanzo', family: 'enso', class: 'ours' },
+      { id: 'anthropic/claude-sonnet-4.5', owned_by: 'anthropic', class: 'premium', name: 'Claude Sonnet 4.5' },
+    ])
   })
 
-  const ZEN7 = { id: 'zen7', label: 'Zen 7', disabled: true, hint: 'Research preview', request: 'https://hanzo.ai/research-access' }
-
-  it('offers the router alone when the catalog lists nothing it can name', async () => {
-    answer(200, { data: [null, { id: 42 }, 'zen5.8'] })
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, ZEN7])
+  it('answers no models when the catalog lists none it can read', async () => {
     answer(200, { data: 'zen5.8' })
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, ZEN7])
+    expect(await models(T)).toEqual([])
     answer(204, undefined)
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, ZEN7])
-  })
-
-  it('lists a model nobody can call yet after what the gateway serves, disabled, until the gateway serves it', async () => {
-    answer(200, { data: [{ id: 'zen6' }] })
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, { id: 'zen6', label: 'Zen6' }, ZEN7])
-    answer(200, { data: [{ id: 'zen7' }] })
-    expect(await models(T)).toEqual([{ id: 'enso', label: 'Enso' }, { id: 'zen7', label: 'Zen7' }])
+    expect(await models(T)).toEqual([])
   })
 })
 

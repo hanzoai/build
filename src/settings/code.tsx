@@ -7,10 +7,10 @@
 import { YStack } from '@hanzo/gui'
 import { ChevronRight } from '@hanzogui/lucide-icons-2'
 import { ChipSelect } from '@hanzo/ui/product'
+import { ModelPicker } from '@hanzo/ui/models'
 import { useState } from 'react'
 
 import { unhonoured } from '../api/coding.ts'
-import { Access } from '../access.tsx'
 import { ENSO, models } from '../api/models.ts'
 import { SANDBOX } from '../api/places.ts'
 import type { Code as Defaults } from '../api/pref.ts'
@@ -54,7 +54,8 @@ export function Code() {
   }))
   // The sandbox is always listed, so a place not found is a machine that is not: it reads as its id.
   const place = where.find((w) => w.place === now.place) ?? { id: now.place, label: now.place, place: now.place }
-  const model = catalog.value.find((m) => m.id === now.model) ?? { id: now.model, label: now.model === ENSO ? 'Enso' : now.model }
+  // A default is never premium: a premium model is picked for one run, in New.
+  const offered = catalog.value.filter((m) => m.class !== 'premium')
   const go = (section: 'environments' | 'machines') => host.go(path({ kind: 'settings', section }))
   const effort = EFFORTS.find((e) => e.id === now.effort)!
   const mode = MODES.find((m) => m.id === now.mode)!
@@ -69,15 +70,13 @@ export function Code() {
             title="Model"
             detail="Enso picks one for each step; any other model runs them all."
             trailing={
-              <ChipSelect
+              <ModelPicker
+                size="sm"
                 name="Default model"
-                label={model.label}
-                chosen={model}
-                items={catalog.value}
-                footer={<Access items={catalog.value} />}
-                onChange={(m) => keep({ model: m.id })}
-                placeholder="Search models…"
-                placement="bottom-end"
+                models={offered}
+                scope="chat"
+                value={now.model || ENSO}
+                onChange={(id) => keep({ model: id })}
                 loading={catalog.loading}
                 error={catalog.error?.message ?? null}
               />

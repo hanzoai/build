@@ -10,11 +10,11 @@ catalogs:
       specifier: 1.9.3
       version: 1.9.3
     '@hanzo/iam':
-      specifier: 0.21.21
-      version: 0.21.21
+      specifier: 0.21.28
+      version: 0.21.28
     '@hanzo/ui':
-      specifier: 8.27.22
-      version: 8.27.22
+      specifier: 8.27.67
+      version: 8.27.67
     '@hanzo/vite':
       specifier: 0.1.4
       version: 0.1.4
@@ -92,10 +92,10 @@ importers:
         version: 8.3.5(react-dom@19.2.8(react@19.2.8))(react-native@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)
       '@hanzo/iam':
         specifier: 'catalog:'
-        version: 0.21.21(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 0.21.28(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@hanzo/ui':
         specifier: 'catalog:'
-        version: 8.27.22(84c1fc078ffaf56981bdc3d5cb44ca34)
+        version: 8.27.67(44df0d66604089f4179a920e71b6a546)
       '@hanzo/vite':
         specifier: 'catalog:'
         version: 0.1.4(react@19.2.8)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(terser@5.51.2))
@@ -487,6 +487,21 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
+  '@codemirror/commands@6.11.1':
+    resolution: {integrity: sha512-O/4hG3SC1YwcmQ0d2UVNDs+AsaNWd1iHVxbTeEBuqH+6bExAiPK3iS/BvpY6rZGURALv4ZD3sIgcCmRvw3ehBg==}
+
+  '@codemirror/lang-json@6.0.2':
+    resolution: {integrity: sha512-x2OtO+AvwEHrEwR0FyyPtfDUiloG3rnVTSZV1W8UteaLL8/MajQd8DpvUb2YVzC+/T18aSDv0H9mu+xw0EStoQ==}
+
+  '@codemirror/language@6.12.4':
+    resolution: {integrity: sha512-1q4PaT+o6PbgpkJt4Q8Fv5XJxTy4FUZ4MWETtyiDw3J0Pyr9E2vqcKL+k9wcvjNTIsauxvE7OfmWj3FRPHQ76A==}
+
+  '@codemirror/state@6.7.6':
+    resolution: {integrity: sha512-kAz+AncRtKuIknedxT1bq4XwXv4UowhbkHU1myPrtVb/jZtImWuV5BXzv5vK6i3kYACsdiZiQKFQQ5Mq7elW8w==}
+
+  '@codemirror/view@6.43.13':
+    resolution: {integrity: sha512-sihaFrUzAsYBQsL9J2t69y8nfMQGwcYmggAZsk+kjPbjYZMyuf2hU8tUNTZ+P+isb6XRr8JE22TZlJxBoVdH1A==}
+
   '@emnapi/runtime@1.11.3':
     resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
 
@@ -667,10 +682,10 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
-  '@hanzo/appearance@0.2.2':
-    resolution: {integrity: sha512-HsH2wT82EbjHF1zY/TWubUQv7N5tBolVyBtXuQD8I+3E7xQ+Qoy7u79Xz1lw0EVkBESM2dr6VMaPWWThnytzZg==}
+  '@hanzo/appearance@0.2.7':
+    resolution: {integrity: sha512-kaZpk2kHzKDliFWIv8GOcJss2JlPdWJm24kxuIevLn1QgO1degPZWTftLOhFYnqVvvr6nvy/e+d57fIFJxvQbg==}
     peerDependencies:
-      react: '>=19'
+      react: '>=19.2.8'
 
   '@hanzo/brand@1.4.8':
     resolution: {integrity: sha512-ezz3JEC+5QO4LywK02o24i0CuHZ+askwT4Dmvd+BrXZsJs/Eyw3Xu/EPEZLpZY0cZ5+8sIYO07jUOaWTU3nfAw==}
@@ -687,8 +702,12 @@ packages:
       '@hanzo/gui': 8.3.5
       react: '>=19'
 
-  '@hanzo/design@0.5.24':
-    resolution: {integrity: sha512-eXoD1Q3giJ3TEx2+rtCub/xZX5j4AflWixt3TXsf3dcYrWuChxSVhzRQdDWyibXzPPtn+msCtLX11IvvcHHUzw==}
+  '@hanzo/design@0.5.33':
+    resolution: {integrity: sha512-pp+XH+3FmNFP5daQmXTlwMvpJk7NcM3oUS15OlFvxTw7KkzA4+fWr+r7ytqblvU0XwT0QMdiBabIQkh7cc2z5Q==}
+    hasBin: true
+
+  '@hanzo/design@0.5.34':
+    resolution: {integrity: sha512-uhZJWUd9KttTZ7F3Aza8a/B4GY8xv2ymljfm3eykOvSj+fOyp6G5X/0QamXEixT/6t42EPAcn3RB15lnA8cdZQ==}
     hasBin: true
 
   '@hanzo/event@0.3.39':
@@ -726,8 +745,8 @@ packages:
     peerDependencies:
       react: '>=19.2.8'
 
-  '@hanzo/iam@0.21.21':
-    resolution: {integrity: sha512-N+IR0HnveLCQS3wfmkQQ7cnL+rG0cWQxADXi1B4yKE9e+TZt5FB3ooqhcsqVhaCnKXjK9RsQwnMKECaH9Leseg==}
+  '@hanzo/iam@0.21.28':
+    resolution: {integrity: sha512-cDCSLTfcE14dROiDp7wEAONy+ZRN78UXO/XycltXUeM49dtBnk7Gp41r+b0kTb0fc84yVjApLPK7TzufTxc76Q==}
     engines: {node: '>=18'}
     peerDependencies:
       react: '>=17'
@@ -770,19 +789,24 @@ packages:
     peerDependencies:
       react: '>=19'
 
-  '@hanzo/ui@8.27.22':
-    resolution: {integrity: sha512-0dkCfnYY67jrhguVIG7uSK90igrNZ+B+7SAxSi4CyeJ9++ymHsxpV1n14Y4JOxgMFapTUmNUYwydiz23lIUIsQ==}
+  '@hanzo/ui@8.27.67':
+    resolution: {integrity: sha512-mPjevz5avFvdiWVz0+vLy1wWlfJiTpfEel9Ya22YyzZT/4mwxK8iDrLHm/s+eaFB5QGYhzhDsGpTAe2pz0Tw7Q==}
     peerDependencies:
       '@hanzo/canvas': '>=0.2.3'
       '@hanzo/cd': '>=0.1.2'
       '@hanzo/dashboard': '>=0.2.0'
       '@hanzo/data': '>=1.2.4'
+      '@hanzo/event': '>=0.3.52'
       '@hanzo/gui': 8.3.5
+      '@hanzo/iam': '>=0.21.26'
+      '@hanzo/pay': '>=0.1.1'
+      '@hanzo/plans': '>=1.8.1'
       '@hanzo/usage': '>=0.1.13'
       '@hanzogui/animations-css': 8.3.5
       '@hanzogui/config': 8.3.5
       '@hanzogui/lucide-icons-2': 8.3.5
       '@hanzogui/next-theme': 8.3.5
+      '@hanzogui/shell': ^8.3.5
       '@hanzogui/telemetry': 8.3.5
       '@hanzogui/toast': 8.3.5
       next: '>=16.3.3'
@@ -797,9 +821,19 @@ packages:
         optional: true
       '@hanzo/dashboard':
         optional: true
+      '@hanzo/event':
+        optional: true
+      '@hanzo/iam':
+        optional: true
+      '@hanzo/pay':
+        optional: true
+      '@hanzo/plans':
+        optional: true
       '@hanzo/usage':
         optional: true
       '@hanzogui/next-theme':
+        optional: true
+      '@hanzogui/shell':
         optional: true
       next:
         optional: true
@@ -1559,6 +1593,21 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@lezer/common@1.5.3':
+    resolution: {integrity: sha512-H0iErY4e43LpXbYDyBci5W4v/RwTgGV3YzYOlJPiGZ8RY8w51kVE+xLn1tg3Z6UmSfyETvtsUK3r7YsgDQEI7Q==}
+
+  '@lezer/highlight@1.2.5':
+    resolution: {integrity: sha512-O1GMVKgtf5YspFaRzpmqkVgMtIk2HG9uMAbH6wdAIdNh3TVzCsch/+cRi+6l2//UGDKe6NB9BW3cvuR5ezMQ0w==}
+
+  '@lezer/json@1.0.3':
+    resolution: {integrity: sha512-BP9KzdF9Y35PDpv04r0VeSTKDeox5vVr3efE7eBbx3r4s3oNLfunchejZhjArmeieBH+nVOpgIiBJpEAv8ilqQ==}
+
+  '@lezer/lr@1.4.10':
+    resolution: {integrity: sha512-rnCpTIBafOx4mRp43xOxDJbFipJm/c0cia/V5TiGlhmMa+wsSdoGmUN3w5Bqrks/09Q/D4tNAmWaT8p6NRi77A==}
+
+  '@marijn/find-cluster-break@1.0.4':
+    resolution: {integrity: sha512-Wy0V7+SGUjnF9/TkiM1hKVDPj7jKXduPNboMVtHTA8dySMURWqfg/JZ9E2Sq8JgSJmkl7k7Qe9FLeMSrSraWmQ==}
+
   '@next/env@16.3.4':
     resolution: {integrity: sha512-cjWZnUUa6jZq2kFaNe/ZyJdZonOZ/QoN0Zka2nz/FLOrfx14pQuM9c5RaSVkWMqgdt4ksgPAMWPyHSs/CyV48Q==}
 
@@ -2181,6 +2230,9 @@ packages:
   core-js-compat@3.50.0:
     resolution: {integrity: sha512-XGpFGbMLHwSt74YLTKho7Ib242qi6O8MSX+sRokV4oz7iKXvQWGYZthjIhjRGMxjzVkAubBO512dKGYcefmX3Q==}
     engines: {node: '>=6.4.0'}
+
+  crelt@1.0.7:
+    resolution: {integrity: sha512-aK6BbWfhf4U/wCcLHKPJl/xa6VkVstRaPywWtMKGwuOLc/wZTyQYuoxgvZnNsBvv7Kg3YTBQYYBCggcviQczuA==}
 
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
@@ -3113,6 +3165,9 @@ packages:
     resolution: {integrity: sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==}
     engines: {node: '>=8'}
 
+  style-mod@4.1.4:
+    resolution: {integrity: sha512-XXWIQt633/EpAFx8aZDOTjBzrCaGmhvEQlQo6MVPfa2OzO2cWo+4hV9h+6UkHYlXGfy+ODXKUdP7Pthmcu5ATw==}
+
   styled-jsx@5.1.6:
     resolution: {integrity: sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA==}
     engines: {node: '>= 12.0.0'}
@@ -3316,6 +3371,9 @@ packages:
 
   vlq@1.0.1:
     resolution: {integrity: sha512-gQpnTgkubC6hQgdIcRdYGDSDc+SaujOdyesZQMv6JlfQee/9Mp0Qhnys6WxDWvQnL5WZdT7o2Ul187aSt0Rq+w==}
+
+  w3c-keyname@2.2.8:
+    resolution: {integrity: sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ==}
 
   walker@1.0.8:
     resolution: {integrity: sha512-ts/8E8l5b7kY0vlWLewOkDXMmPdLcVV4GmOQLyxuSswIJsweeFZtAsMF7k1Nszz+TYBQrlYRmzOnr398y1JemQ==}
@@ -3795,6 +3853,38 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
+  '@codemirror/commands@6.11.1':
+    dependencies:
+      '@codemirror/language': 6.12.4
+      '@codemirror/state': 6.7.6
+      '@codemirror/view': 6.43.13
+      '@lezer/common': 1.5.3
+
+  '@codemirror/lang-json@6.0.2':
+    dependencies:
+      '@codemirror/language': 6.12.4
+      '@lezer/json': 1.0.3
+
+  '@codemirror/language@6.12.4':
+    dependencies:
+      '@codemirror/state': 6.7.6
+      '@codemirror/view': 6.43.13
+      '@lezer/common': 1.5.3
+      '@lezer/highlight': 1.2.5
+      '@lezer/lr': 1.4.10
+      style-mod: 4.1.4
+
+  '@codemirror/state@6.7.6':
+    dependencies:
+      '@marijn/find-cluster-break': 1.0.4
+
+  '@codemirror/view@6.43.13':
+    dependencies:
+      '@codemirror/state': 6.7.6
+      crelt: 1.0.7
+      style-mod: 4.1.4
+      w3c-keyname: 2.2.8
+
   '@emnapi/runtime@1.11.3':
     dependencies:
       tslib: 2.8.1
@@ -3901,9 +3991,9 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@hanzo/appearance@0.2.2(react@19.2.8)':
+  '@hanzo/appearance@0.2.7(react@19.2.8)':
     dependencies:
-      '@hanzo/design': 0.5.24
+      '@hanzo/design': 0.5.33
       react: 19.2.8
 
   '@hanzo/brand@1.4.8(react@19.2.8)':
@@ -3921,7 +4011,9 @@ snapshots:
       - react-dom
       - react-native-svg
 
-  '@hanzo/design@0.5.24': {}
+  '@hanzo/design@0.5.33': {}
+
+  '@hanzo/design@0.5.34': {}
 
   '@hanzo/event@0.3.39(react@19.2.8)':
     dependencies:
@@ -4017,7 +4109,7 @@ snapshots:
       - react-dom
       - react-native
 
-  '@hanzo/iam@0.21.21(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@hanzo/iam@0.21.28(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       jose: 6.2.12
       libphonenumber-js: 1.13.12
@@ -4045,12 +4137,17 @@ snapshots:
     dependencies:
       react: 19.2.8
 
-  '@hanzo/ui@8.27.22(84c1fc078ffaf56981bdc3d5cb44ca34)':
+  '@hanzo/ui@8.27.67(44df0d66604089f4179a920e71b6a546)':
     dependencies:
-      '@hanzo/appearance': 0.2.2(react@19.2.8)
+      '@codemirror/commands': 6.11.1
+      '@codemirror/lang-json': 6.0.2
+      '@codemirror/language': 6.12.4
+      '@codemirror/state': 6.7.6
+      '@codemirror/view': 6.43.13
+      '@hanzo/appearance': 0.2.7(react@19.2.8)
       '@hanzo/brand': 1.4.8(react@19.2.8)
       '@hanzo/data': 1.2.4(@hanzo/gui@8.3.5(react-dom@19.2.8(react@19.2.8))(react-native@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react-native-svg@15.15.5(react-native@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8))(react@19.2.8)
-      '@hanzo/design': 0.5.24
+      '@hanzo/design': 0.5.34
       '@hanzo/font': 1.9.2(next@16.3.4(@babel/core@7.29.7(supports-color@8.1.1))(@playwright/test@1.63.0)(@types/node@26.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
       '@hanzo/gui': 8.3.5(react-dom@19.2.8(react@19.2.8))(react-native@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)
       '@hanzo/logo': 1.0.26(react@19.2.8)
@@ -4061,12 +4158,14 @@ snapshots:
       '@hanzogui/telemetry': 8.3.5(react@19.2.8)
       '@hanzogui/toast': 8.3.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@icons-pack/react-simple-icons': 13.15.1(react@19.2.8)
+      '@lezer/highlight': 1.2.5
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
       react-hook-form: 7.87.0(react@19.2.8)
       react-native-svg: 15.15.5(react-native@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)
       react-native-web: 0.21.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     optionalDependencies:
+      '@hanzo/iam': 0.21.28(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@hanzogui/next-theme': 8.3.5(next@16.3.4(@babel/core@7.29.7(supports-color@8.1.1))(@playwright/test@1.63.0)(@types/node@26.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       next: 16.3.4(@babel/core@7.29.7(supports-color@8.1.1))(@playwright/test@1.63.0)(@types/node@26.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       next-themes: 0.4.6(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -5377,6 +5476,24 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
+  '@lezer/common@1.5.3': {}
+
+  '@lezer/highlight@1.2.5':
+    dependencies:
+      '@lezer/common': 1.5.3
+
+  '@lezer/json@1.0.3':
+    dependencies:
+      '@lezer/common': 1.5.3
+      '@lezer/highlight': 1.2.5
+      '@lezer/lr': 1.4.10
+
+  '@lezer/lr@1.4.10':
+    dependencies:
+      '@lezer/common': 1.5.3
+
+  '@marijn/find-cluster-break@1.0.4': {}
+
   '@next/env@16.3.4': {}
 
   '@next/swc-darwin-arm64@16.3.4':
@@ -5914,6 +6031,8 @@ snapshots:
   core-js-compat@3.50.0:
     dependencies:
       browserslist: 4.28.9
+
+  crelt@1.0.7: {}
 
   cross-fetch@3.2.0:
     dependencies:
@@ -6998,6 +7117,8 @@ snapshots:
     dependencies:
       ansi-regex: 5.0.1
 
+  style-mod@4.1.4: {}
+
   styled-jsx@5.1.6(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.8):
     dependencies:
       client-only: 0.0.1
@@ -7142,6 +7263,8 @@ snapshots:
       - msw
 
   vlq@1.0.1: {}
+
+  w3c-keyname@2.2.8: {}
 
   walker@1.0.8:
     dependencies:

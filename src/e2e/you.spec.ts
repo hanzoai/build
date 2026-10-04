@@ -51,7 +51,7 @@ test('saved settings are applied on load, and New greets by name and starts from
   await expect(page.getByText('What’s up next, Dave?')).toBeVisible()
   await expect(page.locator('html')).toHaveClass(/\blight\b/)
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--type-scale').trim())).toBe('1.15')
-  await expect(page.getByRole('button', { name: 'Model: Zen5.8 Coder' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Model: zen5.8-coder' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Effort: High' })).toBeVisible()
   await page.screenshot({ path: info.outputPath('new-defaults.png') })
 })
@@ -60,11 +60,11 @@ test('a choice kept on New outranks the defaults', async ({ page }) => {
   await platform(
     page,
     { prefs: { code: { model: 'zen5.8-coder', effort: 'high' } } },
-    { [`hanzo.build.new.${ORG}`]: { repo: null, branch: '', place: '', mode: 'build', model: 'enso', effort: 'low', ask: '' } },
+    { [`hanzo.build.new.${ORG}`]: { repo: null, branch: '', place: '', mode: 'build', model: 'enso-auto', effort: 'low', ask: '' } },
   )
   await page.goto('/')
   await expect(page.getByRole('button', { name: 'Effort: Low' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Model: Enso' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Model: enso-auto' })).toBeVisible()
 })
 
 test('Account saves the name, what to call you, the work and the instructions', async ({ page }, info) => {
@@ -146,7 +146,7 @@ test('Memory lists, remembers and forgets', async ({ page }, info) => {
 test('Code keeps the defaults a new run starts from, and links to environments and machines', async ({ page }, info) => {
   const { sent } = await platform(page)
   await page.goto('/-/settings/code')
-  await pick(page, /^Default model: /, 'Zen5.8 Coder')
+  await pick(page, /^Default model: /, 'zen5.8-coder')
   await pick(page, /^Default effort: /, 'High')
   await pick(page, /^Default mode: /, 'Plan')
   await pick(page, /^Default place: /, 'dgx')

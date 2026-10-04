@@ -12,19 +12,17 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Bot } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
-import { ChipSelect } from '@hanzo/ui/product'
+import { ModelPicker } from '@hanzo/ui/models'
 import { useEffect, useMemo, useState } from 'react'
 
 import { agents, ALL, create, draft, EMPTY, fromPreset, one, PERIODS, presets, remove, update, type Agent, type Draft, type Period, type Preset } from '../api/agents.ts'
-import { Access } from '../access.tsx'
-import { label as named, models, type Model } from '../api/models.ts'
+import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Add, Choice, Confirm, Field, Grid, Line, Mark, matches, mono, Sheet, Soft, Tile, Visitor, type Pane } from './ui.tsx'
 
 /** The model a new agent runs on when none is chosen: the deployment's own default. */
-const DEFAULT = 'default'
 
 const money = (m: number): string => `$${(m / 1_000_000).toFixed(m % 10_000 ? 4 : 2).replace(/\.?0+$/, '')}`
 
@@ -189,13 +187,6 @@ function Editor({
     return [...kept, ...listed]
   }, [on.value, d.tools])
   const shownTools = choices.filter((x) => matches(find, x.name, x.source, x.description))
-  const items = useMemo(() => {
-    const list = [{ id: DEFAULT, label: 'Default', hint: 'the deployment’s' }, ...catalog.value]
-    if (d.model && !list.some((m) => m.id === d.model)) list.splice(1, 0, { id: d.model, label: named(d.model) })
-    return agent ? list.filter((m) => m.id !== DEFAULT) : list
-  }, [catalog.value, d.model, agent])
-  const chosen = items.find((m) => m.id === (d.model || DEFAULT)) ?? null
-
   const save = async () => {
     setWorking(true)
     setNote('')
@@ -227,19 +218,23 @@ function Editor({
             <Input value={d.description} onChangeText={(v: string) => set({ description: v })} placeholder="Answers questions about our codebase" aria-label="Description" />
           </Field>
           <Field label="Model">
-            <XStack>
-              <ChipSelect
+            <XStack items="center" gap="$2" flexWrap="wrap">
+              <ModelPicker
+                size="sm"
                 name="Model"
-                label={chosen?.label ?? 'Default'}
-                chosen={chosen}
-                items={items}
-                footer={<Access items={items} />}
-                onChange={(m) => set({ model: m.id === DEFAULT ? '' : m.id })}
-                placeholder="Search models…"
-                placement="bottom-start"
+                placeholder="The deployment’s default"
+                models={catalog.value}
+                scope="chat"
+                value={d.model || undefined}
+                onChange={(id) => set({ model: id })}
                 loading={catalog.loading}
                 error={catalog.error?.message ?? null}
               />
+              {d.model && !agent ? (
+                <Button size="sm" variant="ghost" onPress={() => set({ model: '' })}>
+                  Use the default
+                </Button>
+              ) : null}
             </XStack>
           </Field>
           <Field label="Instructions" hint="The system prompt: what the model reads before every run.">

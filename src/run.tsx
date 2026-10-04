@@ -28,11 +28,13 @@ import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type D
 import { Steer, type Command } from '@hanzo/ui/agents'
 import { Composer } from '@hanzo/ui/chat'
 import { ChipSelect } from '@hanzo/ui/product'
+import { ModelPicker } from '@hanzo/ui/models'
+import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-import { Access } from './access.tsx'
 import { approve, followUp, headline, retry, start, type Ask, type Earlier } from './api/coding.ts'
-import { ENSO, label as named, models } from './api/models.ts'
+import { ENSO, limits as readLimits, models } from './api/models.ts'
+import { usePick } from './pick.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
@@ -107,9 +109,10 @@ export function Run({ id }: { id: string }) {
   // The model and effort a run started here uses: New's choice, which a change here changes too.
   const { prefs } = usePrefs()
   const [chose, choose] = useKept<Record<string, unknown> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
-  const model = text(chose?.model) || prefs.code?.model || ENSO
-  const pace = EFFORTS.find((e) => e.id === chose?.effort) ?? EFFORTS.find((e) => e.id === prefs.code?.effort) ?? EFFORTS[1]
   const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
+  const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
+  const [model, pickModel] = usePick(text(chose?.model) || prefs.code?.model || ENSO, (id) => choose({ ...chose, model: id }), catalog.value)
+  const pace = EFFORTS.find((e) => e.id === chose?.effort) ?? EFFORTS.find((e) => e.id === prefs.code?.effort) ?? EFFORTS[1]
 
   const mode = record?.mode ?? ''
   // A run that narrated no ask of its own opens with the one its title records, once it has said anything.
@@ -337,16 +340,15 @@ export function Run({ id }: { id: string }) {
   // What a new run from here is made with; words that steer this run use neither.
   const tuning = signed && !steering ? (
     <XStack flex={1} items="center" gap="$2" justify="flex-end" flexWrap="wrap" rowGap="$1">
-      <ChipSelect
+      <ModelPicker
         quiet
+        size="sm"
         name="Model"
-        label={catalog.value.find((m) => m.id === model)?.label ?? named(model)}
-        chosen={catalog.value.find((m) => m.id === model) ?? null}
-        items={catalog.value}
-        footer={<Access items={catalog.value} />}
-        onChange={(m) => choose({ ...chose, model: m.id })}
-        placeholder="Search models…"
-        placement="top-end"
+        models={catalog.value}
+        scope="chat"
+        limits={limits}
+        value={model}
+        onChange={pickModel}
         loading={catalog.loading}
         error={catalog.error?.message ?? null}
       />

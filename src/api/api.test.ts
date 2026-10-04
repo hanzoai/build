@@ -339,17 +339,18 @@ describe('templates', () => {
 })
 
 describe('models', () => {
-  it('lists the catalog with the router first and batch lanes dropped', async () => {
-    const seen = answer(200, { data: [{ id: 'zen5-coder' }, { id: 'anthropic/claude-opus-5.5' }, { id: 'anthropic/claude-opus-5.5:batch' }, { id: 'enso' }] })
-    const { models } = await import('./models.ts')
+  it('reads the catalog at /v1/models, every row it lists, and the limits at /v1/ai/limits', async () => {
+    const seen = answer(200, { data: [{ id: 'zen5-coder', family: 'zen', class: 'ours' }, { id: 'anthropic/claude-opus-5.5', class: 'premium' }] })
+    const { models, limits } = await import('./models.ts')
     const list = await models(T)
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/models')
     expect(list).toEqual([
-      { id: 'enso', label: 'Enso' },
-      { id: 'zen5-coder', label: 'Zen5 Coder' },
-      { id: 'anthropic/claude-opus-5.5', label: 'Claude Opus 5.5' },
-      { id: 'zen7', label: 'Zen 7', disabled: true, hint: 'Research preview', request: 'https://hanzo.ai/research-access' },
+      { id: 'zen5-coder', family: 'zen', class: 'ours' },
+      { id: 'anthropic/claude-opus-5.5', class: 'premium' },
     ])
+    const asked = answer(200, { plan: '' })
+    expect(await limits(T)).toEqual({ plan: '' })
+    expect(asked[0].url).toBe('https://api.hanzo.ai/v1/ai/limits')
   })
 })
 
@@ -486,12 +487,6 @@ describe('automations', () => {
     const gone = answer(204, undefined)
     await remove(T, 'flow_1')
     expect(gone[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/auto/automations/flow_1' })
-  })
-
-  it('thinks with Enso first and Hanzo SKUs only', async () => {
-    const { skus } = await import('./models.ts')
-    const ids = ['enso', 'anthropic/claude-opus-5.5', 'enso-flash', 'zen5', 'zen-embedding', 'zen-guard', 'zen-vl', 'zen-voice-mini', 'free', 'zen-free', 'hanzo/zen', 'google/gemma-4-31b-it:free', 'zen6-flash']
-    expect(skus(ids.map((id) => ({ id, label: id }))).map((m) => m.id)).toEqual(['enso', 'enso-flash', 'zen5', 'free', 'zen-free', 'zen6-flash'])
   })
 
   it('says a schedule the way a person does', async () => {

@@ -17,14 +17,16 @@ import { Button } from '@hanzo/ui'
 import { ModeSelect } from '@hanzo/ui/agents'
 import { Composer } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
+import { ModelPicker } from '@hanzo/ui/models'
+import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
 import { read, SETUP, type Environment } from './api/environment.ts'
 import { SetupDialog } from './environment.tsx'
-import { Access } from './access.tsx'
-import { ENSO, models } from './api/models.ts'
+import { ENSO, limits as readLimits, models } from './api/models.ts'
+import { usePick } from './pick.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
 import { isForge } from './choice.ts'
 import { useKept, usePlaces, useRead } from './data.ts'
@@ -138,6 +140,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   const places = usePlaces(t, signed)
   const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
+  const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
+  const [model, pickModel] = usePick(kept.model, (id) => set({ model: id }), catalog.value)
   // The chosen codebase's environment, so New can say when it has none yet.
   const codebase = isForge(kept.repo) ? kept.repo.name : ''
   const env = useRead(signed && codebase ? () => read(t, codebase) : null, null as Environment | null, [t, signed, codebase])
@@ -191,7 +195,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         base: repo ? kept.branch : undefined,
         targetId: place.id,
         mode: kept.mode,
-        model: kept.model === ENSO ? undefined : kept.model,
+        model: model === ENSO ? undefined : model,
         effort: kept.effort,
       })
       setDraft('')
@@ -325,16 +329,15 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         self="center"
       />
       <XStack flex={1} />
-      <ChipSelect
+      <ModelPicker
         quiet
+        size="sm"
         name="Model"
-        label={catalog.value.find((m) => m.id === kept.model)?.label ?? 'Enso'}
-        chosen={catalog.value.find((m) => m.id === kept.model) ?? null}
-        items={catalog.value}
-        footer={<Access items={catalog.value} />}
-        onChange={(m) => set({ model: m.id })}
-        placeholder="Search models…"
-        placement="top-end"
+        models={catalog.value}
+        scope="chat"
+        limits={limits}
+        value={model}
+        onChange={pickModel}
         loading={catalog.loading}
         error={catalog.error?.message ?? null}
       />

@@ -128,7 +128,7 @@ test('a pausing sandbox run waits for its work to be kept, then goes on in a new
   world.events = [ev('status', { status: 'paused', changed: false })]
   await expect(p.getByText('Paused.', { exact: true })).toBeVisible()
   await expect(box(p, 'Follow up on this run')).toHaveAttribute('placeholder', 'Continue this run with a follow up')
-  await expect(p.getByRole('button', { name: 'Model: Enso' })).toBeVisible()
+  await expect(p.getByRole('button', { name: 'Model: enso-auto' })).toBeVisible()
   await box(p, 'Follow up on this run').fill('and tests')
   await box(p, 'Follow up on this run').press('Enter')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
@@ -469,7 +469,7 @@ test('the foot starts from the person’s coding defaults, and a stored model or
     [`hanzo.build.new.${ORG}`]: { model: 5, effort: 'extreme' },
   })
   await p.goto(`/${SESSION}`)
-  await expect(p.getByRole('button', { name: 'Model: Zen5 Flash' })).toBeVisible()
+  await expect(p.getByRole('button', { name: 'Model: zen5-flash' })).toBeVisible()
   await expect(p.getByRole('button', { name: 'Effort: Low' })).toBeVisible()
   await box(p, 'Follow up on this run').fill('again')
   await box(p, 'Follow up on this run').press('Enter')

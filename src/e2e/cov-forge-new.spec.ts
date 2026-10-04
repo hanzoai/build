@@ -76,7 +76,7 @@ const ask = (page: Page) => page.getByRole('textbox', { name: 'Describe a task o
 
 /** New holding a codebase, as a codebase's own screen leaves it. */
 const holding = (repo: Record<string, unknown>, more: Record<string, unknown> = {}) => ({
-  [`hanzo.build.new.${ORG}`]: { repo, branch: 'main', place: '', mode: 'build', model: 'enso', effort: 'medium', ask: '', ...more },
+  [`hanzo.build.new.${ORG}`]: { repo, branch: 'main', place: '', mode: 'build', model: 'enso-auto', effort: 'medium', ask: '', ...more },
 })
 const FORGE = { owner: ORG, name: 'universe', full_name: `${ORG}/universe`, private: true, default_branch: 'main', pushed_at: '', installation_id: 0, forge: true, clone: UNIVERSE.cloneUrl }
 
@@ -94,14 +94,14 @@ test.describe('New', () => {
     const { sent } = await desk(page, { prefs: { callName: 'Dave', code: { model: 'zen5.8', effort: 'high', mode: 'build' } } })
     await page.goto('/')
     await expect(page.getByText('What’s up next, Dave?')).toBeVisible()
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Zen5.8')
+    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: zen5.8')
     await expect(chip(page, 'Effort')).toHaveAccessibleName('Effort: High')
 
     await chip(page, 'Effort').click()
     await list(page, 'Effort').getByRole('option', { name: 'Low' }).click()
     await chip(page, 'Model').click()
-    await list(page, 'Model').getByRole('option', { name: 'Zen5.8 Coder' }).click()
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Zen5.8 Coder')
+    await list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ }).click()
+    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: zen5.8-coder')
     await chip(page, 'Where the run runs').click()
     const places = list(page, 'Where the run runs')
     await expect(places.getByRole('option', { name: /rack/ })).toHaveAttribute('aria-disabled', 'true')
@@ -241,7 +241,8 @@ test.describe('New', () => {
     )
     await page.goto('/')
     await expect(chip(page, 'Effort')).toHaveAccessibleName('Effort: Medium')
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Enso')
+    // A kept model the catalog cannot vouch for is shown as it is kept, never renamed.
+    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: retired-model')
     await chip(page, 'Where the run runs').click()
     await expect(list(page, 'Where the run runs').locator('..').getByText('Machines are resting')).toBeVisible()
     await page.keyboard.press('Escape')

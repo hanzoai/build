@@ -17,6 +17,15 @@ import { ORG, SESSION } from './signed.ts'
 
 const MIN = 60_000
 
+/** The catalog as the gateway lists it: Hanzo's families, a premium model and one that holds no conversation. */
+const MODELS = [
+  { id: 'enso-auto', name: 'Enso', family: 'enso', class: 'ours' },
+  { id: 'enso-flash', name: 'Enso Flash', family: 'enso', class: 'ours' },
+  { id: 'zen5', name: 'Zen5', family: 'zen', class: 'ours' },
+  { id: 'zen-embedding', name: 'Zen Embedding', family: 'zen', class: 'ours', outputs: ['embeddings'] },
+  { id: 'anthropic/claude-opus-5.5', name: 'Claude Opus 5.5', class: 'premium' },
+]
+
 /** A row's time, as the platform answers it: `age` ms before the answer, so a slow page reads the same. */
 const aged = (row: Record<string, unknown>, now: number, key: string, iso: boolean) => {
   if (typeof row.age !== 'number') return row
@@ -81,7 +90,7 @@ async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kep
       return { status: 204 }
     }
     if (one) return find(one[1]) ? { json: aged(find(one[1])!, now, 'updated', true) } : refused(404, 'automation not found')
-    if (path === '/v1/models') return { json: { data: ['enso', 'enso-flash', 'zen5', 'anthropic/claude-opus-5.5', 'zen-embedding', 'free'].map((id) => ({ id })) } }
+    if (path === '/v1/models') return { json: { data: MODELS } }
     if (path === '/v1/git/repos' && method === 'POST') {
       const r = { name: b.name, org: ORG, description: b.description, defaultBranch: 'trunk', updatedAt: new Date().toISOString() }
       world.repos.push(r)
@@ -194,13 +203,13 @@ test.describe('Automations', () => {
     await page.getByLabel('Automation name').fill('Inbox triage')
     await page.getByLabel('Instructions').fill('Sort my inbox and draft replies to anything urgent.')
 
-    // Only Hanzo's own models are offered, Enso first.
+    // Every model that holds a conversation is offered, Enso first; an embedding model holds none.
     await page.getByRole('button', { name: 'Model: Enso' }).click()
-    const offered = page.getByRole('option')
-    await expect(offered.first()).toContainText('Enso')
-    await expect(page.getByRole('option', { name: /Claude/ })).toHaveCount(0)
+    const offered = page.getByRole('listbox', { name: 'Model' }).getByRole('option')
+    await expect(offered.first()).toHaveAccessibleName(/^Enso,/)
+    await expect(page.getByRole('option', { name: /^Claude Opus 5\.5,/ })).toHaveCount(1)
     await expect(page.getByRole('option', { name: /Embedding/ })).toHaveCount(0)
-    await page.getByRole('option', { name: /Zen5/ }).click()
+    await page.getByRole('option', { name: /^Zen5,/ }).click()
 
     await page.getByRole('button', { name: 'When it runs: When I run it' }).click()
     await page.getByRole('option', { name: 'Weekdays' }).click()

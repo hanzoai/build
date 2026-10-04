@@ -14,14 +14,15 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { ChevronLeft, Plus, Workflow } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { StatusDot, type SessionStatus } from '@hanzo/ui/chat'
+import { ModelPicker } from '@hanzo/ui/models'
 import { ChipSelect } from '@hanzo/ui/product'
+import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { ago } from './ago.ts'
-import { Access } from './access.tsx'
 import { automation, automations, changes, create, remove, runs, save, start, words, type Automation, type Draft, type Kind, type Run, type Schedule } from './api/auto.ts'
 import { Refusal } from './api/call.ts'
-import { ENSO, label as named, models, skus } from './api/models.ts'
+import { ENSO, limits as readLimits, models } from './api/models.ts'
 import { Choice, Confirm, Field, Line } from './customize/ui.tsx'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
@@ -273,6 +274,7 @@ export function Editor({ id }: { id: string }) {
   const saved = useRead(signed && !fresh ? () => automation(t, id) : null, null as Automation | null, [t, signed, id, tick])
   const history = useRead(signed && !fresh ? () => runs(t, id) : null, [] as Run[], [t, signed, id, beat])
   const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
+  const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
   // `base` is what the form started from; a save sends what changed since, and only that.
   const [base, setBase] = useState<Draft>(BLANK)
   const [d, setD] = useState<Draft>(BLANK)
@@ -321,12 +323,6 @@ export function Editor({ id }: { id: string }) {
   const setWhen = (p: Partial<Schedule>) => setD((x) => ({ ...x, schedule: { ...x.schedule, ...p } }))
   const wrong = unready(d.schedule)
 
-  const items = useMemo(() => {
-    const list = skus(catalog.value).filter((m) => m.id !== ENSO)
-    const kept = d.model && !list.some((m) => m.id === d.model) ? [{ id: d.model, label: named(d.model) }] : []
-    return [{ id: ENSO, label: 'Enso', hint: 'picks a model for each step' }, ...kept, ...list]
-  }, [catalog.value, d.model])
-  const chosen = items.find((m) => m.id === (d.model ?? ENSO)) ?? items[0]!
   const zones = useMemo(() => {
     try {
       return ['UTC', ...Intl.supportedValuesOf('timeZone').filter((z) => z !== 'UTC')].map((z) => ({ id: z, label: z }))
@@ -464,15 +460,14 @@ export function Editor({ id }: { id: string }) {
         </Field>
         <Field label="Model">
           <XStack>
-            <ChipSelect
+            <ModelPicker
+              size="sm"
               name="Model"
-              label={chosen.label}
-              chosen={chosen}
-              items={items}
-              footer={<Access items={items} />}
-              onChange={(m) => set({ model: m.id === ENSO ? null : m.id })}
-              placeholder="Search models…"
-              placement="bottom-start"
+              models={catalog.value}
+              scope="chat"
+              limits={limits}
+              value={d.model ?? ENSO}
+              onChange={(id) => set({ model: id === ENSO ? null : id })}
               loading={catalog.loading}
               error={catalog.error?.message ?? null}
             />

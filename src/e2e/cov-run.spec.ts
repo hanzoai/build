@@ -114,9 +114,9 @@ test('the steps fold to one line that names the current one, and open when press
 test('a follow-up starts with the model and effort the foot shows, and New keeps them', async ({ page: p }, info) => {
   const { sent } = await rig(p, { events: told() })
   await p.goto(`/${SESSION}`)
-  await expect(p.getByRole('button', { name: 'Model: Enso' })).toBeVisible()
-  await p.getByRole('button', { name: 'Model: Enso' }).click()
-  await p.getByRole('listbox', { name: 'Model' }).getByText('Zen5 Coder').click()
+  await expect(p.getByRole('button', { name: 'Model: enso-auto' })).toBeVisible()
+  await p.getByRole('button', { name: 'Model: enso-auto' }).click()
+  await p.getByRole('listbox', { name: 'Model' }).getByRole('option', { name: /^zen5-coder,/ }).click()
   await p.getByRole('button', { name: 'Effort: Medium' }).click()
   await p.getByRole('listbox', { name: 'Effort' }).getByText('High').click()
   await expect(p.getByRole('button', { name: 'Effort: High' })).toBeVisible()
