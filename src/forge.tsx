@@ -94,11 +94,12 @@ function Codebases() {
   const [q, setQ] = useState('')
   const [making, setMaking] = useState(false)
   const [sort, setSort] = useState<'name' | 'updated'>('name')
+  const [filter, setFilter] = useState<'all' | 'ready' | 'syncing'>('all')
   const [page, setPage] = useState(0)
   const [landed, setLanded] = useState(0)
   useEffect(() => {
     setPage(0)
-  }, [q, sort])
+  }, [q, sort, filter])
   const list = useRead(signed ? () => codebases(t) : null, [] as Codebase[], [t, signed, making, landed])
   // Which codebases have an environment. A codebase absent here has none.
   const envs = useRead(signed ? () => environments(t) : null, [] as Environment[], [t, signed])
@@ -145,6 +146,11 @@ function Codebases() {
         }),
       ),
   ]
+    .filter((c) => {
+      if (filter === 'ready') return envOf.get(c.name) === 'ready'
+      if (filter === 'syncing') return syncing.has(c.name)
+      return true
+    })
     .filter((c) => !needle || `${c.org}/${c.name} ${c.description}`.toLowerCase().includes(needle))
     .slice()
     .sort((a, b) => {
@@ -196,9 +202,21 @@ function Codebases() {
           </XStack>
         </XStack>
         <XStack gap="$2" items="center">
-          <XStack px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" shrink={0} $max-md={{ display: 'none' }}>
+          <XStack
+            render="button"
+            aria-label="Filter repositories"
+            onPress={() => setFilter((f) => (f === 'all' ? 'ready' : f === 'ready' ? 'syncing' : 'all'))}
+            px="$2.5"
+            py="$1.5"
+            rounded="$3"
+            borderWidth={1}
+            borderColor="$borderColor"
+            shrink={0}
+            hoverStyle={{ bg: '$hover' }}
+            $max-md={{ display: 'none' }}
+          >
             <SizableText size="$2" color="$ink">
-              All repos
+              {filter === 'ready' ? 'Ready env' : filter === 'syncing' ? 'Syncing' : 'All repos'}
             </SizableText>
           </XStack>
           <YStack flex={1} $max-md={{ display: 'none' }} />
@@ -220,7 +238,23 @@ function Codebases() {
         ) : list.loading && list.value.length === 0 ? (
           <Note>Reading the forge…</Note>
         ) : shown.length === 0 ? (
-          <Note>{list.value.length === 0 ? 'No repositories yet.' : 'Nothing matches.'}</Note>
+          <YStack gap="$3" py="$2">
+            <Note>{list.value.length === 0 ? 'No repositories yet.' : 'Nothing matches.'}</Note>
+            {list.value.length === 0 ? (
+              <XStack gap="$2" pt="$1">
+                <Button size="sm" disabled={!signed} onPress={() => setMaking(true)}>
+                  <Plus size={14} />
+                  Create repository
+                </Button>
+                <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'sync' }))}>
+                  Sync from GitHub
+                </Button>
+                <Button size="sm" variant="ghost" onPress={() => host.go('-/templates')}>
+                  Start from template
+                </Button>
+              </XStack>
+            ) : null}
+          </YStack>
         ) : (
           <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
             <XStack px="$3" py="$2" gap="$3" items="center">
@@ -333,6 +367,14 @@ function NewRepo({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (!open) {
+      setName('')
+      setDescription('')
+      setError('')
+    }
+  }, [open])
+
   const submit = async () => {
     setBusy(true)
     setError('')
@@ -391,7 +433,17 @@ function Projects() {
         ) : list.loading && list.value.length === 0 ? (
           <Note>Reading the forge…</Note>
         ) : list.value.length === 0 ? (
-          <Note>No boards yet. A repository shows up here once it has an issue.</Note>
+          <YStack gap="$3" py="$2">
+            <Note>No boards yet. A repository shows up here once it has an issue.</Note>
+            <XStack gap="$2" pt="$1">
+              <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'codebases' }))}>
+                View repositories
+              </Button>
+              <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'sync' }))}>
+                Sync from GitHub
+              </Button>
+            </XStack>
+          </YStack>
         ) : (
           <YStack gap="$2">
             {list.value.map((b) => (
@@ -471,7 +523,17 @@ function Issues() {
         ) : list.loading && list.value.length === 0 ? (
           <Note>Reading the forge…</Note>
         ) : list.value.length === 0 ? (
-          <Note>Nothing open.</Note>
+          <YStack gap="$3" py="$2">
+            <Note>Nothing open.</Note>
+            <XStack gap="$2" pt="$1">
+              <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'codebases' }))}>
+                View repositories
+              </Button>
+              <Button size="sm" onPress={() => host.go('')}>
+                Start a new run
+              </Button>
+            </XStack>
+          </YStack>
         ) : (
           <YStack gap="$2">
             {list.value.map((w) => (

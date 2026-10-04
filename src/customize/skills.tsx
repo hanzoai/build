@@ -330,7 +330,7 @@ function Editor({
         </SizableText>
       ) : null}
       <Field label="Name" hint={skill ? 'A skill’s name is its id; save under another name to make a new one.' : 'One lowercase word: letters, digits, _ or -. Agents name it as skill_<name>.'}>
-        <Input value={name} onChangeText={setName} placeholder="triage" aria-label="Name" disabled={Boolean(skill)} autoCapitalize="none" />
+        <Input value={name} onChangeText={setName} aria-label="Name" disabled={Boolean(skill)} autoCapitalize="none" />
       </Field>
       <Field label="Description" hint="The one line an agent reads to decide whether it needs this skill.">
         <Input value={description} onChangeText={setDescription} placeholder="How we triage an incoming issue" aria-label="Description" />

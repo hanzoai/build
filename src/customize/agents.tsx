@@ -212,7 +212,7 @@ function Editor({
       ) : (
         <>
           <Field label="Name" hint={agent ? 'An agent keeps its name.' : 'Letters, digits, . _ or -. Other agents call it as agent_<name>.'}>
-            <Input value={d.name} onChangeText={(v: string) => set({ name: v })} placeholder="helper" aria-label="Name" disabled={Boolean(agent)} autoCapitalize="none" />
+            <Input value={d.name} onChangeText={(v: string) => set({ name: v })} aria-label="Name" disabled={Boolean(agent)} autoCapitalize="none" />
           </Field>
           <Field label="Description" hint="The line another agent reads to decide whether to call this one.">
             <Input value={d.description} onChangeText={(v: string) => set({ description: v })} placeholder="Answers questions about our codebase" aria-label="Description" />

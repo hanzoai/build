@@ -186,6 +186,16 @@ export async function reactivate(t: Target, id: string): Promise<Subscription> {
 
 // ── cards ────────────────────────────────────────────────────────────────────
 
+export interface Address {
+  name?: string
+  line1?: string
+  line2?: string
+  city?: string
+  state?: string
+  postalCode?: string
+  country?: string
+}
+
 export interface Method {
   id: string
   type: string
@@ -196,11 +206,13 @@ export interface Method {
   default: boolean
   /** What the platform calls it when it is not a card. */
   name: string
+  billingAddress?: Address
 }
 
 export function method(raw: unknown): Method {
   const m = obj(raw)
   const c = obj(m.card)
+  const a = obj(m.billingAddress)
   const month = num(c.expMonth)
   const year = num(c.expYear)
   return {
@@ -211,7 +223,31 @@ export function method(raw: unknown): Method {
     expires: month && year ? `${String(month).padStart(2, '0')}/${String(year % 100).padStart(2, '0')}` : '',
     default: m.isDefault === true,
     name: str(m.name),
+    billingAddress:
+      a && (a.line1 || a.city || a.country || a.name || a.postalCode || a.state)
+        ? {
+            name: str(a.name),
+            line1: str(a.line1),
+            line2: str(a.line2),
+            city: str(a.city),
+            state: str(a.state),
+            postalCode: str(a.postalCode),
+            country: str(a.country),
+          }
+        : undefined,
   }
+}
+
+/** Formats a billing address as a readable line: `Acme Inc · 123 Main St · San Francisco CA 94105 · US`. */
+export function formatAddress(a?: Address): string {
+  if (!a) return ''
+  const parts = [
+    a.name,
+    [a.line1, a.line2].filter(Boolean).join(', '),
+    [a.city, a.state, a.postalCode].filter(Boolean).join(' '),
+    a.country,
+  ].filter(Boolean)
+  return parts.join(' · ')
 }
 
 /** How a saved method reads in a row: `Visa •••• 4242`. */
@@ -231,14 +267,26 @@ export function chosen(list: Method[]): Method | null {
   return list.find((m) => m.default) ?? list[0] ?? null
 }
 
-/** Save a card from the single-use token the processor's form returned. */
-export async function save(t: Target, token: string): Promise<Method> {
+/** Save a card from the single-use token the processor's form returned, optionally with billing info. */
+export async function save(t: Target, token: string, billingAddress?: Address): Promise<Method> {
   if (!token) throw new Error('The card form returned no token')
-  return method(await call<unknown>(t, 'POST', '/v1/billing/methods', { type: 'card', providerRef: token }))
+  const body: Record<string, unknown> = { type: 'card', providerRef: token }
+  if (billingAddress && Object.values(billingAddress).some(Boolean)) {
+    body.billingAddress = billingAddress
+  }
+  return method(await call<unknown>(t, 'POST', '/v1/billing/methods', body))
+}
+
+export async function updateMethod(t: Target, id: string, what: { billingAddress?: Address }): Promise<Method> {
+  return method(await call<unknown>(t, 'PATCH', `/v1/billing/methods/${seg(id)}`, what))
 }
 
 export async function detach(t: Target, id: string): Promise<void> {
   await call<unknown>(t, 'DELETE', `/v1/billing/methods/${seg(id)}`)
+}
+
+export async function makeDefault(t: Target, id: string): Promise<Method> {
+  return method(await call<unknown>(t, 'POST', `/v1/billing/methods/${seg(id)}/default`))
 }
 
 export interface Processor {

@@ -156,10 +156,10 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
   return (
     <Sheet title="Build a plugin" open onOpenChange={(o) => !o && onClose()} width={680}>
       <Field label="Name" hint="One lowercase word: letters, digits, _ or -. The runtime loads it by this name.">
-        <Input value={name} onChangeText={setName} placeholder="acme" aria-label="Name" autoCapitalize="none" />
+        <Input value={name} onChangeText={setName} aria-label="Name" autoCapitalize="none" />
       </Field>
       <Field label="Connector" hint="Optional. The connector whose credential the plugin reads when it runs. A plugin never holds a key itself.">
-        <Input value={provider} onChangeText={setProvider} placeholder="acme" aria-label="Connector" autoCapitalize="none" />
+        <Input value={provider} onChangeText={setProvider} aria-label="Connector" autoCapitalize="none" />
       </Field>
       <Choice label="Build from" value={way} options={WAYS} onChange={setWay} />
       <Field

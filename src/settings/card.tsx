@@ -7,13 +7,14 @@
  * it will be charged on.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { X } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
+import { ChevronDown, ChevronUp, X } from '@hanzogui/lucide-icons-2'
+import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
 import { useEffect, useRef, useState } from 'react'
 
-import { processor, save, type Method, type Processor } from '../api/billing.ts'
+import { processor, save, type Address, type Method, type Processor } from '../api/billing.ts'
 import { useRead } from '../data.ts'
 import { useTarget } from '../host.tsx'
+import { Field as FormField } from './ui.tsx'
 
 /** The part of Square's Web Payments SDK this uses. */
 interface Field {
@@ -67,6 +68,13 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
   const [mounted, setMounted] = useState(false)
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
+  const [name, setName] = useState('')
+  const [postalCode, setPostalCode] = useState('')
+  const [moreAddress, setMoreAddress] = useState(false)
+  const [line1, setLine1] = useState('')
+  const [city, setCity] = useState('')
+  const [stateVal, setStateVal] = useState('')
+  const [country, setCountry] = useState('US')
   const p = cfg.value
 
   useEffect(() => {
@@ -105,7 +113,18 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
     try {
       const r = await f.tokenize()
       if (r.status !== 'OK' || !r.token) throw new Error(r.errors?.map((e) => e.message).filter(Boolean).join('; ') || 'The card details are incomplete')
-      const m = await save(t, r.token)
+      const billingAddress: Address | undefined =
+        name.trim() || postalCode.trim() || line1.trim() || city.trim() || stateVal.trim()
+          ? {
+              name: name.trim() || undefined,
+              postalCode: postalCode.trim() || undefined,
+              line1: line1.trim() || undefined,
+              city: city.trim() || undefined,
+              state: stateVal.trim() || undefined,
+              country: country.trim() || 'US',
+            }
+          : undefined
+      const m = await save(t, r.token, billingAddress)
       onSaved(m)
       onOpenChange(false)
     } catch (e) {
@@ -119,7 +138,7 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent maxW={440} showCloseButton={false}>
+      <DialogContent maxW={460} showCloseButton={false}>
         <XStack items="center" justify="space-between" gap="$2">
           <DialogTitle>Add a card</DialogTitle>
           <XStack render="button" aria-label="Close" p="$1" onPress={() => onOpenChange(false)}>
@@ -141,6 +160,52 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
                   </SizableText>
                 ) : null}
               </YStack>
+
+              <XStack gap="$2">
+                <YStack flex={1}>
+                  <FormField label="Name on card" hint="Optional">
+                    <Input value={name} onChangeText={setName} placeholder="Name or business" />
+                  </FormField>
+                </YStack>
+                <YStack width={120}>
+                  <FormField label="Postal code" hint="Optional">
+                    <Input value={postalCode} onChangeText={setPostalCode} placeholder="ZIP / Postal" />
+                  </FormField>
+                </YStack>
+              </XStack>
+
+              <XStack>
+                <Button size="sm" variant="ghost" onPress={() => setMoreAddress(!moreAddress)}>
+                  {moreAddress ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  {moreAddress ? 'Hide address' : 'Add billing address'}
+                </Button>
+              </XStack>
+
+              {moreAddress ? (
+                <YStack gap="$2" pt="$1">
+                  <FormField label="Street address">
+                    <Input value={line1} onChangeText={setLine1} placeholder="Address line 1" />
+                  </FormField>
+                  <XStack gap="$2">
+                    <YStack flex={1}>
+                      <FormField label="City">
+                        <Input value={city} onChangeText={setCity} placeholder="City" />
+                      </FormField>
+                    </YStack>
+                    <YStack width={90}>
+                      <FormField label="State">
+                        <Input value={stateVal} onChangeText={setStateVal} placeholder="State" />
+                      </FormField>
+                    </YStack>
+                    <YStack width={90}>
+                      <FormField label="Country">
+                        <Input value={country} onChangeText={setCountry} placeholder="Country (US)" />
+                      </FormField>
+                    </YStack>
+                  </XStack>
+                </YStack>
+              ) : null}
+
               <SizableText size="$1" color="$soft">
                 {p && p.environment !== 'production'
                   ? 'Sandbox: use a test card. Nothing is charged.'

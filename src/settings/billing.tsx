@@ -5,20 +5,25 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { CreditCard, Download, Plus, X } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle, toast } from '@hanzo/ui'
-import { useState } from 'react'
+import { Button, Dialog, DialogContent, DialogTitle, Input, toast } from '@hanzo/ui'
+import { useEffect, useState } from 'react'
 
 import {
   cancel,
+  chosen,
   current,
   detach,
+  formatAddress,
   invoices,
   label,
+  makeDefault,
   methods,
   money,
   pdf,
   reactivate,
   subscriptions,
+  updateMethod,
+  type Address,
   type Invoice,
   type Method,
   type Subscription,
@@ -27,7 +32,7 @@ import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { path } from '../route.ts'
 import { AddCard } from './card.tsx'
-import { Card, day, Group, Heading, Note, Row, Soft } from './ui.tsx'
+import { Card, day, Field, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
 export function Billing() {
   const host = useHost()
@@ -38,6 +43,7 @@ export function Billing() {
   const bills = useRead(signed ? () => invoices(t) : null, [] as Invoice[], [t, signed])
   const [adding, setAdding] = useState(false)
   const [ending, setEnding] = useState(false)
+  const [editingBilling, setEditingBilling] = useState<Method | null>(null)
   const [open, setOpen] = useState<Invoice | null>(null)
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
@@ -53,6 +59,8 @@ export function Billing() {
 
   const plan = current(subs.value)
   const empty = !cards.error && !cards.loading && cards.value.length === 0
+  const defaultCard = chosen(cards.value)
+
   // A done act is a toast; a refused one stays on the page, beside what was tried.
   const act = async (what: () => Promise<unknown>, done: string, after: () => void) => {
     setWorking(true)
@@ -130,18 +138,48 @@ export function Billing() {
                 first={i === 0}
                 leading={<CreditCard size={16} />}
                 title={label(m)}
-                detail={[m.expires ? `Expires ${m.expires}` : '', m.default ? 'Default' : ''].filter(Boolean).join(' · ') || undefined}
+                detail={
+                  [
+                    m.expires ? `Expires ${m.expires}` : '',
+                    m.default ? 'Default' : '',
+                    m.billingAddress ? formatAddress(m.billingAddress) : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || undefined
+                }
                 trailing={
                   host.admin ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={`Remove ${label(m)}`}
-                      disabled={working}
-                      onPress={() => void act(() => detach(t, m.id), `${label(m)} is removed`, cards.reload)}
-                    >
-                      Remove
-                    </Button>
+                    <XStack gap="$2" items="center">
+                      {!m.default ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Make ${label(m)} default`}
+                          disabled={working}
+                          onPress={() => void act(() => makeDefault(t, m.id), `${label(m)} is now the default`, cards.reload)}
+                        >
+                          Make default
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Edit billing info for ${label(m)}`}
+                        disabled={working}
+                        onPress={() => setEditingBilling(m)}
+                      >
+                        Edit info
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Remove ${label(m)}`}
+                        disabled={working}
+                        onPress={() => void act(() => detach(t, m.id), `${label(m)} is removed`, cards.reload)}
+                      >
+                        Remove
+                      </Button>
+                    </XStack>
                   ) : undefined
                 }
               />
@@ -153,6 +191,68 @@ export function Billing() {
             An org admin adds and removes cards.
           </SizableText>
         ) : null}
+      </Group>
+
+      <Group
+        title="Billing details"
+        detail="Information printed on invoices and payment receipts."
+        action={
+          host.admin && defaultCard ? (
+            <Button size="sm" variant="outline" onPress={() => setEditingBilling(defaultCard)}>
+              {defaultCard.billingAddress ? 'Edit details' : 'Add billing info'}
+            </Button>
+          ) : undefined
+        }
+      >
+        {defaultCard?.billingAddress ? (
+          <Card>
+            <YStack p="$3" gap="$1.5">
+              {defaultCard.billingAddress.name ? (
+                <SizableText size="$3" color="$ink" style={{ fontWeight: 600 }}>
+                  {defaultCard.billingAddress.name}
+                </SizableText>
+              ) : null}
+              {defaultCard.billingAddress.line1 ? (
+                <SizableText size="$2" color="$soft">
+                  {defaultCard.billingAddress.line1}
+                  {defaultCard.billingAddress.line2 ? `, ${defaultCard.billingAddress.line2}` : ''}
+                </SizableText>
+              ) : null}
+              {defaultCard.billingAddress.city || defaultCard.billingAddress.state || defaultCard.billingAddress.postalCode ? (
+                <SizableText size="$2" color="$soft">
+                  {[defaultCard.billingAddress.city, defaultCard.billingAddress.state, defaultCard.billingAddress.postalCode]
+                    .filter(Boolean)
+                    .join(' ')}
+                </SizableText>
+              ) : null}
+              {defaultCard.billingAddress.country ? (
+                <SizableText size="$2" color="$soft">
+                  {defaultCard.billingAddress.country}
+                </SizableText>
+              ) : null}
+            </YStack>
+          </Card>
+        ) : (
+          <XStack items="center" justify="space-between" gap="$3" px="$4" py="$3" borderWidth={1} borderColor="$borderColor" rounded="$3" flexWrap="wrap">
+            <YStack flex={1} minW={180} gap="$1">
+              <SizableText size="$2" color="$ink">
+                No billing address on file.
+              </SizableText>
+              <SizableText size="$1" color="$soft">
+                Add your company name and address so they appear on monthly invoices and receipts.
+              </SizableText>
+            </YStack>
+            {host.admin ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => (defaultCard ? setEditingBilling(defaultCard) : setAdding(true))}
+              >
+                <Plus size={14} /> {defaultCard ? 'Add billing info' : 'Set billing info'}
+              </Button>
+            ) : null}
+          </XStack>
+        )}
       </Group>
 
       <Group title="Invoices">
@@ -233,6 +333,14 @@ export function Billing() {
           toast.success(`${label(m)} is saved`)
         }}
       />
+      <EditBilling
+        open={editingBilling !== null}
+        onOpenChange={(o) => !o && setEditingBilling(null)}
+        card={editingBilling}
+        onSaved={() => {
+          cards.reload()
+        }}
+      />
       {plan ? (
         <Ending
           plan={plan}
@@ -249,6 +357,139 @@ export function Billing() {
       ) : null}
       {open ? <Bill invoice={open} onClose={() => setOpen(null)} /> : null}
     </YStack>
+  )
+}
+
+function EditBilling({
+  open,
+  onOpenChange,
+  card,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  card: Method | null
+  onSaved: () => void
+}) {
+  const t = useTarget()
+  const [name, setName] = useState('')
+  const [line1, setLine1] = useState('')
+  const [line2, setLine2] = useState('')
+  const [city, setCity] = useState('')
+  const [stateVal, setStateVal] = useState('')
+  const [postalCode, setPostalCode] = useState('')
+  const [country, setCountry] = useState('US')
+  const [working, setWorking] = useState(false)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    if (card?.billingAddress) {
+      setName(card.billingAddress.name ?? '')
+      setLine1(card.billingAddress.line1 ?? '')
+      setLine2(card.billingAddress.line2 ?? '')
+      setCity(card.billingAddress.city ?? '')
+      setStateVal(card.billingAddress.state ?? '')
+      setPostalCode(card.billingAddress.postalCode ?? '')
+      setCountry(card.billingAddress.country ?? 'US')
+    } else {
+      setName('')
+      setLine1('')
+      setLine2('')
+      setCity('')
+      setStateVal('')
+      setPostalCode('')
+      setCountry('US')
+    }
+    setNote('')
+  }, [card])
+
+  const save = async () => {
+    if (!card) return
+    setWorking(true)
+    setNote('')
+    try {
+      const address: Address = {
+        name: name.trim() || undefined,
+        line1: line1.trim() || undefined,
+        line2: line2.trim() || undefined,
+        city: city.trim() || undefined,
+        state: stateVal.trim() || undefined,
+        postalCode: postalCode.trim() || undefined,
+        country: country.trim() || undefined,
+      }
+      await updateMethod(t, card.id, { billingAddress: address })
+      onSaved()
+      onOpenChange(false)
+      toast.success('Billing details updated')
+    } catch (e) {
+      setNote((e as Error).message)
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent maxW={460} showCloseButton={false}>
+        <XStack items="center" justify="space-between" gap="$2">
+          <DialogTitle>Billing details</DialogTitle>
+          <XStack render="button" aria-label="Close" p="$1" onPress={() => onOpenChange(false)}>
+            <X size={16} />
+          </XStack>
+        </XStack>
+        <YStack gap="$3">
+          <SizableText size="$2" color="$soft">
+            These details appear on your invoices and receipts.
+          </SizableText>
+          <Field label="Business or personal name">
+            <Input value={name} onChangeText={setName} placeholder="e.g. Webby AI, Inc. or Joshua Lynch" />
+          </Field>
+          <Field label="Address line 1">
+            <Input value={line1} onChangeText={setLine1} placeholder="Street address or P.O. Box" />
+          </Field>
+          <Field label="Address line 2" hint="Optional">
+            <Input value={line2} onChangeText={setLine2} placeholder="Suite, unit, building, floor" />
+          </Field>
+          <XStack gap="$2">
+            <YStack flex={1}>
+              <Field label="City">
+                <Input value={city} onChangeText={setCity} placeholder="City" />
+              </Field>
+            </YStack>
+            <YStack width={100}>
+              <Field label="State">
+                <Input value={stateVal} onChangeText={setStateVal} placeholder="State / Prov" />
+              </Field>
+            </YStack>
+          </XStack>
+          <XStack gap="$2">
+            <YStack flex={1}>
+              <Field label="Postal / ZIP code">
+                <Input value={postalCode} onChangeText={setPostalCode} placeholder="ZIP or Postal Code" />
+              </Field>
+            </YStack>
+            <YStack width={110}>
+              <Field label="Country">
+                <Input value={country} onChangeText={setCountry} placeholder="Country (US)" />
+              </Field>
+            </YStack>
+          </XStack>
+          {note ? (
+            <SizableText size="$2" color="$red10" role="alert">
+              {note}
+            </SizableText>
+          ) : null}
+          <XStack gap="$2" justify="flex-end" pt="$2">
+            <Button size="sm" variant="ghost" disabled={working} onPress={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={working} onPress={() => void save()}>
+              Save details
+            </Button>
+          </XStack>
+        </YStack>
+      </DialogContent>
+    </Dialog>
   )
 }
 

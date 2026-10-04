@@ -18,6 +18,49 @@ import { call, Refusal, seg, type Target } from './call.ts'
 export const KINDS = ['laptop', 'gpu', 'cloud', 'cluster', 'machine'] as const
 export type Kind = (typeof KINDS)[number]
 
+export interface GPU {
+  vendor?: string
+  model?: string
+  memory?: number
+}
+
+export interface MachineSpec {
+  os?: string
+  arch?: string
+  cpus?: number
+  memory?: number
+  gpus?: GPU[]
+}
+
+export interface MachineMetrics {
+  load1?: number
+  load5?: number
+  load15?: number
+  memUsed?: number
+  memFree?: number
+  gpuUtil?: number
+  cpuUtil?: number
+  cpuTemp?: number
+  gpuTemp?: number
+  gpuPower?: number
+  gpuPowerLimit?: number
+  gpuMemUsed?: number
+  gpuMemTotal?: number
+  diskUsed?: number
+  diskTotal?: number
+  diskRead?: number
+  diskWrite?: number
+  netRx?: number
+  netTx?: number
+  model?: string
+  decode?: number
+  prefill?: number
+  ttft?: number
+  running?: number
+  waiting?: number
+  at?: number
+}
+
 export interface Machine {
   /** `tgt_…` */
   id: string
@@ -35,14 +78,108 @@ export interface Machine {
   running: number
   /** When it last beat, RFC 3339, or '' when it never has. */
   seen: string
+  serving?: boolean
+  createdAt?: string
+  updatedAt?: string
+  spec?: MachineSpec
+  metrics?: MachineMetrics
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
+
+export function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return ''
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  const val = bytes / Math.pow(k, i)
+  return `${val >= 10 || i === 0 ? Math.round(val) : val.toFixed(1)} ${sizes[i]}`
+}
+
+export function formatPercent(fraction?: number): string {
+  if (fraction === undefined || !Number.isFinite(fraction)) return ''
+  return `${Math.round(fraction * 100)}%`
+}
+
+export function formatRelative(isoDate?: string): string {
+  if (!isoDate) return ''
+  const t = new Date(isoDate).getTime()
+  if (Number.isNaN(t)) return ''
+  const diffSec = Math.max(0, Math.floor((Date.now() - t) / 1000))
+  if (diffSec < 60) return `${diffSec}s ago`
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
+  return `${Math.floor(diffSec / 86400)}d ago`
+}
+
+export function specSummary(m: Machine): string {
+  if (m.spec) {
+    const parts: string[] = []
+    if (m.spec.cpus) parts.push(`${m.spec.cpus} vCPU`)
+    if (m.spec.memory) parts.push(formatBytes(m.spec.memory))
+    if (m.spec.gpus && m.spec.gpus.length > 0) {
+      const g = m.spec.gpus[0]
+      parts.push(`${m.spec.gpus.length}× ${g.model || g.vendor || 'GPU'}${g.memory ? ` (${formatBytes(g.memory)})` : ''}`)
+    }
+    if (parts.length > 0) return parts.join(' · ')
+  }
+  return m.capacity || ''
+}
 
 export function machine(raw: unknown): Machine {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
-  return {
+  const specObj = obj(o.spec)
+  const metricsObj = obj(o.metrics)
+
+  let spec: MachineSpec | undefined
+  if (Object.keys(specObj).length > 0) {
+    const rawGpus = Array.isArray(specObj.gpus) ? specObj.gpus : []
+    spec = {
+      os: str(specObj.os),
+      arch: str(specObj.arch),
+      cpus: num(specObj.cpus),
+      memory: num(specObj.memory),
+      gpus: rawGpus.map((g: unknown) => {
+        const go = obj(g)
+        return { vendor: str(go.vendor), model: str(go.model), memory: num(go.memory) }
+      }),
+    }
+  }
+
+  let metrics: MachineMetrics | undefined
+  if (Object.keys(metricsObj).length > 0) {
+    metrics = {
+      load1: num(metricsObj.load1),
+      load5: num(metricsObj.load5),
+      load15: num(metricsObj.load15),
+      memUsed: num(metricsObj.memUsed),
+      memFree: num(metricsObj.memFree),
+      gpuUtil: num(metricsObj.gpuUtil),
+      cpuUtil: num(metricsObj.cpuUtil),
+      cpuTemp: num(metricsObj.cpuTemp),
+      gpuTemp: num(metricsObj.gpuTemp),
+      gpuPower: num(metricsObj.gpuPower),
+      gpuPowerLimit: num(metricsObj.gpuPowerLimit),
+      gpuMemUsed: num(metricsObj.gpuMemUsed),
+      gpuMemTotal: num(metricsObj.gpuMemTotal),
+      diskUsed: num(metricsObj.diskUsed),
+      diskTotal: num(metricsObj.diskTotal),
+      diskRead: num(metricsObj.diskRead),
+      diskWrite: num(metricsObj.diskWrite),
+      netRx: num(metricsObj.netRx),
+      netTx: num(metricsObj.netTx),
+      model: str(metricsObj.model),
+      decode: num(metricsObj.decode),
+      prefill: num(metricsObj.prefill),
+      ttft: num(metricsObj.ttft),
+      running: num(metricsObj.running),
+      waiting: num(metricsObj.waiting),
+    }
+  }
+
+  const m: Machine = {
     id: str(o.id),
     label: str(o.label) || str(o.host) || str(o.id),
     kind: str(o.kind),
@@ -53,6 +190,16 @@ export function machine(raw: unknown): Machine {
     running: num(o.running),
     seen: str(o.metricsAt),
   }
+
+  Object.defineProperties(m, {
+    serving: { value: o.serving === true, enumerable: false, writable: true },
+    createdAt: { value: str(o.createdAt), enumerable: false, writable: true },
+    updatedAt: { value: str(o.updatedAt), enumerable: false, writable: true },
+    spec: { value: spec, enumerable: false, writable: true },
+    metrics: { value: metrics, enumerable: false, writable: true },
+  })
+
+  return m
 }
 
 export async function machines(t: Target): Promise<Machine[]> {
@@ -74,11 +221,14 @@ async function owned<T>(p: Promise<T>): Promise<T> {
  * Register a machine by hand. One left unnamed takes its hostname, the name `hanzo
  * link` gives it; `hanzo link` on a machine with this hostname takes the row over.
  */
-export async function add(t: Target, what: { label: string; kind: Kind; host?: string }): Promise<Machine> {
+export async function add(t: Target, what: { label: string; kind: Kind; host?: string; capacity?: string }): Promise<Machine> {
   const host = (what.host ?? '').trim()
   const label = what.label.trim() || host
   if (!label) throw new Error('A machine needs a name or a hostname')
-  return machine(await call<unknown>(t, 'POST', '/v1/agent/targets', { label, kind: what.kind, ...(host ? { host } : {}) }))
+  const body: Record<string, unknown> = { label, kind: what.kind }
+  if (host) body.host = host
+  if (what.capacity?.trim()) body.capacity = what.capacity.trim()
+  return machine(await call<unknown>(t, 'POST', '/v1/agent/targets', body))
 }
 
 /**
@@ -91,14 +241,21 @@ export function state(m: Machine): string {
 }
 
 /** Rename a machine, or drain it (`draining`) and bring it back (`online`). */
-export async function change(t: Target, id: string, what: { label?: string; status?: 'online' | 'draining' }): Promise<Machine> {
-  const body: { label?: string; status?: string } = {}
+export async function change(
+  t: Target,
+  id: string,
+  what: { label?: string; status?: 'online' | 'draining'; capacity?: string; kind?: Kind; host?: string }
+): Promise<Machine> {
+  const body: Record<string, unknown> = {}
   if (what.label !== undefined) {
     const label = what.label.trim()
     if (!label) throw new Error('A machine needs a name')
     body.label = label
   }
   if (what.status !== undefined) body.status = what.status
+  if (what.capacity !== undefined) body.capacity = what.capacity.trim()
+  if (what.kind !== undefined) body.kind = what.kind
+  if (what.host !== undefined) body.host = what.host.trim()
   return machine(await owned(call<unknown>(t, 'PATCH', `/v1/agent/targets/${seg(id)}`, body)))
 }
 

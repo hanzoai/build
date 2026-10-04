@@ -292,6 +292,11 @@ function answer(w: World, s: Sent): Reply | undefined {
     sub.cancelAtPeriodEnd = m[2] === 'cancel'
     return { json: sub }
   }
+  if ((m = at(/^\/v1\/billing\/methods\/([^/]+)\/default$/))) {
+    w.cards = w.cards.map((c) => ({ ...c, isDefault: c.id === m![1] }))
+    const chosen = w.cards.find((c) => c.id === m![1])
+    return { json: chosen }
+  }
   if ((m = at(/^\/v1\/billing\/methods\/([^/]+)$/))) {
     w.cards = w.cards.filter((c) => c.id !== m![1])
     return { json: { deleted: true, id: m[1] } }
@@ -1027,6 +1032,8 @@ test('Billing: seats and no period end, an ending plan kept after a refusal, car
 
   await expect(page.getByText('SEPA account', { exact: true })).toBeVisible()
   await expect(page.getByText('ach', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Make Card •••• 1111 default' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Card •••• 1111 is now the default' })).toBeVisible()
   p.fail('DELETE /v1/billing/methods/pm_9', refusal('The card pays for the plan', 409))
   await page.getByRole('button', { name: 'Remove Card •••• 1111' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'The card pays for the plan' })).toBeVisible()
@@ -1085,6 +1092,7 @@ test('Billing: seats and no period end, an ending plan kept after a refusal, car
   await page.getByRole('button', { name: 'Adjust plan' }).click()
   await expect(page).toHaveURL(/\/-\/plans$/)
   expect(p.writes()).toEqual([
+    ['POST /v1/billing/methods/pm_9/default', null],
     ['DELETE /v1/billing/methods/pm_9', null],
     ['DELETE /v1/billing/methods/pm_9', null],
     ['POST /v1/billing/subscriptions/sub_1/reactivate', {}],
