@@ -56,6 +56,29 @@ export function pinBoard(org: string | null, key: string) {
   window.dispatchEvent(new CustomEvent('hanzo-board', { detail: key }))
 }
 
+/**
+ * A repository on GitHub, chosen from the org's installation: the run works there.
+ * Its `full_name` is GitHub's address, `github.com/owner/name` — what the list
+ * shows, so a forge codebase of the same name is never mistaken for it, and what
+ * a coding run takes to clone, push and propose on GitHub.
+ */
+export interface HubRepo {
+  owner: string
+  name: string
+  full_name: string
+  private: boolean
+  default_branch: string
+  pushed_at: string
+  installation_id: number
+  github: true
+}
+
+export const isHub = (repo: { github?: boolean; full_name?: string } | null): repo is HubRepo =>
+  Boolean(repo && repo.github === true && repo.full_name?.startsWith('github.com/'))
+
+/** A GitHub listing row as the composer offers it. */
+export const asHub = (r: Omit<HubRepo, 'github'>): HubRepo => ({ ...r, full_name: `github.com/${r.owner}/${r.name}`, github: true })
+
 export const isForge = (repo: { forge?: boolean; name?: string } | null): repo is ForgeRepo =>
   Boolean(repo && repo.forge === true && repo.name)
 

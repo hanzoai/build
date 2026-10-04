@@ -23,12 +23,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
+import { repos as githubRepos } from './api/github.ts'
 import { read, SETUP, type Environment } from './api/environment.ts'
 import { SetupDialog } from './environment.tsx'
 import { ENSO, limits as readLimits, models } from './api/models.ts'
 import { usePick } from './pick.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
-import { isForge } from './choice.ts'
+import { asHub, isForge, isHub, type HubRepo } from './choice.ts'
 import { useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { pane } from './pane.ts'
@@ -51,7 +52,7 @@ export const EFFORTS = [
 
 /** What a person chose last time, per org. */
 interface Kept {
-  repo: (RowRepo & { forge?: boolean; clone?: string }) | null
+  repo: (RowRepo & { forge?: boolean; github?: boolean; clone?: string }) | null
   branch: string
   place: string
   mode: Mode
@@ -148,13 +149,20 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const place: Place = places.value.find((p) => p.id === kept.place) ?? SANDBOX
 
   const known = useRef(new Map<string, ForgeRepo>())
+  const hubs = useRef(new Map<string, HubRepo>())
 
+  // The forge's codebases, then the repositories the org's GitHub installation
+  // grants. A GitHub row is chosen as GitHub's address, so a run on it clones,
+  // pushes and proposes on GitHub, where its people work. A GitHub read that
+  // fails leaves the forge's list standing.
   const loadRepos = useCallback(
     async (q: string) => {
-      const page = await codebases(t, q)
+      const [page, hub] = await Promise.all([codebases(t, q), githubRepos(t, { q }).catch(() => null)])
       const repos = page.map(asRepo)
       for (const r of repos) known.current.set(r.name, r)
-      return { repos, next: null }
+      const github = (hub?.repos ?? []).map(asHub)
+      for (const r of github) hubs.current.set(r.full_name.toLowerCase(), r)
+      return { repos: [...repos, ...github], next: null }
     },
     [t],
   )
@@ -179,7 +187,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       return
     }
     const repo = isForge(kept.repo) ? kept.repo : null
-    if (!repo && place.id) {
+    const hub = isHub(kept.repo) ? kept.repo : null
+    if (!repo && !hub && place.id) {
       setNote(`A run on ${place.label} works in its own checkout: choose the codebase, or run it in Cloud.`)
       return
     }
@@ -191,8 +200,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         // The name alone. The org rides the request, and a slash is not a repo name.
         // No codebase is not sent, and the run starts a new project.
         // An empty base or place is not sent: the default branch, and the sandbox.
-        repo: repo?.name,
-        base: repo ? kept.branch : undefined,
+        repo: repo?.name ?? hub?.full_name,
+        base: repo ? kept.branch : hub ? kept.branch || hub.default_branch : undefined,
         targetId: place.id,
         mode: kept.mode,
         model: model === ENSO ? undefined : model,
@@ -278,8 +287,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         key={round}
         open={picking}
         onOpenChange={setPicking}
-        value={isForge(kept.repo) ? kept.repo : null}
+        value={isForge(kept.repo) || isHub(kept.repo) ? kept.repo : null}
         onChange={(r) => {
+          const hub = (r as { github?: boolean }).github ? hubs.current.get((r.full_name ?? "").toLowerCase()) : undefined
+          if (hub) {
+            set({ repo: hub, branch: hub.default_branch })
+            return
+          }
           const row = known.current.get(r.name) ?? chosen(r)
           set({ repo: row, branch: row.default_branch })
         }}
@@ -293,7 +307,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             <FooterLink label="Refresh list" onPress={() => setRound((n) => n + 1)} />
           </XStack>
         }
-        note="Repositories on the forge. Type to search."
+        note="Repositories on the forge and on your organization's GitHub. Type to search."
         action={{
           label: 'Add to project',
           onPress: (r) => {

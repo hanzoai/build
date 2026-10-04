@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Codebase } from './api/codebases.ts'
-import { boardKey, isForge, pinBoard, pinCodebase, readPending, writePending } from './choice.ts'
+import { asHub, boardKey, isForge, isHub, pinBoard, pinCodebase, readPending, writePending } from './choice.ts'
 
 /** Web Storage as a browser has it. */
 function area(seed: Record<string, string> = {}) {
@@ -120,5 +120,22 @@ describe('repositories on their way to the forge', () => {
     refusing()
     expect(readPending('acme')).toEqual([])
     expect(() => writePending('acme', [{ fullName: 'acme/api', name: 'api' }])).not.toThrow()
+  })
+})
+
+describe('a GitHub choice', () => {
+  const row = { owner: 'webby-ai', name: 'intel-hub', full_name: 'webby-ai/intel-hub', private: true, default_branch: 'main', pushed_at: '', installation_id: 7 }
+
+  it('is offered under GitHub’s address, so a forge codebase of the same name stays distinct', () => {
+    const hub = asHub(row)
+    expect(hub.full_name).toBe('github.com/webby-ai/intel-hub')
+    expect(isHub(hub)).toBe(true)
+    expect(isForge(hub)).toBe(false)
+  })
+
+  it('is never a forge row, and a forge row is never one', () => {
+    expect(isHub({ forge: true, name: 'intel-hub', full_name: 'webby-ai/intel-hub' } as never)).toBe(false)
+    expect(isHub({ github: true, full_name: 'webby-ai/intel-hub' })).toBe(false)
+    expect(isHub(null)).toBe(false)
   })
 })
