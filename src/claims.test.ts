@@ -22,4 +22,10 @@ describe('claims', () => {
     expect(administers(jwt({ orgs: 'acme' }), 'acme')).toBe(false)
     expect(administers(jwt({ orgs: [null, { org: 'acme', role: 'admin' }] }), 'acme')).toBe(true)
   })
+
+  it('an owner of the org administers it too', () => {
+    const t = jwt({ orgs: [{ org: 'home', role: 'member' }, { org: 'acme', role: 'owner' }] })
+    expect(administers(t, 'acme')).toBe(true)
+    expect(administers(t, 'home')).toBe(false)
+  })
 })

@@ -144,7 +144,7 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
               <SizableText size="$1" color="$soft">
                 {p && p.environment !== 'production'
                   ? 'Sandbox: use a test card. Nothing is charged.'
-                  : 'The card number goes to the payment processor, never to Hanzo.'}
+                  : 'The card number goes to the payment processor, never to Hanzo. Saving it charges nothing.'}
               </SizableText>
             </>
           )}

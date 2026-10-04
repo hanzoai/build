@@ -5,7 +5,7 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { CreditCard, Download, Plus, X } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
+import { Button, Dialog, DialogContent, DialogTitle, toast } from '@hanzo/ui'
 import { useState } from 'react'
 
 import {
@@ -52,13 +52,15 @@ export function Billing() {
   }
 
   const plan = current(subs.value)
+  const empty = !cards.error && !cards.loading && cards.value.length === 0
+  // A done act is a toast; a refused one stays on the page, beside what was tried.
   const act = async (what: () => Promise<unknown>, done: string, after: () => void) => {
     setWorking(true)
     setNote('')
     try {
       await what()
       after()
-      setNote(done)
+      toast.success(done)
     } catch (e) {
       setNote((e as Error).message)
     } finally {
@@ -92,7 +94,7 @@ export function Billing() {
         title="Payment"
         detail="The card a plan renews on and a top-up charges."
         action={
-          host.admin ? (
+          host.admin && (cards.error || cards.value.length > 0) ? (
             <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
               <Plus size={14} /> Add card
             </Button>
@@ -103,10 +105,23 @@ export function Billing() {
           <Soft>{cards.error.message}</Soft>
         ) : cards.loading && !cards.value.length ? (
           <Soft>Reading cards…</Soft>
-        ) : cards.value.length === 0 ? (
-          <Card>
-            <Soft>No card on file.</Soft>
-          </Card>
+        ) : empty ? (
+          <XStack items="center" gap="$3" px="$4" py="$4" borderWidth={1} borderColor="$borderColor" rounded="$3" flexWrap="wrap">
+            <CreditCard size={20} />
+            <YStack flex={1} minW={180} gap="$1">
+              <SizableText size="$3" color="$ink">
+                No card on file.
+              </SizableText>
+              <SizableText size="$2" color="$soft">
+                {host.admin ? 'Add one to pay for a plan or a top-up. Adding it charges nothing.' : 'An org admin adds cards.'}
+              </SizableText>
+            </YStack>
+            {host.admin ? (
+              <Button onPress={() => setAdding(true)}>
+                <Plus size={16} /> Add card
+              </Button>
+            ) : null}
+          </XStack>
         ) : (
           <Card>
             {cards.value.map((m, i) => (
@@ -118,20 +133,26 @@ export function Billing() {
                 detail={[m.expires ? `Expires ${m.expires}` : '', m.default ? 'Default' : ''].filter(Boolean).join(' · ') || undefined}
                 trailing={
                   host.admin ? (
-                    <XStack
-                      render="button"
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       aria-label={`Remove ${label(m)}`}
-                      p="$1"
+                      disabled={working}
                       onPress={() => void act(() => detach(t, m.id), `${label(m)} is removed`, cards.reload)}
                     >
-                      <X size={14} />
-                    </XStack>
+                      Remove
+                    </Button>
                   ) : undefined
                 }
               />
             ))}
           </Card>
         )}
+        {!host.admin && cards.value.length ? (
+          <SizableText size="$1" color="$soft">
+            An org admin adds and removes cards.
+          </SizableText>
+        ) : null}
       </Group>
 
       <Group title="Invoices">
@@ -209,7 +230,7 @@ export function Billing() {
         onOpenChange={setAdding}
         onSaved={(m) => {
           cards.reload()
-          setNote(`${label(m)} is saved`)
+          toast.success(`${label(m)} is saved`)
         }}
       />
       {plan ? (

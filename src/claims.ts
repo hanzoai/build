@@ -15,16 +15,20 @@ export function claims(token: string | null): Record<string, unknown> | null {
   }
 }
 
+/** The coarse IAM roles that administer an org: its owner and its admins. */
+const ADMIN = ['owner', 'admin']
+
 /**
- * Whether the token says its person administers `org`. Org admin, read off the
- * token's own `orgs` claim — never the reserved `admin` org, which is platform
- * authority and not what a builder decides anything by. The platform enforces
- * it again; this only decides which publish path is offered.
+ * Whether the token says its person administers `org`: owner or admin, read off
+ * the token's own `orgs` claim — never the reserved `admin` org, which is
+ * platform authority and not what a builder decides anything by. The platform
+ * enforces it again; this only decides which controls are offered.
  */
 export function administers(token: string | null, org: string | null): boolean {
   if (!org) return false
   const set = claims(token)?.orgs
-  return (Array.isArray(set) ? set : []).some(
-    (r) => (r as { org?: unknown; role?: unknown } | null)?.org === org && (r as { role?: unknown }).role === 'admin',
-  )
+  return (Array.isArray(set) ? set : []).some((r) => {
+    const m = r as { org?: unknown; role?: unknown } | null
+    return m?.org === org && ADMIN.includes(m.role as string)
+  })
 }

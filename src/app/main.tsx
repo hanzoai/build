@@ -1,4 +1,4 @@
-import { Hanzo, YStack } from '@hanzo/ui'
+import { Hanzo, Toaster, YStack } from '@hanzo/ui'
 // Zen, the face `--font-sans` names; @hanzo/ui's theme names it and ships no woff2.
 import '@hanzo/font/css'
 // The tokens, the reset and the glass material.
@@ -50,6 +50,8 @@ createRoot(document.getElementById('root')!).render(
         <YStack flex={1} minW={0} bg="$background" style={{ height: '100dvh', overflow: 'hidden' }}>
           <RouterProvider router={router} />
         </YStack>
+        {/* The page's one Toaster, as the Hanzo app mounts its own for the builder it hosts. */}
+        <Toaster />
       </Themed>
     </ThemeProvider>
   </StrictMode>,

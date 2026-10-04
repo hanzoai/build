@@ -62,6 +62,42 @@ test('a card is added through the processor’s own field, and only its token is
   expect(find(sent, 'POST', '/v1/billing/methods')?.body).toEqual({ type: 'card', providerRef: 'cnon:test' })
 })
 
+test('an org owner with no card adds one from Payment, and adding it charges nothing', async ({ page }, info) => {
+  const sent = await platform(page, { cards: false })
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
+  const owner = [b64({ alg: 'none' }), b64({ sub: `${ORG}/dave`, email: 'dave@acme.test', orgs: [{ org: 'dave', role: 'member' }, { org: ORG, role: 'owner' }] }), 'x'].join('.')
+  // Home is their own org; acme, which they own, is the one chosen in the switcher.
+  await page.addInitScript((t) => {
+    localStorage.setItem('hanzo_iam_access_token', t)
+    localStorage.setItem('hanzo_iam_current_org', 'acme')
+  }, owner)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/-/settings/billing')
+
+  await expect(page.getByText('No card on file.')).toBeVisible()
+  await expect(page.getByText('Add one to pay for a plan or a top-up. Adding it charges nothing.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add card' })).toHaveCount(1)
+  await page.screenshot({ path: info.outputPath('billing-empty-390.png'), fullPage: true })
+
+  await page.getByRole('button', { name: 'Add card' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add a card' })
+  await expect(dialog.getByLabel('Card number')).toBeVisible()
+  await page.screenshot({ path: info.outputPath('billing-add-390.png') })
+  await dialog.getByRole('button', { name: 'Save card' }).click()
+
+  await expect(page.getByText('Mastercard •••• 4444 is saved')).toBeVisible()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText('Mastercard •••• 4444', { exact: true })).toBeVisible()
+  await expect(page.getByText('Expires 03/29')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Remove Mastercard •••• 4444' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add card' })).toHaveCount(1)
+  await page.screenshot({ path: info.outputPath('billing-saved-390.png'), fullPage: true })
+
+  const writes = sent.filter((s) => s.method !== 'GET').map((s) => `${s.method} ${s.path}`)
+  expect(writes.filter((w) => w.startsWith('POST /v1/billing/'))).toEqual(['POST /v1/billing/methods'])
+  expect(find(sent, 'POST', '/v1/billing/methods')?.body).toEqual({ type: 'card', providerRef: 'cnon:test' })
+})
+
 test('Plans marks the current plan and upgrades with the saved card, yearly', async ({ page }, info) => {
   const sent = await platform(page, { paid: false })
   await page.goto('/-/plans')
@@ -212,6 +248,8 @@ test('a member reads the limits, the roster and the connectors, and changes none
   await expect(page.getByRole('button', { name: 'Buy more' })).toHaveCount(0)
   await page.goto('/-/settings/billing')
   await expect(page.getByText('Invoices', { exact: true })).toBeVisible()
+  await expect(page.getByText('Visa •••• 4242')).toBeVisible()
+  await expect(page.getByText('An org admin adds and removes cards.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add card' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /^Remove / })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)

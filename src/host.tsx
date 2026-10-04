@@ -40,7 +40,7 @@ export interface Host {
   chooseTheme?: (theme: Theme) => void
   /** Who is signed in, or null. */
   person: Person | null
-  /** Whether the person administers `org`: an admin publishes to main, anyone else opens a review. */
+  /** Whether the person administers `org` (its owner or an admin): they publish to main and change its money; anyone else opens a review and reads. */
   admin: boolean
   /** The address under the mount: '' | a session id | a slug | '-/codebases' | '-/projects' | '-/issues' | '-/artifacts' | '-/templates'. */
   path: string
