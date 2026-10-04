@@ -428,6 +428,7 @@ describe('automations', () => {
     schedule: { kind: 'weekdays', at: '08:00', tz: 'America/Los_Angeles' },
     permissions: 'ask',
     notify: true,
+    postTo: [],
     enabled: true,
     draft: false,
     next: '2026-10-05T15:00:00Z',
@@ -450,7 +451,7 @@ describe('automations', () => {
   it('creates one with what the editor holds, and reads one by id', async () => {
     const seen = answer(201, ROW)
     const { create, automation } = await import('./auto.ts')
-    const d = { name: 'Morning brief', instructions: 'Summarize my day.', model: null, schedule: { kind: 'weekdays', at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask', notify: true, enabled: false } as const
+    const d = { name: 'Morning brief', instructions: 'Summarize my day.', model: null, schedule: { kind: 'weekdays', at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask', notify: true, postTo: [] as string[], enabled: false } as const
     expect((await create(T, d)).id).toBe('flow_1')
     expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/auto/automations', body: d })
     const one = answer(200, ROW)
@@ -460,7 +461,7 @@ describe('automations', () => {
 
   it('sends a change as only what changed, and switches by enabled alone', async () => {
     const { changes, save } = await import('./auto.ts')
-    const was = { name: 'Morning brief', instructions: 'Summarize my day.', model: 'zen5' as string | null, schedule: { kind: 'weekdays' as const, at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask' as const, notify: true, enabled: true }
+    const was = { name: 'Morning brief', instructions: 'Summarize my day.', model: 'zen5' as string | null, schedule: { kind: 'weekdays' as const, at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask' as const, notify: true, postTo: [] as string[], enabled: true }
     expect(changes(was, { ...was })).toEqual({})
     expect(changes(was, { ...was, enabled: false })).toEqual({ enabled: false })
     expect(changes(was, { ...was, model: null, schedule: { kind: 'daily' as const, at: '09:00', tz: 'UTC' } })).toEqual({ model: null, schedule: { kind: 'daily', at: '09:00', tz: 'UTC' } })
@@ -487,6 +488,41 @@ describe('automations', () => {
     const gone = answer(204, undefined)
     await remove(T, 'flow_1')
     expect(gone[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/auto/automations/flow_1' })
+  })
+
+  it('carries where an automation posts, reads a run\'s post and where it went, and answers a review', async () => {
+    const { read, runs, review } = await import('./auto.ts')
+    expect(read({ id: 'flow_1', postTo: ['x', 'linkedin', 7] })?.postTo).toEqual(['x', 'linkedin'])
+    expect(read({ id: 'flow_1' })?.postTo).toEqual([])
+    answer(200, {
+      data: [
+        { id: 'run_1', status: 'review', at: '2026-10-04T15:00:00Z', summary: 'Waiting for your review: post it or discard it.', draft: 'Shipped three things.', posts: [] },
+        { id: 'run_0', status: 'succeeded', at: '2026-10-03T15:00:00Z', draft: 'Hello.', posts: [{ to: 'x', url: 'https://x.com/i/status/1' }, { to: 'linkedin', error: 'LinkedIn is not connected' }, { url: 'nowhere' }] },
+      ],
+    })
+    const rows = await runs(T, 'flow_1')
+    expect(rows[0]).toMatchObject({ status: 'review', draft: 'Shipped three things.', posts: [] })
+    expect(rows[1].posts).toEqual([
+      { to: 'x', url: 'https://x.com/i/status/1', error: '' },
+      { to: 'linkedin', url: '', error: 'LinkedIn is not connected' },
+    ])
+    const seen = answer(200, { id: 'run_1', status: 'running', posts: [] })
+    expect((await review(T, 'flow_1', 'run_1', true)).status).toBe('running')
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/auto/automations/flow_1/runs/run_1/review', body: { post: true } })
+  })
+
+  it('connects a social account only at its own consent page', async () => {
+    const { authorize, SOCIAL } = await import('./provider.ts')
+    expect(SOCIAL.map((s) => s.id)).toEqual(['x', 'linkedin', 'facebook', 'instagram', 'tiktok'])
+    expect(SOCIAL.filter((s) => s.posts).map((s) => s.id)).toEqual(['x', 'linkedin', 'facebook'])
+    answer(200, { authorizeUrl: 'https://twitter.com/i/oauth2/authorize?client_id=a' })
+    expect(await authorize(T, 'x', 'https://hanzo.ai/?at=-/settings/integrations')).toContain('twitter.com')
+    answer(200, { authorizeUrl: 'https://www.linkedin.com/oauth/v2/authorization?x=1' })
+    expect(await authorize(T, 'linkedin')).toContain('linkedin.com')
+    answer(200, { authorizeUrl: 'https://www.facebook.com/v21.0/dialog/oauth?x=1' })
+    expect(await authorize(T, 'facebook')).toContain('facebook.com')
+    answer(200, { authorizeUrl: 'https://evil.example/oauth' })
+    await expect(authorize(T, 'x')).rejects.toThrow('did not name a x address')
   })
 
   it('reads the starters from /v1/auto/templates', async () => {

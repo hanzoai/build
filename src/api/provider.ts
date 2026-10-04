@@ -1,6 +1,7 @@
 /**
  * The organization's connectors: a Slack workspace, the GitHub accounts the
- * platform's GitHub App is installed on.
+ * platform's GitHub App is installed on, and the social accounts automations
+ * post to.
  *
  *   GET  /v1/provider/{id}              one connector and this org's connection to it
  *   POST /v1/provider/{id}/connect      {return} → {authorizeUrl}: the provider's own consent page (org admin)
@@ -51,7 +52,38 @@ export async function read(t: Target, id: string): Promise<Connector> {
 const CONSENT: Record<string, RegExp> = {
   slack: /^https:\/\/slack\.com\//,
   github: /^https:\/\/github\.com\//,
+  x: /^https:\/\/(twitter|x)\.com\//,
+  linkedin: /^https:\/\/www\.linkedin\.com\//,
+  facebook: /^https:\/\/www\.facebook\.com\//,
+  instagram: /^https:\/\/www\.facebook\.com\//,
+  tiktok: /^https:\/\/www\.tiktok\.com\//,
 }
+
+/**
+ * The social accounts an organization connects. An automation posts text to
+ * the ones that take it; Instagram and TikTok take only images and video, and
+ * say so. `needs` is what connecting waits on while Hanzo's app with the
+ * platform is not set up.
+ */
+export const SOCIAL: readonly { id: string; name: string; posts: boolean; needs: string; takes?: string }[] = [
+  { id: 'x', name: 'X', posts: true, needs: 'X posting needs Hanzo’s X developer app with paid API access; it is not set up yet.' },
+  { id: 'linkedin', name: 'LinkedIn', posts: true, needs: 'LinkedIn posting needs Hanzo’s LinkedIn app with Share on LinkedIn; it is not set up yet.' },
+  { id: 'facebook', name: 'Facebook', posts: true, needs: 'Facebook Page posting needs Hanzo’s Meta app, approved by Meta App Review to publish to Pages; it is not set up yet.' },
+  {
+    id: 'instagram',
+    name: 'Instagram',
+    posts: false,
+    needs: 'Instagram posting needs Hanzo’s Meta app, approved by Meta App Review; it is not set up yet.',
+    takes: 'Instagram takes photos and reels, not text, so automations do not post to it.',
+  },
+  {
+    id: 'tiktok',
+    name: 'TikTok',
+    posts: false,
+    needs: 'TikTok posting needs TikTok’s audit of Hanzo’s app; it is not set up yet.',
+    takes: 'TikTok takes videos and photos, not text, so automations do not post to it.',
+  },
+]
 
 /** The provider's consent page for this org; its return lands on `back` when that is a Hanzo app page. */
 export async function authorize(t: Target, id: string, back?: string): Promise<string> {

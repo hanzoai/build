@@ -8,6 +8,7 @@
  *   DELETE /v1/auto/automations/{id}       delete it, its schedule and its runs
  *   POST   /v1/auto/automations/{id}/run   {run: {id, status}}  one run, now
  *   GET    /v1/auto/automations/{id}/runs  {data: [run]}        newest first
+ *   POST   /v1/auto/automations/{id}/runs/{run}/review  {post}  post a held post, or discard it
  *   GET    /v1/auto/templates              {data: [starter]}    to start a new one from
  *
  * Each run is one Dev run in this organization, started as the person who last
@@ -41,6 +42,8 @@ export interface Draft {
   schedule: Schedule
   permissions: Permissions
   notify: boolean
+  /** The connected accounts each run's answer is posted to: x, linkedin, facebook. */
+  postTo: string[]
   enabled: boolean
 }
 
@@ -63,7 +66,14 @@ export interface Automation extends Draft {
   updated: string
 }
 
-/** One run: succeeded, failed, running, queued, skipped or refused. */
+/** Where one post went: its link, or the platform's reason it did not go. */
+export interface Posted {
+  to: string
+  url: string
+  error: string
+}
+
+/** One run: succeeded, failed, running, queued, review (a post waiting for you), skipped or refused. */
 export interface Run {
   id: string
   status: string
@@ -72,6 +82,9 @@ export interface Run {
   summary: string
   /** The Dev run it started, or null when it started none. */
   session: string | null
+  /** The post its agent wrote, for an automation that posts. */
+  draft: string
+  posts: Posted[]
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -102,6 +115,7 @@ export function read(raw: unknown): Automation | null {
     schedule: schedule(o.schedule),
     permissions: o.permissions === 'auto' ? 'auto' : 'ask',
     notify: o.notify === true,
+    postTo: (Array.isArray(o.postTo) ? o.postTo : []).filter((x): x is string => typeof x === 'string'),
     enabled: o.enabled === true,
     draft: o.draft === true,
     next: nullable(o.next),
@@ -167,9 +181,22 @@ export async function runs(t: Target, id: string): Promise<Run[]> {
   return list(await call<unknown>(t, 'GET', `/v1/auto/automations/${seg(id)}/runs`))
     .map((raw) => {
       const o = obj(raw)
-      return { id: str(o.id), status: str(o.status), at: str(o.at), finished: nullable(o.finished), summary: str(o.summary), session: session(o.transcript) }
+      return run(o)
     })
     .filter((r) => r.id)
+}
+
+function run(o: Record<string, unknown>): Run {
+  const posts = (Array.isArray(o.posts) ? o.posts : [])
+    .map(obj)
+    .filter((p) => str(p.to))
+    .map((p) => ({ to: str(p.to), url: /^https:\/\//.test(str(p.url)) ? str(p.url) : '', error: str(p.error) }))
+  return { id: str(o.id), status: str(o.status), at: str(o.at), finished: nullable(o.finished), summary: str(o.summary), session: session(o.transcript), draft: str(o.draft), posts }
+}
+
+/** Post a held post to the automation's accounts, or discard it. */
+export async function review(t: Target, id: string, runId: string, post: boolean): Promise<Run> {
+  return run(obj(await call<unknown>(t, 'POST', `/v1/auto/automations/${seg(id)}/runs/${seg(runId)}/review`, { post })))
 }
 
 const DAYS: Record<string, string> = { mon: 'Mondays', tue: 'Tuesdays', wed: 'Wednesdays', thu: 'Thursdays', fri: 'Fridays', sat: 'Saturdays', sun: 'Sundays' }

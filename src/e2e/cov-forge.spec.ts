@@ -44,11 +44,31 @@ interface World extends Holds {
   unread: string[]
   boards: Record<string, unknown>[]
   issues: Record<string, unknown>[]
+  /** The social connectors by id; one not named is not set up here. */
+  social: Record<string, Record<string, unknown>>
+  /** The org's subscriptions: none is the Free plan. */
+  subs: Record<string, unknown>[]
 }
 
 /** The forge's platform, holding `world` and changing it on every write. */
 async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept: Record<string, unknown> = {}) {
-  const world: World = { autos: [], runs: {}, lasts: 1, repos: [], envs: [], grants: [], unread: [], boards: [], issues: [], holds: {}, down: {}, slow: {}, ...seed }
+  const world: World = {
+    autos: [],
+    runs: {},
+    lasts: 1,
+    repos: [],
+    envs: [],
+    grants: [],
+    unread: [],
+    boards: [],
+    issues: [],
+    social: {},
+    subs: [{ id: 'sub_1', plan: 'dev', name: 'Pro', status: 'active' }],
+    holds: {},
+    down: {},
+    slow: {},
+    ...seed,
+  }
   const answer = ({ method, path, body }: Sent): Reply | undefined => {
     const b = (body ?? {}) as Record<string, unknown>
     const now = Date.now()
@@ -65,11 +85,23 @@ async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kep
       world.runs[one[1]] = [run, ...(world.runs[one[1]] ?? [])]
       return { status: 201, json: { run: { id: run.id, status: 'running' } } }
     }
+    const held = path.match(/^\/v1\/auto\/automations\/([^/]+)\/runs\/([^/]+)\/review$/)
+    if (held) {
+      const r = (world.runs[held[1]] ?? []).find((x) => x.id === held[2])
+      if (!r || r.status !== 'review') return refused(409, 'this run is not waiting for review')
+      // A post goes on in the background: the run reads running, then how it went.
+      if (b.post) Object.assign(r, { status: 'running', reads: 0, then: { summary: 'Posted to X.', posts: [{ to: 'x', url: 'https://x.com/i/status/190001' }] } })
+      else Object.assign(r, { status: 'succeeded', summary: 'Discarded at review; nothing was posted.' })
+      return { json: r }
+    }
+    const social = path.match(/^\/v1\/provider\/(x|linkedin|facebook|instagram|tiktok)$/)
+    if (social) return { json: world.social[social[1]] ?? { id: social[1], available: false, connected: false } }
+    if (path === '/v1/billing/subscriptions') return { json: { subscriptions: world.subs } }
     if (one?.[2] === 'runs') {
       // A run going finishes on the second read after it started, with its answer and its Dev run.
       for (const r of world.runs[one[1]] ?? []) {
         if (r.status === 'running' && (r.reads = (r.reads as number) + 1) > world.lasts) {
-          Object.assign(r, { status: 'succeeded', finished: new Date().toISOString(), summary: 'Three meetings today; the first at 9.', transcript: `https://hanzo.ai/dev?run=${SESSION}` })
+          Object.assign(r, { status: 'succeeded', finished: new Date().toISOString(), summary: 'Three meetings today; the first at 9.', transcript: `https://hanzo.ai/dev?run=${SESSION}` }, r.then ?? {})
           find(one[1])!.last = { id: r.id, status: 'succeeded', at: r.at, summary: r.summary }
         }
       }
@@ -300,14 +332,85 @@ test.describe('Automations', () => {
     await expect(page).toHaveURL(/\/-\/automations$/)
   })
 
-  test('a run refused for want of credit says so and offers where to add it', async ({ page }) => {
-    await forge(page, { autos: AUTOS(), holds: { [`POST /v1/auto/automations/${ID(1)}/run`]: [{ status: 402, detail: 'Add credits at https://console.hanzo.ai/billing/credits' }] } })
+  test('a run refused for want of a plan says so and offers the plans; Free says what a run costs', async ({ page }) => {
+    await forge(page, { autos: AUTOS(), subs: [], holds: { [`POST /v1/auto/automations/${ID(1)}/run`]: [{ status: 402, detail: 'automations run on a paid plan; upgrade to run this one' }] } })
     await page.goto(`/-/automations/${ID(1)}`)
+    await expect(page.getByText('Paid plans include automation runs. On the Free plan each run needs $1 of credit.')).toBeVisible()
     await page.getByRole('button', { name: 'Run now' }).click()
-    await expect(page.getByText('This organization has no credit for a run. Add credit, then Run now again.')).toBeVisible()
-    await expect(page.getByText(/console\.hanzo\.ai/)).toHaveCount(0)
-    await page.getByRole('button', { name: 'Add credit' }).click()
-    await expect(page).toHaveURL(/\/-\/settings\/billing$/)
+    await expect(page.getByText('Automations run on a paid plan; on Free each run needs $1 of credit, and this organization has none. Upgrade to run it.')).toBeVisible()
+    await page.getByRole('button', { name: 'See plans' }).last().click()
+    await expect(page).toHaveURL(/\/-\/plans$/)
+  })
+
+  test('a member sees where it posts and cannot change it, nor answer a held post', async ({ page }) => {
+    const held = { id: 'run_9', status: 'review', at: '2026-10-04T15:00:00Z', finished: null, summary: 'Waiting for your review: post it or discard it.', transcript: null, draft: 'A post.', posts: [] }
+    const autos: Record<string, unknown>[] = AUTOS()
+    autos[1]!.postTo = ['x']
+    await forge(page, { autos, runs: { [ID(2)]: [held] } }, MEMBER)
+    await page.goto(`/-/automations/${ID(2)}`)
+    await expect(page.getByText('An org admin chooses where automations post: the accounts are the organization’s.')).toBeVisible()
+    await expect(page.getByText('This automation posts to the organization’s accounts, so only an org admin changes it.')).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Post to X' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await expect(page.getByLabel('Run history').getByRole('button', { name: /^Post the post of / })).toHaveCount(0)
+    await expect(page.getByLabel('Run history')).toContainText('An org admin posts or discards it.')
+  })
+
+  test('a held post discarded goes nowhere, an account not connected cannot be chosen to post on its own, and Connect accounts asks before leaving unsaved work', async ({ page }) => {
+    const held = { id: 'run_9', status: 'review', at: '2026-10-04T15:00:00Z', finished: null, summary: 'Waiting for your review: post it or discard it.', transcript: null, draft: 'A post.', posts: [] }
+    const { sent } = await forge(page, { autos: AUTOS(), runs: { [ID(2)]: [held] } })
+    await page.goto(`/-/automations/${ID(2)}`)
+    const history = page.getByLabel('Run history')
+    await history.getByRole('button', { name: /^Discard the post of / }).click()
+    await expect(history).toContainText('Discarded at review; nothing was posted.')
+    expect(sent.filter((x) => x.method === 'POST' && x.path.endsWith('/runs/run_9/review')).map((x) => x.body)).toEqual([{ post: false }])
+    await page.getByRole('group', { name: 'Permissions' }).getByRole('button', { name: 'Act on its own' }).click()
+    await expect(page.getByRole('switch', { name: 'Post to X' })).toBeDisabled()
+    await page.getByRole('button', { name: 'Connect accounts' }).click()
+    const asked = page.getByRole('dialog', { name: 'Leave without saving?' })
+    await expect(asked).toBeVisible()
+    await asked.getByRole('button', { name: 'Leave' }).click()
+    await expect(page).toHaveURL(/\/-\/settings\/integrations$/)
+  })
+
+  test('a paid plan reads no plan line', async ({ page }) => {
+    await forge(page, { autos: AUTOS() })
+    await page.goto(`/-/automations/${ID(1)}`)
+    await expect(page.getByLabel('Automation name')).toHaveValue('Morning briefing')
+    await expect(page.getByText('Paid plans include automation runs.', { exact: false })).toHaveCount(0)
+  })
+
+  test('posting: each account says whether it can post, the choice is saved, a held post is posted or discarded, and a run says where it went', async ({ page }, info) => {
+    const held = { id: 'run_9', status: 'review', at: '2026-10-04T15:00:00Z', finished: null, summary: 'Waiting for your review: post it or discard it.', transcript: null, draft: 'Shipped three things this week.', posts: [] }
+    const done = { id: 'run_8', status: 'succeeded', at: '2026-10-03T15:00:00Z', finished: '2026-10-03T15:01:00Z', summary: 'Posted to X; not posted: LinkedIn is not connected.', transcript: null, draft: 'Last week, in a line.', posts: [{ to: 'x', url: 'https://x.com/i/status/1' }, { to: 'linkedin', error: 'LinkedIn is not connected: connect it in Settings → Integrations' }] }
+    const { sent, world } = await forge(page, {
+      autos: AUTOS(),
+      runs: { [ID(2)]: [held, done] },
+      social: { x: { id: 'x', available: true, connected: true, connection: { account: '@acme' } }, linkedin: { id: 'linkedin', available: true, connected: false } },
+    })
+    await page.goto(`/-/automations/${ID(2)}`)
+    await expect(page.getByText('Connected as @acme')).toBeVisible()
+    await expect(page.getByText('Not connected: an org admin connects it in Settings → Integrations.')).toBeVisible()
+    await expect(page.getByText('Facebook Page posting needs Hanzo’s Meta app, approved by Meta App Review to publish to Pages; it is not set up yet.')).toBeVisible()
+    await page.getByRole('switch', { name: 'Post to X' }).click()
+    await page.getByRole('switch', { name: 'Post to LinkedIn' }).click()
+    await expect(page.getByText('Each run holds what the agent writes for you to post or discard.')).toBeVisible()
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('Saved.')).toBeVisible()
+    expect(patched(sent, ID(2)).at(-1)).toEqual({ postTo: ['linkedin', 'x'] })
+
+    const history = page.getByLabel('Run history')
+    await expect(history.getByLabel('The post').first()).toHaveText('Shipped three things this week.')
+    await expect(history).toContainText('Waiting for your review')
+    await expect(history.getByRole('link', { name: 'Open the X post' })).toHaveAttribute('href', 'https://x.com/i/status/1')
+    await expect(history).toContainText('LinkedIn is not connected: connect it in Settings → Integrations')
+    await page.screenshot({ path: info.outputPath('automation-review.png') })
+    await history.getByRole('button', { name: /^Post the post of / }).click()
+    await expect(history.getByRole('button', { name: /^Post the post of / })).toHaveCount(0)
+    await expect(history).toContainText('Running')
+    await expect(history).toContainText('Posted to X.', { timeout: 15_000 })
+    expect(sent.filter((x) => x.method === 'POST' && x.path === `/v1/auto/automations/${ID(2)}/runs/run_9/review`).map((x) => x.body)).toEqual([{ post: true }])
+    expect(world.runs[ID(2)]![0]!.status).toBe('succeeded')
   })
 
   test('a row opens its editor; Run now runs it, and its runs say how each went and open the Dev run', async ({ page }, info) => {

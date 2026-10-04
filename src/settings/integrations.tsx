@@ -1,6 +1,7 @@
 /**
  * Integrations: your own GitHub connection, the GitHub accounts the
- * organization has installed the platform's App on, and its Slack workspace.
+ * organization has installed the platform's App on, its Slack workspace, and
+ * the social accounts its automations post to.
  *
  * Connecting leaves this page once, for GitHub's or Slack's own consent screen,
  * and the platform's callback brings the person back here with the answer
@@ -9,12 +10,12 @@
  * the platform's rule.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Github, Hash, Lock, Slack } from '@hanzogui/lucide-icons-2'
+import { Github, Hash, Lock, Megaphone, Slack } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { useState } from 'react'
 
 import { connect, connection, disconnect as unlinkGithub, installations, type Connection, type Installation } from '../api/github.ts'
-import { authorize, channels, disconnect, read, type Channels, type Connector } from '../api/provider.ts'
+import { authorize, channels, disconnect, read, SOCIAL, type Channels, type Connector } from '../api/provider.ts'
 import { here, useBack } from '../back.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
@@ -29,12 +30,14 @@ export function Integrations() {
   const slack = useRead(signed ? () => read(t, 'slack') : null, null as Connector | null, [t, signed])
   const joined = slack.value?.connected ?? false
   const rooms = useRead(signed && joined ? () => channels(t) : null, { channels: [], next: '' } as Channels, [t, signed, joined])
+  const social = useSocial(signed, SOCIAL.map((p) => p.id))
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
   useBack(t, signed, setNote, () => {
     mine.reload()
     installed.reload()
     slack.reload()
+    social.reload()
   })
 
   if (!signed) {
@@ -198,7 +201,72 @@ export function Integrations() {
         ) : null}
       </Group>
 
+      <Group title="Social accounts" detail="Where automations post what their agent writes.">
+        <Card>
+          {SOCIAL.map((p, i) => {
+            const c = social.value[p.id]
+            return (
+              <Row
+                key={p.id}
+                first={i === 0}
+                leading={<Megaphone size={16} />}
+                title={c?.connected && c.account ? `${p.name} · ${c.account}` : p.name}
+                detail={
+                  social.error
+                    ? social.error.message
+                    : !c
+                      ? 'Reading…'
+                      : c.connected
+                        ? `Connected${c.since ? ` since ${day(c.since)}` : ''}${p.takes ? `. ${p.takes}` : ''}`
+                        : c.available
+                          ? p.takes || 'Not connected'
+                          : p.takes ? `${p.takes} ${p.needs}` : p.needs
+                }
+                trailing={
+                  host.admin && c && (c.connected || c.available) ? (
+                    c.connected ? (
+                      <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => disconnect(t, p.id), `${p.name} is disconnected`, social.reload)}>
+                        Disconnect
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(t, p.id, here()))} aria-label={`Connect ${p.name}`}>
+                        Connect
+                      </Button>
+                    )
+                  ) : null
+                }
+              />
+            )
+          })}
+        </Card>
+        {!host.admin ? (
+          <SizableText size="$1" color="$soft">
+            An org admin connects the organization’s social accounts.
+          </SizableText>
+        ) : null}
+      </Group>
+
       <Note>{note}</Note>
     </YStack>
+  )
+}
+
+/**
+ * The named social connectors, by id: whether each can be connected here and
+ * whether it is. One that could not be read is left out, and its row reads on
+ * as "Reading…" rather than taking the others with it.
+ */
+export function useSocial(signed: boolean, ids: readonly string[]) {
+  const t = useTarget()
+  const key = ids.join(',')
+  return useRead(
+    signed
+      ? async () => {
+          const got = await Promise.allSettled(ids.map((id) => read(t, id)))
+          return Object.fromEntries(got.flatMap((r, i) => (r.status === 'fulfilled' ? [[ids[i]!, r.value] as const] : [])))
+        }
+      : null,
+    {} as Record<string, Connector>,
+    [t, signed, key],
   )
 }

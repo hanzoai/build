@@ -94,6 +94,8 @@ function fresh() {
     installations: [{ login: 'acme', type: 'Organization', grant: 'all', connected: true }] as Row[],
     slack: { id: 'slack', name: 'Slack', available: true, connected: true, connection: { account: 'Acme HQ', connectedAt: '2026-09-02T00:00:00Z' } } as Row,
     channels: [{ id: 'C1', name: 'general', is_member: true }] as Row[],
+    // The social connectors, by id; one not named here is not set up on this deployment.
+    social: {} as Record<string, Row>,
     hooks: [{ id: 'wh_1', url: 'https://acme.test/hooks/orders', events: ['commerce.order.>'], description: 'orders', status: 'active', deliveries7d: 12, failures7d: 1 }] as Row[],
     deliveries: [{ subject: 'webhook.test', status: 'ok', httpStatus: 200, attempt: 1, created: '2026-09-27T00:00:00Z' }] as Row[],
     plans: PLANS as Row[],
@@ -253,6 +255,15 @@ function answer(w: World, s: Sent): Reply | undefined {
     }
   }
   if ((m = at(/^\/v1\/account\/avatar\/.+/))) return { body: PNG, type: 'image/png' }
+  if ((m = at(/^\/v1\/provider\/(x|linkedin|facebook|instagram|tiktok)$/))) return { json: w.social[m[1]] ?? { id: m[1], available: false, connected: false } }
+  if ((m = at(/^\/v1\/provider\/(x|linkedin|facebook)\/connect$/))) {
+    const consent: Record<string, string> = { x: 'https://twitter.com/i/oauth2/authorize?state=signed', linkedin: 'https://www.linkedin.com/oauth/v2/authorization?state=signed', facebook: 'https://www.facebook.com/v21.0/dialog/oauth?state=signed' }
+    return { json: { authorizeUrl: consent[m[1]] } }
+  }
+  if ((m = at(/^\/v1\/provider\/(x|linkedin|facebook)\/disconnect$/))) {
+    w.social[m[1]] = { id: m[1], available: true, connected: false }
+    return { json: { disconnected: true } }
+  }
   if ((m = at(/^\/v1\/projects\/([^/]+)$/)) && s.method === 'PATCH') {
     const p = w.projects.find((x) => x.slug === m![1])!
     Object.assign(p, b)
@@ -1675,6 +1686,29 @@ test('Integrations disconnects GitHub and Slack after refusals, reads a workspac
   p.w.slack = { id: 'slack', name: 'Slack', available: false, connected: false }
   await page.reload()
   await expect(page.getByText('This deployment cannot connect Slack yet.')).toBeVisible()
+})
+
+test('Integrations lists the social accounts automations post to: connected, to connect, and what one not set up needs', async ({ page }) => {
+  const p = await platform(page, (w) => {
+    w.social = {
+      x: { id: 'x', name: 'X', available: true, connected: true, connection: { account: '@acme', connectedAt: '2026-10-01T00:00:00Z' } },
+      linkedin: { id: 'linkedin', name: 'LinkedIn', available: true, connected: false },
+    }
+  })
+  const left: string[] = []
+  await page.route(/^https:\/\/www\.linkedin\.com\//, (r) => {
+    left.push(r.request().url())
+    return r.fulfill({ status: 204 })
+  })
+  await page.goto('/-/settings/integrations')
+  const back = page.url()
+  await expect(page.getByText('X · @acme')).toBeVisible()
+  await expect(page.getByText('Facebook Page posting needs Hanzo’s Meta app, approved by Meta App Review to publish to Pages; it is not set up yet.')).toBeVisible()
+  await expect(page.getByText(/TikTok takes videos and photos, not text, so automations do not post to it\./)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Connect Facebook' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Connect LinkedIn' }).click()
+  await expect.poll(() => left).toEqual(['https://www.linkedin.com/oauth/v2/authorization?state=signed'])
+  expect(p.writes()).toContainEqual(['POST /v1/provider/linkedin/connect', { return: back }])
 })
 
 test('Notifications: tests that did not arrive, a log read again and hidden, a webhook deleted while open, and a secret copied and hidden', async ({ page }) => {
