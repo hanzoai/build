@@ -148,7 +148,7 @@ export function Artifacts() {
             <XStack flexWrap="wrap" gap="$3">
               {starters.value.slice(0, 4).map((x) => (
                 <Card key={x.slug} small label={`Start from ${x.title}`} onPress={() => void take(x.slug)}>
-                  <Shot slug={x.slug} height={110} />
+                  <Shot slug={x.slug} />
                   <YStack px="$3" py="$2.5">
                     <SizableText size="$2" color="$ink" numberOfLines={1}>
                       {busy === x.slug ? 'Copying…' : x.title}
@@ -262,10 +262,15 @@ export function Artifacts() {
   )
 }
 
-function Shot({ slug, height = 140 }: { slug: string; height?: number }) {
+/**
+ * A starter's picture: a capture of its page from the top, 16:10. The frame has
+ * the capture's own shape at every width the grid gives a card, and the image is
+ * anchored at its top edge, so nothing of the page's header is cropped away.
+ */
+function Shot({ slug }: { slug: string }) {
   const [gone, setGone] = useState(false)
   return (
-    <YStack height={height} bg="$hover" items="center" justify="center" position="relative" overflow="hidden">
+    <YStack width="100%" aspectRatio={16 / 10} bg="$hover" items="center" justify="center" position="relative" overflow="hidden">
       <YStack items="center" gap="$2" opacity={0.6}>
         <Boxes size={24} />
         <SizableText size="$1" color="$soft" textTransform="uppercase" letterSpacing={1}>
@@ -278,7 +283,7 @@ function Shot({ slug, height = 140 }: { slug: string; height?: number }) {
           alt=""
           loading="lazy"
           onError={() => setGone(true)}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }}
         />
       )}
     </YStack>

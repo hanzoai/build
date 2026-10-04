@@ -248,6 +248,26 @@ test.describe('Templates', () => {
     expect(sentTo(sent, 'POST', '/v1/projects/fork').map((s) => s.body)).toEqual([{ slug: 'synapse' }])
   })
 
+  // A card shows the whole capture: the frame has the shot's own 16:10 shape at
+  // every width the grid gives it, and the image is anchored at its top edge, so
+  // a page's header is never cropped off.
+  for (const width of [800, 1280, 1440]) {
+    test(`at ${width} every starter's picture is whole, at its own ratio, from the top of the page`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await shelf(page)
+      for (const [path, label] of [['/-/templates', 'Start from Circle'], ['/-/artifacts', 'Start from Circle']] as const) {
+        await page.goto(path)
+        const img = page.getByRole('button', { name: label }).locator('img')
+        await expect(img).toBeVisible()
+        await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true)
+        const box = await img.boundingBox()
+        expect(box, `${path} has a picture`).toBeTruthy()
+        expect(Math.abs(box!.width / box!.height - 16 / 10), `${path} frame is ${box!.width}×${box!.height}`).toBeLessThan(0.02)
+        expect(await img.evaluate((i) => getComputedStyle(i).objectPosition)).toMatch(/^50% 0(%|px)$/)
+      }
+    })
+  }
+
   test('a refused catalogue says why', async ({ page }) => {
     await shelf(page, { down: { 'GET /v1/templates': 'The catalogue is resting' } })
     await page.goto('/-/templates')
