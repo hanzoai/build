@@ -4,6 +4,7 @@
  *   ''              the empty state: a new run
  *   sess_<32 hex>   one run
  *   -/<screen>      a builder screen
+ *   -/automations/<id>      one automation's editor and runs; `new` writes one
  *   -/settings[/<section>]  a section of Settings
  *   -/customize[/<tab>]     skills, connectors and plugins: what the agent brings to a run
  *   -/plans                 the plans an organization can be on
@@ -45,9 +46,12 @@ export type Route =
   | { kind: 'settings'; section: Section }
   | { kind: 'customize'; tab: Tab }
   | { kind: 'project'; slug: string }
+  | { kind: 'automation'; id: string }
 
 export const SESSION = /^sess_[0-9a-f]{32}$/
 export const SLUG = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/
+/** An automation's id, or `new` for one not yet written. */
+export const AUTOMATION = /^(flow_[0-9a-f]{32}|new)$/
 const SCREENS: readonly Screen[] = ['artifacts', 'templates', 'codebases', 'projects', 'issues', 'automations', 'sync', 'mcp', 'plans']
 
 export function route(path: string): Route {
@@ -60,6 +64,10 @@ export function route(path: string): Route {
   if (p === '-/customize' || p.startsWith('-/customize/')) {
     const tab = (p.slice('-/customize/'.length) || 'skills') as Tab
     return TABS.includes(tab) ? { kind: 'customize', tab } : { kind: 'new' }
+  }
+  if (p.startsWith('-/automations/')) {
+    const id = p.slice('-/automations/'.length)
+    return AUTOMATION.test(id) ? { kind: 'automation', id } : { kind: 'new' }
   }
   if (p.startsWith('-/')) {
     const s = p.slice(2) as Screen
@@ -84,5 +92,7 @@ export function path(r: Route): string {
       return r.tab === 'skills' ? '-/customize' : `-/customize/${r.tab}`
     case 'project':
       return r.slug
+    case 'automation':
+      return `-/automations/${r.id}`
   }
 }

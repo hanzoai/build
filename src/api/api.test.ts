@@ -418,34 +418,90 @@ describe('forge', () => {
 })
 
 describe('automations', () => {
-  it('lists flows and reads each name from its version', async () => {
-    const seen: string[] = []
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        seen.push(url)
-        const body = url.endsWith('/flows')
-          ? { data: [{ id: 'flow_1', status: 'DISABLED', updated: 10 }] }
-          : { id: 'flow_1', status: 'DISABLED', updated: 10, version: { displayName: 'Nightly' } }
-        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
-      }),
-    )
-    const { flows } = await import('./auto.ts')
-    const rows = await flows(T)
-    expect(seen[0]).toBe('https://api.hanzo.ai/v1/auto/flows')
-    expect(seen[1]).toBe('https://api.hanzo.ai/v1/auto/flows/flow_1')
-    expect(rows).toEqual([{ id: 'flow_1', name: 'Nightly', status: 'DISABLED', updated: 10 }])
+  const ROW = {
+    id: 'flow_1',
+    name: 'Morning brief',
+    instructions: 'Summarize my day.',
+    project: null,
+    model: 'zen5',
+    schedule: { kind: 'weekdays', at: '08:00', tz: 'America/Los_Angeles' },
+    permissions: 'ask',
+    notify: true,
+    enabled: true,
+    draft: false,
+    next: '2026-10-05T15:00:00Z',
+    last: { id: 'run_1', status: 'succeeded', at: '2026-10-04T15:00:00Z', summary: 'Three meetings.' },
+    created: '2026-10-01T00:00:00Z',
+    updated: '2026-10-02T00:00:00Z',
+  }
+
+  it('lists the org\'s automations as the platform says them', async () => {
+    const seen = answer(200, { data: [ROW, { id: 'flow_2', name: 'trial', draft: true, schedule: { kind: 'manual', tz: 'UTC' } }, { name: 'no id' }] })
+    const { automations } = await import('./auto.ts')
+    const rows = await automations(T)
+    expect(seen[0].url).toBe('https://api.hanzo.ai/v1/auto/automations')
+    expect(seen[0].headers.get('x-org-id')).toBe('hanzo')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toEqual(ROW)
+    expect(rows[1]).toMatchObject({ id: 'flow_2', name: 'trial', draft: true, instructions: '', enabled: false, model: null, permissions: 'ask', last: null })
   })
 
-  it('creates a disabled draft and arms it by a separate call', async () => {
-    const seen = answer(201, { id: 'flow_2', status: 'DISABLED', version: { displayName: 'Nightly' } })
-    const { add, arm } = await import('./auto.ts')
-    expect((await add(T, 'Nightly')).name).toBe('Nightly')
-    expect(seen[0].method).toBe('POST')
-    expect(seen[0].body).toMatchObject({ displayName: 'Nightly', trigger: { strategy: 'MANUAL' } })
-    const armed = answer(200, { id: 'flow_2', status: 'ENABLED' })
-    await arm(T, 'flow_2', true)
-    expect(armed[0].url).toBe('https://api.hanzo.ai/v1/auto/flows/flow_2/enable')
+  it('creates one with what the editor holds, and reads one by id', async () => {
+    const seen = answer(201, ROW)
+    const { create, automation } = await import('./auto.ts')
+    const d = { name: 'Morning brief', instructions: 'Summarize my day.', model: null, schedule: { kind: 'weekdays', at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask', notify: true, enabled: false } as const
+    expect((await create(T, d)).id).toBe('flow_1')
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/auto/automations', body: d })
+    const one = answer(200, ROW)
+    await automation(T, 'flow_1')
+    expect(one[0].url).toBe('https://api.hanzo.ai/v1/auto/automations/flow_1')
+  })
+
+  it('sends a change as only what changed, and switches by enabled alone', async () => {
+    const { changes, save } = await import('./auto.ts')
+    const was = { name: 'Morning brief', instructions: 'Summarize my day.', model: 'zen5' as string | null, schedule: { kind: 'weekdays' as const, at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask' as const, notify: true, enabled: true }
+    expect(changes(was, { ...was })).toEqual({})
+    expect(changes(was, { ...was, enabled: false })).toEqual({ enabled: false })
+    expect(changes(was, { ...was, model: null, schedule: { kind: 'daily' as const, at: '09:00', tz: 'UTC' } })).toEqual({ model: null, schedule: { kind: 'daily', at: '09:00', tz: 'UTC' } })
+    const seen = answer(200, ROW)
+    await save(T, 'flow_1', { enabled: false })
+    expect(seen[0]).toMatchObject({ method: 'PATCH', url: 'https://api.hanzo.ai/v1/auto/automations/flow_1', body: { enabled: false } })
+  })
+
+  it('runs one now, reads its runs, and deletes it', async () => {
+    const { remove, runs, start } = await import('./auto.ts')
+    const started = answer(201, { run: { id: 'run_2', status: 'running' } })
+    expect(await start(T, 'flow_1')).toEqual({ id: 'run_2', status: 'running' })
+    expect(started[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/auto/automations/flow_1/run' })
+    const listed = answer(200, {
+      data: [
+        { id: 'run_2', status: 'failed', at: '2026-10-04T15:00:00Z', finished: '2026-10-04T15:02:00Z', summary: 'Failed: no sandbox.', transcript: 'https://hanzo.ai/dev?run=sess_0992f90537264a6b154ebff799f38e1c' },
+        { id: 'run_1', status: 'skipped', at: '2026-10-04T14:00:00Z', finished: null, summary: 'Skipped: the previous run was still going.', transcript: null },
+      ],
+    })
+    const rows = await runs(T, 'flow_1')
+    expect(listed[0].url).toBe('https://api.hanzo.ai/v1/auto/automations/flow_1/runs')
+    expect(rows[0]).toMatchObject({ id: 'run_2', status: 'failed', session: 'sess_0992f90537264a6b154ebff799f38e1c' })
+    expect(rows[1]).toMatchObject({ id: 'run_1', status: 'skipped', session: null })
+    const gone = answer(204, undefined)
+    await remove(T, 'flow_1')
+    expect(gone[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/auto/automations/flow_1' })
+  })
+
+  it('thinks with Enso first and Hanzo SKUs only', async () => {
+    const { skus } = await import('./models.ts')
+    const ids = ['enso', 'anthropic/claude-opus-5.5', 'enso-flash', 'zen5', 'zen-embedding', 'zen-guard', 'zen-vl', 'zen-voice-mini', 'free', 'zen-free', 'hanzo/zen', 'google/gemma-4-31b-it:free', 'zen6-flash']
+    expect(skus(ids.map((id) => ({ id, label: id }))).map((m) => m.id)).toEqual(['enso', 'enso-flash', 'zen5', 'free', 'zen-free', 'zen6-flash'])
+  })
+
+  it('says a schedule the way a person does', async () => {
+    const { words } = await import('./auto.ts')
+    expect(words({ kind: 'manual', tz: 'UTC' })).toBe('When you run it')
+    expect(words({ kind: 'hourly', at: '00:15', tz: 'UTC' })).toBe('Every hour at :15')
+    expect(words({ kind: 'daily', at: '09:00', tz: 'Europe/London' })).toBe('Every day at 09:00 · Europe/London')
+    expect(words({ kind: 'weekdays', at: '08:00', tz: 'UTC' })).toBe('Weekdays at 08:00 · UTC')
+    expect(words({ kind: 'weekly', day: 'fri', at: '16:00', tz: 'UTC' })).toBe('Fridays at 16:00 · UTC')
+    expect(words({ kind: 'cron', cron: '30 7 * * 1-5', tz: 'UTC' })).toBe('Cron 30 7 * * 1-5 · UTC')
   })
 })
 

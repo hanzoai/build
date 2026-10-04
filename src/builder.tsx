@@ -3,7 +3,7 @@
  *
  *   /            New — the empty state, a composer over the codebase it works on
  *   /sess_…      one run, live
- *   /-/automations repeating work
+ *   /-/automations work that runs itself; /-/automations/<id> one, to edit and run
    /-/codebases the forge's repositories
  *   /-/sync      bring granted repositories onto the forge
  *   /-/projects  the forge's boards
@@ -36,6 +36,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { safe } from './api/projects.ts'
 import { pinBoard } from './choice.ts'
 import { Customize } from './customize/index.tsx'
+import { Editor } from './automations.tsx'
 import { useKept, useRecents } from './data.ts'
 import { Forge } from './forge.tsx'
 import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
@@ -184,7 +185,7 @@ export function nav(host: Host, go: (path: string) => void): { links: RailLink[]
     { id: 'projects', label: 'Projects', icon: <Kanban size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'projects' })), active: screen === 'projects' },
     { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
     { id: 'customize', label: 'Customize', icon: <SlidersHorizontal size={16} />, onPress: () => go(path({ kind: 'customize', tab: 'skills' })), active: r.kind === 'customize' || screen === 'mcp' },
-    { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' },
+    { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' || r.kind === 'automation' },
   ]
   const more: RailLink[] = [
     { id: 'codebases', label: 'Codebase', icon: <FolderGit2 size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'codebases' })), active: screen === 'codebases' },
@@ -230,6 +231,7 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   if (r.kind === 'run') return <Run key={r.id} id={r.id} />
   if (r.kind === 'settings') return <Settings section={r.section} />
   if (r.kind === 'customize') return <Customize tab={r.tab} />
+  if (r.kind === 'automation') return <Editor key={r.id} id={r.id} />
   if (r.kind === 'screen') {
     if (r.screen === 'artifacts') return <Artifacts />
     if (r.screen === 'templates') return <Templates />

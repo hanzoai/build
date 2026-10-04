@@ -54,3 +54,12 @@ export async function models(t: Target): Promise<Model[]> {
     })),
   ]
 }
+
+/**
+ * The models an agent may think with on a surface a customer reads: Hanzo's own
+ * SKUs — Enso, Zen and the free tier — by their Hanzo names, and none of the
+ * embedding, guard, rerank, speech or vision models, which hold no conversation.
+ */
+export function skus(list: readonly Model[]): Model[] {
+  return list.filter((m) => /^(enso|zen\d*|free)(-[a-z0-9]+)*$/.test(m.id) && !/-(embedding|guard|rerank|scribe|vl|voice)\b/.test(m.id))
+}

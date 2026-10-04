@@ -762,12 +762,13 @@ export function forge(page: Page) {
         },
       }
     }
-    if (path === '/v1/auto/flows') {
+    if (path === '/v1/auto/automations') {
+      const row = { project: null, model: null, permissions: 'ask', notify: false, draft: false, next: null, created: '2026-09-20T10:00:00Z', updated: '2026-09-26T10:00:00Z' }
       return {
         json: {
           data: [
-            { id: 'f1', status: 'ENABLED', updated: Date.UTC(2026, 8, 26), version: { displayName: 'Nightly dependency bump' } },
-            { id: 'f2', status: 'DISABLED', updated: Date.UTC(2026, 8, 20), version: { displayName: 'Weekly digest' } },
+            { ...row, id: 'flow_1', name: 'Nightly dependency bump', instructions: 'Bump what is behind.', schedule: { kind: 'daily', at: '02:00', tz: 'UTC' }, enabled: true, next: '2026-09-27T02:00:00Z', last: { id: 'run_1', status: 'succeeded', at: '2026-09-26T02:00:00Z', summary: 'Bumped three.' } },
+            { ...row, id: 'flow_2', name: 'Weekly digest', instructions: 'Summarize the week.', schedule: { kind: 'weekly', day: 'fri', at: '16:00', tz: 'UTC' }, enabled: false, last: null },
           ],
         },
       }

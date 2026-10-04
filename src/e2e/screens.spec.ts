@@ -74,7 +74,7 @@ const customize: Platform = async (page) => {
  * added there and not here does not compile.
  */
 const SCREENS: Record<Screen, [Platform, RegExp]> = {
-  automations: [forge, /Repeating work for this organization/],
+  automations: [forge, /Work that runs itself in this organization/],
   codebases: [forge, /Create and browse this organization.s repositories/],
   sync: [forge, /Select repositories/],
   projects: [forge, /Boards on the forge/],

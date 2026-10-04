@@ -6,12 +6,13 @@
  * issue opens New with that codebase and the issue as the ask.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ChevronDown, GitBranch, Plus, Settings, Workflow } from '@hanzogui/lucide-icons-2'
+import { ChevronDown, GitBranch, Plus, Settings } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
 import { useEffect, useState, type ReactNode } from 'react'
 
-import { add, arm, flows, type Automation } from './api/auto.ts'
+import { ago } from './ago.ts'
 import { codebases, create, type Codebase } from './api/codebases.ts'
+import { Automations } from './automations.tsx'
 import { environments, type Environment } from './api/environment.ts'
 import { boards, issues, type Board, type Work } from './api/work.ts'
 import { boardKey, pinBoard, pinCodebase, readPending, writePending } from './choice.ts'
@@ -82,174 +83,6 @@ export function Forge({ screen }: { screen: Exclude<Screen, 'artifacts' | 'templ
   if (screen === 'codebases') return <Codebases />
   if (screen === 'projects') return <Projects />
   return <Issues />
-}
-
-function Automations() {
-  const host = useHost()
-  const t = useTarget()
-  const signed = Boolean(host.person)
-  const [q, setQ] = useState('')
-  const [making, setMaking] = useState(false)
-  const [tick, setTick] = useState(0)
-  const [problem, setProblem] = useState('')
-  const list = useRead(signed ? () => flows(t) : null, [] as Automation[], [t, signed, tick])
-  const needle = q.trim().toLowerCase()
-  const shown = list.value.filter((a) => !needle || a.name.toLowerCase().includes(needle))
-
-  const flip = async (a: Automation) => {
-    setProblem('')
-    try {
-      await arm(t, a.id, a.status !== 'ENABLED')
-      setTick((n) => n + 1)
-    } catch (e) {
-      setProblem((e as Error).message)
-    }
-  }
-
-  return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6">
-      <YStack width="100%" maxW={1040} mx="auto" gap="$4">
-        <XStack justify="space-between" items="flex-start" gap="$4">
-          <YStack gap="$1" flex={1} minW={0}>
-            <SizableText size="$6" fontWeight="500" color="$ink">
-              Automations
-            </SizableText>
-            <SizableText size="$2" color="$soft">
-              Repeating work for this organization. A new one starts off, so you can name it before it runs.
-            </SizableText>
-          </YStack>
-          <Button size="sm" shrink={0} disabled={!signed} onPress={() => setMaking(true)}>
-            <Plus size={14} />
-            New automation
-          </Button>
-        </XStack>
-        <XStack justify="flex-end">
-          <YStack width={240} maxW="100%">
-            <Input value={q} onChangeText={setQ} placeholder="Search…" aria-label="Search automations" disabled={!signed} />
-          </YStack>
-        </XStack>
-        {problem ? <Note>{problem}</Note> : null}
-        {list.error ? (
-          <Note>{list.error.message}</Note>
-        ) : !signed ? (
-          <Empty says="Sign in to see this organization's automations." />
-        ) : list.loading && list.value.length === 0 ? (
-          <Empty says="Reading automations…" />
-        ) : shown.length === 0 ? (
-          <Empty says={list.value.length === 0 ? 'No automations yet.' : 'Nothing matches.'}>
-            {list.value.length === 0 ? (
-              <Button size="sm" onPress={() => setMaking(true)}>
-                New automation
-              </Button>
-            ) : null}
-          </Empty>
-        ) : (
-          <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-            <XStack px="$3" py="$2" gap="$3">
-              <SizableText flex={1} size="$1" color="$soft">
-                Name
-              </SizableText>
-              <SizableText size="$1" color="$soft" width={80} style={{ textAlign: 'right' }}>
-                Status
-              </SizableText>
-              <SizableText size="$1" color="$soft" width={120} style={{ textAlign: 'right' }}>
-                Updated
-              </SizableText>
-            </XStack>
-            {shown.map((a) => (
-              <XStack key={a.id} items="center" gap="$3" px="$3" py="$2.5" borderTopWidth={1} borderColor="$borderColor">
-                <Workflow size={14} />
-                <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
-                  {a.name}
-                </SizableText>
-                <XStack
-                  render="button"
-                  aria-label={a.status === 'ENABLED' ? `Turn off ${a.name}` : `Turn on ${a.name}`}
-                  onPress={() => void flip(a)}
-                  width={80}
-                  justify="flex-end"
-                >
-                  <SizableText size="$1" color="$ink">
-                    {a.status === 'ENABLED' ? 'On' : 'Off'}
-                  </SizableText>
-                </XStack>
-                <SizableText size="$1" color="$soft" width={120} style={{ textAlign: 'right' }}>
-                  {a.updated ? when(new Date(a.updated).toISOString()) : '—'}
-                </SizableText>
-              </XStack>
-            ))}
-          </YStack>
-        )}
-      </YStack>
-      <NewAutomation
-        open={making}
-        onOpenChange={setMaking}
-        onCreate={async (name) => {
-          await add(t, name)
-          setMaking(false)
-          setTick((n) => n + 1)
-        }}
-      />
-    </YStack>
-  )
-}
-
-function Empty({ says, children }: { says: string; children?: ReactNode }) {
-  return (
-    <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" px="$4" py="$8" gap="$3" items="center">
-      <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
-        {says}
-      </SizableText>
-      {children}
-    </YStack>
-  )
-}
-
-function NewAutomation({
-  open,
-  onOpenChange,
-  onCreate,
-}: {
-  open: boolean
-  onOpenChange: (v: boolean) => void
-  onCreate: (name: string) => Promise<void>
-}) {
-  const [name, setName] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  const submit = async () => {
-    setBusy(true)
-    setError('')
-    try {
-      await onCreate(name)
-      setName('')
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogTitle>New automation</DialogTitle>
-        <YStack gap="$3" pt="$3">
-          <Input value={name} onChangeText={setName} placeholder="Name" aria-label="Automation name" />
-          {error ? <Note>{error}</Note> : null}
-          <XStack gap="$2" justify="flex-end">
-            <Button size="sm" variant="outline" disabled={busy} onPress={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" disabled={busy || !name.trim()} onPress={() => void submit()}>
-              {busy ? 'Creating…' : 'Create'}
-            </Button>
-          </XStack>
-        </YStack>
-      </DialogContent>
-    </Dialog>
-  )
 }
 
 const PAGE = 25
@@ -445,7 +278,7 @@ function Codebases() {
                   {envOf.get(c.name) === 'ready' ? 'Ready' : envOf.get(c.name) === 'proposed' ? 'To review' : '—'}
                 </SizableText>
                 <SizableText size="$1" color="$soft" width={140} style={{ textAlign: 'right' }}>
-                  {syncing.has(c.name) ? 'Syncing…' : when(c.updated)}
+                  {syncing.has(c.name) ? 'Syncing…' : ago(c.updated)}
                 </SizableText>
               </XStack>
             ))}
@@ -534,19 +367,6 @@ function NewRepo({
       </DialogContent>
     </Dialog>
   )
-}
-
-function when(iso: string): string {
-  const t = Date.parse(iso)
-  if (!Number.isFinite(t)) return '—'
-  const minutes = Math.round((Date.now() - t) / 60000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(t).toLocaleDateString()
 }
 
 function Projects() {

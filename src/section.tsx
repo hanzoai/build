@@ -70,7 +70,7 @@ export function DevSection({
       <SidebarItem icon={<SquarePen size={16} aria-hidden />} active={r.kind === 'new'} onPress={() => go('')}>
         New run
       </SidebarItem>
-      <SidebarItem icon={<Workflow size={16} aria-hidden />} active={screen === 'automations'} onPress={() => go(path({ kind: 'screen', screen: 'automations' }))}>
+      <SidebarItem icon={<Workflow size={16} aria-hidden />} active={screen === 'automations' || r.kind === 'automation'} onPress={() => go(path({ kind: 'screen', screen: 'automations' }))}>
         Automations
       </SidebarItem>
       <SidebarItem icon={<FolderGit2 size={16} aria-hidden />} active={screen === 'codebases'} onPress={() => go(path({ kind: 'screen', screen: 'codebases' }))}>

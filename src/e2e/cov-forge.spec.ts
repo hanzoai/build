@@ -10,10 +10,10 @@
  */
 import type { Page } from '@playwright/test'
 
-import { DAVE, enter, held, MEMBER, via, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
+import { DAVE, enter, held, MEMBER, refused, via, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
 import { mounted, went } from './mount.ts'
-import { ORG } from './signed.ts'
+import { ORG, SESSION } from './signed.ts'
 
 const MIN = 60_000
 
@@ -25,7 +25,10 @@ const aged = (row: Record<string, unknown>, now: number, key: string, iso: boole
 }
 
 interface World extends Holds {
-  flows: Record<string, unknown>[]
+  autos: Record<string, unknown>[]
+  runs: Record<string, Record<string, unknown>[]>
+  /** How many reads of its runs a started run stays running for. */
+  lasts: number
   repos: Record<string, unknown>[]
   envs: Record<string, unknown>[]
   grants: Record<string, unknown>[]
@@ -36,24 +39,49 @@ interface World extends Holds {
 
 /** The forge's platform, holding `world` and changing it on every write. */
 async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept: Record<string, unknown> = {}) {
-  const world: World = { flows: [], repos: [], envs: [], grants: [], unread: [], boards: [], issues: [], holds: {}, down: {}, slow: {}, ...seed }
+  const world: World = { autos: [], runs: {}, lasts: 1, repos: [], envs: [], grants: [], unread: [], boards: [], issues: [], holds: {}, down: {}, slow: {}, ...seed }
   const answer = ({ method, path, body }: Sent): Reply | undefined => {
     const b = (body ?? {}) as Record<string, unknown>
-    const flow = path.match(/^\/v1\/auto\/flows\/([^/]+)(?:\/(enable|disable))?$/)
-    if (path === '/v1/auto/flows' && method === 'POST') {
-      const f = { id: `f${world.flows.length + 1}`, status: 'DISABLED', updated: Date.now(), version: { displayName: b.displayName } }
-      world.flows.unshift(f)
-      return { status: 201, json: f }
-    }
-    // A flow listed without its version is named by reading it once more.
     const now = Date.now()
-    if (path === '/v1/auto/flows') return { json: { data: world.flows.map((f) => ({ ...aged(f, now, 'updated', false), version: f.listed === false ? undefined : f.version })) } }
-    if (flow?.[2]) {
-      const f = world.flows.find((x) => x.id === flow[1])!
-      f.status = flow[2] === 'enable' ? 'ENABLED' : 'DISABLED'
-      return { json: f }
+    const one = path.match(/^\/v1\/auto\/automations\/([^/]+)(?:\/(run|runs))?$/)
+    const find = (id: string) => world.autos.find((x) => x.id === id)
+    if (path === '/v1/auto/automations' && method === 'POST') {
+      const a = { id: `flow_${String(world.autos.length + 1).padStart(32, '0')}`, project: null, draft: false, next: null, last: null, created: new Date().toISOString(), updated: new Date().toISOString(), ...b, enabled: b.enabled !== false }
+      world.autos.unshift(a)
+      return { status: 201, json: a }
     }
-    if (flow) return { json: aged(world.flows.find((x) => x.id === flow[1])!, now, 'updated', false) }
+    if (path === '/v1/auto/automations') return { json: { data: world.autos.map((x) => aged(x, now, 'updated', true)) } }
+    if (one?.[2] === 'run') {
+      const run = { id: `run_${Object.values(world.runs).flat().length + 1}`, status: 'running', at: new Date().toISOString(), finished: null, summary: '', transcript: null, reads: 0 }
+      world.runs[one[1]] = [run, ...(world.runs[one[1]] ?? [])]
+      return { status: 201, json: { run: { id: run.id, status: 'running' } } }
+    }
+    if (one?.[2] === 'runs') {
+      // A run going finishes on the second read after it started, with its answer and its Dev run.
+      for (const r of world.runs[one[1]] ?? []) {
+        if (r.status === 'running' && (r.reads = (r.reads as number) + 1) > world.lasts) {
+          Object.assign(r, { status: 'succeeded', finished: new Date().toISOString(), summary: 'Three meetings today; the first at 9.', transcript: `https://hanzo.ai/dev?run=${SESSION}` })
+          find(one[1])!.last = { id: r.id, status: 'succeeded', at: r.at, summary: r.summary }
+        }
+      }
+      return { json: { data: world.runs[one[1]] ?? [] } }
+    }
+    if (one && method === 'PATCH') {
+      const a = find(one[1])!
+      if (a.draft && !b.instructions) return refused(400, 'instructions are required')
+      // A draft finished by its instructions is on unless the change says otherwise.
+      const finishing = a.draft
+      Object.assign(a, b, { updated: new Date().toISOString() })
+      if (finishing) Object.assign(a, { draft: false, enabled: b.enabled !== false })
+      a.next = a.enabled && (a.schedule as { kind: string }).kind !== 'manual' ? '2026-10-05T16:00:00Z' : null
+      return { json: a }
+    }
+    if (one && method === 'DELETE') {
+      world.autos = world.autos.filter((x) => x.id !== one[1])
+      return { status: 204 }
+    }
+    if (one) return find(one[1]) ? { json: aged(find(one[1])!, now, 'updated', true) } : refused(404, 'automation not found')
+    if (path === '/v1/models') return { json: { data: ['enso', 'enso-flash', 'zen5', 'anthropic/claude-opus-5.5', 'zen-embedding', 'free'].map((id) => ({ id })) } }
     if (path === '/v1/git/repos' && method === 'POST') {
       const r = { name: b.name, org: ORG, description: b.description, defaultBranch: 'trunk', updatedAt: new Date().toISOString() }
       world.repos.push(r)
@@ -97,90 +125,218 @@ const queued = (page: Page, org: string, rows: { fullName: string; name: string 
 const pending = (page: Page, org = ORG) => page.evaluate((k) => JSON.parse(sessionStorage.getItem(k) ?? 'null'), `hanzo.build.sync.${org}`)
 
 test.describe('Automations', () => {
-  const FLOWS = () => [
-    { id: 'f1', status: 'ENABLED', age: 20_000, version: { displayName: 'Nightly dependency bump' } },
-    { id: 'f2', status: 'DISABLED', age: 5 * MIN, version: { displayName: 'Weekly digest' } },
-    { id: 'f3', status: 'DISABLED', age: 3 * 60 * MIN, version: { displayName: 'Triage new issues' }, listed: false },
-    { id: 'f4', status: 'ENABLED', age: 4 * 24 * 60 * MIN, version: { displayName: 'Rotate keys' } },
-    { id: 'f5', status: 'DISABLED', updated: Date.UTC(2026, 0, 15, 12), version: { displayName: 'New year cleanup' } },
-    { id: 'f6', status: 'DISABLED', version: { displayName: 'Never run' } },
+  const ID = (n: number) => `flow_${String(n).padStart(32, '0')}`
+  const BASE = { project: null, model: null, permissions: 'ask', notify: false, draft: false, next: null, last: null, created: '2026-09-01T00:00:00Z' }
+  const AUTOS = () => [
+    {
+      ...BASE,
+      id: ID(1),
+      name: 'Morning briefing',
+      instructions: 'What needs my attention today.',
+      schedule: { kind: 'weekdays', at: '08:00', tz: 'America/Los_Angeles' },
+      enabled: true,
+      next: '2026-10-05T15:00:00Z',
+      last: { id: 'run_0', status: 'failed', at: '2026-10-03T15:00:00Z', summary: 'No sandbox was free.' },
+      age: 20_000,
+    },
+    { ...BASE, id: ID(2), name: 'Weekly digest', instructions: 'Summarize the week.', schedule: { kind: 'weekly', day: 'fri', at: '16:00', tz: 'UTC' }, enabled: false, age: 5 * MIN },
+    { ...BASE, id: ID(3), name: 'trial', instructions: '', schedule: { kind: 'manual', tz: 'UTC' }, enabled: false, draft: true, age: 60 * MIN },
   ]
+  const patched = (sent: Sent[], id: string) => sent.filter((s) => s.method === 'PATCH' && s.path === `/v1/auto/automations/${id}`).map((s) => s.body)
 
-  test('lists each by name with when it changed, turns one on and off, and searches', async ({ page }, info) => {
-    const { sent } = await forge(page, { flows: FLOWS() })
+  test('lists each with when it runs and its last run, switches one on and off, and searches', async ({ page }, info) => {
+    const { sent } = await forge(page, { autos: AUTOS() })
     await page.goto('/-/automations')
-    const row = (name: string) => page.getByText(name, { exact: true }).locator('xpath=..')
-    await expect(row('Nightly dependency bump')).toContainText('just now')
-    await expect(row('Weekly digest')).toContainText('5m ago')
-    await expect(row('Triage new issues')).toContainText('3h ago')
-    await expect(row('Rotate keys')).toContainText('4d ago')
-    await expect(row('New year cleanup')).toContainText(new Date(Date.UTC(2026, 0, 15, 12)).toLocaleDateString('en-US'))
-    await expect(row('Never run')).toContainText('—')
-    expect(sent.filter((s) => s.path === '/v1/auto/flows/f3')).not.toHaveLength(0)
+    const row = (name: string) => page.getByRole('button', { name: `Open ${name}` })
+    await expect(row('Morning briefing')).toContainText('Weekdays at 08:00 · America/Los_Angeles')
+    await expect(row('Morning briefing')).toContainText('Failed')
+    await expect(row('Weekly digest')).toContainText('Fridays at 16:00 · UTC')
+    await expect(row('Weekly digest')).toContainText('Never run')
+    await expect(row('trial')).toContainText('Draft')
+    await expect(row('trial')).toContainText('Needs instructions')
+    // A draft cannot be switched on until it says what it does.
+    await expect(page.getByRole('switch', { name: 'trial on' })).toBeDisabled()
     await page.screenshot({ path: info.outputPath('automations.png') })
 
-    // Each switch is the platform's: the list is read again after it answers.
-    await page.getByRole('button', { name: 'Turn on Weekly digest' }).click()
-    await expect(page.getByRole('button', { name: 'Turn off Weekly digest' })).toHaveText('On')
-    await page.getByRole('button', { name: 'Turn off Nightly dependency bump' }).click()
-    await expect(page.getByRole('button', { name: 'Turn on Nightly dependency bump' })).toHaveText('Off')
-    expect(posted(sent, '/v1/auto/flows/f2/enable')).toHaveLength(1)
-    expect(posted(sent, '/v1/auto/flows/f1/disable')).toHaveLength(1)
-    await via(page, 'Projects')
-    await via(page, 'Automations')
-    await expect(page.getByRole('button', { name: 'Turn off Weekly digest' })).toHaveText('On')
+    await page.getByRole('switch', { name: 'Weekly digest on' }).click()
+    await expect(page.getByRole('switch', { name: 'Weekly digest on' })).toBeChecked()
+    await page.getByRole('switch', { name: 'Morning briefing on' }).click()
+    await expect(page.getByRole('switch', { name: 'Morning briefing on' })).not.toBeChecked()
+    // The switch sends enabled alone, so it never changes who it runs as.
+    expect(patched(sent, ID(2))).toEqual([{ enabled: true }])
+    expect(patched(sent, ID(1))).toEqual([{ enabled: false }])
 
-    await page.getByLabel('Search automations').fill('  WEEKLY ')
-    await expect(page.getByRole('button', { name: /^Turn (on|off) / })).toHaveCount(1)
+    await page.getByLabel('Search automations').fill('  WEEK ')
+    await expect(page.getByRole('button', { name: /^Open / })).toHaveCount(1)
+    await page.getByLabel('Search automations').fill('attention')
+    await expect(page.getByRole('button', { name: /^Open / })).toHaveText(/Morning briefing/)
     await page.getByLabel('Search automations').fill('nothing like this')
     await expect(page.getByText('Nothing matches.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'New automation' })).toHaveCount(1)
   })
 
   test('a switch the platform refuses says why and changes nothing', async ({ page }) => {
-    await forge(page, { flows: FLOWS(), holds: { 'POST /v1/auto/flows/f2/enable': [{ status: 403, detail: 'Only an org admin arms a trigger' }] } })
+    await forge(page, { autos: AUTOS(), holds: { [`PATCH /v1/auto/automations/${ID(2)}`]: [{ status: 403, detail: 'only the person this automation runs as, or an admin of the organization, may do that' }] } })
     await page.goto('/-/automations')
-    await page.getByRole('button', { name: 'Turn on Weekly digest' }).click()
-    await expect(page.getByText('Only an org admin arms a trigger')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Turn on Weekly digest' })).toHaveText('Off')
+    await page.getByRole('switch', { name: 'Weekly digest on' }).click()
+    await expect(page.getByText('Weekly digest: only the person this automation runs as')).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Weekly digest on' })).not.toBeChecked()
   })
 
-  test('a new one starts off, named; a refusal is said in the dialog, which stays open', async ({ page }, info) => {
-    const { sent } = await forge(page, { flows: [], holds: { 'POST /v1/auto/flows': [{ status: 422, detail: 'That name is taken' }, { wait: 2000 }] } })
+  test('New automation opens the editor; Create sends what it holds, on Enso unless chosen, and lands on its page', async ({ page }, info) => {
+    const { sent, world } = await forge(page, { autos: [], holds: { 'POST /v1/auto/automations': [{ status: 422, detail: 'invalid schedule: 09:00 is taken' }] } })
     await page.goto('/-/automations')
     await expect(page.getByText('No automations yet.')).toBeVisible()
-    // The empty state offers one too.
     await page.getByText('No automations yet.').locator('..').getByRole('button', { name: 'New automation' }).click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog.getByRole('button', { name: 'Create' })).toBeDisabled()
-    await dialog.getByLabel('Automation name').fill('Morning report')
-    await dialog.getByRole('button', { name: 'Create' }).click()
-    await expect(dialog.getByText('That name is taken')).toBeVisible()
-    await page.screenshot({ path: info.outputPath('automation-refused.png') })
-    await dialog.getByRole('button', { name: 'Create' }).click()
-    await expect(dialog.getByRole('button', { name: 'Creating…' })).toBeVisible()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Turn on Morning report' })).toHaveText('Off')
-    const made = posted(sent, '/v1/auto/flows').at(-1)?.body as { displayName: string; trigger: { strategy: string } }
-    expect(made.displayName).toBe('Morning report')
-    expect(made.trigger.strategy).toBe('MANUAL')
+    await expect(page).toHaveURL(/\/-\/automations\/new$/)
+    await expect(page.getByRole('heading', { name: 'New automation' })).toBeVisible()
+    const create = page.getByRole('button', { name: 'Create' })
+    await expect(create).toBeDisabled()
+    await page.getByLabel('Automation name').fill('Inbox triage')
+    await page.getByLabel('Instructions').fill('Sort my inbox and draft replies to anything urgent.')
 
-    await page.getByRole('button', { name: 'New automation' }).first().click()
-    await expect(page.getByRole('dialog').getByLabel('Automation name')).toHaveValue('')
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
+    // Only Hanzo's own models are offered, Enso first.
+    await page.getByRole('button', { name: 'Model: Enso' }).click()
+    const offered = page.getByRole('option')
+    await expect(offered.first()).toContainText('Enso')
+    await expect(page.getByRole('option', { name: /Claude/ })).toHaveCount(0)
+    await expect(page.getByRole('option', { name: /Embedding/ })).toHaveCount(0)
+    await page.getByRole('option', { name: /Zen5/ }).click()
+
+    await page.getByRole('button', { name: 'When it runs: When I run it' }).click()
+    await page.getByRole('option', { name: 'Weekdays' }).click()
+    await page.getByLabel('Time of day').fill('9:00')
+    await page.getByRole('group', { name: 'Permissions' }).getByRole('button', { name: 'Act on its own' }).click()
+    await page.getByRole('switch', { name: 'Email me when a run ends' }).click()
+    await create.click()
+    await expect(page.getByText('invalid schedule: 09:00 is taken')).toBeVisible()
+    await page.getByLabel('Time of day').fill('08:30')
+    await create.click()
+    await expect(page.getByRole('heading', { name: 'Inbox triage' })).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/-/automations/${world.autos[0]!.id}$`))
+    await page.screenshot({ path: info.outputPath('automation-created.png') })
+    const body = posted(sent, '/v1/auto/automations').at(-1)!.body as Record<string, unknown>
+    expect(body).toMatchObject({ name: 'Inbox triage', instructions: 'Sort my inbox and draft replies to anything urgent.', model: 'zen5', permissions: 'auto', notify: true, enabled: true })
+    const zone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
+    expect(body.schedule).toEqual({ kind: 'weekdays', at: '08:30', tz: zone })
+    await expect(page.getByText('No runs yet. Run now starts one.')).toBeVisible()
   })
 
-  test('says it is reading, and says why a read was refused', async ({ page }) => {
-    const { world } = await forge(page, { flows: FLOWS(), slow: { 'GET /v1/auto/flows': 3000 } })
+  test('a row opens its editor; Run now runs it, and its runs say how each went and open the Dev run', async ({ page }, info) => {
+    const { sent } = await forge(page, { autos: AUTOS() })
+    await page.goto('/-/automations')
+    await page.getByRole('button', { name: 'Open Morning briefing' }).click()
+    await expect(page).toHaveURL(new RegExp(`/-/automations/${ID(1)}$`))
+    await expect(page.getByLabel('Automation name')).toHaveValue('Morning briefing')
+    await expect(page.getByLabel('Instructions')).toHaveValue('What needs my attention today.')
+    await expect(page.getByText(/Weekdays at 08:00 · America\/Los_Angeles · next /)).toBeVisible()
+    await page.getByRole('button', { name: 'Run now' }).click()
+    const runs = page.getByLabel('Run history')
+    await expect(runs).toContainText('Succeeded', { timeout: 15_000 })
+    await expect(runs).toContainText('Three meetings today; the first at 9.')
+    expect(posted(sent, `/v1/auto/automations/${ID(1)}/run`)).toHaveLength(1)
+    await page.screenshot({ path: info.outputPath('automation-ran.png') })
+    await runs.getByRole('button', { name: /Open the Dev run/ }).click()
+    await expect(page).toHaveURL(new RegExp(`${SESSION}$`))
+  })
+
+  test('a change sends only what changed, Run now waits for the save, and a delete asks and goes back', async ({ page }) => {
+    const { sent, world } = await forge(page, { autos: AUTOS() })
+    await page.goto('/-/automations')
+    await page.getByRole('button', { name: 'Open Weekly digest' }).click()
+    await expect(page.getByLabel('Automation name')).toHaveValue('Weekly digest')
+    // A time that is not HH:MM is said, and holds the save.
+    await page.getByLabel('Time of day').fill('')
+    await expect(page.getByText('Time of day is HH:MM on a 24-hour clock.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await page.getByLabel('Time of day').fill('16:00')
+    await page.getByLabel('Instructions').fill('Summarize the week by project.')
+    await expect(page.getByRole('button', { name: 'Run now' })).toBeDisabled()
+    await page.getByRole('button', { name: 'Discard changes' }).click()
+    await expect(page.getByLabel('Instructions')).toHaveValue('Summarize the week.')
+    await page.getByLabel('Instructions').fill('Summarize the week by project.')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('Saved.')).toBeVisible()
+    expect(patched(sent, ID(2))).toEqual([{ instructions: 'Summarize the week by project.' }])
+    await expect(page.getByRole('button', { name: 'Run now' })).toBeEnabled()
+
+    // The switch on the editor saves as it moves.
+    await page.getByRole('switch', { name: 'Weekly digest on' }).click()
+    await expect(page.getByRole('switch', { name: 'Weekly digest on' })).toBeChecked()
+    expect(patched(sent, ID(2)).at(-1)).toEqual({ enabled: true })
+
+    await page.getByRole('button', { name: 'Delete' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
+    await expect(page).toHaveURL(/\/-\/automations$/)
+    expect(sent.filter((s) => s.method === 'DELETE' && s.path === `/v1/auto/automations/${ID(2)}`)).toHaveLength(1)
+    expect(world.autos.map((a) => a.id)).not.toContain(ID(2))
+    await expect(page.getByRole('button', { name: 'Open Weekly digest' })).toHaveCount(0)
+    // Back does not open the page of what was deleted.
+    await page.goBack()
+    await expect(page).not.toHaveURL(new RegExp(ID(2)))
+  })
+
+  test('an edit stands while a run is read again and while the switch moves, and a save sends only it', async ({ page }) => {
+    const { sent } = await forge(page, { autos: AUTOS(), lasts: 1000 })
+    await page.goto(`/-/automations/${ID(1)}`)
+    await page.getByRole('button', { name: 'Run now' }).click()
+    await expect(page.getByLabel('Run history')).toContainText('Running')
+    await page.getByLabel('Instructions').fill('What needs my attention today, and why.')
+    // Two reads of the runs go by.
+    await page.waitForTimeout(9000)
+    expect(sent.filter((x) => x.method === 'GET' && x.path === `/v1/auto/automations/${ID(1)}/runs`).length).toBeGreaterThan(2)
+    await expect(page.getByLabel('Instructions')).toHaveValue('What needs my attention today, and why.')
+    await page.getByRole('switch', { name: 'Morning briefing on' }).click()
+    await expect(page.getByRole('switch', { name: 'Morning briefing on' })).not.toBeChecked()
+    await expect(page.getByLabel('Instructions')).toHaveValue('What needs my attention today, and why.')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('Saved.')).toBeVisible()
+    expect(patched(sent, ID(1))).toEqual([{ enabled: false }, { instructions: 'What needs my attention today, and why.' }])
+  })
+
+  test('what is typed while a save is in flight stands, and UTC can be chosen', async ({ page }) => {
+    await forge(page, { autos: AUTOS(), holds: { [`PATCH /v1/auto/automations/${ID(2)}`]: [{ wait: 1500 }] } })
+    await page.goto(`/-/automations/${ID(2)}`)
+    await page.getByLabel('Instructions').fill('Summarize the week by project.')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByLabel('Automation name').fill('Friday digest')
+    await expect(page.getByText('Saved.')).toBeVisible()
+    await expect(page.getByLabel('Automation name')).toHaveValue('Friday digest')
+    await expect(page.getByLabel('Instructions')).toHaveValue('Summarize the week by project.')
+    await expect(page.getByRole('button', { name: 'Save' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Time zone: UTC' }).click()
+    await expect(page.getByRole('option').first()).toHaveText(/^UTC/)
+  })
+
+  test('a draft opens, cannot run, and is finished in place by saving its instructions', async ({ page }, info) => {
+    const { sent } = await forge(page, { autos: AUTOS() })
+    await page.goto('/-/automations')
+    await page.getByRole('button', { name: 'Open trial' }).click()
+    await expect(page.getByText('A draft: say what it should do and save it, and it runs.')).toBeVisible()
+    await expect(page.getByLabel('Automation name')).toHaveValue('trial')
+    await expect(page.getByRole('button', { name: 'Run now' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await page.screenshot({ path: info.outputPath('automation-draft.png') })
+    await page.getByLabel('Instructions').fill('List what changed in our repos today.')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByRole('button', { name: 'Run now' })).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/-/automations/${ID(3)}$`))
+    expect(patched(sent, ID(3))).toEqual([{ instructions: 'List what changed in our repos today.' }])
+  })
+
+  test('says it is reading, says why a read was refused, and an unknown automation says so', async ({ page }) => {
+    const { world } = await forge(page, { autos: AUTOS(), slow: { 'GET /v1/auto/automations': 3000 } })
     await page.goto('/-/automations')
     await expect(page.getByText('Reading automations…')).toBeVisible()
-    await expect(page.getByText('Weekly digest')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open Weekly digest' })).toBeVisible()
     world.slow = {}
-    world.down['GET /v1/auto/flows'] = 'Automations are resting'
+    world.down['GET /v1/auto/automations'] = 'Automations are resting'
     await via(page, 'Projects')
     await via(page, 'Automations')
     await expect(page.getByText('Automations are resting')).toBeVisible()
+    await page.goto(`/-/automations/${ID(9)}`)
+    await expect(page.getByText('automation not found')).toBeVisible()
+    await page.getByRole('button', { name: 'All automations' }).click()
+    await expect(page).toHaveURL(/\/-\/automations$/)
   })
 })
 

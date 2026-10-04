@@ -236,41 +236,41 @@ describe('agents', () => {
 })
 
 describe('automations', () => {
-  it('drops a row with no id, names one by its own name, then its id, and reads a missing status as disabled', () => {
-    expect(auto.automation({ status: 'ENABLED' })).toBeNull()
-    expect(auto.automation({ id: 'flow_1', displayName: 'Nightly', updated: '2026-09-01' })).toEqual({ id: 'flow_1', name: 'Nightly', status: 'DISABLED', updated: 0 })
-    expect(auto.automation({ id: 'flow_2', version: null })?.name).toBe('flow_2')
-    expect(auto.automation('flow_3')).toBeNull()
-  })
-
-  it('keeps a row as listed when its version cannot be read or names nothing', async () => {
-    const seen = route({
-      '/v1/auto/flows': { json: { data: [{ id: 'flow_1', status: 'ENABLED', updated: 5 }, { id: 'flow_2', status: 'DISABLED' }, { id: 'flow_3', displayName: 'Sweep' }, { status: 'ENABLED' }] } },
-      '/v1/auto/flows/flow_1': new TypeError('Failed to fetch'),
-      '/v1/auto/flows/flow_2': { json: {} },
+  it('drops a row with no id, names one by its id when it has no name, and reads what is missing as off, manual and asking', () => {
+    expect(auto.read({ name: 'Nightly' })).toBeNull()
+    expect(auto.read('flow_3')).toBeNull()
+    expect(auto.read({ id: 'flow_1', schedule: { kind: 'yearly', at: 9 }, permissions: 'root', enabled: 'yes', last: { status: 'succeeded' } })).toEqual({
+      id: 'flow_1',
+      name: 'flow_1',
+      instructions: '',
+      project: null,
+      model: null,
+      schedule: { kind: 'manual' },
+      permissions: 'ask',
+      notify: false,
+      enabled: false,
+      draft: false,
+      next: null,
+      last: null,
+      created: '',
+      updated: '',
     })
-    expect(await auto.flows(T)).toEqual([
-      { id: 'flow_1', name: 'flow_1', status: 'ENABLED', updated: 5 },
-      { id: 'flow_2', name: 'flow_2', status: 'DISABLED', updated: 0 },
-      { id: 'flow_3', name: 'Sweep', status: 'DISABLED', updated: 0 },
-    ])
-    // The one already named is not read again.
-    expect(seen.map((s) => s.url.replace(T.api, ''))).toEqual(['/v1/auto/flows', '/v1/auto/flows/flow_1', '/v1/auto/flows/flow_2'])
   })
 
-  it('lists no flows from an answer that is not a page', async () => {
-    answer(200, { flows: [] })
-    expect(await auto.flows(T)).toEqual([])
+  it('lists none from an answer that is not a page, and keeps a run with no transcript', async () => {
+    answer(200, { automations: [] })
+    expect(await auto.automations(T)).toEqual([])
+    answer(200, { data: [{ id: 'run_1', status: 'refused', transcript: 'https://hanzo.ai/dev?run=nope' }, { status: 'failed' }] })
+    expect(await auto.runs(T, 'flow_1')).toEqual([{ id: 'run_1', status: 'refused', at: '', finished: null, summary: '', session: null }])
   })
 
-  it('refuses an empty name before sending, and says when the new flow came back without an id', async () => {
-    let seen = answer(201, {})
-    await expect(auto.add(T, '   ')).rejects.toThrow('Name the automation')
-    expect(seen).toEqual([])
-    await expect(auto.add(T, 'Nightly')).rejects.toThrow('The automation was created and did not come back named')
-    seen = answer(200, {})
-    await auto.arm(T, 'flow 2', false)
-    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/auto/flows/flow%202/disable' })
+  it('says when a write came back without an id, and escapes the id it addresses', async () => {
+    const d = { name: 'n', instructions: 'i', model: null, schedule: { kind: 'manual' as const }, permissions: 'ask' as const, notify: false, enabled: true }
+    answer(201, {})
+    await expect(auto.create(T, d)).rejects.toThrow('came back without an id')
+    const seen = answer(200, {})
+    await expect(auto.save(T, 'flow 2', { enabled: false })).rejects.toThrow('came back without an id')
+    expect(seen[0]).toMatchObject({ method: 'PATCH', url: 'https://api.hanzo.ai/v1/auto/automations/flow%202' })
   })
 })
 
