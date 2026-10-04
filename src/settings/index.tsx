@@ -38,9 +38,12 @@ export function Settings({ section }: { section: Section }) {
           const list = ENTRIES.filter((e) => e.group === g)
           return (
             <YStack key={g} gap="$0.5">
-              <SizableText size="$1" color="$soft" px="$2" pb="$1">
-                {g}
-              </SizableText>
+              {/* The first group sits under the page's own "Settings" heading, so it carries no label. */}
+              {g === 'Settings' ? null : (
+                <SizableText size="$1" color="$soft" px="$2" pb="$1">
+                  {g}
+                </SizableText>
+              )}
               {list.map((e) => (
                 <XStack
                   key={e.id}
