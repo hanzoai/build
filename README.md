@@ -214,7 +214,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `PATCH /v1/agent/sessions/{id}` `{title}` · `{published}` | rename a run, share its story at `GET /v1/agent/builds/{org}/{project}` |
 | `GET /v1/agent/sessions?kind=coding&status=&after=` | Find, by status, paged |
 | `GET`/`POST /v1/agent/targets` · `PATCH`/`DELETE …/{id}` · `POST …/{id}/key` | the org's machines, and a machine's claim key |
-| `GET`/`POST`/`DELETE /v1/account/keys` | your API keys |
+| `GET`/`POST /v1/account/keys` · `DELETE …/{id}` | your API keys, as many as you need; one revoked at a time |
 | `GET /v1/auto/flows` · `POST /v1/auto/flows` · `POST /v1/auto/flows/{id}/enable` | automations |
 | `GET /v1/environment` · `GET`/`PUT`/`DELETE /v1/environment/{repo}` · `PUT`/`DELETE …/secrets/{name}` | a codebase's environment |
 | `GET /v1/agent/coding/{session}/changes` · `/tree` · `/blob` | what a run pushed, and its branch's files, from the forge |

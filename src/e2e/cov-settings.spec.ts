@@ -162,14 +162,11 @@ function answer(w: World, s: Sent): Reply | undefined {
     case 'GET /v1/account/keys':
       return { json: { keys: w.keys } }
     case 'POST /v1/account/keys': {
-      const key = `${b.type === 'secret' ? 'sk' : 'pk'}-live-${w.keys.length + 1}`
-      w.keys = [...w.keys.filter((k) => k.type !== b.type), { type: b.type, prefix: key.slice(0, 7), ...(b.type === 'publishable' ? { key } : {}), limit: b.limit, createdAt: '2026-09-27T12:00:00Z' }]
-      return { json: { key, type: b.type, limit: b.limit } }
-    }
-    case 'DELETE /v1/account/keys': {
-      const type = new URLSearchParams(s.query).get('type')
-      w.keys = w.keys.filter((k) => k.type !== type)
-      return { json: { ok: true, type } }
+      const n = w.keys.length + 1
+      const key = `${b.type === 'secret' ? 'sk' : 'pk'}-live-${n}`
+      const row = { id: `dave-${b.type}-${n}`, name: b.name ?? `key ${n}`, type: b.type, prefix: key.slice(0, 7), status: 'active', limit: b.limit, created: '2026-09-27T12:00:00Z' }
+      w.keys = [...w.keys, b.type === 'publishable' ? { ...row, key } : row]
+      return { json: { ...row, key } }
     }
     case 'GET /v1/billing/subscriptions':
       return { json: { count: w.subs.length, subscriptions: w.subs } }
@@ -255,6 +252,10 @@ function answer(w: World, s: Sent): Reply | undefined {
     }
   }
   if ((m = at(/^\/v1\/account\/avatar\/.+/))) return { body: PNG, type: 'image/png' }
+  if ((m = at(/^\/v1\/account\/keys\/([^/]+)$/)) && s.method === 'DELETE') {
+    w.keys = w.keys.map((k) => (k.id === m![1] ? { ...k, status: 'revoked' } : k))
+    return { json: w.keys.find((k) => k.id === m![1]) ?? {} }
+  }
   if ((m = at(/^\/v1\/provider\/(x|linkedin|facebook|instagram|tiktok)$/))) return { json: w.social[m[1]] ?? { id: m[1], available: false, connected: false } }
   if ((m = at(/^\/v1\/provider\/(x|linkedin|facebook)\/connect$/))) {
     const consent: Record<string, string> = { x: 'https://twitter.com/i/oauth2/authorize?state=signed', linkedin: 'https://www.linkedin.com/oauth/v2/authorization?state=signed', facebook: 'https://www.facebook.com/v21.0/dialog/oauth?state=signed' }
@@ -943,19 +944,19 @@ test('Machines re-reads on the beat without a flash: an empty list stays empty w
   await expect(page.getByText('online · gpu · spark', { exact: true })).toBeVisible()
 })
 
-test('API keys: a secret created after a refusal, a publishable rotated with a limit, and a secret revoked, each across a reload', async ({ page }) => {
+test('API keys: a second secret beside the first after a refusal, both kept across a reload, and one revoked', async ({ page }) => {
   const p = await platform(page, (w) => {
-    w.keys = [{ type: 'publishable', prefix: 'pk-acme', key: 'pk-acme-public-1234', createdAt: 'not a date' }]
+    w.keys = [{ id: 'dave-publishable-1', name: 'site', type: 'publishable', prefix: 'pk-acme', key: 'pk-acme-public-1234', status: 'active', created: 'not a date' }]
   })
   await page.goto('/-/settings/keys')
-  await expect(page.getByText('Unrestricted', { exact: true })).toBeVisible()
+  await expect(page.getByText('Publishable · Unrestricted', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Create the secret key' }).click()
+  await page.getByRole('button', { name: 'Create a secret key' }).click()
   const make = page.getByRole('dialog', { name: /key$/ })
-  await expect(make.getByText('Create your secret key')).toBeVisible()
+  await expect(make.getByText('Create a secret key')).toBeVisible()
   await make.getByRole('button', { name: 'Cancel' }).click()
   await expect(make).toHaveCount(0)
-  await page.getByRole('button', { name: 'Create the secret key' }).click()
+  await page.getByRole('button', { name: 'Create a secret key' }).click()
   p.fail('POST /v1/account/keys', refusal('keys are disabled for this organization', 403))
   await make.getByRole('button', { name: 'Create' }).click()
   await expect(make.getByText('keys are disabled for this organization')).toBeVisible()
@@ -967,42 +968,38 @@ test('API keys: a secret created after a refusal, a publishable rotated with a l
   release()
   await expect(make.getByText('Your new secret key')).toBeVisible()
   await expect(make.getByLabel('Secret key', { exact: true })).toHaveText('sk-live-2')
-  await expect(make.getByText(/It reaches/)).toHaveCount(0)
   await make.getByRole('button', { name: 'Done' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'Secret key created' })).toBeVisible()
-  await expect(page.getByText('sk-live… · Unrestricted · Created Sep 27, 2026')).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'key 2 created' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Rotate the publishable key' }).click()
-  await expect(make.getByText('Rotate your publishable key')).toBeVisible()
-  await expect(make.getByText('The publishable key you have now stops working.')).toBeVisible()
+  // A second secret key joins the first; neither replaces the other.
+  await page.getByRole('button', { name: 'Create a secret key' }).click()
+  await make.getByLabel('Name').fill('second')
   await make.getByLabel('Limit').fill('project:acme')
-  await make.getByRole('button', { name: 'Rotate' }).click()
-  await expect(make.getByText('Your new publishable key')).toBeVisible()
-  await expect(make.getByText('pk-live-3', { exact: true })).toBeVisible()
+  await make.getByRole('button', { name: 'Create' }).click()
   await expect(make.getByText('It reaches project:acme and nothing else.')).toBeVisible()
   await make.getByRole('button', { name: 'Done' }).click()
-  await expect(page.getByLabel('Publishable key', { exact: true })).toHaveText('pk-live-3')
-  await expect(page.getByText('Reaches project:acme · Created Sep 27, 2026')).toBeVisible()
+  await expect(page.getByText('sk-live… · Unrestricted · Created Sep 27, 2026')).toBeVisible()
+  await expect(page.getByText('sk-live… · Reaches project:acme · Created Sep 27, 2026')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Revoke the secret key' }).click()
-  const ask = page.getByRole('dialog', { name: 'Revoke your secret key?' })
-  await expect(ask.getByText('Revoke your secret key?')).toBeVisible()
-  p.fail('DELETE /v1/account/keys', refusal('IAM is not answering', 502))
+  await page.getByRole('button', { name: 'Revoke key 2' }).click()
+  const ask = page.getByRole('dialog', { name: 'Revoke key 2?' })
+  p.fail('DELETE /v1/account/keys/dave-secret-2', refusal('IAM is not answering', 502))
   await ask.getByRole('button', { name: 'Revoke' }).click()
   await expect(ask.getByText('IAM is not answering')).toBeVisible()
-  p.pass('DELETE /v1/account/keys')
+  p.pass('DELETE /v1/account/keys/dave-secret-2')
   await ask.getByRole('button', { name: 'Revoke' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'Secret key revoked' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'key 2 revoked' })).toBeVisible()
   expect(p.writes()).toEqual([
     ['POST /v1/account/keys', { type: 'secret' }],
     ['POST /v1/account/keys', { type: 'secret' }],
-    ['POST /v1/account/keys', { type: 'publishable', limit: ['project:acme'] }],
-    ['DELETE /v1/account/keys?type=secret', null],
-    ['DELETE /v1/account/keys?type=secret', null],
+    ['POST /v1/account/keys', { type: 'secret', name: 'second', limit: ['project:acme'] }],
+    ['DELETE /v1/account/keys/dave-secret-2', null],
+    ['DELETE /v1/account/keys/dave-secret-2', null],
   ])
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Create the secret key' })).toBeVisible()
-  await expect(page.getByLabel('Publishable key', { exact: true })).toHaveText('pk-live-3')
+  await expect(page.getByText('sk-live… · Unrestricted · Created Sep 27, 2026 · Revoked')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Revoke second' })).toBeVisible()
+  await expect(page.getByLabel('Publishable key', { exact: true })).toHaveText('pk-acme-public-1234')
 })
 
 // ── money and the organization ──────────────────────────────────────────────

@@ -1,34 +1,41 @@
 /**
- * A person's own API keys: one secret key (sk-, it belongs on a server) and one
- * publishable key (pk-, safe in a page's source), at most one of each.
+ * A person's API keys, each its own credential: as many as they like, of either
+ * type — secret (sk-, it belongs on a server) or publishable (pk-, safe in a
+ * page's source).
  *
- *   GET    /v1/account/keys             {keys: [{type, prefix, key?, limit?, createdAt}]}
- *   POST   /v1/account/keys             {type, limit?} → {key, type, limit}, answered once
- *   DELETE /v1/account/keys?type=…      revoke that one
+ *   GET    /v1/account/keys        {keys: [{id, name, type, prefix, key?, status, limit?, created, …}]}
+ *   POST   /v1/account/keys        {name, type, limit?} → the key, its secret answered once
+ *   DELETE /v1/account/keys/{id}   revoke exactly that one; it stays listed as revoked
  *
- * Creating is rotating: a new key of a type ends the one before it. A secret key
- * is answered once and by its prefix after; a publishable key is public by
- * construction and always comes back whole. A limit only narrows what a key may
- * reach — `model:zen5`, `project:acme`, `product:commerce`, `model:*`.
+ * Creating a key never touches another. A secret key is answered once and by its
+ * prefix after; a publishable key is public by construction and always comes back
+ * whole. A limit only narrows what a key may reach — `model:zen5`,
+ * `project:acme`, `product:train`, `read:*`.
  */
-import { call, query, type Target } from './call.ts'
+import { call, type Target } from './call.ts'
 
 export const KINDS = ['secret', 'publishable'] as const
 export type Kind = (typeof KINDS)[number]
 
 export interface Key {
+  id: string
+  name: string
   type: Kind
   /** The recognizable head, never enough to use the key. */
   prefix: string
   /** The whole key: a publishable key's only. */
   key: string
+  /** active, expired, revoked or disabled. */
+  status: string
   /** `kind:name` entries; none reaches whatever its holder does. */
   limit: string[]
-  /** When it last changed, as IAM records it. */
+  /** When it was made, as IAM records it. */
   created: string
 }
 
 export interface Minted {
+  id: string
+  name: string
   type: Kind
   /** The key itself. A secret one is never readable again. */
   key: string
@@ -46,8 +53,17 @@ export async function keys(t: Target): Promise<Key[]> {
   for (const raw of rows) {
     const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
     const type = kind(o.type)
-    if (!type) continue
-    out.push({ type, prefix: str(o.prefix), key: str(o.key), limit: list(o.limit), created: str(o.createdAt) })
+    if (!type || !str(o.id)) continue
+    out.push({
+      id: str(o.id),
+      name: str(o.name),
+      type,
+      prefix: str(o.prefix),
+      key: str(o.key),
+      status: str(o.status) || 'active',
+      limit: list(o.limit),
+      created: str(o.created),
+    })
   }
   return out
 }
@@ -66,14 +82,18 @@ export function limits(raw: string): string[] {
   return out
 }
 
-/** Create a key of this type, ending the one before it. The answer is the only time a secret key is shown. */
-export async function mint(t: Target, type: Kind, limit: string[] = []): Promise<Minted> {
-  const r = await call<Record<string, unknown>>(t, 'POST', '/v1/account/keys', limit.length ? { type, limit } : { type })
-  const key = str(r?.key) || str(r?.accessKey)
+/** Create a new key beside the ones held. The answer is the only time a secret key is shown. */
+export async function mint(t: Target, type: Kind, name = '', limit: string[] = []): Promise<Minted> {
+  const body: Record<string, unknown> = { type }
+  if (name.trim()) body.name = name.trim()
+  if (limit.length) body.limit = limit
+  const r = await call<Record<string, unknown>>(t, 'POST', '/v1/account/keys', body)
+  const key = str(r?.key)
   if (!key) throw new Error('The platform answered no key')
-  return { type: kind(r?.type) ?? type, key, limit: list(r?.limit) }
+  return { id: str(r?.id), name: str(r?.name), type: kind(r?.type) ?? type, key, limit: list(r?.limit) }
 }
 
-export async function revoke(t: Target, type: Kind): Promise<void> {
-  await call<unknown>(t, 'DELETE', `/v1/account/keys${query({ type })}`)
+/** Revoke exactly one key, by id. Every other key keeps working. */
+export async function revoke(t: Target, id: string): Promise<void> {
+  await call<unknown>(t, 'DELETE', `/v1/account/keys/${encodeURIComponent(id)}`)
 }

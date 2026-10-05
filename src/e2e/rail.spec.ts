@@ -267,10 +267,9 @@ test.describe('Code settings', () => {
     const sent = await platform(page)
     await page.goto('/-/settings/keys')
     await expect(page.getByLabel('Publishable key', { exact: true })).toHaveText('pk-acme-public-1234')
-    await expect(page.getByText(/For a server\. .* None yet\./)).toBeVisible()
     await page.screenshot({ path: info.outputPath('keys.png') })
 
-    await page.getByRole('button', { name: 'Create the secret key' }).click()
+    await page.getByRole('button', { name: 'Create a secret key' }).click()
     const make = page.getByRole('dialog')
     await make.getByLabel('Limit').fill('zen5')
     await make.getByRole('button', { name: 'Create' }).click()
@@ -285,10 +284,10 @@ test.describe('Code settings', () => {
     expect(sent).toContainEqual({ method: 'POST', path: '/v1/account/keys', query: '', body: { type: 'secret', limit: ['model:zen5', 'project:acme'] } })
     expect(sent.filter((s) => s.method === 'POST' && s.path === '/v1/account/keys')).toHaveLength(1)
 
-    await page.getByRole('button', { name: 'Revoke the publishable key' }).click()
+    await page.getByRole('button', { name: 'Revoke site' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Revoke' }).click()
-    await expect(page.getByText('Publishable key revoked')).toBeVisible()
-    expect(sent).toContainEqual({ method: 'DELETE', path: '/v1/account/keys', query: '?type=publishable', body: null })
+    await expect(page.getByText('site revoked')).toBeVisible()
+    expect(sent).toContainEqual({ method: 'DELETE', path: '/v1/account/keys/acme-publishable-1', query: '', body: null })
   })
 
   test('each section fits a phone', async ({ page }, info) => {

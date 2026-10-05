@@ -144,17 +144,19 @@ describe('machines', () => {
 })
 
 describe('keys', () => {
-  it('reads both keys, a secret by its prefix, and drops an unknown type', async () => {
+  it('reads every key, a secret by its prefix, and drops an unknown type', async () => {
     const seen = answer(200, {
       keys: [
-        { type: 'secret', prefix: 'sk-ab12', createdAt: '2026-09-01T00:00:00Z', limit: ['model:zen5'] },
-        { type: 'publishable', prefix: 'pk-cd34', key: 'pk-cd34full' },
-        { type: 'master', prefix: 'mk-' },
+        { id: 'z-secret-1', name: 'ci', type: 'secret', prefix: 'sk-ab12', status: 'active', created: '2026-09-01T00:00:00Z', limit: ['model:zen5'] },
+        { id: 'z-secret-2', name: 'old', type: 'secret', prefix: 'sk-ef56', status: 'revoked' },
+        { id: 'z-publishable-1', name: 'web', type: 'publishable', prefix: 'pk-cd34', key: 'pk-cd34full', status: 'active' },
+        { id: 'z-master', type: 'master', prefix: 'mk-' },
       ],
     })
     expect(await keys(T)).toEqual([
-      { type: 'secret', prefix: 'sk-ab12', key: '', limit: ['model:zen5'], created: '2026-09-01T00:00:00Z' },
-      { type: 'publishable', prefix: 'pk-cd34', key: 'pk-cd34full', limit: [], created: '' },
+      { id: 'z-secret-1', name: 'ci', type: 'secret', prefix: 'sk-ab12', key: '', status: 'active', limit: ['model:zen5'], created: '2026-09-01T00:00:00Z' },
+      { id: 'z-secret-2', name: 'old', type: 'secret', prefix: 'sk-ef56', key: '', status: 'revoked', limit: [], created: '' },
+      { id: 'z-publishable-1', name: 'web', type: 'publishable', prefix: 'pk-cd34', key: 'pk-cd34full', status: 'active', limit: [], created: '' },
     ])
     expect(seen[0]).toMatchObject({ method: 'GET', url: 'https://api.hanzo.ai/v1/account/keys' })
   })
@@ -164,21 +166,21 @@ describe('keys', () => {
     expect(await keys(T)).toEqual([])
   })
 
-  it('mints a key, sending a limit only when there is one', async () => {
-    let seen = answer(200, { key: 'sk-new', accessKey: 'sk-new', type: 'secret' })
-    expect(await mint(T, 'secret')).toEqual({ type: 'secret', key: 'sk-new', limit: [] })
+  it('creates a new key, sending a name and a limit only when there are some', async () => {
+    let seen = answer(200, { id: 'z-secret-3', name: 'key 3', key: 'sk-new', type: 'secret' })
+    expect(await mint(T, 'secret')).toEqual({ id: 'z-secret-3', name: 'key 3', type: 'secret', key: 'sk-new', limit: [] })
     expect(seen[0]).toEqual({ method: 'POST', url: 'https://api.hanzo.ai/v1/account/keys', body: { type: 'secret' } })
-    seen = answer(200, { accessKey: 'pk-new', type: 'publishable', limit: ['project:acme'] })
-    expect(await mint(T, 'publishable', ['project:acme'])).toEqual({ type: 'publishable', key: 'pk-new', limit: ['project:acme'] })
-    expect(seen[0].body).toEqual({ type: 'publishable', limit: ['project:acme'] })
+    seen = answer(200, { id: 'z-publishable-2', name: 'site', key: 'pk-new', type: 'publishable', limit: ['project:acme'] })
+    expect(await mint(T, 'publishable', 'site', ['project:acme'])).toEqual({ id: 'z-publishable-2', name: 'site', type: 'publishable', key: 'pk-new', limit: ['project:acme'] })
+    expect(seen[0].body).toEqual({ type: 'publishable', name: 'site', limit: ['project:acme'] })
     answer(200, { type: 'secret' })
     await expect(mint(T, 'secret')).rejects.toThrow('The platform answered no key')
   })
 
-  it('revokes the one type named, in the query', async () => {
-    const seen = answer(200, { ok: true, type: 'publishable' })
-    await revoke(T, 'publishable')
-    expect(seen[0]).toEqual({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/account/keys?type=publishable', body: undefined })
+  it('revokes exactly the key named, by id', async () => {
+    const seen = answer(200, { id: 'z~a-secret-1', status: 'revoked' })
+    await revoke(T, 'z~a-secret-1')
+    expect(seen[0]).toEqual({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/account/keys/z~a-secret-1', body: undefined })
   })
 
   it('reads limits as kind:name, and refuses the first that is not one', () => {

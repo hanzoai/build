@@ -102,10 +102,10 @@ describe('memory', () => {
 
 describe('keys', () => {
   it('skips a row that is not one, and reads a key minted with no type or limit as the type asked for', async () => {
-    answer(200, { keys: [null, 'sk-x', { type: 'secret', prefix: 'sk-ab' }] })
-    expect(await keys(T)).toEqual([{ type: 'secret', prefix: 'sk-ab', key: '', limit: [], created: '' }])
+    answer(200, { keys: [null, 'sk-x', { type: 'secret', prefix: 'sk-no-id' }, { id: 'k', type: 'secret', prefix: 'sk-ab' }] })
+    expect(await keys(T)).toEqual([{ id: 'k', name: '', type: 'secret', prefix: 'sk-ab', key: '', status: 'active', limit: [], created: '' }])
     answer(200, { key: 'pk-new' })
-    expect(await mint(T, 'publishable')).toEqual({ type: 'publishable', key: 'pk-new', limit: [] })
+    expect(await mint(T, 'publishable')).toEqual({ id: '', name: '', type: 'publishable', key: 'pk-new', limit: [] })
     answer(204, undefined)
     await expect(mint(T, 'secret')).rejects.toThrow('The platform answered no key')
   })

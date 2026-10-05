@@ -288,9 +288,11 @@ export function rail(page: Page, kept: Record<string, unknown> = {}): Promise<Se
       if (path === '/v1/environment') return { json: { data: ENVIRONMENTS } }
       if (path === '/v1/environment/universe' && method === 'GET') return { json: ENVIRONMENTS[0] }
       if (path === '/v1/environment/universe' && method === 'DELETE') return { status: 204, text: '' }
-      if (path === '/v1/account/keys' && method === 'GET') return { json: { keys: [{ type: 'publishable', prefix: 'pk-acme', key: 'pk-acme-public-1234' }] } }
-      if (path === '/v1/account/keys' && method === 'POST') return { json: { key: 'sk-live-shown-once', accessKey: 'sk-live-shown-once', type: 'secret', limit: (body as { limit?: string[] }).limit } }
-      if (path === '/v1/account/keys' && method === 'DELETE') return { json: { ok: true, type: new URLSearchParams(query).get('type') } }
+      if (path === '/v1/account/keys' && method === 'GET')
+        return { json: { keys: [{ id: 'acme-publishable-1', name: 'site', type: 'publishable', prefix: 'pk-acme', key: 'pk-acme-public-1234', status: 'active' }] } }
+      if (path === '/v1/account/keys' && method === 'POST')
+        return { json: { id: 'acme-secret-1', name: (body as { name?: string }).name ?? 'key 2', key: 'sk-live-shown-once', type: 'secret', status: 'active', limit: (body as { limit?: string[] }).limit } }
+      if (path.startsWith('/v1/account/keys/') && method === 'DELETE') return { json: { id: path.slice('/v1/account/keys/'.length), status: 'revoked' } }
       return undefined
     },
     kept,
