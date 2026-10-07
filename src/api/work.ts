@@ -33,9 +33,32 @@ export interface Work {
   assignee: string
   /** The repository the item is bound to, or ''. */
   repo: string
+  /** Where it was opened: `git` (the forge, or mirrored from GitHub), `team`, `agent`, … */
+  source: string
+  labels: string[]
+  /** Its page upstream (a GitHub issue for a mirrored one), https only, or ''. */
+  url: string
+  /** Unix milliseconds, or 0 when the platform did not say. */
+  created: number
+  updated: number
+}
+
+/** The project an item is filed under: its repository, else its board. */
+export const projectOf = (w: Work): string => w.repo || w.project
+
+/** Done and canceled are closed; every other column is open work. */
+export const closed = (w: Work): boolean => w.status === 'done' || w.status === 'canceled'
+
+/** Whether `w` belongs to the project `key` — by repository or by board, either case. */
+export function inProject(w: Work, key: string): boolean {
+  const k = key.toLowerCase()
+  return w.repo.toLowerCase() === k || w.project.toLowerCase() === k
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+/** The platform states seconds; a value already in milliseconds is kept. */
+const when = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? (v < 1e12 ? v * 1000 : v) : 0)
+const https = (v: unknown): string => (typeof v === 'string' && /^https:\/\//.test(v) ? v : '')
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' ? (v as Record<string, unknown>) : {}
 
@@ -71,6 +94,11 @@ export function work(raw: unknown): Work | null {
     priority: str(o.priority) || 'none',
     assignee: str(o.assignee),
     repo: str(o.repo),
+    source: str(o.source),
+    labels: Array.isArray(o.labels) ? o.labels.filter((l): l is string => typeof l === 'string' && l !== '') : [],
+    url: https(o.url) || https(o.extRef),
+    created: when(o.createdAt),
+    updated: when(o.updatedAt),
   }
 }
 

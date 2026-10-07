@@ -8,6 +8,7 @@
  *   POST /v1/provider/github/user/complete     {grant} → the connection
  *   POST /v1/provider/github/user/disconnect
  *   GET  /v1/provider/github/installations     the accounts this org has bound the App on
+ *   POST /v1/provider/github/issues/backfill   {state, repo?} → mirror GitHub issues onto the board
  *
  * Paged by an opaque `after` cursor; `next` is the cursor for the page after
  * this one, or empty on the last. Rows are read defensively: a field the
@@ -272,4 +273,36 @@ export async function bring(t: Target, repos: string[]): Promise<number> {
   if (names.length === 0) throw new Error('Choose a repository first')
   const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/repos/import', { repos: names }))
   return num(raw.queued)
+}
+
+/** What one issue sync did. */
+export interface Synced {
+  repos: number
+  issues: number
+  created: number
+  updated: number
+  failed: number
+  /** The pass stopped at its budget; syncing again continues where it stopped. */
+  truncated: boolean
+}
+
+/**
+ * Mirror GitHub issues onto the board — open and closed, so a closed one reads as
+ * closed here too. `repo` (`name` or `owner/name`) syncs one project; empty syncs
+ * every repository the connection grants. Idempotent: a second sync updates and
+ * never duplicates, and the App's webhook keeps them live afterwards.
+ */
+export async function syncIssues(t: Target, repo = ''): Promise<Synced> {
+  const name = repo.trim()
+  const raw = obj(
+    await call<unknown>(t, 'POST', '/v1/provider/github/issues/backfill', name ? { state: 'all', repo: name } : { state: 'all' }),
+  )
+  return {
+    repos: num(raw.repos),
+    issues: num(raw.issues),
+    created: num(raw.created),
+    updated: num(raw.updated),
+    failed: num(raw.failed),
+    truncated: raw.truncated === true,
+  }
 }
