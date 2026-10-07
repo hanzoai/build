@@ -55,7 +55,8 @@ const inRail = (label: string) => async (p: Page, size: Size) => {
   await p.getByLabel('Open runs').click()
   await p.getByRole('button', { name: label }).last().click()
 }
-const view = (label: string) => (p: Page) => p.getByRole('button', { name: label, exact: true }).click()
+/** A view of Customize, by the word its button starts with: Yours carries its count. */
+const view = (label: string) => (p: Page) => p.getByRole('button', { name: new RegExp(`^${label}`) }).click()
 
 type Platform = (page: Page) => Promise<unknown>
 
@@ -80,7 +81,7 @@ const SCREENS: Record<Screen, [Platform, RegExp]> = {
   issues: [forge, /Open work across every board/],
   artifacts: [rail, /What this organization has built/],
   templates: [rail, /Start from a working app/],
-  mcp: [customize, /The fleet.s own servers/],
+  mcp: [customize, /Hanzo.s own servers/],
   plans: [org, /Plans that grow with you/],
 }
 const HEADINGS: Record<Section, [Platform, RegExp]> = {
@@ -99,7 +100,7 @@ const HEADINGS: Record<Section, [Platform, RegExp]> = {
   integrations: [org, /What acme and you have connected/],
   notifications: [org, /Webhooks: events in acme/],
 }
-const CUSTOMIZE = /What the agent brings to a run/
+const CUSTOMIZE = /What your agent can use in every run/
 const screens = Object.entries(SCREENS) as [Screen, [Platform, RegExp]][]
 
 const signedIn: State[] = [
@@ -112,7 +113,7 @@ const signedIn: State[] = [
   ...screens.map(([screen, [platform, says]]) => ({ name: screen, path: `/-/${screen}`, platform, says })),
   ...SECTIONS.map((section) => ({ name: `settings-${section}`, path: `/-/settings/${section}`, platform: HEADINGS[section][0], says: HEADINGS[section][1] })),
   ...TABS.flatMap((tab) =>
-    (['Yours', 'Discover'] as const).map((v) => ({ name: `customize-${tab}-${v.toLowerCase()}`, path: `/-/customize/${tab}`, platform: customize, says: CUSTOMIZE, act: view(v) })),
+    (['Browse', 'Yours'] as const).map((v) => ({ name: `customize-${tab}-${v.toLowerCase()}`, path: `/-/customize/${tab}`, platform: customize, says: CUSTOMIZE, act: view(v) })),
   ),
 ]
 

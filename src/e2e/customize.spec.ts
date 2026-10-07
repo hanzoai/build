@@ -1,7 +1,8 @@
 /**
- * Customize — skills, connectors, plugins and agents, yours and to discover —
- * signed in against a stubbed platform (stubs.ts) that keeps what it is sent,
- * so a write shows up on the next read the way it would live.
+ * Customize — skills, connectors, plugins and agents — signed in against a
+ * stubbed platform (stubs.ts) that keeps what it is sent, so a write shows up on
+ * the next read the way it would live. Browse is first and is where every tab
+ * opens; Yours is what the org has, counted on its button.
  */
 import type { Page } from '@playwright/test'
 
@@ -17,23 +18,65 @@ async function open(page: Page, at: string) {
 }
 
 const sentTo = (sent: Sent[], method: string, path: string) => sent.filter((s) => s.method === method && s.path === path)
+const browse = (page: Page) => page.getByRole('button', { name: 'Browse', exact: true })
+const yours = (page: Page) => page.getByRole('button', { name: /^Yours/ })
 
-test('the rail’s Customize opens Skills, and the old MCP address lands on Connectors’ Discover', async ({ page, baseURL }) => {
-  await open(page, '/')
+test('every tab opens on Browse, first in the choice, with what is yours counted beside it', async ({ page, baseURL }) => {
+  const sent = await open(page, '/')
   await page.getByText('Customize', { exact: true }).first().click()
   await expect(page).toHaveURL(new URL('/-/customize', baseURL).href)
   await expect(page.getByRole('tab', { name: 'Skills' })).toHaveAttribute('aria-selected', 'true')
-  await page.goto('/-/mcp')
-  await expect(page.getByRole('button', { name: 'Discover', pressed: true })).toBeVisible()
-  await expect(page.getByText('2 servers · 3 operations')).toBeVisible()
-  await page.getByRole('tab', { name: 'Agents' }).click()
-  await expect(page).toHaveURL(new URL('/-/customize/agents', baseURL).href)
+  const group = page.getByRole('group', { name: 'Show' })
+  // Browse first; one skill of the org's own and one added from Hanzo, counted on Yours.
+  await expect.poll(() => group.getByRole('button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Browse', 'Yours, 2'])
+  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('list', { name: 'Skills to add' })).toBeVisible()
+
+  for (const tab of ['Connectors', 'Plugins', 'Agents']) {
+    await page.getByRole('tab', { name: tab }).click()
+    await expect(browse(page), tab).toHaveAttribute('aria-pressed', 'true')
+  }
+  await expect(yours(page)).toHaveAccessibleName('Yours, 1')
+  // The fleet's servers are not listed until asked for: listing them starts every subsystem.
+  expect(sentTo(sent, 'POST', '/v1/mcp')).toHaveLength(0)
 })
 
-test('skills: yours switch on and off, and a new one is written and switched on', async ({ page }, info) => {
+test('the old MCP address lands on Connectors’ Browse with the built-in servers open', async ({ page }) => {
+  await open(page, '/-/mcp')
+  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('tab', { name: 'Connectors' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('2 servers · 3 operations')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Show built-in servers' })).toHaveCount(0)
+})
+
+test('skills: browse Hanzo’s, read a SKILL.md, and add one', async ({ page }, info) => {
   const sent = await open(page, '/-/customize')
-  await expect(page.getByRole('tab', { name: 'Skills' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('heading', { name: 'From Hanzo' })).toBeVisible()
+  await expect(page.getByText('3 skills', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('git_branches is added')).toBeVisible()
+  await page.getByLabel('Search skills').fill('kms')
+  await expect(page.getByText('1 of 3 skills')).toBeVisible()
+  await page.getByLabel('Search skills').fill('')
+  await page.screenshot({ path: info.outputPath('skills-browse.png') })
+
+  await page.getByRole('button', { name: 'Add git_repos' }).click()
+  await expect(page.getByLabel('git_repos is added')).toBeVisible()
+  expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: ['skill_git_repos'], deactivate: [] })
+  await expect(yours(page)).toHaveAccessibleName('Yours, 3')
+
+  await page.getByRole('button', { name: 'kms_secrets', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('What kms_secrets does, step by step.')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Add to your skills' }).click()
+  await expect(dialog.getByRole('button', { name: 'Remove' })).toBeVisible()
+  await page.screenshot({ path: info.outputPath('skills-read.png') })
+})
+
+test('skills: yours switch off and on, one added is removed, and a new one is written and switched on', async ({ page }, info) => {
+  const sent = await open(page, '/-/customize')
+  await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your skills' })
+  await expect(page.getByRole('heading', { name: 'Made by your team' })).toBeVisible()
   await expect(mine.getByText('triage', { exact: true })).toBeVisible()
   await expect(page.getByRole('list', { name: 'Added skills' }).getByText('git_branches', { exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath('skills-yours.png') })
@@ -41,6 +84,9 @@ test('skills: yours switch on and off, and a new one is written and switched on'
   await mine.getByRole('switch', { name: 'triage on' }).click()
   await expect(page.getByText('triage is off')).toBeVisible()
   expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: [], deactivate: ['skill_triage'] })
+  await mine.getByRole('switch', { name: 'triage on' }).click()
+  await expect(page.getByText('triage is on')).toBeVisible()
+  expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: ['skill_triage'], deactivate: [] })
 
   await page.getByRole('button', { name: 'Remove git_branches' }).click()
   await expect(page.getByRole('list', { name: 'Added skills' })).toHaveCount(0)
@@ -50,10 +96,9 @@ test('skills: yours switch on and off, and a new one is written and switched on'
   await dialog.getByLabel('Name').fill('Release Notes')
   await dialog.getByLabel('SKILL.md').fill('# Release notes\n\nCollect the merged PRs.')
   await dialog.getByRole('button', { name: 'Save' }).click()
-  await expect(dialog.getByText(/one lowercase word/)).toBeVisible()
+  await expect(dialog.getByRole('status')).toHaveText('A name is one lowercase word: letters, digits, _ or -')
   await dialog.getByLabel('Name').fill('release-notes')
   await dialog.getByLabel('Description').fill('Write the release notes')
-  await page.screenshot({ path: info.outputPath('skills-new.png') })
   await dialog.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByText('release-notes is saved and on')).toBeVisible()
@@ -69,37 +114,16 @@ test('skills: yours switch on and off, and a new one is written and switched on'
   expect(sentTo(sent, 'DELETE', '/v1/tool/skills/triage')).toHaveLength(1)
 })
 
-test('skills: discover the catalogue, read a SKILL.md, and add one', async ({ page }, info) => {
-  const sent = await open(page, '/-/customize')
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
-  await expect(page.getByText('3 skills across 2 products')).toBeVisible()
-  await expect(page.getByLabel('git_branches is added')).toBeVisible()
-  await page.getByLabel('Search skills').fill('kms')
-  await expect(page.getByText('1 of 3 skills')).toBeVisible()
-  await page.getByLabel('Search skills').fill('')
-  await page.screenshot({ path: info.outputPath('skills-discover.png') })
-
-  await page.getByRole('button', { name: 'Add git_repos' }).click()
-  await expect(page.getByLabel('git_repos is added')).toBeVisible()
-  expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: ['skill_git_repos'], deactivate: [] })
-
-  await page.getByRole('button', { name: 'kms_secrets', exact: true }).click()
-  const dialog = page.getByRole('dialog')
-  await expect(dialog.getByText('What kms_secrets does, step by step.')).toBeVisible()
-  await dialog.getByRole('button', { name: 'Add to your skills' }).click()
-  await expect(dialog.getByRole('button', { name: 'Remove' })).toBeVisible()
-  await page.screenshot({ path: info.outputPath('skills-read.png') })
-})
-
-test('connectors: add one off the shelf, switch its tools, and remove it', async ({ page }, info) => {
+test('connectors: add one from Browse, switch it off and on from its card, switch one tool, and remove it', async ({ page }, info) => {
   const sent = await open(page, '/-/customize/connectors')
-  await expect(page.getByText('No connectors yet.', { exact: false })).toBeVisible()
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
   await expect(page.getByText('Featured', { exact: true })).toBeVisible()
-  await expect(page.getByRole('list', { name: 'Servers on the shelf' }).getByText('Package', { exact: true })).toBeVisible()
+  // One that ships only as a package says so, and has no Add.
+  const shelf = page.getByRole('list', { name: 'Servers on the shelf' })
+  await expect(shelf.getByText('io.local · Package only: needs a place to run')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add Local files' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show built-in servers' }).click()
   await expect(page.getByText('2 servers · 3 operations')).toBeVisible()
-  await page.screenshot({ path: info.outputPath('connectors-discover.png'), fullPage: true })
+  await page.screenshot({ path: info.outputPath('connectors-browse.png'), fullPage: true })
 
   await page.getByRole('button', { name: 'Stripe', exact: true }).click()
   await expect(page.getByRole('dialog').getByText('https://mcp.stripe.com · streamable-http')).toBeVisible()
@@ -113,8 +137,20 @@ test('connectors: add one off the shelf, switch its tools, and remove it', async
   expect(sentTo(sent, 'POST', '/v1/tool/mcp/servers').at(-1)?.body).toEqual({ listing: 'com.stripe_mcp', authHeader: 'Authorization', secret: 'Bearer sk_test_x' })
   expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: ['com-stripe_create_payment_link', 'com-stripe_list_customers'], deactivate: [] })
 
+  // Adding lands on Yours, where it is.
+  await expect(yours(page)).toHaveAttribute('aria-pressed', 'true')
   const mine = page.getByRole('list', { name: 'Your connectors' })
-  await expect(mine.getByText('From the shelf · secret sealed in KMS', { exact: false })).toBeVisible()
+  const card = mine.getByRole('listitem').filter({ hasText: 'Stripe' })
+  await expect(card.getByText('2 of 2 tools on · From Browse · Secret in KMS')).toBeVisible()
+  await card.getByRole('switch', { name: 'Stripe on' }).click()
+  await expect(page.getByText('Stripe is off')).toBeVisible()
+  expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: [], deactivate: ['com-stripe_create_payment_link', 'com-stripe_list_customers'] })
+  await expect(card.getByText('0 of 2 tools on · From Browse · Secret in KMS')).toBeVisible()
+  await card.getByRole('switch', { name: 'Stripe on' }).click()
+  await expect(page.getByText('Stripe is on')).toBeVisible()
+  await expect(card.getByRole('switch', { name: 'Stripe on' })).toBeChecked()
+  await page.screenshot({ path: info.outputPath('connectors-yours.png') })
+
   await mine.getByRole('button', { name: 'Stripe' }).click()
   const detail = page.getByRole('dialog', { name: 'Stripe' })
   await expect(detail.getByText('A secret is sealed in KMS and sent in Authorization.')).toBeVisible()
@@ -123,7 +159,6 @@ test('connectors: add one off the shelf, switch its tools, and remove it', async
   expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: [], deactivate: ['com-stripe_list_customers'] })
   await detail.getByRole('button', { name: 'Turn all on' }).click()
   await expect(detail.getByRole('switch', { name: 'list_customers on' })).toBeChecked()
-  await page.screenshot({ path: info.outputPath('connectors-detail.png') })
   await detail.getByRole('button', { name: 'Remove connector' }).click()
   await page.getByRole('dialog', { name: 'Delete Stripe?' }).getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByText('Stripe is removed')).toBeVisible()
@@ -132,8 +167,8 @@ test('connectors: add one off the shelf, switch its tools, and remove it', async
 
 test('connectors: add any MCP server by its URL', async ({ page }) => {
   const sent = await open(page, '/-/customize/connectors')
-  await page.getByRole('button', { name: 'Add connector' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Add connector' })
+  await page.getByRole('button', { name: 'Add by URL' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add by URL' })
   await dialog.getByLabel('Name').fill('Docs')
   await dialog.getByLabel('URL').fill('https://docs.example.com/mcp')
   await dialog.getByRole('button', { name: 'Add', exact: true }).click()
@@ -141,14 +176,19 @@ test('connectors: add any MCP server by its URL', async ({ page }) => {
   expect(sentTo(sent, 'POST', '/v1/tool/mcp/servers').at(-1)?.body).toEqual({ url: 'https://docs.example.com/mcp', name: 'Docs' })
 })
 
-test('plugins: build one, read its source, a failed build says why, and discover what is mounted', async ({ page }, info) => {
+test('plugins: what is built in, then build one, read its source, a failed build says why, and delete it', async ({ page }, info) => {
   const sent = await open(page, '/-/customize/plugins')
-  await expect(page.getByRole('list', { name: 'Your plugins' }).getByText('weather', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Build plugin' }).click()
+  await expect(page.getByRole('heading', { name: 'Build your own' })).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Mounted subsystems' }).getByText('/v1/agent')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0)
+  await page.screenshot({ path: info.outputPath('plugins-browse.png') })
+
+  await page.getByRole('button', { name: 'Build a plugin' }).click()
   let dialog = page.getByRole('dialog', { name: 'Build a plugin' })
   await dialog.getByLabel('Name').fill('acme')
   await dialog.getByLabel('Source').fill('export const acme = oops')
   await dialog.getByRole('button', { name: 'Build', exact: true }).click()
+  // The bundler's own words: a build that failed says why.
   await expect(dialog.getByText('bundle: Expected ";" but found "oops"')).toBeVisible()
   await dialog.getByRole('button', { name: 'Describe an API' }).click()
   await dialog.getByLabel('The API').fill('POST /v1/things creates a thing')
@@ -158,19 +198,17 @@ test('plugins: build one, read its source, a failed build says why, and discover
   dialog = page.getByRole('dialog', { name: 'acme' })
   await expect(dialog.getByText('// written from: POST /v1/things creates a thing')).toBeVisible()
   expect(sentTo(sent, 'POST', '/v1/tool/plugins/build').at(-1)?.body).toEqual({ name: 'acme', provider: 'acme', spec: 'POST /v1/things creates a thing' })
+  await expect(yours(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('list', { name: 'Your plugins' }).getByText('weather', { exact: true })).toBeVisible()
   await dialog.getByRole('button', { name: 'Delete plugin' }).click()
   await page.getByRole('dialog', { name: 'Delete acme?' }).getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByText('acme is deleted')).toBeVisible()
   expect(sentTo(sent, 'DELETE', '/v1/tool/plugins/authored/p1')).toHaveLength(1)
-
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
-  await expect(page.getByRole('list', { name: 'Mounted subsystems' }).getByText('/v1/agent')).toBeVisible()
-  await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0)
-  await page.screenshot({ path: info.outputPath('plugins-discover.png') })
 })
 
 test('agents: create one with a budget, change only its instructions, and delete it', async ({ page }, info) => {
   const sent = await open(page, '/-/customize/agents')
+  await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your agents' })
   await expect(mine.getByText('zen5.8 · 4 runs · 1 tool · $0.25 of $10 this month')).toBeVisible()
 
@@ -214,18 +252,18 @@ test('agents: create one with a budget, change only its instructions, and delete
 
 test('agents: a preset opens a new agent written from it', async ({ page }, info) => {
   const sent = await open(page, '/-/customize/agents')
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Start from a preset' })).toBeVisible()
   await expect(page.getByText('Product & Fashion Create', { exact: true })).toBeVisible()
   await expect(page.getByText('Studio Graph Copilot')).toHaveCount(0)
-  await page.screenshot({ path: info.outputPath('agents-discover.png') })
-  await page.getByRole('button', { name: 'Add Product & Fashion Create' }).click()
+  await page.screenshot({ path: info.outputPath('agents-browse.png') })
+  await page.getByRole('button', { name: 'Use Product & Fashion Create' }).click()
   const dialog = page.getByRole('dialog', { name: 'New agent' })
   await expect(dialog.getByLabel('Name')).toHaveValue('create')
   await expect(dialog.getByLabel('Instructions')).toHaveValue('You are Hanzo Create, a render assistant.')
   await dialog.getByRole('switch', { name: 'Every tool' }).click()
-  await dialog.getByRole('button', { name: 'Model: Default' }).click()
-  await page.getByRole('option', { name: /Zen5\.8 Coder/ }).click()
-  await expect(dialog.getByRole('button', { name: 'Model: Zen5.8 Coder' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Model: The deployment’s default' }).click()
+  await page.getByRole('option', { name: /^zen5\.8-coder/ }).click()
+  await expect(dialog.getByRole('button', { name: 'Model: zen5.8-coder' })).toBeVisible()
   await dialog.getByLabel('Budget each period').fill('5')
   await dialog.getByLabel('Budget for one run').fill('0.5')
   await dialog.getByRole('button', { name: 'Create' }).click()
@@ -234,15 +272,18 @@ test('agents: a preset opens a new agent written from it', async ({ page }, info
 })
 
 for (const tab of ['skills', 'connectors', 'plugins', 'agents']) {
-  test(`a phone gets ${tab} whole, with the cards in one column`, async ({ page }, info) => {
+  test(`a phone gets ${tab} whole, both views, with the cards in one column`, async ({ page }, info) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await open(page, tab === 'skills' ? '/-/customize' : `/-/customize/${tab}`)
     await expect(page.getByRole('tab', { selected: true })).toBeVisible()
-    for (const view of ['Yours', 'Discover']) {
-      await page.getByRole('button', { name: view, exact: true }).click()
+    for (const [name, view] of [
+      ['browse', browse],
+      ['yours', yours],
+    ] as const) {
+      await view(page).click()
       await page.waitForTimeout(300)
-      expect(await cramped(page), `${tab} ${view}`).toEqual([])
-      await page.screenshot({ path: info.outputPath(`phone-${tab}-${view.toLowerCase()}.png`), fullPage: true })
+      expect(await cramped(page), `${tab} ${name}`).toEqual([])
+      await page.screenshot({ path: info.outputPath(`phone-${tab}-${name}.png`), fullPage: true })
     }
     if (tab !== 'agents') return
     await page.getByRole('button', { name: 'New agent' }).first().click()
@@ -251,7 +292,7 @@ for (const tab of ['skills', 'connectors', 'plugins', 'agents']) {
   })
 }
 
-test('a member reads the org’s skills and connectors, and changes none of them', async ({ page }) => {
+test('a member reads the org’s skills and connectors, is told who changes them, and changes none', async ({ page }) => {
   await catalogue(page)
   await platform(page, [
     { id: 'com-stripe', org: 'acme', name: 'Stripe', url: 'https://mcp.stripe.com', authHeader: 'Authorization', hasSecret: true, listing: 'com.stripe_mcp', source: 'catalog', createdAt: 1790000200 },
@@ -261,16 +302,25 @@ test('a member reads the org’s skills and connectors, and changes none of them
   await page.addInitScript((t) => localStorage.setItem('hanzo_iam_access_token', t), member)
 
   await page.goto('/-/customize')
+  await expect(page.getByText('Only an org admin can add or change skills. You can see what is on.')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'New skill' })).toHaveCount(0)
+  await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your skills' })
   await expect(mine.getByText('triage', { exact: true })).toBeVisible()
   await expect(mine.getByRole('switch')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'New skill' })).toHaveCount(0)
 
-  await page.goto('/-/customize/connectors')
-  await expect(page.getByRole('button', { name: 'Add connector' })).toHaveCount(0)
+  await page.getByRole('tab', { name: 'Connectors' }).click()
+  await expect(page.getByRole('button', { name: 'Add by URL' })).toHaveCount(0)
+  await yours(page).click()
   await page.getByRole('list', { name: 'Your connectors' }).getByRole('button', { name: 'Stripe' }).click()
   const detail = page.getByRole('dialog', { name: 'Stripe' })
-  await expect(detail.getByText('An org admin adds, switches and removes the organization’s connectors.')).toBeVisible()
+  await expect(detail.getByText('Only an org admin can switch or remove connectors.')).toBeVisible()
   await expect(detail.getByRole('switch')).toHaveCount(0)
   await expect(detail.getByRole('button', { name: 'Remove connector' })).toHaveCount(0)
+
+  // Plugins and agents are any member's.
+  await page.keyboard.press('Escape')
+  await page.getByRole('tab', { name: 'Agents' }).click()
+  await expect(page.getByRole('button', { name: 'New agent' })).toBeVisible()
 })

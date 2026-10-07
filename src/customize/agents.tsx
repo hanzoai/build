@@ -2,12 +2,13 @@
  * Agents: the org's own — a model, instructions, the tools it may call, and
  * what it may spend.
  *
- * Yours lists them; opening one edits it in place, and only what changed is
- * sent. An agent calls only the tools it names, and only those that are on for
- * the org, so the choices are the tools that are on; "every tool" is whatever
- * the fleet's MCP server serves when it runs. A budget is required: what it may
- * spend each period, and in one run. Discover is the platform's presets whose
- * tool calls run on the platform; adding one opens a new agent written from it.
+ * Browse is the platform's presets whose tool calls run on the platform;
+ * starting from one opens a new agent written from it. Yours lists the org's
+ * agents; opening one edits it in place, and only what changed is sent. An
+ * agent calls only the tools it names, and only those that are on for the org,
+ * so the choices are the tools that are on; "every tool" is whatever the
+ * fleet's MCP server serves when it runs. A budget is required: what it may
+ * spend each period, and in one run.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Bot } from '@hanzogui/lucide-icons-2'
@@ -18,20 +19,20 @@ import { useEffect, useMemo, useState } from 'react'
 import { agents, ALL, create, draft, EMPTY, fromPreset, one, PERIODS, presets, remove, update, type Agent, type Draft, type Period, type Preset } from '../api/agents.ts'
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
-import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
-import { Add, Choice, Confirm, Field, Grid, Line, Mark, matches, mono, Sheet, Soft, Tile, Visitor, type Pane } from './ui.tsx'
-
-/** The model a new agent runs on when none is chosen: the deployment's own default. */
+import { useLoad } from './load.ts'
+import { say } from './say.ts'
+import { Add, Choice, Confirm, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
 
 const money = (m: number): string => `$${(m / 1_000_000).toFixed(m % 10_000 ? 4 : 2).replace(/\.?0+$/, '')}`
 
-export function Agents({ view, q, adding, onAdding, onView }: Pane) {
+export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
-  const mine = useRead(signed ? () => agents(t) : null, [] as Agent[], [t, signed])
-  const offered = useRead(view === 'discover' ? () => presets(t) : null, [] as Preset[], [t, view])
+  const mine = useLoad(signed ? () => agents(t) : null, [] as Agent[], [t, signed])
+  const offered = useLoad(view === 'discover' ? () => presets(t) : null, [] as Preset[], [t, view])
+  useCount(mine.value.length, onCount)
   const [opened, setOpened] = useState<Agent | null>(null)
   const [start, setStart] = useState<Draft | null>(null)
   const [note, setNote] = useState('')
@@ -74,17 +75,15 @@ export function Agents({ view, q, adding, onAdding, onView }: Pane) {
     const shown = offered.value.filter((p) => matches(q, p.id, p.title, p.prompt))
     return (
       <YStack gap="$3">
-        {offered.error && !offered.value.length ? (
-          <Soft>{offered.error.message}</Soft>
-        ) : offered.loading && !offered.value.length ? (
-          <Soft>Reading the presets…</Soft>
-        ) : !shown.length ? (
-          <Soft>{offered.value.length ? 'No preset matches.' : 'The platform offers no presets.'}</Soft>
-        ) : (
-          <>
-            <SizableText size="$1" color="$soft">
-              Presets from the platform. Adding one opens a new agent written from it, to change before it is saved.
-            </SizableText>
+        <Line>{note}</Line>
+        <Part title="Start from a preset" detail="A ready agent from Hanzo. You can change it before you save it.">
+          {offered.error && !offered.value.length ? (
+            <Failed error={offered.error} onRetry={offered.reload} />
+          ) : offered.loading && !offered.value.length ? (
+            <Soft>Loading presets…</Soft>
+          ) : !shown.length ? (
+            <Soft>{offered.value.length ? `No preset matches “${q.trim()}”.` : 'There are no presets yet. Start from a blank agent with New agent.'}</Soft>
+          ) : (
             <Grid label="Presets">
               {shown.map((p) => (
                 <Tile
@@ -93,12 +92,12 @@ export function Agents({ view, q, adding, onAdding, onView }: Pane) {
                   detail={p.prompt}
                   meta={`Preset ${p.id}`}
                   mark={<Mark name={p.title || p.id} icon={<Bot size={15} />} />}
-                  action={signed ? <Add name={p.title || p.id} added={names.has(p.id)} onPress={() => setStart(fromPreset(p))} /> : undefined}
+                  action={signed ? <Add name={p.title || p.id} label="Use" added={names.has(p.id)} onPress={() => setStart(fromPreset(p))} /> : undefined}
                 />
               ))}
             </Grid>
-          </>
-        )}
+          )}
+        </Part>
         {editor}
       </YStack>
     )
@@ -112,15 +111,20 @@ export function Agents({ view, q, adding, onAdding, onView }: Pane) {
     <YStack gap="$3">
       <Line>{note}</Line>
       {mine.error && !mine.value.length ? (
-        <Soft>{mine.error.message}</Soft>
+        <Failed error={mine.error} onRetry={mine.reload} />
       ) : mine.loading && !mine.value.length ? (
-        <Soft>Reading your agents…</Soft>
+        <Soft>Loading your agents…</Soft>
       ) : !mine.value.length ? (
-        <Soft action={<Button size="sm" variant="outline" onPress={() => onAdding(true)}>New agent</Button>}>
-          No agents yet. Give one a model, instructions and the tools it may call.
-        </Soft>
+        <Empty title="No agents yet" detail="Start from a preset, or give a new one a model, instructions and tools.">
+          <Button size="sm" variant="outline" onPress={() => onView('discover')}>
+            Browse presets
+          </Button>
+          <Button size="sm" onPress={() => onAdding(true)}>
+            New agent
+          </Button>
+        </Empty>
       ) : !shown.length ? (
-        <Soft>No agent matches.</Soft>
+        <Soft>{`No agent of yours matches “${q.trim()}”.`}</Soft>
       ) : (
         <Grid label="Your agents">
           {shown.map((a) => (
@@ -160,9 +164,9 @@ function Editor({
   onDeleted?: () => void
 }) {
   const t = useTarget()
-  const full = useRead(agent ? () => one(t, agent.id || agent.name) : null, null as Agent | null, [t, agent?.id])
-  const catalog = useRead(() => models(t), [] as Model[], [t])
-  const on = useRead(() => tools(t, { activated: true }), [] as Tool[], [t])
+  const full = useLoad(agent ? () => one(t, agent.id || agent.name) : null, null as Agent | null, [t, agent?.id])
+  const catalog = useLoad(() => models(t), [] as Model[], [t])
+  const on = useLoad(() => tools(t, { activated: true }), [] as Tool[], [t])
   const [d, setD] = useState<Draft>(start ?? EMPTY)
   const [ready, setReady] = useState(!agent)
   const [working, setWorking] = useState(false)
@@ -195,7 +199,7 @@ function Editor({
       const saved = agent && was ? await update(t, was, d) : await create(t, d)
       onSaved(saved)
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(say(e))
     } finally {
       setWorking(false)
     }
@@ -206,9 +210,9 @@ function Editor({
   return (
     <Sheet title={agent ? agent.name : 'New agent'} open onOpenChange={(o) => !o && onClose()} width={680}>
       {agent && full.error && !full.value ? (
-        <Soft>{full.error.message}</Soft>
+        <Failed error={full.error} onRetry={full.reload} />
       ) : !ready ? (
-        <Soft>Reading the agent…</Soft>
+        <Soft>Loading the agent…</Soft>
       ) : (
         <>
           <Field label="Name" hint={agent ? 'An agent keeps its name.' : 'Letters, digits, . _ or -. Other agents call it as agent_<name>.'}>
@@ -228,7 +232,7 @@ function Editor({
                 value={d.model || undefined}
                 onChange={(id) => set({ model: id })}
                 loading={catalog.loading}
-                error={catalog.error?.message ?? null}
+                error={catalog.error ? say(catalog.error) : null}
               />
               {d.model && !agent ? (
                 <Button size="sm" variant="ghost" onPress={() => set({ model: '' })}>
@@ -260,11 +264,11 @@ function Editor({
                 <Input value={find} onChangeText={setFind} placeholder="Find a tool…" aria-label="Find a tool" />
                 <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" maxH={240} overflow="scroll">
                   {on.loading && !on.value.length ? (
-                    <Soft>Reading the tools that are on…</Soft>
+                    <Soft>Loading the tools that are on…</Soft>
                   ) : on.error && !on.value.length ? (
-                    <Soft>{on.error.message}</Soft>
+                    <Failed error={on.error} onRetry={on.reload} />
                   ) : !shownTools.length ? (
-                    <Soft>{choices.length ? 'No tool matches.' : 'No tool is on for your organization. Switch skills and connectors on first.'}</Soft>
+                    <Soft>{choices.length ? 'No tool matches.' : 'No tool is on for your organization yet. Add skills or connectors first.'}</Soft>
                   ) : (
                     shownTools.map((x, i) => (
                       <XStack key={x.name} items="center" gap="$3" px="$3" py="$2" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">

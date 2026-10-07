@@ -2,29 +2,37 @@
  * What every Customize tab is drawn from, so the four read as one page: a grid
  * of cards that stacks on a phone, the card itself with its one action, the
  * featured card, a dialog with a title and a scrolling body, a delete that asks
- * first, and the quiet line for empty, loading, signed-out and refused.
+ * first, the empty state that names the next step, a failure with its retry,
+ * and the quiet line for loading and signed-out.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Check, Plus, X } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { useHost } from '../host.tsx'
+import { say } from './say.ts'
 
 export const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 /** A button that holds a card's text reads from the left, not from the middle a button centres it in. */
 export const left = { textAlign: 'left' } as const
 
-/** Which half of a tab: what the org has, or what it can add. */
-export type View = 'yours' | 'discover'
+/** Which half of a tab: what there is to browse and add (first), or what the org already has. */
+export type View = 'discover' | 'yours'
 
-/** What the shell hands a tab: which half, the search, and the Add dialog's state. */
+/** What the shell hands a tab: which half, the search, the Add dialog's state, and where to say how many are yours. */
 export interface Pane {
   view: View
   q: string
   adding: boolean
   onAdding: (open: boolean) => void
   onView: (v: View) => void
+  onCount: (n: number) => void
+}
+
+/** Tells the shell how many are yours, whenever that changes. */
+export function useCount(n: number, onCount: (n: number) => void) {
+  useEffect(() => onCount(n), [n, onCount])
 }
 
 /** Whether a row answers a search: every word of it somewhere in the row's text. */
@@ -159,18 +167,21 @@ export function Featured({ title, detail, meta, mark, action, onOpen }: { title:
   )
 }
 
-/** A card's add control: a plus while it is not yours, a check once it is. */
-export function Add({ name, added, busy, onPress }: { name: string; added: boolean; busy?: boolean; onPress: () => void }) {
+/** A card's add control: Add while it is not yours, Added once it is. */
+export function Add({ name, added, busy, onPress, label = 'Add' }: { name: string; added: boolean; busy?: boolean; onPress: () => void; label?: string }) {
   if (added) {
     return (
-      <XStack aria-label={`${name} is added`} width={32} height={32} items="center" justify="center" shrink={0}>
-        <Check size={16} />
+      <XStack aria-label={`${name} is added`} gap="$1" height={32} items="center" shrink={0}>
+        <Check size={14} />
+        <SizableText size="$1" color="$soft">
+          Added
+        </SizableText>
       </XStack>
     )
   }
   return (
-    <Button size="icon-sm" variant="outline" aria-label={`Add ${name}`} disabled={busy} onPress={onPress}>
-      <Plus size={14} />
+    <Button size="sm" variant="outline" aria-label={`${label} ${name}`} disabled={busy} onPress={onPress}>
+      <Plus size={14} /> {label}
     </Button>
   )
 }
@@ -207,7 +218,7 @@ export function Confirm({ what, says, open, onOpenChange, onYes }: { what: strin
       await onYes()
       onOpenChange(false)
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(say(e))
     } finally {
       setBusy(false)
     }
@@ -230,14 +241,49 @@ export function Confirm({ what, says, open, onOpenChange, onYes }: { what: strin
   )
 }
 
-/** The quiet line for empty, loading, signed-out and refused. */
+/** The quiet line for loading, a search that matched nothing, and signed-out. */
 export function Soft({ children, action }: { children: string; action?: ReactNode }) {
   return (
     <YStack py="$6" items="center" gap="$3">
-      <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+      <SizableText size="$2" color="$soft" text="center">
         {children}
       </SizableText>
       {action}
+    </YStack>
+  )
+}
+
+/** A read that failed: what went wrong in plain words, and the one control that asks again. */
+export function Failed({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  return (
+    <YStack py="$6" items="center" gap="$3" role="alert">
+      <SizableText size="$2" color="$soft" text="center">
+        {say(error)}
+      </SizableText>
+      <Button size="sm" variant="outline" onPress={onRetry}>
+        Try again
+      </Button>
+    </YStack>
+  )
+}
+
+/** Nothing here yet: what this place holds, and the next step, as buttons. */
+export function Empty({ title, detail, children }: { title: string; detail: string; children?: ReactNode }) {
+  return (
+    <YStack py="$8" px="$4" items="center" gap="$3" rounded="$4" borderWidth={1} borderStyle="dashed" borderColor="$borderColor">
+      <YStack items="center" gap="$1" maxW={420}>
+        <SizableText size="$4" color="$ink" text="center">
+          {title}
+        </SizableText>
+        <SizableText size="$2" color="$soft" text="center">
+          {detail}
+        </SizableText>
+      </YStack>
+      {children ? (
+        <XStack gap="$2" flexWrap="wrap" justify="center">
+          {children}
+        </XStack>
+      ) : null}
     </YStack>
   )
 }
@@ -269,17 +315,20 @@ export function Line({ children }: { children: string }) {
 }
 
 /** A small heading over a run of cards. */
-export function Part({ title, detail, children }: { title: string; detail: string; children: ReactNode }) {
+export function Part({ title, detail, action, children }: { title: string; detail: string; action?: ReactNode; children?: ReactNode }) {
   return (
-    <YStack gap="$2.5">
-      <YStack gap="$0.5">
-        <SizableText size="$3" color="$ink">
-          {title}
-        </SizableText>
-        <SizableText size="$1" color="$soft">
-          {detail}
-        </SizableText>
-      </YStack>
+    <YStack gap="$2.5" render="section" aria-label={title}>
+      <XStack items="center" gap="$3">
+        <YStack flex={1} minW={0} gap="$0.5">
+          <SizableText render="h2" size="$4" color="$ink">
+            {title}
+          </SizableText>
+          <SizableText size="$2" color="$soft">
+            {detail}
+          </SizableText>
+        </YStack>
+        {action}
+      </XStack>
       {children}
     </YStack>
   )
@@ -302,16 +351,29 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   )
 }
 
-/** Two or three choices side by side; the chosen one is filled. */
-export function Choice<T extends string>({ value, options, onChange, label }: { value: T; options: readonly { id: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+/** Two or three choices side by side; the chosen one is filled. A count, when one is given, follows its label. */
+export function Choice<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T
+  options: readonly { id: T; label: string; count?: number }[]
+  onChange: (v: T) => void
+  label: string
+}) {
   return (
-    <XStack role="group" aria-label={label} p={2} gap={2} rounded="$3" borderWidth={1} borderColor="$borderColor" self="flex-start">
+    <XStack role="group" aria-label={label} p={2} gap={2} rounded="$3" borderWidth={1} borderColor="$borderColor" self="flex-start" shrink={0}>
       {options.map((o) => (
         <XStack
           key={o.id}
           render="button"
           aria-pressed={o.id === value}
+          aria-label={o.count ? `${o.label}, ${o.count}` : o.label}
           onPress={() => onChange(o.id)}
+          items="center"
+          gap="$1.5"
           px="$3"
           py="$1"
           rounded="$2"
@@ -321,6 +383,11 @@ export function Choice<T extends string>({ value, options, onChange, label }: { 
           <SizableText size="$2" color={o.id === value ? '$ink' : '$soft'}>
             {o.label}
           </SizableText>
+          {o.count ? (
+            <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
+              {o.count}
+            </SizableText>
+          ) : null}
         </XStack>
       ))}
     </XStack>

@@ -1,13 +1,13 @@
 /**
  * Plugins: TypeScript connectors the org builds for the runtime to run.
  *
- * Yours is what the org built, each with the source that runs. Building is the
- * gate — the platform bundles and compiles the source and keeps it only if both
- * succeed, and a failure says why in the bundler's words. Describe an API
- * instead of writing the TypeScript and a model writes it; the result opens to
- * be read. A plugin carries no credential: it names the connector whose
- * credential it reads when it runs. Discover lists what this deployment mounts,
- * which is read-only.
+ * Browse offers building one, then lists what this deployment mounts, which is
+ * built in and read-only. Yours is what the org built, each with the source that
+ * runs. Building is the gate — the platform bundles and compiles the source and
+ * keeps it only if both succeed, and a failure says why in the bundler's words.
+ * Describe an API instead of writing the TypeScript and a model writes it; the
+ * result opens to be read. A plugin carries no credential: it names the
+ * connector whose credential it reads when it runs.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Puzzle } from '@hanzogui/lucide-icons-2'
@@ -16,20 +16,22 @@ import { Code } from '@hanzo/ui/chat'
 import { useState } from 'react'
 
 import { authored, build, mounted, remove, type Mount, type Plugin } from '../api/plugins.ts'
-import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
-import { Choice, Confirm, day, Field, Grid, Line, Mark, matches, mono, Sheet, Soft, Tile, Visitor, type Pane } from './ui.tsx'
+import { useLoad } from './load.ts'
+import { say } from './say.ts'
+import { Choice, Confirm, day, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
 
 const kb = (n: number): string => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`)
 
-export function Plugins({ view, q, adding, onAdding, onView }: Pane) {
+export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
-  const mine = useRead(signed && view === 'yours' ? () => authored(t) : null, [] as Plugin[], [t, signed, view])
-  const mounts = useRead(signed && view === 'discover' ? () => mounted(t) : null, [] as Mount[], [t, signed, view])
+  const mine = useLoad(signed ? () => authored(t) : null, [] as Plugin[], [t, signed])
+  const mounts = useLoad(signed && view === 'discover' ? () => mounted(t) : null, [] as Mount[], [t, signed, view])
   const [opened, setOpened] = useState<Plugin | null>(null)
   const [note, setNote] = useState('')
+  useCount(mine.value.length, onCount)
 
   const sheets = (
     <>
@@ -60,31 +62,41 @@ export function Plugins({ view, q, adding, onAdding, onView }: Pane) {
   )
 
   if (!signed) {
-    return <Visitor>{view === 'discover' ? 'Sign in to see what this deployment mounts.' : 'Sign in to see your plugins.'}</Visitor>
+    return <Visitor>{view === 'discover' ? 'Sign in to browse plugins.' : 'Sign in to see your plugins.'}</Visitor>
   }
 
   if (view === 'discover') {
     const shown = mounts.value.filter((m) => matches(q, m.name, ...m.prefixes))
     return (
-      <YStack gap="$3">
-        {mounts.error && !mounts.value.length ? (
-          <Soft>{mounts.error.message}</Soft>
-        ) : mounts.loading && !mounts.value.length ? (
-          <Soft>Reading what is mounted…</Soft>
-        ) : !shown.length ? (
-          <Soft>{mounts.value.length ? 'Nothing mounted matches.' : 'This deployment reports nothing mounted.'}</Soft>
-        ) : (
-          <>
-            <SizableText size="$1" color="$soft">
-              {shown.length} subsystems mounted in this deployment. They are part of the platform, so there is nothing to add.
-            </SizableText>
-            <Grid label="Mounted subsystems">
-              {shown.map((m) => (
-                <Tile key={m.name} title={m.name} detail={m.prefixes.join('  ')} mark={<Mark name={m.name} icon={<Puzzle size={15} />} />} />
-              ))}
-            </Grid>
-          </>
-        )}
+      <YStack gap="$6">
+        <Line>{note}</Line>
+        <Part title="Build your own" detail="Write a connector in TypeScript, or describe an API and Hanzo writes it.">
+          <XStack>
+            <Button size="sm" onPress={() => onAdding(true)}>
+              Build a plugin
+            </Button>
+          </XStack>
+        </Part>
+        <Part title="Built in" detail="Part of Hanzo. Always on, nothing to add.">
+          {mounts.error && !mounts.value.length ? (
+            <Failed error={mounts.error} onRetry={mounts.reload} />
+          ) : mounts.loading && !mounts.value.length ? (
+            <Soft>Loading built-in plugins…</Soft>
+          ) : !shown.length ? (
+            <Soft>{mounts.value.length ? `Nothing built in matches “${q.trim()}”.` : 'Nothing built in is listed.'}</Soft>
+          ) : (
+            <>
+              <SizableText size="$1" color="$soft">
+                {shown.length} built in
+              </SizableText>
+              <Grid label="Mounted subsystems">
+                {shown.map((m) => (
+                  <Tile key={m.name} title={m.name} detail={m.prefixes.join('  ')} meta={m.enabled ? 'On' : 'Off'} mark={<Mark name={m.name} icon={<Puzzle size={15} />} />} />
+                ))}
+              </Grid>
+            </>
+          )}
+        </Part>
         {sheets}
       </YStack>
     )
@@ -95,15 +107,17 @@ export function Plugins({ view, q, adding, onAdding, onView }: Pane) {
     <YStack gap="$3">
       <Line>{note}</Line>
       {mine.error && !mine.value.length ? (
-        <Soft>{mine.error.message}</Soft>
+        <Failed error={mine.error} onRetry={mine.reload} />
       ) : mine.loading && !mine.value.length ? (
-        <Soft>Reading your plugins…</Soft>
+        <Soft>Loading your plugins…</Soft>
       ) : !mine.value.length ? (
-        <Soft action={<Button size="sm" variant="outline" onPress={() => onAdding(true)}>Build a plugin</Button>}>
-          No plugins yet. Write a connector in TypeScript, or describe an API and have one written.
-        </Soft>
+        <Empty title="No plugins yet" detail="Write a connector in TypeScript, or describe an API and Hanzo writes it.">
+          <Button size="sm" onPress={() => onAdding(true)}>
+            Build a plugin
+          </Button>
+        </Empty>
       ) : !shown.length ? (
-        <Soft>No plugin matches.</Soft>
+        <Soft>{`No plugin of yours matches “${q.trim()}”.`}</Soft>
       ) : (
         <Grid label="Your plugins">
           {shown.map((p) => (
@@ -147,7 +161,7 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
       const out = await build(t, { name: name.trim(), provider, source: way === 'source' ? source : '', spec: way === 'spec' ? spec : '' })
       onBuilt(out.plugin, `${out.plugin.name} built: ${kb(out.bytes)}${out.generated ? ', written from your description — read it below' : ''}.`)
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(say(e))
     } finally {
       setWorking(false)
     }
@@ -155,10 +169,10 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
 
   return (
     <Sheet title="Build a plugin" open onOpenChange={(o) => !o && onClose()} width={680}>
-      <Field label="Name" hint="One lowercase word: letters, digits, _ or -. The runtime loads it by this name.">
+      <Field label="Name" hint="One lowercase word: letters, digits, _ or -.">
         <Input value={name} onChangeText={setName} aria-label="Name" autoCapitalize="none" />
       </Field>
-      <Field label="Connector" hint="Optional. The connector whose credential the plugin reads when it runs. A plugin never holds a key itself.">
+      <Field label="Connector" hint="Optional. The connector whose key it uses when it runs; a plugin never holds a key itself.">
         <Input value={provider} onChangeText={setProvider} aria-label="Connector" autoCapitalize="none" />
       </Field>
       <Choice label="Build from" value={way} options={WAYS} onChange={setWay} />
@@ -166,8 +180,8 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
         label={way === 'source' ? 'Source' : 'The API'}
         hint={
           way === 'source'
-            ? 'It is bundled and compiled in the runtime that will run it, and kept only if both succeed.'
-            : 'An OpenAPI document, or prose naming the endpoints. A model writes the TypeScript; you read it before it runs.'
+            ? 'Kept only if it builds. A failed build says why.'
+            : 'An OpenAPI document, or the endpoints in plain words. You read the TypeScript before it runs.'
         }
       >
         <Textarea
