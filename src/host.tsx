@@ -42,7 +42,7 @@ export interface Host {
   person: Person | null
   /** Whether the person administers `org` (its owner or an admin): they publish to main and change its money; anyone else opens a review and reads. */
   admin: boolean
-  /** The address under the mount: '' | a session id | a slug | '-/codebases' | '-/projects' | '-/issues' | '-/artifacts' | '-/templates'. */
+  /** The address under the mount, in route.ts's grammar: '' | a session id | `<org>/<repo>` | a slug | '-/projects' | '-/issues' | … */
   path: string
   /** Move under the mount. */
   go: (path: string, how?: { replace?: boolean }) => void

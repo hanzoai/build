@@ -99,18 +99,18 @@ hanzo.id token for `Host.admin`. One left column, never two.
 | `-/automations` | repeating work, read from `/v1/auto/flows` |
 | `-/customize` · `-/customize/connectors` · `/plugins` · `/agents` | Customize: skills, connectors, plugins, agents |
 | `-/mcp` | Connectors → Discover, where the fleet's native MCP servers now live |
-| `-/codebases` | the forge's repositories |
-| `-/sync` | bring granted repositories onto the forge |
-| `-/projects` | the forge's boards |
+| `-/projects` | the org's projects: its repositories on the forge |
+| `-/sync` | link repositories from GitHub onto the forge |
 | `-/issues` | the forge's issues |
 | `-/artifacts` | what the org has built |
 | `-/templates` | the public starters |
 | `-/plans` | the plans this brand sells, and the move to another |
 | `-/settings/<section>` | Billing, Usage, Members, Integrations, Notifications, … |
-| `<slug>` | a project's workspace |
+| `<org>/<repo>` | a project's workspace: the repository, and its site when it has one |
+| `<slug>` | a deployed site's workspace |
 
-A project slug holds no `_` and never starts with `-`, so the forms cannot
-collide.
+A project slug holds no `_` and never starts with `-`, and a repository is the
+one address of two segments, so the forms cannot collide.
 
 ## What is on the screen
 

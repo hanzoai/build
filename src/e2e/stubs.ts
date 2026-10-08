@@ -727,7 +727,7 @@ export async function you(page: Page, seed: Partial<World> = {}, kept: Record<st
 
 // The forge: codebases, what GitHub grants, boards and their issues, and automations.
 
-/** Codebase, Sync, Projects, Issues and Automations, each with something on it. */
+/** Projects, Sync, Issues and Automations, each with something on it. */
 export function forge(page: Page) {
   return signIn(page, ({ path }) => {
     if (path === '/v1/git/repos') {

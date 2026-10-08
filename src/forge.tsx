@@ -1,10 +1,11 @@
 /**
- * Codebases, projects and issues, read from the forge and opened in this window.
+ * Projects and issues, read from the forge and opened in this window.
  *
- * A codebase is a repository, synced from GitHub or started from a template.
- * Choosing one is choosing what the next run works on. A project is a board of
- * issues on one of those repositories, and its GitHub issues sync onto it.
- * Choosing an issue opens New with that codebase and the issue as the ask.
+ * A project is a repository, linked from GitHub or started from a template;
+ * choosing one opens its workspace, where every run works on it. Issues are
+ * the forge's, filed under a board or a repository, and a repository's GitHub
+ * issues sync onto it. Choosing an issue opens New with that repository and
+ * the issue as the ask.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import {
@@ -15,6 +16,7 @@ import {
   CircleDot,
   CircleSlash,
   ExternalLink,
+  FolderGit2,
   GitBranch,
   Github,
   GitPullRequest,
@@ -28,7 +30,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { ago } from './ago.ts'
 import { codebases, type Codebase } from './api/codebases.ts'
 import { Automations } from './automations.tsx'
-import { environments, type Environment } from './api/environment.ts'
 import { boards, closed, inProject, issues, projectOf, type Board, type Work } from './api/work.ts'
 import { boardKey, pinBoard, pinCodebase, readPending, writePending } from './choice.ts'
 import { useKept, useRead } from './data.ts'
@@ -40,41 +41,6 @@ import { Sync } from './sync.tsx'
 import { connect, connection, grants, syncIssues, type Connection } from './api/github.ts'
 import { here, useBack } from './back.ts'
 import { Out } from './out.tsx'
-
-function Head({ title, says }: { title: string; says: string }) {
-  return (
-    <YStack gap="$1" pb="$4">
-      <SizableText render="h1" size="$6" color="$ink">
-        {title}
-      </SizableText>
-      <SizableText size="$2" color="$soft">
-        {says}
-      </SizableText>
-    </YStack>
-  )
-}
-
-function Row({ label, onPress, children }: { label: string; onPress: () => void; children: ReactNode }) {
-  return (
-    <XStack
-      render="button"
-      onPress={onPress}
-      aria-label={label}
-      items="center"
-      gap="$3"
-      px="$3"
-      py="$2.5"
-      rounded="$3"
-      borderWidth={1}
-      borderColor="$borderColor"
-      bg="$panel"
-      hoverStyle={{ borderColor: '$edge', bg: '$hover' }}
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
-    >
-      {children}
-    </XStack>
-  )
-}
 
 function Note({ children }: { children: string }) {
   return (
@@ -97,7 +63,6 @@ export function Forge({ screen }: { screen: Exclude<Screen, 'artifacts' | 'templ
   if (screen === 'sync') return <Sync />
   // The fleet's native servers are Connectors → Discover now; the old address lands there.
   if (screen === 'mcp') return <Customize tab="connectors" view="discover" />
-  if (screen === 'codebases') return <Codebases />
   if (screen === 'projects') return <Projects />
   return <Issues />
 }
@@ -105,31 +70,29 @@ export function Forge({ screen }: { screen: Exclude<Screen, 'artifacts' | 'templ
 const PAGE = 25
 
 /**
- * The organization's code, which arrives one of two ways: mirrored from GitHub,
- * or started from a template. There is no blank repository here — a codebase
- * with nothing in it gives a run nothing to work on.
+ * The organization's projects: its repositories on the forge, which arrive one
+ * of two ways — linked from GitHub, or started from a template. A project is a
+ * repository; opening one opens its workspace at `<org>/<repo>`, and every run
+ * there works on that repository. There is no project without one.
  */
-function Codebases() {
+function Projects() {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<'name' | 'updated'>('name')
-  const [filter, setFilter] = useState<'all' | 'ready' | 'syncing'>('all')
+  const [sort, setSort] = useState<'name' | 'updated'>('updated')
   const [page, setPage] = useState(0)
   const [landed, setLanded] = useState(0)
   useEffect(() => {
     setPage(0)
-  }, [q, sort, filter])
+  }, [q, sort])
   const list = useRead(signed ? () => codebases(t) : null, [] as Codebase[], [t, signed, landed])
-  // Which codebases have an environment. A codebase absent here has none.
-  const envs = useRead(signed ? () => environments(t) : null, [] as Environment[], [t, signed])
-  const envOf = new Map(envs.value.map((e) => [e.repo, e.state]))
   const needle = q.trim().toLowerCase()
   const pending = readPending(host.org)
   const pendingKey = pending.map((p) => p.fullName).join('\n')
   const syncing = new Set(pending.map((p) => p.name))
 
+  // A repository asked for from GitHub is listed as syncing until the forge holds it.
   useEffect(() => {
     const waiting = readPending(host.org)
     if (!signed || waiting.length === 0) return
@@ -167,17 +130,12 @@ function Codebases() {
         }),
       ),
   ]
-    .filter((c) => {
-      if (filter === 'ready') return envOf.get(c.name) === 'ready'
-      if (filter === 'syncing') return syncing.has(c.name)
-      return true
-    })
     .filter((c) => !needle || `${c.org}/${c.name} ${c.description}`.toLowerCase().includes(needle))
     .slice()
     .sort((a, b) => {
       if (sort === 'updated') {
-        const d = Date.parse(b.updated) - Date.parse(a.updated)
-        if (Number.isFinite(d) && d !== 0) return d
+        const d = (Date.parse(b.updated) || 0) - (Date.parse(a.updated) || 0)
+        if (d !== 0) return d
       }
       return a.name.localeCompare(b.name)
     })
@@ -188,11 +146,8 @@ function Codebases() {
   const to = safePage * PAGE + slice.length
   const none = !list.loading && !list.error && list.value.length === 0 && pending.length === 0
 
-  const open = (c: Codebase) => {
-    pinCodebase(host.org, c)
-    host.go('')
-  }
-  const sync = () => host.go(path({ kind: 'screen', screen: 'sync' }))
+  const open = (c: Codebase) => host.go(path({ kind: 'repo', org: c.org || host.org || '', name: c.name }))
+  const link = () => host.go(path({ kind: 'screen', screen: 'sync' }))
   const template = () => host.go(path({ kind: 'screen', screen: 'templates' }))
 
   return (
@@ -201,56 +156,39 @@ function Codebases() {
         <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap">
           <YStack gap="$1" flex={1} minW={240}>
             <SizableText render="h1" size="$6" fontWeight="500" color="$ink">
-              {host.org || 'Forge'}
+              Projects
             </SizableText>
             <SizableText size="$2" color="$soft">
-              Sync this organization’s repositories from GitHub, or start one from a template.
+              {`${host.org ? `${host.org}’s` : 'This organization’s'} repositories on the forge. Open one to work on it.`}
             </SizableText>
           </YStack>
           <XStack gap="$2" items="center" flexWrap="wrap">
-            <XStack
-              render="button"
-              aria-label="Settings"
-              shrink={0}
-              items="center"
-              gap="$1.5"
-              px="$2"
-              py="$1"
-              rounded="$3"
-              hoverStyle={{ bg: '$hover' }}
-              onPress={() => host.go('-/settings/environments')}
-            >
-              <Settings size={14} />
-              <SizableText size="$2" color="$soft">
-                Settings
-              </SizableText>
-            </XStack>
             <Button size="sm" variant="outline" onPress={template}>
               <LayoutTemplate size={14} />
               Create from template
             </Button>
-            <Button size="sm" variant="primary" onPress={sync}>
+            <Button size="sm" variant="primary" onPress={link}>
               <Github size={14} />
-              Sync from GitHub
+              Link a GitHub repo
             </Button>
           </XStack>
         </XStack>
-        {signed ? <GitHubLink onSync={sync} /> : null}
+        {signed ? <GitHubLink onSync={link} /> : null}
         {list.error ? (
           <Note>{list.error.message}</Note>
         ) : !signed ? (
-          <Note>Sign in to see this organization's repositories.</Note>
+          <Note>Sign in to see this organization's projects.</Note>
         ) : list.loading && list.value.length === 0 && pending.length === 0 ? (
           <Note>Reading the forge…</Note>
         ) : none ? (
           <YStack gap="$3" py="$2">
-            <Note>No repositories yet.</Note>
+            <Note>No projects yet. A project is a repository: link one from GitHub, or start one from a template.</Note>
             <XStack gap="$3" flexWrap="wrap">
               <Choice
-                label="Sync from GitHub"
+                label="Link a GitHub repo"
                 icon={<Github size={20} />}
                 says="Mirror repositories you already have. They stay in step with GitHub, and their issues can come too."
-                onPress={sync}
+                onPress={link}
               />
               <Choice
                 label="Create from template"
@@ -263,26 +201,9 @@ function Codebases() {
         ) : (
           <>
             <XStack gap="$2" items="center">
-              <XStack
-                render="button"
-                aria-label="Filter repositories"
-                onPress={() => setFilter((f) => (f === 'all' ? 'ready' : f === 'ready' ? 'syncing' : 'all'))}
-                px="$2.5"
-                py="$1.5"
-                rounded="$3"
-                borderWidth={1}
-                borderColor="$borderColor"
-                shrink={0}
-                hoverStyle={{ bg: '$hover' }}
-                $max-md={{ display: 'none' }}
-              >
-                <SizableText size="$2" color="$ink">
-                  {filter === 'ready' ? 'Ready env' : filter === 'syncing' ? 'Syncing' : 'All repos'}
-                </SizableText>
-              </XStack>
               <YStack flex={1} $max-md={{ display: 'none' }} />
-              <YStack width={280} minW={0} shrink={1} $max-md={{ width: 'auto', flex: 1 }}>
-                <Input value={q} onChangeText={setQ} placeholder="Find repo…" aria-label="Find a repository" />
+              <YStack width={320} minW={0} shrink={1} $max-md={{ width: 'auto', flex: 1 }}>
+                <Input value={q} onChangeText={setQ} placeholder="Find a project…" aria-label="Find a project" />
               </YStack>
             </XStack>
             {shown.length === 0 ? (
@@ -296,20 +217,12 @@ function Codebases() {
                     </SizableText>
                     {sort === 'name' ? <ChevronDown size={12} /> : null}
                   </XStack>
-                  <SizableText size="$1" color="$soft" width={96} $max-md={{ display: 'none' }}>
-                    Environment
+                  <SizableText size="$1" color="$soft" width={120} $max-md={{ display: 'none' }}>
+                    Branch
                   </SizableText>
-                  <XStack
-                    render="button"
-                    aria-label="Sort by last updated"
-                    items="center"
-                    justify="flex-end"
-                    gap="$1"
-                    width={140}
-                    onPress={() => setSort('updated')}
-                  >
+                  <XStack render="button" aria-label="Sort by last updated" items="center" justify="flex-end" gap="$1" width={120} onPress={() => setSort('updated')}>
                     <SizableText size="$1" color="$soft">
-                      Last updated
+                      Updated
                     </SizableText>
                     {sort === 'updated' ? <ChevronDown size={12} /> : null}
                   </XStack>
@@ -318,8 +231,9 @@ function Codebases() {
                   <XStack
                     key={`${c.org}/${c.name}`}
                     render="button"
-                    aria-label={`Work on ${c.name}`}
+                    aria-label={`Open ${c.org ? `${c.org}/` : ''}${c.name}`}
                     onPress={() => open(c)}
+                    style={{ textAlign: 'left' }}
                     items="center"
                     gap="$3"
                     px="$3"
@@ -329,21 +243,31 @@ function Codebases() {
                     hoverStyle={{ bg: '$hover' }}
                     focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
                   >
-                    <GitBranch size={14} />
+                    <FolderGit2 size={15} color="$soft" />
                     <YStack flex={1} minW={0}>
-                      <SizableText size="$2" color="$ink" numberOfLines={1}>
-                        {c.name}
-                      </SizableText>
+                      <XStack minW={0} items="baseline">
+                        {c.org ? (
+                          <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
+                            {`${c.org}/`}
+                          </SizableText>
+                        ) : null}
+                        <SizableText size="$2" color="$ink" fontWeight="500" numberOfLines={1} shrink={1}>
+                          {c.name}
+                        </SizableText>
+                      </XStack>
                       {c.description ? (
                         <SizableText size="$1" color="$soft" numberOfLines={1}>
                           {c.description}
                         </SizableText>
                       ) : null}
                     </YStack>
-                    <SizableText size="$1" color="$soft" width={96} $max-md={{ display: 'none' }}>
-                      {envOf.get(c.name) === 'ready' ? 'Ready' : envOf.get(c.name) === 'proposed' ? 'To review' : '—'}
-                    </SizableText>
-                    <SizableText size="$1" color="$soft" width={140} style={{ textAlign: 'right' }}>
+                    <XStack width={120} items="center" gap="$1.5" minW={0} $max-md={{ display: 'none' }}>
+                      <GitBranch size={12} color="$soft" />
+                      <SizableText size="$1" color="$soft" numberOfLines={1}>
+                        {c.branch}
+                      </SizableText>
+                    </XStack>
+                    <SizableText size="$1" color="$soft" width={120} style={{ textAlign: 'right' }}>
                       {syncing.has(c.name) ? 'Syncing…' : ago(c.updated)}
                     </SizableText>
                   </XStack>
@@ -470,66 +394,6 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
         </Button>
       )}
     </XStack>
-  )
-}
-
-function Projects() {
-  const host = useHost()
-  const t = useTarget()
-  const signed = Boolean(host.person)
-  const list = useRead(signed ? () => boards(t) : null, [] as Board[], [t, signed])
-
-  const open = (b: Board) => {
-    pinBoard(host.org, b.key)
-    host.go(path({ kind: 'screen', screen: 'issues' }))
-  }
-
-  return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" items="center">
-      <YStack width="100%" maxW={720} gap="$3">
-        <Head title="Projects" says="Boards on the forge. A board is a repository that has work on it." />
-        {list.error ? (
-          <Note>{list.error.message}</Note>
-        ) : !signed ? (
-          <Note>Sign in to see this organization's boards.</Note>
-        ) : list.loading && list.value.length === 0 ? (
-          <Note>Reading the forge…</Note>
-        ) : list.value.length === 0 ? (
-          <YStack gap="$3" py="$2">
-            <Note>No boards yet. A repository shows up here once it has an issue.</Note>
-            <XStack gap="$2" pt="$1">
-              <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'codebases' }))}>
-                View repositories
-              </Button>
-              <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'sync' }))}>
-                Sync from GitHub
-              </Button>
-            </XStack>
-          </YStack>
-        ) : (
-          <YStack gap="$2">
-            {list.value.map((b) => (
-              <Row key={b.key} label={`Open ${b.name}`} onPress={() => open(b)}>
-                <YStack flex={1} minW={0} gap="$1">
-                  <SizableText size="$3" color="$ink" numberOfLines={1}>
-                    {b.name}
-                  </SizableText>
-                  {b.description ? (
-                    <SizableText size="$1" color="$soft" numberOfLines={1}>
-                      {b.description}
-                    </SizableText>
-                  ) : (
-                    <SizableText size="$1" color="$soft">
-                      {b.key}
-                    </SizableText>
-                  )}
-                </YStack>
-              </Row>
-            ))}
-          </YStack>
-        )}
-      </YStack>
-    </YStack>
   )
 }
 

@@ -116,14 +116,13 @@ test.describe('New', () => {
     const plan = page.getByText(/^A plan runs in the Hanzo sandbox/)
     await expect(plan).toBeVisible()
 
-    // A machine works in its own checkout, so with no codebase chosen it is said, and nothing sent.
-    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: New project')
+    // A run works on a project, so with none chosen it is said, the picker opens, and nothing is sent.
+    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Choose a project')
     await ask(page).fill('Add a footer')
     await ask(page).press('Enter')
-    await expect(page.getByText('A run on dave-laptop works in its own checkout: choose the codebase, or run it in Cloud.')).toBeVisible()
+    await expect(page.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
     expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
 
-    await chip(page, 'Repository').click()
     await list(page, 'Repository').getByRole('option', { name: `${ORG}/universe` }).click()
     await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: universe')
     await chip(page, 'Branch').click()
@@ -152,15 +151,19 @@ test.describe('New', () => {
     })
   })
 
-  test('with no codebase chosen, a run in the sandbox starts a new project from the ask', async ({ page, baseURL }) => {
+  test('with no project chosen, an ask in the sandbox opens the picker and makes no project up', async ({ page, baseURL }) => {
     const { sent } = await desk(page)
     await page.goto('/')
-    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: New project')
+    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Choose a project')
     await ask(page).fill('Build a todo app')
     await ask(page).press('Enter')
+    await expect(page.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
+    expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
+    // The draft waits, and goes once a project is chosen.
+    await list(page, 'Repository').getByRole('option', { name: `${ORG}/universe` }).click()
+    await ask(page).press('Enter')
     await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
-    // No repository and no base: the platform names the project after the ask.
-    expect(posted(sent, '/v1/agent/coding')[0]?.body).toEqual({ prompt: 'Build a todo app', mode: 'build', effort: 'medium', desktop: true })
+    expect(posted(sent, '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Build a todo app', repo: 'universe', mode: 'build' })
   })
 
   test('a run in the sandbox through the router names no model and no machine; a refusal is said and the draft stays', async ({ page, baseURL }) => {

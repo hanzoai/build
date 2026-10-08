@@ -75,9 +75,8 @@ const customize: Platform = async (page) => {
  */
 const SCREENS: Record<Screen, [Platform, RegExp]> = {
   automations: [forge, /Work that runs itself in this organization/],
-  codebases: [forge, /Create and browse this organization.s repositories/],
   sync: [forge, /Select repositories/],
-  projects: [forge, /Boards on the forge/],
+  projects: [forge, /repositories on the forge\. Open one to work on it/],
   issues: [forge, /Open work across every board/],
   artifacts: [rail, /What this organization has built/],
   templates: [rail, /Start from a working app/],

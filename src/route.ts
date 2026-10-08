@@ -8,13 +8,15 @@
  *   -/settings[/<section>]  a section of Settings
  *   -/customize[/<tab>]     skills, connectors and plugins: what the agent brings to a run
  *   -/plans                 the plans an organization can be on
- *   <slug>          a project's workspace
+ *   <org>/<repo>    a repository's workspace: a project is a repository on the forge
+ *   <slug>          a deployed site's workspace (Artifacts)
  *
  * Unambiguous by construction: a project slug is `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`,
- * so it can hold neither the `_` a session id carries nor start with `-`.
- * Anything else is not an address here and reads as the empty state.
+ * so it can hold neither the `_` a session id carries nor start with `-`, and a
+ * repository is the one address with two segments, each starting with a letter
+ * or a digit. Anything else is not an address here and reads as the empty state.
  */
-export type Screen = 'artifacts' | 'templates' | 'codebases' | 'projects' | 'issues' | 'automations' | 'sync' | 'mcp' | 'plans'
+export type Screen = 'artifacts' | 'templates' | 'projects' | 'issues' | 'automations' | 'sync' | 'mcp' | 'plans'
 
 /** Settings, one section each. Every setting the builder has lives on this page, none elsewhere. */
 export const SECTIONS = [
@@ -46,13 +48,16 @@ export type Route =
   | { kind: 'settings'; section: Section }
   | { kind: 'customize'; tab: Tab }
   | { kind: 'project'; slug: string }
+  | { kind: 'repo'; org: string; name: string }
   | { kind: 'automation'; id: string }
 
 export const SESSION = /^sess_[0-9a-f]{32}$/
 export const SLUG = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/
+/** An organization or a repository name on the forge (api/codebases.ts `NAME`). */
+export const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 /** An automation's id, or `new` for one not yet written. */
 export const AUTOMATION = /^(flow_[0-9a-f]{32}|new)$/
-const SCREENS: readonly Screen[] = ['artifacts', 'templates', 'codebases', 'projects', 'issues', 'automations', 'sync', 'mcp', 'plans']
+const SCREENS: readonly Screen[] = ['artifacts', 'templates', 'projects', 'issues', 'automations', 'sync', 'mcp', 'plans']
 
 export function route(path: string): Route {
   const p = path.replace(/^\/+|\/+$/g, '')
@@ -74,6 +79,8 @@ export function route(path: string): Route {
     return SCREENS.includes(s) ? { kind: 'screen', screen: s } : { kind: 'new' }
   }
   if (SLUG.test(p)) return { kind: 'project', slug: p }
+  const [org, name, ...rest] = p.split('/')
+  if (!rest.length && org && name && NAME.test(org) && NAME.test(name)) return { kind: 'repo', org, name }
   return { kind: 'new' }
 }
 
@@ -92,6 +99,8 @@ export function path(r: Route): string {
       return r.tab === 'skills' ? '-/customize' : `-/customize/${r.tab}`
     case 'project':
       return r.slug
+    case 'repo':
+      return `${r.org}/${r.name}`
     case 'automation':
       return `-/automations/${r.id}`
   }

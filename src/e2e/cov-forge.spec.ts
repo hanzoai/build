@@ -1,5 +1,5 @@
 /**
- * The forge's screens — Automations, Codebase, Sync, Projects and Issues —
+ * The forge's screens — Automations, Projects, Sync and Issues —
  * against a platform that keeps what it is sent, signed in as acme's admin
  * unless a test says otherwise: every control driven, every refusal said.
  *
@@ -563,12 +563,12 @@ test.describe('Automations', () => {
   })
 })
 
-test.describe('Codebase', () => {
+test.describe('Projects', () => {
   /** Twenty-seven repositories: two pages, two of them edited at the same moment. */
   const REPOS = () => {
     const list: Record<string, unknown>[] = [
       { name: 'universe', org: ORG, description: 'The cluster, declared', defaultBranch: 'main', age: 10 * MIN },
-      { name: 'site', org: ORG, description: 'hanzo.build', age: 30 * MIN },
+      { name: 'site', org: ORG, description: 'hanzo.build', defaultBranch: 'next', age: 30 * MIN },
       { name: 'alpha', org: ORG, description: '', age: 2 * 60 * MIN },
       { name: 'beta', org: ORG, description: '', age: 2 * 60 * MIN },
     ]
@@ -577,95 +577,88 @@ test.describe('Codebase', () => {
     }
     return list
   }
-  const ENVS = [
-    { repo: 'universe', state: 'ready', install: 'pnpm i', start: '', secrets: [] },
-    { repo: 'site', state: 'proposed', install: '', start: '', secrets: [], proposal: { install: 'npm ci' } },
-  ]
-  const names = (page: Page) => page.getByRole('button', { name: /^Work on / }).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')!.slice(8)))
-  const row = (page: Page, name: string) => page.getByRole('button', { name: `Work on ${name}` })
+  const names = (page: Page) => page.getByRole('button', { name: /^Open [^ ]+\// }).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')!.split('/').pop()!))
+  const row = (page: Page, name: string) => page.getByRole('button', { name: `Open ${ORG}/${name}` })
 
-  test('pages 25 at a time, sorts by name or by last updated, and shows each one’s environment', async ({ page }, info) => {
-    await forge(page, { repos: REPOS(), envs: ENVS })
-    await page.goto('/-/codebases')
+  test('lists the organization’s repositories newest first, 25 at a time, with each one’s branch and when it moved', async ({ page }, info) => {
+    await forge(page, { repos: REPOS() })
+    await page.goto('/-/projects')
+    await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible()
     await expect(page.getByText('Showing 1–25 of 27')).toBeVisible()
-    expect((await names(page)).slice(0, 3)).toEqual(['alpha', 'beta', 'repo-01'])
+    expect((await names(page)).slice(0, 6)).toEqual(['universe', 'site', 'alpha', 'beta', 'repo-01', 'repo-02'])
+    await expect(row(page, 'universe')).toContainText(`${ORG}/`)
+    await expect(row(page, 'universe')).toContainText('The cluster, declared')
+    await expect(row(page, 'universe')).toContainText('main')
+    await expect(row(page, 'universe')).toContainText('10m ago')
+    await expect(row(page, 'site')).toContainText('next')
+    await page.screenshot({ path: info.outputPath('projects.png') })
     await expect(page.getByRole('button', { name: 'Previous page' })).toBeDisabled()
     await page.getByRole('button', { name: 'Next page' }).click()
     await expect(page.getByText('Showing 26–27 of 27')).toBeVisible()
     await expect(page.getByText('2 / 2')).toBeVisible()
-    expect(await names(page)).toEqual(['site', 'universe'])
-    await expect(row(page, 'universe')).toContainText('Ready')
-    await expect(row(page, 'universe')).toContainText('10m ago')
-    await expect(row(page, 'site')).toContainText('To review')
     await expect(page.getByRole('button', { name: 'Next page' })).toBeDisabled()
     await page.getByRole('button', { name: 'Previous page' }).click()
     await expect(page.getByText('1 / 2')).toBeVisible()
-    await expect(row(page, 'alpha')).toContainText('2h ago')
-    await expect(row(page, 'alpha')).toContainText('—')
 
-    await page.getByRole('button', { name: 'Sort by last updated' }).click()
-    expect((await names(page)).slice(0, 6)).toEqual(['universe', 'site', 'alpha', 'beta', 'repo-01', 'repo-02'])
-    await page.screenshot({ path: info.outputPath('codebases.png') })
     await page.getByRole('button', { name: 'Sort by name' }).click()
-    expect((await names(page))[0]).toBe('alpha')
+    expect((await names(page)).slice(0, 3)).toEqual(['alpha', 'beta', 'repo-01'])
+    await page.getByRole('button', { name: 'Sort by last updated' }).click()
+    expect((await names(page))[0]).toBe('universe')
 
     // Finding goes back to the first page, and matches the description too.
     await page.getByRole('button', { name: 'Next page' }).click()
-    await page.getByLabel('Find a repository').fill('widget')
+    await page.getByLabel('Find a project').fill('widget')
     expect(await names(page)).toEqual(['repo-07'])
     await expect(page.getByText('Showing 1–1 of 1')).toBeVisible()
-    await page.getByLabel('Find a repository').fill('no such thing')
+    await page.getByLabel('Find a project').fill('no such thing')
     await expect(page.getByText('Nothing matches.')).toBeVisible()
   })
 
-  test('choosing one points New at it; Settings, Sync from GitHub and Create from template are this page’s own', async ({ page, baseURL }) => {
-    await forge(page, { repos: [...REPOS().slice(0, 4), { name: 'zeta', org: ORG }], envs: ENVS })
-    await page.goto('/-/codebases')
+  test('a repository opens its workspace; Link a GitHub repo and Create from template are this page’s own', async ({ page, baseURL }) => {
+    await forge(page, { repos: [...REPOS().slice(0, 4), { name: 'zeta', org: ORG }] })
+    await page.goto('/-/projects')
     // A repository the forge gave no time for.
     await expect(row(page, 'zeta')).toContainText('—')
-    await own(page, 'Settings').click()
-    await expect(page).toHaveURL(new URL('/-/settings/environments', baseURL).href)
-    await via(page, 'Codebase')
     await own(page, 'Create from template').click()
     await expect(page).toHaveURL(new URL('/-/templates', baseURL).href)
-    await via(page, 'Codebase')
-    await own(page, 'Sync from GitHub').click()
+    await via(page, 'Projects')
+    await own(page, 'Link a GitHub repo').click()
     await expect(page).toHaveURL(new URL('/-/sync', baseURL).href)
-    await page.getByRole('button', { name: 'Back to codebases' }).click()
-    // There is no blank repository: code comes from GitHub or a template.
+    await page.getByRole('button', { name: 'Back to projects' }).click()
+    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
+    // There is no project without a repository: code comes from GitHub or a template.
     await expect(own(page, 'New')).toHaveCount(0)
     await row(page, 'alpha').click()
-    await expect(page).toHaveURL(new URL('/', baseURL).href)
-    await expect(page.getByRole('button', { name: 'Repository: alpha' })).toBeVisible()
-    expect(await kept(page)).toMatchObject({ repo: { name: 'alpha', forge: true }, branch: 'main', ask: '' })
+    await expect(page).toHaveURL(new URL(`/${ORG}/alpha`, baseURL).href)
+    await expect(page.getByRole('button', { name: 'Project: alpha' })).toBeVisible()
   })
 
-  test('with nothing yet it offers the two ways in: Sync from GitHub, or Create from template', async ({ page, baseURL }, info) => {
+  test('with nothing yet it offers the two ways in: link a GitHub repo, or create from a template', async ({ page, baseURL }, info) => {
     await forge(page, { repos: [] })
-    await page.goto('/-/codebases')
-    await expect(page.getByText('No repositories yet.')).toBeVisible()
-    await expect(page.getByLabel('Find a repository')).toHaveCount(0)
-    await page.screenshot({ path: info.outputPath('codebases-empty.png') })
+    await page.goto('/-/projects')
+    await expect(page.getByText(/^No projects yet\. A project is a repository/)).toBeVisible()
+    await expect(page.getByLabel('Find a project')).toHaveCount(0)
+    await page.screenshot({ path: info.outputPath('projects-empty.png') })
     await own(page, 'Create from template').last().click()
     await expect(page).toHaveURL(new URL('/-/templates', baseURL).href)
-    await via(page, 'Codebase')
-    await page.getByRole('button', { name: 'Sync from GitHub', exact: true }).last().click()
+    await via(page, 'Projects')
+    await own(page, 'Link a GitHub repo').last().click()
     await expect(page).toHaveURL(new URL('/-/sync', baseURL).href)
   })
 
   test('the GitHub line connects, says who it is connected as, and finishes a connect GitHub sends back', async ({ page, baseURL }, info) => {
     const { sent, world } = await forge(page, { repos: REPOS().slice(0, 2), github: { configured: true, connected: false } })
-    await page.goto('/-/codebases')
+    await page.goto('/-/projects')
     await expect(page.getByText('Connect GitHub to bring your repositories here')).toBeVisible()
-    await page.screenshot({ path: info.outputPath('codebases-connect.png') })
+    await page.screenshot({ path: info.outputPath('projects-connect.png') })
     const popup = page.waitForRequest((r) => r.url().startsWith('https://github.com/'))
     await page.route('https://github.com/**', (r) => r.fulfill({ body: 'GitHub' }))
     await own(page, 'Connect GitHub').click()
     await popup
-    expect(posted(sent, '/v1/provider/github/user/connect').at(-1)?.body).toEqual({ return: new URL('/-/codebases', baseURL).href })
+    expect(posted(sent, '/v1/provider/github/user/connect').at(-1)?.body).toEqual({ return: new URL('/-/projects', baseURL).href })
 
     world.github = { configured: true, connected: true, login: 'dave' }
-    await page.goto('/-/codebases')
+    await page.goto('/-/projects')
     await expect(page.getByText('GitHub connected as @dave')).toBeVisible()
     await own(page, 'Sync repositories').click()
     await expect(page).toHaveURL(new URL('/-/sync', baseURL).href)
@@ -673,13 +666,13 @@ test.describe('Codebase', () => {
 
   test('says it is reading, and says why a read was refused', async ({ page }) => {
     const { world } = await forge(page, { repos: REPOS(), slow: { 'GET /v1/git/repos': 3000 } })
-    await page.goto('/-/codebases')
+    await page.goto('/-/projects')
     await expect(page.getByText('Reading the forge…')).toBeVisible()
     await expect(page.getByText('Showing 1–25 of 27')).toBeVisible()
     world.slow = {}
     world.down['GET /v1/git/repos'] = 'The forge did not answer'
+    await via(page, 'Artifacts')
     await via(page, 'Projects')
-    await via(page, 'Codebase')
     await expect(page.getByText('The forge did not answer')).toBeVisible()
   })
 
@@ -696,23 +689,23 @@ test.describe('Codebase', () => {
       { fullName: `${ORG}/widgets`, name: 'widgets' },
       { fullName: `${ORG}/site`, name: 'site' },
     ])
-    await page.goto('/-/codebases')
+    await page.goto('/-/projects')
     // The first look is refused: both stay as queued, the listed one once.
     await expect(row(page, 'widgets')).toContainText('Syncing…')
     await expect(row(page, 'site')).toHaveCount(1)
     await expect(row(page, 'site')).toContainText('Syncing…')
     // The next says site landed and widgets did not.
     world.down = {}
+    await via(page, 'Artifacts')
     await via(page, 'Projects')
-    await via(page, 'Codebase')
     await expect(row(page, 'site')).toContainText('30m ago')
     await expect(row(page, 'widgets')).toContainText('Syncing…')
     expect(await pending(page)).toEqual([{ fullName: `${ORG}/widgets`, name: 'widgets' }])
     // Then widgets lands, and the forge lists it.
     world.grants[0]!.imported = true
     world.repos.push({ name: 'widgets', org: ORG, age: 2 * MIN })
+    await via(page, 'Artifacts')
     await via(page, 'Projects')
-    await via(page, 'Codebase')
     await expect(row(page, 'widgets')).toContainText('2m ago')
     expect(await pending(page)).toBeNull()
   })
@@ -720,21 +713,21 @@ test.describe('Codebase', () => {
   test('a look that answers after the page is left changes nothing there', async ({ page, baseURL }) => {
     await forge(page, { grants: [{ name: 'widgets', fullName: `${ORG}/widgets`, imported: true }], slow: { 'GET /v1/provider/github/repos': 3000 } })
     await queued(page, ORG, [{ fullName: `${ORG}/widgets`, name: 'widgets' }])
-    await page.goto('/-/codebases')
+    await page.goto('/-/projects')
     await expect(row(page, 'widgets')).toContainText('Syncing…')
-    await via(page, 'Projects')
-    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
+    await via(page, 'Artifacts')
+    await expect(page).toHaveURL(new URL('/-/artifacts', baseURL).href)
     await page.waitForTimeout(3500)
     // Still queued: the answer came to a page that was gone.
     expect(await pending(page)).toHaveLength(1)
   })
 
-  test('someone in no organization sees the forge’s own name, and what they queued', async ({ page }) => {
+  test('someone in no organization sees what they queued', async ({ page }) => {
     await forge(page, { grants: [] }, { sub: 'solo/sam', name: 'Sam', email: 'sam@solo.test', orgs: [] })
     await queued(page, 'none', [{ fullName: 'sam/notes', name: 'notes' }])
-    await page.goto('/-/codebases')
-    await expect(page.getByText('Forge', { exact: true })).toBeVisible()
-    await expect(row(page, 'notes')).toContainText('Syncing…')
+    await page.goto('/-/projects')
+    await expect(page.getByText('This organization’s repositories on the forge. Open one to work on it.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open notes' })).toContainText('Syncing…')
   })
 })
 
@@ -823,9 +816,9 @@ test.describe('Sync', () => {
     await expect.poll(() => looks(sent), { timeout: 15_000 }).toBeGreaterThanOrEqual(3)
     await expect(page).toHaveURL(new URL('/-/sync', baseURL).href)
     world.grants[0]!.imported = true
-    await expect(page).toHaveURL(new URL('/-/codebases', baseURL).href, { timeout: 15_000 })
+    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href, { timeout: 15_000 })
     expect(await pending(page)).toEqual([{ fullName: `${ORG}/older`, name: 'older' }])
-    await expect(page.getByRole('button', { name: 'Work on older' })).toContainText('Syncing…')
+    await expect(page.getByRole('button', { name: `Open ${ORG}/older` })).toContainText('Syncing…')
   })
 
   test('a look that answers after Sync is left does not move the page', async ({ page, baseURL }) => {
@@ -839,11 +832,11 @@ test.describe('Sync', () => {
     await expect(page.getByRole('button', { name: 'Syncing…' })).toBeVisible()
     await expect.poll(() => looks(sent), { timeout: 10_000 }).toBe(2)
     world.grants[0]!.imported = true
-    await page.getByRole('button', { name: 'Back to codebases' }).click()
-    await via(page, 'Projects')
-    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
+    await page.getByRole('button', { name: 'Back to projects' }).click()
+    await via(page, 'Artifacts')
+    await expect(page).toHaveURL(new URL('/-/artifacts', baseURL).href)
     await page.waitForTimeout(4500)
-    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
+    await expect(page).toHaveURL(new URL('/-/artifacts', baseURL).href)
   })
 
   test('what the platform refuses is said: a queue and a GitHub connection; a granted one goes to GitHub', async ({ page, baseURL }) => {
@@ -865,8 +858,8 @@ test.describe('Sync', () => {
     await page.getByRole('button', { name: `Sync 1 repository to ${ORG}` }).click()
     await expect(page.getByText('Only an org admin brings repositories in')).toBeVisible()
     await page.getByRole('button', { name: 'Sync later' }).click()
-    await expect(page).toHaveURL(new URL('/-/codebases', baseURL).href)
-    await own(page, 'Sync from GitHub').first().click()
+    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
+    await own(page, 'Link a GitHub repo').first().click()
     await page.getByRole('button', { name: `Open ${ORG}` }).click()
     const [away] = await Promise.all([page.waitForRequest(/^https:\/\/github\.com\//), page.getByRole('button', { name: 'Grant more repositories' }).click()])
     expect(away.url()).toBe('https://github.com/apps/hanzo/installations/new?state=signed')
@@ -884,8 +877,8 @@ test.describe('Sync', () => {
   test('says it is reading, why a read failed, and when the connection holds nothing', async ({ page }) => {
     const { world } = await forge(page, { grants: [], slow: { 'GET /v1/provider/github/repos': 3000 } })
     const again = async () => {
-      await page.getByRole('button', { name: 'Back to codebases' }).click()
-      await own(page, 'Sync from GitHub').first().click()
+      await page.getByRole('button', { name: 'Back to projects' }).click()
+      await own(page, 'Link a GitHub repo').first().click()
     }
     await page.goto('/-/sync')
     await expect(page.getByText('Reading the connection…')).toBeVisible()
@@ -936,7 +929,7 @@ test.describe('Sync', () => {
   })
 })
 
-test.describe('Projects and Issues', () => {
+test.describe('Issues', () => {
   const BOARDS = [
     { id: 'p1', key: 'universe', name: 'Universe', description: 'The cluster' },
     { id: 'p2', key: 'site', name: 'Site' },
@@ -955,13 +948,10 @@ test.describe('Projects and Issues', () => {
   const build = (page: Page, label: string) => page.getByRole('button', { name: label })
   const titles = (page: Page) => page.getByRole('button', { name: /^Build / }).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')!.slice(6)))
 
-  test('a board opens its issues; every project is one press away, each with what is open on it', async ({ page, baseURL }, info) => {
+  test('a board shows its issues; every project is one press away, each with what is open on it', async ({ page, baseURL }, info) => {
     await forge(page, { boards: BOARDS, issues: ISSUES() })
-    await page.goto('/-/projects')
-    await expect(page.getByRole('button', { name: 'Open Universe' })).toContainText('The cluster')
-    await expect(page.getByRole('button', { name: 'Open Site' })).toContainText('site')
-    await page.screenshot({ path: info.outputPath('projects.png') })
-    await page.getByRole('button', { name: 'Open Site' }).click()
+    await page.goto('/-/issues')
+    await page.getByRole('button', { name: 'Show Site' }).click()
     await expect(page).toHaveURL(new URL('/-/issues', baseURL).href)
     await expect(page.getByText('Work on Site. Choosing an issue starts the next run on that codebase.')).toBeVisible()
     // Site's own, and the GitHub issue mirrored onto it.
@@ -1098,18 +1088,14 @@ test.describe('Projects and Issues', () => {
     await expect(page.getByRole('button', { name: /^Build / })).toHaveCount(6)
   })
 
-  test('each says it is reading, why a read failed, and when there is nothing', async ({ page }) => {
+  test('Issues says it is reading, why a read failed, and when there is nothing', async ({ page }) => {
     const { world } = await forge(page, { slow: { 'GET /v1/task/projects': 3000, 'GET /v1/task/board': 3000 } })
-    await page.goto('/-/projects')
-    await expect(page.getByText('Reading the forge…')).toBeVisible()
-    await expect(page.getByText('No boards yet. A repository shows up here once it has an issue.')).toBeVisible()
-    await via(page, 'Issues')
+    await page.goto('/-/issues')
     await expect(page.getByText('Reading the forge…')).toBeVisible()
     await expect(page.getByText('Nothing open.')).toBeVisible()
     world.slow = {}
     world.down = { 'GET /v1/task/projects': 'Boards are down', 'GET /v1/task/board': 'Issues are down' }
     await via(page, 'Projects')
-    await expect(page.getByText('Boards are down')).toBeVisible()
     await via(page, 'Issues')
     await expect(page.getByText('Issues are down')).toBeVisible()
   })

@@ -97,7 +97,7 @@ export async function serve(page: Page, answer: Answer): Promise<Sent[]> {
   return sent
 }
 
-const MORE = ['Codebase', 'Issues', 'Templates', 'Machines', 'Docs']
+const MORE = ['Issues', 'Templates', 'Machines', 'Docs']
 
 /** Moves to one of the rail's places, opening More when it is under it: no reload, so the page's coverage stays. */
 export async function via(page: Page, label: string) {

@@ -33,7 +33,7 @@ test.describe('the rail', () => {
     expect(top.indexOf('Automations')).toBe(top.length - 2)
     expect(top.at(-1)).toBe('More')
     await page.getByText('More', { exact: true }).click()
-    expect((await rows(page)).slice(top.length)).toEqual(['Codebase', 'Issues', 'Templates', 'Machines', 'Docs'])
+    expect((await rows(page)).slice(top.length)).toEqual(['Issues', 'Templates', 'Machines', 'Docs'])
     await page.screenshot({ path: info.outputPath('rail.png') })
     await page.getByText('Machines', { exact: true }).click()
     await expect(page).toHaveURL(/\/-\/settings\/machines$/)

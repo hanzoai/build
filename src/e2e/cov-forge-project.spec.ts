@@ -2,7 +2,8 @@
  * A project's workspace: its runs as a conversation, asking, steering and
  * stopping, verdicts, the preview and the page's own bridge, Files and Code at
  * the run's branch, Layers, the bar, the dock, history, the project switcher,
- * Share and Publish; a copy being published and one whose build failed, a run
+ * Share and Publish; a repository's workspace, with a site and without one;
+ * a copy being published and one whose build failed, a run
  * that published what it pushed and one that could not, and its pull request
  * merged — against a platform that answers each call the way a test says. One
  * document per test (cov-forge.spec.ts says why).
@@ -20,6 +21,7 @@ const UNTITLED = id('2')
 const HALTED = id('3')
 const ELSEWHERE = id('4')
 const NEXT = id('5')
+const SITED = id('6')
 const LIVE = 'https://shop.hanzo.app'
 const DEMO = 'https://synapse.hanzo.app'
 const PR = `https://git.hanzo.ai/${ORG}/shop/pulls/4`
@@ -28,6 +30,8 @@ const ev = (session: string, seq: number, kind: string, payload: unknown) => ({ 
 
 interface World extends Holds {
   projects: Record<string, unknown>[]
+  /** The org's repositories on the forge. */
+  repos: Record<string, unknown>[]
   runs: Record<string, unknown>[]
   events: Record<string, Record<string, unknown>[]>
   /** Whether the event bus takes a verdict. */
@@ -68,6 +72,12 @@ const PUSHED = (state: string, mergeable = true) => ({
   pull: { number: 4, url: PR, title: 'Add a cart', state, mergeable, reviews: [] },
 })
 
+/** The forge's repositories: shop, which the Shop site builds from, and site, which has no site yet. */
+const REPOS = () => [
+  { name: 'shop', org: ORG, defaultBranch: 'main', cloneUrl: `https://git.hanzo.ai/${ORG}/shop.git`, updatedAt: '2026-10-01T00:00:00Z' },
+  { name: 'site', org: ORG, description: 'The marketing site', defaultBranch: 'next', cloneUrl: `https://git.hanzo.ai/${ORG}/site.git`, updatedAt: '2026-09-01T00:00:00Z' },
+]
+
 const STARTERS = [{ slug: 'synapse', title: 'Synapse', category: 'Landing', source: 'https://github.com/hanzo-apps/template-synapse', demo: DEMO }]
 
 const RUNS = () => [
@@ -76,6 +86,8 @@ const RUNS = () => [
   { id: HALTED, title: 'Tidy the header', status: 'stopped', kind: 'coding', repo: `${ORG}/shop`, project: 'shop' },
   // Moved into this project, but it worked on another codebase: not shown here.
   { id: ELSEWHERE, title: 'Elsewhere', status: 'done', kind: 'coding', repo: `${ORG}/other`, project: 'shop' },
+  // On the site repository, which has no site of its own.
+  { id: SITED, title: 'Rewrite the hero', status: 'done', kind: 'coding', repo: `${ORG}/site`, branch: 'agent/hero' },
 ]
 
 const EVENTS = () => ({
@@ -113,6 +125,7 @@ const PAGE = (origin: string, title: string) => `<!doctype html><title>${title}<
 async function studio(page: Page, seed: Partial<World> = {}, who?: Who) {
   const world: World = {
     projects: PROJECTS(),
+    repos: REPOS(),
     runs: RUNS(),
     events: EVENTS(),
     accepts: true,
@@ -137,7 +150,14 @@ async function studio(page: Page, seed: Partial<World> = {}, who?: Who) {
     const q = new URLSearchParams(query)
     if (path === '/v1/projects') return { json: world.projects }
     if (path === '/v1/templates') return { json: { data: STARTERS } }
-    if (path === '/v1/agent/sessions') return { json: { sessions: world.runs.filter((r) => r.project === q.get('project')), next: '' } }
+    if (path === '/v1/agent/sessions') return { json: { sessions: world.runs.filter((r) => !q.has('project') || r.project === q.get('project')), next: '' } }
+    if (path === '/v1/git/repos') return { json: { data: world.repos } }
+    const repo = path.match(/^\/v1\/git\/repos\/([^/]+)$/)
+    if (repo) {
+      const found = world.repos.find((r) => r.name === repo[1])
+      return found ? { json: { ...found, branches: [found.defaultBranch ?? 'main'] } } : { status: 404, json: { status: 404, detail: 'repository not found' } }
+    }
+    if (path === '/v1/git/repos/site/tree') return { status: 404, json: { status: 404, detail: 'empty repository' } }
     if (path === '/v1/agent/sessions/stream') return { text: '', type: 'text/event-stream' }
     const session = path.match(/^\/v1\/agent\/sessions\/(sess_[0-9a-f]{32})(?:\/(message|stop))?$/)
     if (session?.[2]) return { json: { command: session[2] } }
@@ -459,8 +479,10 @@ test.describe('the workspace', () => {
     await page.getByRole('button', { name: 'Project: Shop' }).click()
     const projects = page.getByRole('dialog')
     await expect(projects.getByText('Projects', { exact: true })).toBeVisible()
-    await projects.getByRole('button', { name: 'Blog' }).click()
-    await expect(page).toHaveURL(new URL('/blog', baseURL).href)
+    await expect(projects.getByRole('button', { name: `Open ${ORG}/shop` })).toBeVisible()
+    await projects.getByRole('button', { name: 'All projects' }).click()
+    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
+    await page.goto('/blog')
     // Blog has no repository and nothing deployed: said, and nothing to publish.
     await expect(page.getByText('Nothing deployed yet')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Publish' })).toBeDisabled()
@@ -537,6 +559,70 @@ test.describe('the workspace', () => {
     await expect(box(page)).toBeHidden()
     await page.getByRole('tab', { name: 'Chat' }).click()
     await expect(box(page)).toBeVisible()
+  })
+})
+
+test.describe('a repository’s workspace', () => {
+  test('a repository with a site opens on that site: its runs, its preview and its files', async ({ page }) => {
+    await studio(page)
+    await page.goto(`/${ORG}/shop`)
+    await expect(page.getByRole('button', { name: 'Project: Shop' })).toBeVisible()
+    await expect(page.getByText('Added a cart to the header.')).toBeVisible()
+    // A run moved into the site from another codebase is not this repository's.
+    await expect(page.getByRole('region', { name: 'Chat' }).getByText('Elsewhere')).toHaveCount(0)
+    await expect(page.frameLocator('iframe').getByRole('heading', { name: 'Shop' })).toBeVisible()
+    await page.getByRole('tab', { name: 'Files' }).click()
+    await expect(page.getByRole('treeitem', { name: /index\.html/ })).toBeVisible()
+  })
+
+  test('a repository with no site yet works on the repository: its runs, an ask on it, Publish as a new site, and what the forge says of its files', async ({ page, baseURL }, info) => {
+    const { sent } = await studio(page)
+    await page.goto(`/${ORG}/site`)
+    await expect(page.getByRole('button', { name: 'Project: site' })).toBeVisible()
+    // Its runs are the org's on this repository.
+    await expect(page.getByText('Rewrite the hero')).toBeVisible()
+    await expect(page.getByText('Add a cart')).toHaveCount(0)
+    expect(sent.some((s) => s.path === '/v1/agent/sessions' && !new URLSearchParams(s.query).has('project'))).toBe(true)
+    await expect(page.getByText('Nothing deployed yet')).toBeVisible()
+    await page.screenshot({ path: info.outputPath('repo-workspace.png') })
+
+    await page.getByRole('tab', { name: 'Files' }).click()
+    await expect(page.getByText('Nothing to show for site at agent/hero: the forge answered “empty repository”.')).toBeVisible()
+    await page.getByRole('tab', { name: 'Preview' }).click()
+
+    await box(page).fill('Make the hero shorter')
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expect.poll(() => posted(sent, '/v1/agent/coding').length).toBe(1)
+    const asked = posted(sent, '/v1/agent/coding')[0]!.body as Record<string, unknown>
+    expect(asked).toMatchObject({ repo: 'site', base: 'next', after: SITED })
+    expect(asked.project).toBeUndefined()
+
+    await page.getByRole('button', { name: 'Publish' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByRole('textbox', { name: 'Project' })).toHaveValue('site')
+    await dialog.getByRole('button', { name: 'Add to project' }).click()
+    await expect.poll(() => posted(sent, '/v1/platform/apps').length).toBe(1)
+    expect(posted(sent, '/v1/platform/apps')[0]?.body).toMatchObject({ repo: `https://git.hanzo.ai/${ORG}/site.git`, name: 'site', partOf: 'site' })
+    await dialog.getByRole('button', { name: 'Done' }).click()
+
+    // The switcher lists the organization's repositories, and opens one.
+    await page.getByRole('button', { name: 'Project: site' }).click()
+    await expect(page.getByRole('dialog').getByRole('button', { name: `Open ${ORG}/site` })).toHaveAttribute('aria-current', 'page')
+    await page.getByRole('dialog').getByRole('button', { name: `Open ${ORG}/shop` }).click()
+    await expect(page).toHaveURL(new URL(`/${ORG}/shop`, baseURL).href)
+    await expect(page.getByRole('button', { name: 'Project: Shop' })).toBeVisible()
+  })
+
+  test('a repository the forge does not hold says so, and one of another organization offers to switch there', async ({ page, baseURL }) => {
+    await studio(page)
+    await page.goto(`/${ORG}/nope`)
+    await expect(page.getByText(`${ORG} has no repository named nope.`)).toBeVisible()
+    await page.getByRole('button', { name: 'See this organization’s projects' }).click()
+    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
+    await page.goto('/elsewhere/shop')
+    await expect(page.getByText(`elsewhere/shop is in elsewhere, and you are working in ${ORG}.`)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Switch to elsewhere' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'See this organization’s projects' })).toBeVisible()
   })
 })
 
@@ -802,12 +888,10 @@ test.describe('publishing and merging', () => {
     const { world } = await studio(page, { projects: [PROJECTS()[0]!, blog, failed], deployments: { synapse: [] } })
     await page.goto('/synapse')
     await expect(page.getByText('Its build ended without saying why.')).toBeVisible()
-    await page.getByRole('button', { name: 'Project: Synapse' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Blog' }).click()
+    await page.goto('/blog')
     await expect(page.getByText('Publishing…', { exact: true })).toBeVisible()
     world.down['GET /v1/projects/synapse/deployments'] = 'Deployments are resting'
-    await page.getByRole('button', { name: 'Project: Blog' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Synapse' }).click()
+    await page.goto('/synapse')
     await expect(page.getByText('Deployments are resting')).toBeVisible()
   })
 

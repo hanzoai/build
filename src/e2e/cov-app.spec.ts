@@ -112,9 +112,9 @@ test.describe('signing in', () => {
   test('the return lands on the address the visitor asked for', async ({ page, baseURL }) => {
     const asked = await issuer(page.context())
     await nothing(page)
-    await page.goto('/-/codebases')
+    await page.goto('/-/projects')
     await arrived(page)
-    await expect(page).toHaveURL(new URL('/-/codebases', baseURL).href)
+    await expect(page).toHaveURL(new URL('/-/projects', baseURL).href)
     expect(asked.authorize).toHaveLength(1)
     expect(asked.token[0]!.get('code')).toBe('c0de')
   })
@@ -158,7 +158,10 @@ test.describe('signing in', () => {
   })
 
   test('words sent while signed out are sent once the person is in', async ({ page }) => {
-    const sent = await serve(page, ({ path, method }) => (path === '/v1/agent/coding' && method === 'POST' ? { status: 202, json: { sessionId: SESSION, repo: '', branch: '' } } : undefined))
+    const sent = await serve(page, ({ path, method }) => (path === '/v1/agent/coding' && method === 'POST' ? { status: 202, json: { sessionId: SESSION, repo: 'shop', branch: '' } } : undefined))
+    // The project the run works on, chosen on an earlier visit.
+    const shop = { owner: ORG, name: 'shop', full_name: `${ORG}/shop`, private: true, default_branch: 'main', pushed_at: '', installation_id: 0, forge: true, clone: '' }
+    await page.addInitScript(([key, kept]) => localStorage.setItem(key, kept), [`hanzo.build.new.${ORG}`, JSON.stringify({ repo: shop, branch: 'main', place: '', mode: 'build', effort: 'medium', ask: '' })] as const)
     await mounted(page, { path: '', org: ORG, admin: true, person: null, signIn: true })
     const ask = page.getByRole('textbox', { name: 'Describe a task or ask a question' })
     await ask.fill('Add a cart to the shop')
@@ -169,7 +172,7 @@ test.describe('signing in', () => {
     // Back from signing in: the same tab, now with a person.
     await mounted(page, { path: '', org: ORG, admin: true, person: { name: 'Dave', email: 'dave@acme.test', avatar: '' } })
     await expect.poll(() => sent.filter((s) => s.method === 'POST' && s.path === '/v1/agent/coding').length).toBe(1)
-    expect((sent.find((s) => s.path === '/v1/agent/coding')!.body as { prompt: string }).prompt).toBe('Add a cart to the shop')
+    expect(sent.find((s) => s.path === '/v1/agent/coding')!.body).toMatchObject({ prompt: 'Add a cart to the shop', repo: 'shop' })
     await expect.poll(() => went(page)).toEqual([SESSION])
     // Once: a reload does not send it again.
     await page.reload()
@@ -375,7 +378,7 @@ test.describe('a host that draws its own rail', () => {
     const r = rail(page)
     await expect(r.getByText('Dev', { exact: true })).toBeVisible()
     const rows = await r.locator('[data-slot="sidebar-item"]').allInnerTexts()
-    expect(rows).toEqual(['New run', 'Automations', 'Codebase', 'Projects', 'Issues', 'Customize', 'Artifacts', 'Templates', 'The host’s own row', 'universe: Add the widget', 'Untitled run'])
+    expect(rows).toEqual(['New run', 'Automations', 'Projects', 'Issues', 'Customize', 'Artifacts', 'Templates', 'The host’s own row', 'universe: Add the widget', 'Untitled run'])
     await expect(row(page, 'universe: Add the widget').locator('[data-status]')).toHaveAttribute('data-status', 'running')
     // A status the rail has no dot for is idle.
     await expect(row(page, 'Untitled run').locator('[data-status]')).toHaveAttribute('data-status', 'idle')
@@ -426,7 +429,6 @@ test.describe('a host that draws its own rail', () => {
     await page.goto(`${HOST}?label=Dev`)
     const at = [
       ['Automations', '-/automations'],
-      ['Codebase', '-/codebases'],
       ['Projects', '-/projects'],
       ['Artifacts', '-/artifacts'],
       ['Templates', '-/templates'],
@@ -455,7 +457,7 @@ test.describe('a host that draws its own rail', () => {
     await row(page, 'New run').click()
     await expect(moves(page)).toHaveText(/\(new\)$/)
     // The host is told of every pick, so a drawer can close.
-    await expect(page.getByLabel('Picks')).toHaveText('9')
+    await expect(page.getByLabel('Picks')).toHaveText('8')
   })
 
   test('with no label of its own it lists Runs, and tells a host that asked for nothing only through go', async ({ page }) => {

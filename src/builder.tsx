@@ -4,14 +4,14 @@
  *   /            New — the empty state, a composer over the codebase it works on
  *   /sess_…      one run, live
  *   /-/automations work that runs itself; /-/automations/<id> one, to edit and run
-   /-/codebases the forge's repositories
- *   /-/sync      bring granted repositories onto the forge
- *   /-/projects  the forge's boards
+ *   /-/projects  the org's repositories on the forge: a project is a repository
+ *   /-/sync      link repositories from GitHub onto the forge
  *   /-/issues    the forge's issues
  *   /-/artifacts what this org has built
  *   /-/templates the public starters
  *   /-/customize skills, connectors, plugins and agents
- *   /<slug>      a deployed project's workspace, in this same window
+ *   /<org>/<repo> a repository's workspace, in this same window
+ *   /<slug>      a deployed site's workspace
  *
  * The rail is the sessions rail every Hanzo surface shares: New, the builder's
  * places with the rest under More, the org's coding runs newest first with a
@@ -19,15 +19,15 @@
  * whose menu opens Settings, Usage, the plans, help and logging out (foot.tsx).
  * Its collapse is an explicit toggle kept per browser.
  *
- * A project's workspace takes the whole window — it has its own chat column,
- * bar and panes — and its mark leads back here.
+ * A workspace takes the whole window — it has its own chat column, bar and
+ * panes — and its mark leads back here.
  *
  * A host with a rail of its own mounts `<Builder rail={false}>` and draws the
  * builder's places (`nav`) and runs in that rail (`useSessions`, or `DevSection`,
  * section.tsx): one left column, never two.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, Kanban, LayoutTemplate, Menu, Search, SlidersHorizontal, Workflow } from '@hanzogui/lucide-icons-2'
+import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, LayoutTemplate, Menu, Search, SlidersHorizontal, Workflow } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
@@ -182,13 +182,18 @@ export function nav(host: Host, go: (path: string) => void): { links: RailLink[]
   const r = route(host.path)
   const screen = r.kind === 'screen' ? r.screen : ''
   const links: RailLink[] = [
-    { id: 'projects', label: 'Projects', icon: <Kanban size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'projects' })), active: screen === 'projects' },
+    {
+      id: 'projects',
+      label: 'Projects',
+      icon: <FolderGit2 size={16} />,
+      onPress: () => go(path({ kind: 'screen', screen: 'projects' })),
+      active: screen === 'projects' || screen === 'sync' || r.kind === 'repo',
+    },
     { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
     { id: 'customize', label: 'Customize', icon: <SlidersHorizontal size={16} />, onPress: () => go(path({ kind: 'customize', tab: 'skills' })), active: r.kind === 'customize' || screen === 'mcp' },
     { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' || r.kind === 'automation' },
   ]
   const more: RailLink[] = [
-    { id: 'codebases', label: 'Codebase', icon: <FolderGit2 size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'codebases' })), active: screen === 'codebases' },
     {
       id: 'issues',
       label: 'Issues',
@@ -266,7 +271,8 @@ function Brand({ org, logo }: { org: string | null; logo?: string }) {
 function Screens({ rail }: { rail: boolean }) {
   const host = useHost()
   const r = route(host.path)
-  if (r.kind === 'project') return <Project key={r.slug} slug={r.slug} />
+  if (r.kind === 'project') return <Project key={r.slug} at={{ slug: r.slug }} />
+  if (r.kind === 'repo') return <Project key={`${r.org}/${r.name}`} at={{ org: r.org, name: r.name }} />
   if (!rail) return <Pane />
   return <Shell />
 }

@@ -2,6 +2,11 @@
  * A project's workspace, in the same window: the chat on the left, what it
  * built on the right.
  *
+ * A project is a repository on the forge, addressed `<org>/<repo>`; the site it
+ * publishes to, when it has one, is the org's project row on that repository
+ * (or of the same name). A deployed site with no repository on the forge is
+ * opened by its slug (Artifacts), and works the same way.
+ *
  *   bar     mark · project · history · chat toggle | Preview Files Code Layers |
  *           Share · Publish
  *   left    the project's runs as a conversation, suggestions, and the ask
@@ -73,10 +78,11 @@ import { HanzoMark } from '@hanzo/ui/product'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { read as pushed, type Pull } from './api/changes.ts'
+import { codebases, one, type Codebase } from './api/codebases.ts'
 import { start, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
 import { declare } from './api/platform.ts'
-import { deployments, name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
+import { address, deployments, name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
 import { decode, outcome, pull, said, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
@@ -86,8 +92,8 @@ import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { MODES } from './landing.tsx'
 import { Out } from './out.tsx'
-import { pane as cut } from './pane.ts'
 import { Publish, type Source } from './publish.tsx'
+import { path } from './route.ts'
 import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
 
 type ViewId = 'preview' | 'files' | 'code' | 'layers'
@@ -108,6 +114,25 @@ const CHAT_CEIL = 640
 const GUTTER = 12
 /** What the work keeps beside the chat however wide the chat was asked to be, px. */
 const WORK = 400 + 2 * GUTTER
+
+/** What a workspace is opened on: a repository on the forge, or a deployed site by its slug. */
+export type Where = { slug: string } | { org: string; name: string }
+
+/** Whether the site `p` is the repository `r`'s: built from it, or named as it is. */
+export function siteOf(p: Row, r: { org: string; name: string }): boolean {
+  const want = `${r.org}/${r.name}`.toLowerCase()
+  return (p.repo !== '' && address(p.repo).toLowerCase() === want) || p.slug === r.name.toLowerCase()
+}
+
+/** A site's slug for a repository's name: lowercase letters, digits and hyphens, at most 40. */
+export function slugOf(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '')
+}
 
 /** One run in the conversation: what was asked, and what it came to. */
 function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onOpen: () => void; project: string }) {
@@ -160,12 +185,18 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
   )
 }
 
-export function Project({ slug }: { slug: string }) {
+export function Project({ at }: { at: Where }) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
   const all = useProjects(t, signed)
-  const project: Row | null = all.value.find((p) => p.slug === slug) ?? null
+  // The repository the address names, and the forge's record of it.
+  const named = 'slug' in at ? null : at
+  const forge = useRead(named && signed ? () => one(t, named.name) : null, null as Codebase | null, [t, signed, named?.name])
+  const project: Row | null = all.value.find((p) => (named ? siteOf(p, named) : 'slug' in at && p.slug === at.slug)) ?? null
+  // The site this workspace publishes to: the project's, or the repository's name as one.
+  const slug = project?.slug ?? ('slug' in at ? at.slug : slugOf(named?.name ?? ''))
+  const title = project?.name ?? named?.name ?? slug
   // A project that has never served reads `building` while it is published, and
   // is read again until it is live or its build failed.
   const building = project?.status === 'building'
@@ -189,11 +220,14 @@ export function Project({ slug }: { slug: string }) {
   const stalled = building && ran > STALL
   // Publish again: the project's repository, built at its branch, the way Publish builds it.
   const [redo, setRedo] = useState<{ busy: boolean; error: string }>({ busy: false, error: '' })
+  // The repository's clone address: the forge's for a repository, the site's own otherwise.
+  const clone = named ? (forge.value?.clone ?? '') : (project?.repo ?? '')
+  const home = named ? (forge.value?.branch ?? 'main') : project?.branch || 'main'
   const retry = async () => {
-    if (!project?.repo || redo.busy) return
+    if (!clone || redo.busy) return
     setRedo({ busy: true, error: '' })
     try {
-      await declare(t, { repo: project.repo, ref: project.branch || 'main', name: slug, project: slug, mode: 'branch' })
+      await declare(t, { repo: clone, ref: home, name: slug, project: slug, mode: 'branch' })
       setNow(Date.now())
       again()
       setRedo({ busy: false, error: '' })
@@ -202,11 +236,18 @@ export function Project({ slug }: { slug: string }) {
     }
   }
 
-  const listed = useRead(signed ? () => list(t, { kind: 'coding', project: slug, limit: 50 }) : null, [] as Session[], [t, signed, slug])
+  // The site's runs, or the org's when the repository has no site yet.
+  const sited = !named || Boolean(project)
+  const listed = useRead(
+    signed ? () => list(t, sited ? { kind: 'coding', project: slug, limit: 50 } : { kind: 'coding', limit: 50 }) : null,
+    [] as Session[],
+    [t, signed, slug, sited],
+  )
   // Only the runs on this project's own repository: a record can be moved into
   // any project, and a run's branch is what Files, Code and Publish read.
-  const runs = { ...listed, value: listed.value.filter((r) => ours(r.repo, project?.repo ?? '')) }
-  const ordered = useMemo(() => [...runs.value].reverse(), [listed.value, project?.repo])
+  const mine = (r: Session) => (named ? ours(r.repo, `${named.org}/${named.name}`) && Boolean(r.repo) : ours(r.repo, project?.repo ?? ''))
+  const runs = { ...listed, value: listed.value.filter(mine) }
+  const ordered = useMemo(() => [...runs.value].reverse(), [listed.value, project?.repo, named?.org, named?.name])
   const [chosen, setChosen] = useState<string | null>(null)
   const current = chosen ?? runs.value[0]?.id ?? null
   const run = useRun(t, current)
@@ -225,6 +266,12 @@ export function Project({ slug }: { slug: string }) {
   // Below md the chat and the work take turns, and Chat is one more view to switch back to.
   const [pane, setPane] = useState<'chat' | 'view'>('chat')
   const wide = useMedia().md
+  // A workspace too narrow for the chat at its floor and the work at its room
+  // (a tablet beside the host's column) shows the work, and the chat when asked:
+  // never both cut. Asked here is for this visit; the kept choice is the wide one's.
+  const cramped = wide && room > 0 && room < CHAT_FLOOR + WORK
+  const [asked, setAsked] = useState(false)
+  const shut = cramped ? !asked : collapsed
   const [dock, setDock] = useKept('hanzo.build.dock', 36)
   const [dismissed, setDismissed] = useKept(`hanzo.build.hints.${slug}`, false)
   const [mode, setMode] = useKept<Mode>('hanzo.build.mode', 'build')
@@ -240,6 +287,7 @@ export function Project({ slug }: { slug: string }) {
   const [history, setHistory] = useState(false)
   const [publish, setPublish] = useState<Source | null>(null)
   const [switcher, setSwitcher] = useState(false)
+  const repos = useRead(switcher && signed ? () => codebases(t) : null, [] as Codebase[], [t, switcher, signed])
   const frame = useRef<PreviewHandle | null>(null)
 
   // What was published may be new files at the same address: the project is read
@@ -278,8 +326,8 @@ export function Project({ slug }: { slug: string }) {
   const [round, setRound] = useState(0)
 
   // Files and Code: native git, at the branch the open run pushed (or the project's own).
-  const repo = project?.repo ? repoName(project.repo) : ''
-  const ref = run.record?.branch || project?.branch || 'main'
+  const repo = named ? named.name : project?.repo ? repoName(project.repo) : ''
+  const ref = run.record?.branch || home
   const [files, setFiles] = useState<OpenFile[]>([])
   const [file, setFile] = useState<string | null>(null)
   useEffect(() => {
@@ -385,9 +433,10 @@ export function Project({ slug }: { slug: string }) {
       // A project with no repository yet sends neither, and its first run makes one.
       const next = await start(t, {
         prompt: compose(`${ask}${context}`, attached),
-        project: slug,
+        // A repository with no site yet runs on the repository alone.
+        project: project?.slug,
         repo,
-        base: project?.branch,
+        base: named ? forge.value?.branch : project?.branch,
         after: current ?? undefined,
         mode,
       })
@@ -435,24 +484,52 @@ export function Project({ slug }: { slug: string }) {
     )
   }
 
-  if (!all.loading && !project && !all.error) {
+  // A repository of another organization is opened in that one.
+  if (named && host.org && named.org.toLowerCase() !== host.org.toLowerCase()) {
+    const member = host.memberships?.some((m) => m.toLowerCase() === named.org.toLowerCase()) && host.chooseOrg
     return (
       <YStack flex={1} items="center" justify="center" gap="$3" px="$4">
-        <SizableText size="$4" color="$ink">
-          {host.org ? `${host.org} has no project named ${slug}.` : `There is no project named ${slug}.`}
+        <SizableText size="$4" color="$ink" text="center">
+          {`${named.org}/${named.name} is in ${named.org}, and you are working in ${host.org}.`}
         </SizableText>
-        <Button variant="outline" onPress={() => host.go('-/artifacts')}>
-          See what this organization has built
+        {member ? (
+          <Button variant="outline" onPress={() => host.chooseOrg?.(named.org)}>
+            {`Switch to ${named.org}`}
+          </Button>
+        ) : (
+          <Button variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'projects' }))}>
+            See this organization’s projects
+          </Button>
+        )}
+      </YStack>
+    )
+  }
+
+  if (named ? !forge.loading && !forge.value : !all.loading && !project && !all.error) {
+    return (
+      <YStack flex={1} items="center" justify="center" gap="$3" px="$4">
+        <SizableText size="$4" color="$ink" text="center">
+          {named
+            ? forge.error && !/not found|404/i.test(forge.error.message)
+              ? forge.error.message
+              : `${named.org} has no repository named ${named.name}.`
+            : host.org
+              ? `${host.org} has no project named ${slug}.`
+              : `There is no project named ${slug}.`}
+        </SizableText>
+        <Button variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: named ? 'projects' : 'artifacts' }))}>
+          {named ? 'See this organization’s projects' : 'See what this organization has built'}
         </Button>
       </YStack>
     )
   }
 
   const chat = (
-    <YStack flex={1} minH={0} position="relative">
-      <YStack flex={1} minH={0} overflow="scroll" px="$3" py="$4" gap="$4">
+    <YStack data-slot="project-chat" flex={1} minH={0} position="relative">
+      {/* Its first line sits level with the preview's toolbar beside it. */}
+      <YStack flex={1} minH={0} overflow="scroll" px="$3" pt="$2" pb="$4" gap="$4" $md={{ pr: 0 }}>
         {ordered.length === 0 ? (
-          <SizableText size="$2" color="$ink" px="$2">
+          <SizableText size="$2" color="$ink">
             {runs.loading
               ? 'Reading this project’s runs…'
               : project?.live
@@ -467,7 +544,9 @@ export function Project({ slug }: { slug: string }) {
                     ? `${project?.name} is loaded — the preview shows the ${starter.title} starter until your copy is published. Say what to change and it gets built.`
                     : project
                       ? `${project.name} is loaded and nothing is published yet. Say what to change and it gets built.`
-                      : `${slug} is loaded. Say what to change and it gets built.`}
+                      : named
+                        ? `${named.org}/${named.name} is open on ${home}. Say what to change and it gets built there.`
+                        : `${slug} is loaded. Say what to change and it gets built.`}
           </SizableText>
         ) : (
           ordered.map((r) => (
@@ -497,7 +576,8 @@ export function Project({ slug }: { slug: string }) {
           ))
         )}
       </YStack>
-      <YStack px="$3" pb="$3" gap="$2">
+      {/* The ask: flush with the column's foot, as wide as the column less its gutter, the chips above it on the same edges. */}
+      <YStack data-slot="project-ask" px="$3" pb="$3" gap="$2" minW={0} $md={{ pr: 0 }}>
         {!dismissed && !running ? <Suggestions items={SUGGESTIONS} onPick={(s) => void send(s)} onDismiss={() => setDismissed(true)} /> : null}
         {/* A run from a workspace always runs in the sandbox, so every mode is honoured there. */}
         {note ? (
@@ -512,7 +592,6 @@ export function Project({ slug }: { slug: string }) {
           </XStack>
         ) : null}
         <Composer
-          {...cut}
           value={draft}
           onChange={setDraft}
           onSend={() => void (current && running ? steer(current) : send())}
@@ -537,7 +616,7 @@ export function Project({ slug }: { slug: string }) {
         </Composer>
       </YStack>
       {/* In the gutter between the chat and the work. */}
-      {wide && !collapsed ? (
+      {wide && !shut ? (
         <Grip
           side="left"
           span={across}
@@ -576,7 +655,7 @@ export function Project({ slug }: { slug: string }) {
       <PreviewFrame
         ref={frame}
         src={src}
-        title={`${project?.name ?? slug} preview`}
+        title={`${title} preview`}
         device={device}
         onBridge={onBridge}
         empty={
@@ -601,7 +680,7 @@ export function Project({ slug }: { slug: string }) {
                     ? why
                     : 'Publish this project and its page appears here.'}
             </SizableText>
-            {(stalled || failed) && project?.repo ? (
+            {(stalled || failed) && clone ? (
               <Button variant="outline" disabled={redo.busy} onPress={() => void retry()}>
                 Publish again
               </Button>
@@ -637,7 +716,11 @@ export function Project({ slug }: { slug: string }) {
 
   const body =
     view === 'preview' ? null : view === 'files' ? (
-      repo ? (
+      repo && root.error ? (
+        <SizableText size="$2" color="$soft" p="$4" role="status">
+          {`Nothing to show for ${repo} at ${ref}: the forge answered “${root.error.message}”.`}
+        </SizableText>
+      ) : repo ? (
         <FileTree
           key={round}
           load={async (dir) => (await tree(t, repo, ref, dir)).map((e) => ({ path: e.path, kind: e.dir ? ('dir' as const) : ('file' as const) }))}
@@ -693,16 +776,16 @@ export function Project({ slug }: { slug: string }) {
             <XStack render="button" aria-label="All runs" onPress={() => host.go('')} p="$1" shrink={0}>
               <HanzoMark size={20} />
             </XStack>
-            <ProjectChip name={project?.name ?? slug} onPress={() => setSwitcher(true)} />
+            <ProjectChip name={title} onPress={() => setSwitcher(true)} />
             <XStack render="button" aria-label="History" onPress={() => setHistory(true)} p="$1.5" rounded="$3" shrink={0} hoverStyle={{ bg: '$hover' }}>
               <Clock size={16} />
             </XStack>
             {/* The chat folds away beside the work; on a phone the views switch to it instead. */}
             <XStack
               render="button"
-              aria-label={collapsed ? 'Show the chat' : 'Hide the chat'}
-              aria-pressed={!collapsed}
-              onPress={() => setCollapsed(!collapsed)}
+              aria-label={shut ? 'Show the chat' : 'Hide the chat'}
+              aria-pressed={!shut}
+              onPress={() => (cramped ? setAsked(!asked) : setCollapsed(!collapsed))}
               p="$1.5"
               rounded="$3"
               shrink={0}
@@ -715,7 +798,7 @@ export function Project({ slug }: { slug: string }) {
         }
         middle={
           <Views
-            views={[...VIEWS, CHAT]}
+            views={[CHAT, ...VIEWS]}
             value={pane === 'chat' && !wide ? 'chat' : view}
             onChange={(v) => {
               if (v === 'chat') return setPane('chat')
@@ -735,13 +818,15 @@ export function Project({ slug }: { slug: string }) {
             </XStack>
             <Button
               size="sm"
-              disabled={!project?.repo}
-              onPress={() =>
-                project &&
-                setPublish({ repo: project.repo, title: project.name, ref, name: project.slug, project: project.slug })
-              }
+              aria-label="Publish"
+              disabled={!clone || !slug}
+              onPress={() => setPublish({ repo: clone, title, ref, name: slug, project: slug })}
             >
-              <Upload size={14} /> Publish
+              <Upload size={14} />
+              {/* A glyph alone on a phone, where the bar's middle needs the room. */}
+              <SizableText size="$2" color="inherit" $max-md={{ display: 'none' }}>
+                Publish
+              </SizableText>
             </Button>
           </XStack>
         }
@@ -756,7 +841,7 @@ export function Project({ slug }: { slug: string }) {
             label="Console"
           />
         }
-        collapsed={collapsed}
+        collapsed={shut}
         pane={pane}
         width={across}
         onLayout={(e) => setRoom(e.nativeEvent.layout.width)}
@@ -767,7 +852,7 @@ export function Project({ slug }: { slug: string }) {
 
       <Dialog open={history} onOpenChange={setHistory}>
         <DialogContent maxW={480}>
-          <DialogTitle>Runs on {project?.name ?? slug}</DialogTitle>
+          <DialogTitle>Runs on {title}</DialogTitle>
           <YStack gap="$1">
             {runs.value.length === 0 ? (
               <SizableText size="$2" color="$soft">
@@ -805,26 +890,51 @@ export function Project({ slug }: { slug: string }) {
         <DialogContent maxW={420}>
           <DialogTitle>Projects</DialogTitle>
           <YStack gap="$1" maxH={420} overflow="scroll">
-            {all.value.map((p) => (
-              <XStack
-                key={p.slug}
-                render="button"
-                onPress={() => {
-                  setSwitcher(false)
-                  host.go(p.slug)
-                }}
-                px="$2"
-                py="$1.5"
-                rounded="$3"
-                bg={p.slug === slug ? '$hover' : undefined}
-                hoverStyle={{ bg: '$hover' }}
-              >
-                <SizableText size="$2" color="$ink" numberOfLines={1}>
-                  {p.name}
-                </SizableText>
-              </XStack>
-            ))}
+            {repos.error ? (
+              <SizableText size="$2" color="$soft">
+                {repos.error.message}
+              </SizableText>
+            ) : repos.loading && repos.value.length === 0 ? (
+              <SizableText size="$2" color="$soft">
+                Reading the forge…
+              </SizableText>
+            ) : (
+              repos.value.map((c) => {
+                const here = Boolean(named) && c.name === named?.name
+                return (
+                  <XStack
+                    key={`${c.org}/${c.name}`}
+                    render="button"
+                    aria-label={`Open ${c.org}/${c.name}`}
+                    aria-current={here ? 'page' : undefined}
+                    onPress={() => {
+                      setSwitcher(false)
+                      host.go(path({ kind: 'repo', org: c.org || host.org || '', name: c.name }))
+                    }}
+                    px="$2"
+                    py="$1.5"
+                    rounded="$3"
+                    bg={here ? '$hover' : undefined}
+                    hoverStyle={{ bg: '$hover' }}
+                  >
+                    <SizableText size="$2" color="$ink" numberOfLines={1}>
+                      {c.name}
+                    </SizableText>
+                  </XStack>
+                )
+              })
+            )}
           </YStack>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => {
+              setSwitcher(false)
+              host.go(path({ kind: 'screen', screen: 'projects' }))
+            }}
+          >
+            All projects
+          </Button>
         </DialogContent>
       </Dialog>
 

@@ -10,7 +10,7 @@
  * host's own `go`.
  */
 import { SizableText } from '@hanzo/gui'
-import { Blocks, CircleDot, FolderGit2, Kanban, LayoutTemplate, SlidersHorizontal, SquarePen, Workflow } from '@hanzogui/lucide-icons-2'
+import { Blocks, CircleDot, FolderGit2, LayoutTemplate, SlidersHorizontal, SquarePen, Workflow } from '@hanzogui/lucide-icons-2'
 import { SidebarItem, SidebarSection, StatusDot, type SessionStatus } from '@hanzo/ui/chat'
 import { useMemo, type ReactNode } from 'react'
 
@@ -42,7 +42,7 @@ const Note = ({ children }: { children: string }) => (
 )
 
 /**
- * New, Automations, the forge (Codebase, Projects, Issues), Artifacts, Templates, then the
+ * New, Automations, the forge (Projects, Issues), Artifacts, Templates, then the
  * runs. `children` sit between the places and the runs — where a host lists its
  * own. `onPick` fires after a move, so a host that draws its rail as a drawer
  * on a phone can close it.
@@ -73,10 +73,11 @@ export function DevSection({
       <SidebarItem icon={<Workflow size={16} aria-hidden />} active={screen === 'automations' || r.kind === 'automation'} onPress={() => go(path({ kind: 'screen', screen: 'automations' }))}>
         Automations
       </SidebarItem>
-      <SidebarItem icon={<FolderGit2 size={16} aria-hidden />} active={screen === 'codebases'} onPress={() => go(path({ kind: 'screen', screen: 'codebases' }))}>
-        Codebase
-      </SidebarItem>
-      <SidebarItem icon={<Kanban size={16} aria-hidden />} active={screen === 'projects'} onPress={() => go(path({ kind: 'screen', screen: 'projects' }))}>
+      <SidebarItem
+        icon={<FolderGit2 size={16} aria-hidden />}
+        active={screen === 'projects' || screen === 'sync' || r.kind === 'repo'}
+        onPress={() => go(path({ kind: 'screen', screen: 'projects' }))}
+      >
         Projects
       </SidebarItem>
       <SidebarItem

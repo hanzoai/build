@@ -13,7 +13,6 @@ describe('route', () => {
     [`/${ID}/`, { kind: 'run', id: ID }],
     ['-/artifacts', { kind: 'screen', screen: 'artifacts' }],
     ['-/templates', { kind: 'screen', screen: 'templates' }],
-    ['-/codebases', { kind: 'screen', screen: 'codebases' }],
     ['-/projects', { kind: 'screen', screen: 'projects' }],
     ['-/issues', { kind: 'screen', screen: 'issues' }],
     ['-/automations', { kind: 'screen', screen: 'automations' }],
@@ -29,14 +28,16 @@ describe('route', () => {
     ['-/settings/environments/', { kind: 'settings', section: 'environments' }],
     ['mega-shop', { kind: 'project', slug: 'mega-shop' }],
     ['artifacts', { kind: 'project', slug: 'artifacts' }],
+    ['hanzo/circle', { kind: 'repo', org: 'hanzo', name: 'circle' }],
+    ['/acme/Shop.web_2/', { kind: 'repo', org: 'acme', name: 'Shop.web_2' }],
   ])('%s', (p, r) => expect(route(p)).toEqual(r))
 
-  it.each(['sess_nothex', 'Mega-Shop', '-/elsewhere', '-/settings/elsewhere', '-/settings/skills', '-/customize/elsewhere', '-/automations/flow_nothex', '-/automations/../x', '-leading', 'a/b', 'x'.repeat(41), '../etc', 'javascript:alert(1)', 'https://evil.example'])(
+  it.each(['sess_nothex', 'Mega-Shop', '-/elsewhere', '-/settings/elsewhere', '-/settings/skills', '-/customize/elsewhere', '-/automations/flow_nothex', '-/automations/../x', '-leading', '-/codebases', 'a/b/c', 'a/-b', '.a/b', 'a//b', 'x'.repeat(41), `a/${'x'.repeat(65)}`, '../etc', 'javascript:alert(1)', 'https://evil.example'])(
     'reads %s as the empty state',
     (p) => expect(route(p)).toEqual({ kind: 'new' }),
   )
 
   it('inverts', () => {
-    for (const p of ['', ID, '-/artifacts', '-/codebases', '-/projects', '-/issues', '-/automations', `-/automations/${FLOW}`, '-/automations/new', '-/sync', '-/mcp', '-/settings', '-/settings/machines', '-/customize', '-/customize/plugins', '-/plans', 'mega-shop']) expect(path(route(p))).toBe(p)
+    for (const p of ['', ID, '-/artifacts', '-/projects', '-/issues', '-/automations', `-/automations/${FLOW}`, '-/automations/new', '-/sync', '-/mcp', '-/settings', '-/settings/machines', '-/customize', '-/customize/plugins', '-/plans', 'mega-shop', 'hanzo/circle']) expect(path(route(p))).toBe(p)
   })
 })

@@ -141,7 +141,7 @@ test.describe('the rail', () => {
     page.on('popup', (p) => popups.push(p.url()))
     await lapsed(page)
     await serve(page, () => ({ status: 401, json: { status: 401, detail: 'Sign in to use this.' } }))
-    await page.goto('/-/codebases')
+    await page.goto('/-/projects')
     await expect(rail(page).getByText('Sign in to see your runs.')).toBeVisible()
     await rail(page).getByRole('button', { name: 'Account: Sign in' }).click()
     await page.waitForURL((u) => u.hostname === 'hanzo.id')

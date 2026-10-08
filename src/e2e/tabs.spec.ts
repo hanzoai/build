@@ -93,7 +93,7 @@ const account = (page: Page, who: string) => page.getByRole('button', { name: `A
 
 /** Open the builder and wait for it to be drawn for `who`, marking this document. */
 async function open(page: Page, who: string): Promise<void> {
-  await page.goto('/-/codebases')
+  await page.goto('/-/projects')
   await expect(account(page, who)).toBeVisible({ timeout: 20_000 })
   // A mark only this document carries: gone means the tab reloaded.
   await page.evaluate(() => ((window as unknown as { kept: boolean }).kept = true))
@@ -119,7 +119,7 @@ test('a sign-out in another tab sends this one to hanzo.id for the sign-in form,
   const at = seen.authorize[0]!
   expect(at.searchParams.get('prompt')).toBe('login')
   expect(at.searchParams.get('redirect_uri')).toBe(new URL('/auth/callback', baseURL).href)
-  expect(await work.evaluate(() => sessionStorage.getItem('signin.destination'))).toBe('/-/codebases')
+  expect(await work.evaluate(() => sessionStorage.getItem('signin.destination'))).toBe('/-/projects')
   expect(await work.evaluate(() => localStorage.getItem('hanzo_iam_access_token'))).toBeNull()
 
   expect(seen.calls.filter((c) => c.org && !c.bearer), 'a call naming an org with nothing to vouch for it').toEqual([])

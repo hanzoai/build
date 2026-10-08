@@ -81,7 +81,7 @@ export function Sync() {
   }
 
   const back = () => {
-    host.go(path({ kind: 'screen', screen: 'codebases' }))
+    host.go(path({ kind: 'screen', screen: 'projects' }))
   }
 
   useEffect(() => {
@@ -108,9 +108,9 @@ export function Sync() {
   return (
     <YStack flex={1} minH={0} overflow="scroll">
       <XStack px="$6" pt="$5" pb="$2" gap="$2" items="center">
-        <XStack render="button" aria-label="Back to codebases" onPress={back}>
+        <XStack render="button" aria-label="Back to projects" onPress={back}>
           <SizableText size="$2" color="$soft">
-            Codebase
+            Projects
           </SizableText>
         </XStack>
         <SizableText size="$2" color="$soft">
