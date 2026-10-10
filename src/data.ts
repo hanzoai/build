@@ -53,6 +53,78 @@ export function useRead<T>(load: (() => Promise<T>) | null, initial: T, key: unk
   return { value, error, loading, reload }
 }
 
+/** How long a read is waited on before the screen says it is taking too long. */
+export const WAIT = 15_000
+
+/** A read that did not answer in time. */
+export class Slow extends Error {
+  constructor() {
+    super('Hanzo is taking too long to answer.')
+    this.name = 'Slow'
+  }
+}
+
+/** What this page last read, per key, for the life of the page. */
+const seen = new Map<string, unknown>()
+
+/**
+ * A read drawn at once from what this page last read under the same `key`, then
+ * read again behind it: stale while it revalidates, so moving between tabs is
+ * instant and a list never blanks to "reading" on the way back. A read that has
+ * not answered after `wait` ms is let go, as `Slow`. A null key reads nothing.
+ */
+export function useCached<T>(key: string | null, load: (signal: AbortSignal) => Promise<T>, initial: T, wait = WAIT): Read<T> {
+  const [value, setValue] = useState<T>(() => (key !== null && seen.has(key) ? (seen.get(key) as T) : initial))
+  const [error, setError] = useState<Error | null>(null)
+  const [loading, setLoading] = useState(key !== null)
+  const [tick, setTick] = useState(0)
+  const reload = useCallback(() => setTick((n) => n + 1), [])
+  const loader = useRef(load)
+  loader.current = load
+  const was = useRef(key)
+  useEffect(() => {
+    // Another key (another org, another search) never shows the last one's answer or failure.
+    if (was.current !== key) {
+      was.current = key
+      setValue(key !== null && seen.has(key) ? (seen.get(key) as T) : initial)
+      setError(null)
+    }
+    if (key === null) {
+      setLoading(false)
+      return
+    }
+    const ctl = new AbortController()
+    const timer = setTimeout(() => {
+      ctl.abort()
+      setError(new Slow())
+      setLoading(false)
+    }, wait)
+    setLoading(true)
+    loader
+      .current(ctl.signal)
+      .then((v) => {
+        if (ctl.signal.aborted) return
+        seen.set(key, v)
+        setValue(v)
+        setError(null)
+        setLoading(false)
+      })
+      .catch((e: unknown) => {
+        if (ctl.signal.aborted) return
+        setError(e as Error)
+        setLoading(false)
+      })
+      .finally(() => clearTimeout(timer))
+    return () => {
+      clearTimeout(timer)
+      ctl.abort()
+    }
+    // `initial` is the empty value, read only when the key changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, tick, wait])
+  return { value, error, loading, reload }
+}
+
 /**
  * The org's coding runs, newest first, kept current by the org's own session
  * stream: a status that moves moves its dot, and a run started anywhere appears.

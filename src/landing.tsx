@@ -24,13 +24,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { start, unhonoured, type Mode } from './api/coding.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
 import { repos as githubRepos } from './api/github.ts'
-import { read, SETUP, type Environment } from './api/environment.ts'
+import { plain, read, SETUP, unset, type Environment } from './api/environment.ts'
+import { homes as readHomes, type Home, type Homes } from './api/work.ts'
 import { SetupDialog } from './environment.tsx'
-import { ENSO, limits as readLimits, models } from './api/models.ts'
-import { usePick } from './pick.ts'
+import { ENSO, limits as readLimits } from './api/models.ts'
+import { useCatalog, usePick } from './pick.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
-import { asHub, isForge, isHub, type HubRepo } from './choice.ts'
-import { useKept, usePlaces, useRead } from './data.ts'
+import { asHub, isForge, isHub, settle, type HubRepo } from './choice.ts'
+import { useCached, useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { pane } from './pane.ts'
 import { usePrefs } from './prefs.tsx'
@@ -59,9 +60,14 @@ interface Kept {
   model: string
   effort: string
   ask: string
+  /** The issue the handed-over words are, by the number the run's pull request closes; 0 for none. */
+  issue: number
 }
 
-const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', model: ENSO, effort: 'medium', ask: '' }
+/** The org's repositories before they have been read: no answer, so nothing is judged from it. */
+const NOHOMES: Homes = { homes: [], whole: false }
+
+const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', model: ENSO, effort: 'medium', ask: '', issue: 0 }
 
 const COLUMN = 768
 
@@ -114,13 +120,17 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const t = useTarget()
   const signed = Boolean(host.person)
   const { prefs } = usePrefs()
-  const [stored, keep] = useKept<Kept | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
-  // Nothing chosen here yet: start from the person's coding defaults (Settings → Code).
-  const kept: Kept = stored ?? { ...FIRST, ...prefs.code }
+  const [stored, keep] = useKept<Partial<Kept> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
+  // What was chosen here, over the person's coding defaults (Settings → Code), over
+  // the first run's. Field by field: a codebase or an issue handed over from its own
+  // screen keeps only the codebase and the words, and the rest still has a value.
+  const kept = settle(FIRST, prefs.code, stored)
   const set = (patch: Partial<Kept>) => keep({ ...kept, ...patch })
 
   const [was] = useState(unsent)
   const [draft, setDraft] = useState(kept.ask || was.draft)
+  // The issue handed over with the words, while the run is still on its repository.
+  const [issue, setIssue] = useState(kept.ask ? kept.issue : 0)
   const [files, setFiles] = useState<Attached[]>(was.files)
   useEffect(() => hold({ draft, files }), [draft, files])
   const [busy, setBusy] = useState(false)
@@ -134,18 +144,27 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   // A codebase or an issue hands its words over once. Left in the kept choice,
   // every later visit to New would put them back.
   useEffect(() => {
-    if (kept.ask) set({ ask: '' })
+    if (kept.ask || kept.issue) set({ ask: '', issue: 0 })
     // The handover is read on this mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const places = usePlaces(t, signed)
-  const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
+  const catalog = useCatalog(t, signed)
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
-  const [model, pickModel] = usePick(kept.model, (id) => set({ model: id }), catalog.value)
+  const [model, pickModel] = usePick(kept.model, (id) => set({ model: id }), catalog.list)
   // The chosen codebase's environment, so New can say when it has none yet.
   const codebase = isForge(kept.repo) ? kept.repo.name : ''
-  const env = useRead(signed && codebase ? () => read(t, codebase) : null, null as Environment | null, [t, signed, codebase])
+  // The org's repositories on the forge: what a run and an environment can name.
+  const homes = useCached<Homes>(signed ? `${host.org}:homes` : null, (signal) => readHomes(t, signal), NOHOMES)
+  // A kept codebase the org's whole list does not hold — a board's key once handed over as one — is not offered as one.
+  const stranger =
+    codebase !== '' && homes.value.whole && !homes.value.homes.some((h) => h.name.toLowerCase() === codebase.toLowerCase())
+  // Read once the list has answered (or failed), so a name that is not the org's is never asked for.
+  const settled = homes.value !== NOHOMES || homes.error !== null
+  const found = useRead(signed && codebase && settled && !stranger ? () => read(t, codebase) : null, null as Environment | null, [t, signed, codebase, settled, stranger])
+  // A read kept from the codebase before is not this one's.
+  const env = { ...found, value: found.value && found.value.repo === codebase && !stranger ? found.value : null }
   const place: Place = places.value.find((p) => p.id === kept.place) ?? SANDBOX
 
   const known = useRef(new Map<string, ForgeRepo>())
@@ -171,9 +190,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const home = kept.repo?.default_branch || 'main'
   const loadBranches = useCallback(
     async (q: string) => {
-      const found = await one(t, codebase)
+      const got = await one(t, codebase)
       const needle = q.trim().toLowerCase()
-      const names = (found?.branches ?? [home]).filter((b) => !needle || b.toLowerCase().includes(needle))
+      const names = (got?.branches ?? [home]).filter((b) => !needle || b.toLowerCase().includes(needle))
       return { branches: names.map((name) => ({ name })), next: null }
     },
     [t, codebase, home],
@@ -193,6 +212,17 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       setPicking(true)
       return
     }
+    // A plan or a setup routed to a machine is refused here, in its own words, before it leaves the page.
+    const why = unhonoured(kept.mode, place.id)
+    if (why) {
+      setNote(why)
+      return
+    }
+    if (stranger) {
+      setNote(`${codebase} is not one of this organization’s repositories. Choose one, or leave it empty to start a new project.`)
+      setPicking(true)
+      return
+    }
     setBusy(true)
     setNote('')
     try {
@@ -204,14 +234,16 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         base: repo ? kept.branch : hub ? kept.branch || hub.default_branch : undefined,
         targetId: place.id,
         mode: kept.mode,
-        model: model === ENSO ? undefined : model,
+        model,
         effort: kept.effort,
+        issue,
       })
       setDraft('')
       setFiles([])
+      setIssue(0)
       onStarted(run.session)
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(plain(e, repo?.name ?? hub?.full_name ?? 'a new project', 'run'))
     } finally {
       setBusy(false)
     }
@@ -227,10 +259,17 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signed])
 
-  /** Start the agent that finds this codebase's environment, and open it. A refusal is the dialog's to say. */
-  const setup = async () => {
-    const run = await start(t, { prompt: SETUP, repo: codebase, mode: 'setup' })
+  /** Start the agent that finds a codebase's environment, and open it: its run is the progress. A refusal is the dialog's to say. */
+  const setup = async (repo: string) => {
+    const run = await start(t, { prompt: SETUP, repo, mode: 'setup', model, effort: kept.effort })
     onStarted(run.session)
+  }
+
+  /** The codebase a dialog chose, chosen here too. */
+  const choose = (h: Home) => {
+    const row = chosen({ owner: h.label.split('/')[0] ?? '', name: h.name, full_name: h.label, default_branch: h.branch })
+    setIssue(0)
+    set({ repo: row, branch: row.default_branch })
   }
 
   // Cloud is the sandbox, set up by the chosen codebase's environment.
@@ -240,7 +279,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         ? `${codebase} environment`
         : env.value.state === 'proposed'
           ? `${codebase} environment proposed`
-          : `no ${codebase} environment yet`
+          : unset(env.value)
+            ? `no ${codebase} environment yet`
+            : `${codebase} environment, empty`
       : ''
   const placeItems = useMemo(
     () =>
@@ -290,6 +331,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         value={isForge(kept.repo) || isHub(kept.repo) ? kept.repo : null}
         onChange={(r) => {
           const hub = (r as { github?: boolean }).github ? hubs.current.get((r.full_name ?? "").toLowerCase()) : undefined
+          setIssue(0)
           if (hub) {
             set({ repo: hub, branch: hub.default_branch })
             return
@@ -347,13 +389,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         quiet
         size="sm"
         name="Model"
-        models={catalog.value}
+        models={catalog.shown}
         scope="chat"
         limits={limits}
         value={model}
         onChange={pickModel}
         loading={catalog.loading}
-        error={catalog.error?.message ?? null}
+        error={catalog.error}
       />
       <ChipSelect
         quiet
@@ -380,7 +422,16 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           </SizableText>
         </XStack>
         <YStack gap="$2">
-          {env.value && env.value.state !== 'ready' && !place.id ? (
+          {stranger ? (
+            <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" role="alert">
+              <SizableText size="$2" color="$ink" flex={1} minW={0}>
+                {`${codebase} is not one of this organization’s repositories.`}
+              </SizableText>
+              <Button size="sm" variant="outline" onPress={() => setPicking(true)}>
+                Choose a repository
+              </Button>
+            </XStack>
+          ) : env.value && (env.value.state === 'proposed' || unset(env.value)) && !place.id ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
               <SizableText size="$2" color="$ink" flex={1} minW={0}>
                 {env.value.state === 'proposed'
@@ -398,9 +449,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
               )}
             </XStack>
           ) : null}
-          {note || unhonoured(kept.mode, place.id) ? (
+          {note || unhonoured(kept.mode, place.id) || catalog.note ? (
             <SizableText size="$1" color="$soft" role="status">
-              {note || unhonoured(kept.mode, place.id)}
+              {note || unhonoured(kept.mode, place.id) || catalog.note}
             </SizableText>
           ) : null}
           <Composer
@@ -421,9 +472,11 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       {codebase ? (
         <SetupDialog
           repo={codebase}
+          homes={homes}
           open={offering}
           onOpenChange={setOffering}
           onStart={setup}
+          onRepo={choose}
           onSaved={() => {
             setOffering(false)
             env.reload()

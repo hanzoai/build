@@ -11,7 +11,10 @@ import { Check, ChevronLeft, ChevronRight, Plus, X } from '@hanzogui/lucide-icon
 import { Button, Input } from '@hanzo/ui'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { accounts, bring, connect, grants, type Grant, type Grants } from './api/github.ts'
+import { here, useBack } from './back.ts'
+import { Refusal } from './api/call.ts'
+import { accounts, bring, grants, type Grant, type Grants } from './api/github.ts'
+import { authorize } from './api/provider.ts'
 import { readPending, writePending, type Pending } from './choice.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
@@ -52,13 +55,24 @@ export function Sync() {
     setPicked((cur) => (all ? cur.filter((n) => !names.includes(n)) : [...new Set([...cur, ...names])]))
   }
 
+  // Coming back from GitHub's App install lands here, says what happened, and reads the list again.
+  useBack(t, signed, setError, list.reload)
+
+  /**
+   * Install the platform's GitHub App on another account — an organization admin's
+   * act — and come back to this page: the App, not a person's own sign-in, is what
+   * grants an organization's repositories.
+   */
   const addOrg = async () => {
     setError('')
+    if (!host.admin) {
+      setError('An organization admin installs the GitHub App on another account.')
+      return
+    }
     try {
-      const url = await connect(t)
-      host.open(url)
+      host.open(await authorize(t, 'github', here()))
     } catch (e) {
-      setError((e as Error).message)
+      setError(e instanceof Refusal && e.status === 403 ? 'An organization admin installs the GitHub App on another account.' : 'GitHub could not be reached to install the App. Try again.')
     }
   }
 
@@ -66,10 +80,11 @@ export function Sync() {
     setBusy(true)
     setError('')
     try {
-      await bring(t, picked)
+      const queued = await bring(t, picked)
+      // Each waits under the name it takes on the forge, as the import says it, else as GitHub's listing says it will.
       const next: Pending[] = [
         ...readPending(host.org).filter((p) => !picked.includes(p.fullName)),
-        ...chosen.map((r) => ({ fullName: r.fullName, name: r.name })),
+        ...chosen.map((r) => ({ fullName: r.fullName, name: queued.codebases[r.fullName.toLowerCase()] || r.codebase || r.name })),
       ]
       writePending(host.org, next)
       setSyncing(true)
@@ -143,7 +158,7 @@ export function Sync() {
                     {`${orgs.length} ${orgs.length === 1 ? 'organization' : 'organizations'}`}
                   </SizableText>
                 ) : null}
-                {list.error ? <Soft>{list.error.message}</Soft> : null}
+                {list.error ? <Soft>The GitHub connection could not be read right now.</Soft> : null}
                 {!signed ? (
                   <Soft>Sign in to choose repositories the GitHub connection can read.</Soft>
                 ) : list.loading && rows.length === 0 && orgs.length === 0 ? (
@@ -366,9 +381,9 @@ function RepoRow({ repo, on, onPress }: { repo: Grant; on: boolean; onPress: () 
       <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
         {repo.name}
       </SizableText>
-      {repo.imported ? (
+      {repo.imported || repo.status === 'pending' ? (
         <SizableText size="$1" color="$soft">
-          On Forge
+          {repo.imported ? (repo.status === 'conflict' ? 'On Forge · diverged' : 'On Forge') : 'Syncing…'}
         </SizableText>
       ) : null}
     </XStack>

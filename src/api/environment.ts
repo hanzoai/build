@@ -14,7 +14,7 @@
  * here as `proposal` until someone saves it. Secrets are names only; their values
  * are sealed in KMS and reach the run's environment, never this record.
  */
-import { call, seg, type Target } from './call.ts'
+import { call, Refusal, seg, type Target } from './call.ts'
 
 export type State = 'none' | 'proposed' | 'ready'
 
@@ -59,6 +59,36 @@ export function environment(raw: unknown, repo = ''): Environment {
     proposal: p ? { install: str(p.install), start: str(p.start), secrets: names(p.secrets), note: str(p.note) } : null,
     updated: str(o.updatedAt),
   }
+}
+
+/**
+ * Whether a codebase still waits to be set up: nothing proposed and nothing ever
+ * saved. Skip & save keeps an empty environment, which the platform answers as
+ * state `none` with the time it was saved (apps/environment `view`), so the
+ * time is what tells a choice made from one never made.
+ */
+export const unset = (e: Environment): boolean => e.state === 'none' && !e.updated
+
+/**
+ * What a refused save or setup run says to the person who pressed it: what is
+ * wrong and what to do, in the reader's words rather than the platform's.
+ */
+export function plain(e: unknown, repo: string, act: 'save' | 'start' | 'run'): string {
+  // This page's own refusals (a secret's name, an empty value) are already a reader's words.
+  if (e instanceof Error && !(e instanceof Refusal) && e.name === 'Error' && e.message) return e.message
+  if (e instanceof Refusal) {
+    const why = e.message
+    if (e.status === 401) return 'Your session ended. Sign in again, then try again.'
+    if (e.status === 403 && act === 'save') return 'Only an organization admin saves an environment. Start the agent instead; an admin reviews what it proposes.'
+    if (e.status === 402) return 'This run needs a plan with runs left. See Plans to change it.'
+    if (e.status === 403) return `This account cannot start a run on ${repo}. Ask an organization admin for access.`
+    if (e.status === 429) return 'Too many runs are going right now. Try again in a minute.'
+    if (e.status >= 500) return act === 'save' ? 'The environment store is not answering right now. Try again shortly.' : 'The code workspace is not answering right now. Try again shortly.'
+    if (/no repository named|not one of this organization|is not a repository/.test(why)) return `${repo} is not a repository this organization has on the forge. Choose one of its repositories.`
+    if (/no account on the forge|verify .* first|no forge identity/.test(why)) return 'Your forge account is not ready yet: sign in to the forge once, then try again.'
+  }
+  if (act === 'save') return `The environment for ${repo} could not be saved. Try again.`
+  return act === 'start' ? `The setup run on ${repo} could not start. Try again.` : `The run on ${repo} could not start. Try again.`
 }
 
 export async function environments(t: Target): Promise<Environment[]> {

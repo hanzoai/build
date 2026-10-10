@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Codebase } from './api/codebases.ts'
-import { asHub, boardKey, isForge, isHub, pinBoard, pinCodebase, readPending, writePending } from './choice.ts'
+import { asHub, boardKey, isForge, isHub, pinBoard, pinCodebase, pinRepo, readPending, settle, writePending } from './choice.ts'
 
 /** Web Storage as a browser has it. */
 function area(seed: Record<string, string> = {}) {
@@ -48,6 +48,7 @@ describe('pointing New at a codebase', () => {
       repo: { owner: 'acme', name: 'widget', full_name: 'acme/widget', private: true, default_branch: 'trunk', pushed_at: '', installation_id: 0, forge: true, clone: 'https://git/acme/widget.git' },
       branch: 'trunk',
       ask: 'Fix the build',
+      issue: 0,
     })
   })
 
@@ -84,6 +85,56 @@ describe('the board Issues shows', () => {
     const heard = refusing()
     pinBoard('acme', 'web')
     expect(heard).toEqual(['hanzo-board'])
+  })
+})
+
+describe('pointing New at a project', () => {
+  const P = { key: 'hanzoai/build', owner: 'hanzoai', name: 'build', description: '', private: false, branch: 'trunk', activity: '', issues: 0, pulls: 0, linked: true, mirrored: false, forge: '', synced: '', status: '', slug: '', codebase: 'hanzoai_build', url: '' }
+
+  it('chooses a project on the forge by its forge name, with the issue as the draft, keeping the model', () => {
+    const { local } = browser(area({ 'hanzo.build.new.acme': JSON.stringify({ model: 'zen5', mode: 'plan' }) }))
+    pinRepo('acme', { ...P, mirrored: true, forge: 'hanzoai_build' }, 'Fix it (#12)', 12)
+    expect(JSON.parse(local.getItem('hanzo.build.new.acme')!)).toEqual({
+      model: 'zen5',
+      mode: 'plan',
+      repo: { owner: 'acme', name: 'hanzoai_build', full_name: 'acme/hanzoai_build', private: false, default_branch: 'trunk', pushed_at: '', installation_id: 0, forge: true, clone: '' },
+      branch: 'trunk',
+      ask: 'Fix it (#12)',
+      issue: 12,
+    })
+  })
+
+  it('chooses one linked from GitHub alone by GitHub’s address', () => {
+    const { local } = browser()
+    pinRepo('acme', { ...P, branch: '', private: null })
+    const kept = JSON.parse(local.getItem('hanzo.build.new.acme')!)
+    expect(kept.repo).toMatchObject({ full_name: 'github.com/hanzoai/build', github: true, default_branch: 'main', private: true })
+    expect(isHub(kept.repo)).toBe(true)
+    expect(kept.branch).toBe('main')
+  })
+
+  it('refuses one that is neither, rather than pinning a name the platform would refuse', () => {
+    browser()
+    expect(() => pinRepo('acme', { ...P, linked: false })).toThrow('hanzoai/build is neither on the forge nor linked from GitHub')
+  })
+})
+
+describe('the choice New opens on', () => {
+  const FIRST = { repo: null as { name: string } | null, branch: '', place: '', mode: 'build', model: 'enso-auto', effort: 'medium', ask: '' }
+
+  it('keeps every field a codebase handed over did not name: the model, the mode and the effort', () => {
+    // pinCodebase in a browser that kept nothing writes the codebase, its branch and the words alone.
+    const handed = { repo: { name: 'universe' }, branch: 'main', ask: 'Fix #12' }
+    expect(settle(FIRST, undefined, handed)).toEqual({ ...FIRST, repo: { name: 'universe' }, branch: 'main', ask: 'Fix #12' })
+  })
+
+  it('takes the person’s coding defaults under what was kept here', () => {
+    expect(settle(FIRST, { model: 'zen5', effort: 'high', place: 'tgt_1' }, { effort: 'low' })).toMatchObject({ model: 'zen5', effort: 'low', place: 'tgt_1', mode: 'build' })
+  })
+
+  it('keeps a field kept as empty — the default branch, the sandbox — and ignores what is not a choice', () => {
+    expect(settle(FIRST, { place: 'tgt_1' }, { place: '', branch: '' })).toMatchObject({ place: '', branch: '' })
+    expect(settle(FIRST, null, 'nope' as never, [1] as never)).toEqual(FIRST)
   })
 })
 

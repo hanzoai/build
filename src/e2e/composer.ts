@@ -5,7 +5,7 @@
  */
 import type { Page } from '@playwright/test'
 
-import { SESSION, signIn, type Reply } from './signed.ts'
+import { ORG, SESSION, signIn, type Reply } from './signed.ts'
 import { KEPT } from './stubs.ts'
 
 /**
@@ -17,6 +17,8 @@ export async function composer(page: Page, { heard = { json: { text: ' add a car
   const sent = await signIn(
     page,
     ({ method, path, body }) => {
+      // The kept codebase is one of the org's repositories, so New offers it rather than asking for one.
+      if (path === '/v1/git/repos') return { json: { data: [{ name: 'universe', org: ORG, defaultBranch: 'main' }] } }
       if (path === '/v1/environment/universe') return { json: { repo: 'universe', install: 'pnpm i', start: '', secrets: [], state: 'ready' } }
       if (path === '/v1/agent/coding' && method === 'POST') return { status: 202, json: { sessionId: SESSION, repo: 'universe', branch: '' } }
       if (path === '/v1/pref' && method === 'GET') return { json: { prefs, updatedAt: 1 } }

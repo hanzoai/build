@@ -56,8 +56,11 @@ export interface Ask {
   /** An earlier run's session to continue from, on the branch it pushed. */
   after?: string
   mode?: Mode
+  /** The model the agent thinks with, by the id GET /v1/models lists; Enso is sent as itself. */
   model?: string
   effort?: string
+  /** The number of the issue on `repo` this run resolves: its pull request says `Closes #<n>`. */
+  issue?: number
 }
 
 export interface Run {
@@ -73,12 +76,13 @@ export interface Run {
  * A run in the sandbox asks for one with a desktop, so its Desktop tab has a
  * screen to show; a machine is whatever it is.
  */
-export function body(ask: Ask): Record<string, string | boolean> {
-  const out: Record<string, string | boolean> = { prompt: ask.prompt.trim() }
+export function body(ask: Ask): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = { prompt: ask.prompt.trim() }
   for (const k of ['repo', 'base', 'targetId', 'project', 'after', 'mode', 'model', 'effort'] as const) {
     const v = ask[k]?.trim()
     if (v) out[k] = v
   }
+  if (ask.issue && Number.isInteger(ask.issue) && ask.issue > 0) out.issue = ask.issue
   if (!out.targetId) out.desktop = true
   return out
 }

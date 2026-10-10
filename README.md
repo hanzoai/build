@@ -111,7 +111,7 @@ hanzo.id token for `Host.admin`. One left column, never two.
 | `-/mcp` | Connectors → Browse with the fleet's native MCP servers listed |
 | `-/projects` | the org's projects: its repositories on the forge |
 | `-/sync` | link repositories from GitHub onto the forge |
-| `-/issues` | the forge's issues |
+| `-/issues` | every project's issues, merged: the forge's and the task index's |
 | `-/artifacts` | what the org has built |
 | `-/templates` | the public starters |
 | `-/plans` | the plans this brand sells, and the move to another |
@@ -123,6 +123,17 @@ A project slug holds no `_` and never starts with `-`, and a repository is the
 one address of two segments, so the forms cannot collide.
 
 ## What is on the screen
+
+**Issues.** Every project's issues and pull requests, the forge's and the task
+index's merged (merge.ts): the same issue on two boards is one row, with every
+label and assignee either carried. A column of projects — every board, and every
+repository an issue is filed under — each with what is open on it; Open and
+Closed with their counts; a search; Label, Assignee, Kind, Source and Sort.
+Pressing an issue opens New on the issue's own repository, where the issue
+lives (a GitHub issue on GitHub, a forge issue on the forge), filled with its
+title, number, link and body, and the run's pull request closes it; an issue no
+project answers to (a Linear team's key, a board with no repository) asks which
+project it is for. A board's key is never taken for a repository.
 
 **The rail** (this page, or `rail` left on). At the top, the mark. Signed in to an organization,
 that spot is the organization switcher: the org, and the projects under it.
@@ -246,7 +257,8 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `POST /v1/sandbox/read` | the run's working tree, live |
 | `GET /v1/provider/github/repos` · `POST /v1/provider/github/repos/import` | granted repositories, and bringing them onto the forge |
 | `GET /v1/git/repos` · `GET /v1/git/repos/{name}` | the codebase chip, and its branches |
-| `GET /v1/task/projects` · `GET /v1/task/board` · `GET /v1/task/projects/{key}/issues` | boards and issues, read from the forge |
+| `GET /v1/sync` | the repositories linked from GitHub, each with its forge copy and when it last synced |
+| `GET /v1/task/projects` · `GET /v1/task/board` · `GET /v1/task/projects/{key}/issues` | boards, and every issue and pull request: the forge's and the task index's |
 | `GET /v1/provider/github/repos` · `…/{owner}/{repo}/branches` | kept for a host that still asks GitHub |
 | `POST /v1/provider/github/user/connect` | connect a person's GitHub |
 | `GET /v1/projects` · `PATCH`/`DELETE /v1/projects/{slug}` · `POST /v1/projects/fork` · `GET /v1/templates` | artifacts, templates |
@@ -276,8 +288,10 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/provider/{slack,github}` · `POST …/connect`·`/disconnect` · `GET /v1/provider/slack/channels` · `GET /v1/provider/github/installations` | Integrations |
 | `GET`/`POST /v1/webhook` · `DELETE /v1/webhook/{id}` · `POST …/test` · `GET …/deliveries` | Notifications |
 
-`mode`, `model` and `effort` are sent with a run as asked; the platform
-honours them where it does and nothing here simulates them.
+`mode`, `model` and `effort` are sent with a run as asked — Enso as
+`enso-auto`, never left out — and `issue`, the number a run started from an
+issue closes; the platform honours them where it does and nothing here
+simulates them.
 
 ## Layout
 
@@ -286,7 +300,8 @@ src/
   index.ts      the library surface
   builder.tsx   the rail and the pane the address names
   landing.tsx   New
-  forge.tsx     Codebase, Automations, Projects, Issues
+  forge.tsx     Automations, Projects, Issues
+  merge.ts      what is the same project and the same issue, which repository an issue is for
   run.tsx       one run
   transcript.tsx  a run's transcript, as cards
   prose.tsx     markdown, drawn as text (markdown.ts reads it)

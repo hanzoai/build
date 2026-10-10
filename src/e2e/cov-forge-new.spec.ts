@@ -37,7 +37,7 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
       { id: 'tgt_1', label: 'dave-laptop', kind: 'laptop', status: 'online', capacity: '10 vCPU / 32G', metricsAt: '2026-09-27T11:59:40Z' },
       { id: 'tgt_2', label: 'rack', kind: 'cluster', status: 'offline' },
     ],
-    models: ['zen5.8', 'zen5.8-coder'],
+    models: ['enso-auto', 'zen5.8', 'zen5.8-coder'],
     repos: [UNIVERSE, SITE],
     envs: {},
     declared: [],
@@ -51,7 +51,8 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
   const answer = ({ method, path }: Sent): Reply | undefined => {
     if (path === '/v1/pref') return { json: { prefs: world.prefs, updatedAt: 1 } }
     if (path === '/v1/agent/targets') return { json: { targets: world.machines } }
-    if (path === '/v1/models') return { json: { data: world.models.map((id) => ({ id })) } }
+    // hanzoai/ai model_routes.go: `{object, data}`, a row's family and class the gateway's own; no default is marked.
+    if (path === '/v1/models') return { json: { object: 'list', data: world.models.map((id) => ({ id, object: 'model', owned_by: 'hanzo', ...(id.startsWith('enso') ? { name: 'Enso', family: 'enso', class: 'ours' } : {}) })) } }
     if (path === '/v1/git/repos') return { json: { data: world.repos } }
     const repo = path.match(/^\/v1\/git\/repos\/([^/]+)$/)?.[1]
     if (repo) return { json: world.repos.find((r) => r.name === repo) ?? {} }
@@ -163,19 +164,20 @@ test.describe('New', () => {
     await list(page, 'Repository').getByRole('option', { name: `${ORG}/universe` }).click()
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
-    expect(posted(sent, '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Build a todo app', repo: 'universe', mode: 'build' })
+    // The model is Enso, named, and the effort Medium: New fills each field it was not handed.
+    expect(posted(sent, '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Build a todo app', repo: 'universe', mode: 'build', model: 'enso-auto', effort: 'medium' })
   })
 
-  test('a run in the sandbox through the router names no model and no machine; a refusal is said and the draft stays', async ({ page, baseURL }) => {
+  test('a run in the sandbox names Enso as its model, and no machine; a refusal is said and the draft stays', async ({ page, baseURL }) => {
     const { sent } = await desk(page, { holds: { 'POST /v1/agent/coding': [{ status: 503, detail: 'No sandbox is free right now' }] } }, DAVE, holding(FORGE))
     await page.goto('/')
     await ask(page).fill('Add a footer')
     await ask(page).press('Enter')
-    await expect(page.getByText('No sandbox is free right now')).toBeVisible()
+    await expect(page.getByText('The code workspace is not answering right now. Try again shortly.')).toBeVisible()
     await expect(ask(page)).toHaveValue('Add a footer')
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
-    expect(posted(sent, '/v1/agent/coding')[1]?.body).toEqual({ prompt: 'Add a footer', repo: 'universe', base: 'main', mode: 'build', effort: 'medium', desktop: true })
+    expect(posted(sent, '/v1/agent/coding')[1]?.body).toEqual({ prompt: 'Add a footer', repo: 'universe', base: 'main', mode: 'build', model: 'enso-auto', effort: 'medium', desktop: true })
   })
 
   test('says when a codebase’s environment waits for review, or has none, above the composer', async ({ page, baseURL }, info) => {
@@ -250,7 +252,35 @@ test.describe('New', () => {
     await expect(list(page, 'Where the run runs').locator('..').getByText('Machines are resting')).toBeVisible()
     await page.keyboard.press('Escape')
     await chip(page, 'Model').click()
-    await expect(page.getByText('The catalog is resting')).toBeVisible()
+    await expect(page.getByText('The model list could not be read right now.')).toBeVisible()
+    await expect(page.getByText('The catalog is resting')).toHaveCount(0)
+  })
+
+  test('a model list refused once the quota is spent shows the list last read, with a note, never an empty chooser', async ({ page }) => {
+    const { world } = await desk(page, {}, DAVE, holding(FORGE, { model: '' }))
+    await page.goto('/')
+    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Enso')
+    // The list is read once, whole, and this browser keeps it.
+    await chip(page, 'Model').click()
+    await expect(list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+    // Every read of the list is refused while the quota is spent, however often the page asks.
+    world.holds['GET /v1/models'] = Array.from({ length: 8 }, () => ({ status: 429, detail: 'rate limited' }))
+    await page.reload()
+    await expect(page.getByText('The model list could not be refreshed; these are the models as last read.')).toBeVisible()
+    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Enso')
+    await chip(page, 'Model').click()
+    await expect(list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ })).toBeVisible()
+  })
+
+  test('a codebase handed over with only its words opens on Enso and Medium, not on an empty chooser', async ({ page }) => {
+    // What pinCodebase leaves in a browser that kept nothing before: the codebase, its branch and the words.
+    await desk(page, {}, DAVE, { [`hanzo.build.new.${ORG}`]: { repo: FORGE, branch: 'main', ask: 'Fix the footer' } })
+    await page.goto('/')
+    await expect(ask(page)).toHaveValue('Fix the footer')
+    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Enso')
+    await expect(chip(page, 'Effort')).toHaveAccessibleName('Effort: Medium')
+    await expect(page.getByText('Choose a model')).toHaveCount(0)
   })
 
   test('dictation lands in the draft, after what is already there', async ({ page }) => {

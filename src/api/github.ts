@@ -21,6 +21,8 @@
  * and that page completes it (`complete`, and `landed` in ../back.ts).
  */
 import { call, query, seg, type Target } from './call.ts'
+import { codebases } from './codebases.ts'
+import { links, type Link } from './links.ts'
 
 export interface Repo {
   owner: string
@@ -33,6 +35,8 @@ export interface Repo {
   pushed_at: string
   /** The App installation that grants access, or 0 for the person's own grant. */
   installation_id: number
+  /** The name it takes on the forge once brought there: `owner_name`, folded. */
+  codebase: string
 }
 
 export interface Repos {
@@ -84,6 +88,7 @@ export function repo(raw: unknown): Repo {
     default_branch: str(r.default_branch),
     pushed_at: str(r.pushed_at),
     installation_id: num(r.installation_id),
+    codebase: str(r.codebase),
   }
 }
 
@@ -205,9 +210,11 @@ export interface Grant {
   fullName: string
   private: boolean
   branch: string
-  /** Already mirrored onto the forge. */
+  /** The name it takes on the forge once brought there. */
+  codebase: string
+  /** On the forge: linked and landed, or held there under its codebase name. */
   imported: boolean
-  /** `synced`, `conflict`, or '' while it has not landed. */
+  /** `synced`, `conflict`, `pending`, `paused`, or '' while it is not linked. */
   status: string
 }
 
@@ -224,20 +231,27 @@ export interface Account {
   blocked: boolean
 }
 
+/**
+ * One row of GET /v1/provider/github/repos (apps/provider github_index.go
+ * repoView): `owner`, `name`, `full_name`, `private`, `default_branch`,
+ * `pushed_at`, `installation_id`, `codebase`. Whether it is on the forge is not
+ * in the row — `codebase` is the name it would take, not a sign it has — so
+ * `imported` is decided by `grants` from the links and the forge.
+ */
 export function grant(raw: unknown): Grant | null {
-  const r = obj(raw)
-  const name = str(r.name)
-  if (!name) return null
-  const full = str(r.fullName) || str(r.full_name)
-  const owner = str(r.owner) || (full.includes('/') ? full.slice(0, full.indexOf('/')) : '')
+  const r = repo(raw)
+  if (!r.name) return null
+  const full = r.full_name
+  const owner = r.owner || (full.includes('/') ? full.slice(0, full.indexOf('/')) : '')
   return {
     owner,
-    name,
-    fullName: full || (owner ? `${owner}/${name}` : name),
-    private: r.private === true,
-    branch: str(r.defaultBranch) || str(r.default_branch) || 'main',
-    imported: r.imported === true,
-    status: str(r.syncStatus) || str(r.sync_status),
+    name: r.name,
+    fullName: full || (owner ? `${owner}/${r.name}` : r.name),
+    private: r.private,
+    branch: r.default_branch || 'main',
+    codebase: r.codebase,
+    imported: false,
+    status: '',
   }
 }
 
@@ -258,21 +272,60 @@ export function accounts(g: Grants): Account[] {
     })
 }
 
-/** Every repository the GitHub connection grants, with whether the forge already has it. */
+/** How many of GitHub's pages a full read takes at most: a hundred rows each. */
+const PAGES = 20
+
+/**
+ * Every repository the GitHub connection grants, every page, with whether the
+ * forge already has it: a link that has landed (GET /v1/sync, its `native`
+ * state), or a forge repository under its codebase name (GET /v1/git/repos).
+ */
 export async function grants(t: Target, signal?: AbortSignal): Promise<Grants> {
-  const raw = obj(await call<unknown>(t, 'GET', '/v1/provider/github/repos', undefined, { signal }))
+  const rows: Repo[] = []
+  let unread: string[] = []
+  let after = ''
+  for (let n = 0; n < PAGES; n++) {
+    const page = await repos(t, { limit: 100, after }, signal)
+    rows.push(...page.repos)
+    unread = page.unread
+    if (!page.next) break
+    after = page.next
+  }
+  const [linked, held] = await Promise.all([links(t, signal).catch(() => [] as Link[]), codebases(t).catch(() => [])])
+  const state = new Map(linked.map((l) => [`${l.owner}/${l.name}`.toLowerCase(), l.status]))
+  const names = new Set(held.map((c) => c.name.toLowerCase()))
   return {
-    repos: (Array.isArray(raw.repos) ? raw.repos : []).map(grant).filter((r): r is Grant => r !== null),
-    unread: (Array.isArray(raw.unread) ? raw.unread : []).filter((x): x is string => typeof x === 'string' && x !== ''),
+    repos: rows
+      .map(grant)
+      .filter((r): r is Grant => r !== null)
+      .map((r) => {
+        // A link's state, '' when the forge could not be read for it; absent with no link.
+        const said = state.get(r.fullName.toLowerCase())
+        const there = names.has(r.codebase.toLowerCase())
+        return { ...r, imported: there || said === 'synced' || said === 'conflict' || said === 'paused', status: said || (there ? 'synced' : '') }
+      }),
+    unread: unread.filter(Boolean),
   }
 }
 
+/** What an import queued: how many, and the name each takes on the forge, by `owner/name`. */
+export interface Queued {
+  queued: number
+  codebases: Record<string, string>
+}
+
 /** Queue a mirror of the named repositories onto the forge. The names are `owner/name`. */
-export async function bring(t: Target, repos: string[]): Promise<number> {
+export async function bring(t: Target, repos: string[]): Promise<Queued> {
   const names = repos.map((n) => n.trim()).filter(Boolean)
   if (names.length === 0) throw new Error('Choose a repository first')
   const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/repos/import', { repos: names }))
-  return num(raw.queued)
+  const said = Array.isArray(raw.repos) ? raw.repos : []
+  const made = Array.isArray(raw.codebases) ? raw.codebases : []
+  const codebases: Record<string, string> = {}
+  said.forEach((r, i) => {
+    if (typeof r === 'string' && typeof made[i] === 'string' && made[i]) codebases[r.toLowerCase()] = made[i] as string
+  })
+  return { queued: num(raw.queued), codebases }
 }
 
 /** What one issue sync did. */

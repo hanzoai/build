@@ -323,19 +323,21 @@ describe('github', () => {
     expect(github.repo(null)).toMatchObject({ owner: '', name: '', full_name: '' })
   })
 
-  it('reads a grant by whichever name the platform gave it, and counts no account for one without an owner', () => {
-    expect(github.grant({ name: 'site', full_name: 'acme/site', default_branch: 'dev', sync_status: 'synced' })).toEqual({
+  it('reads a grant by the shape the listing answers, and counts no account for one without an owner', () => {
+    expect(github.grant({ owner: 'acme', name: 'site', full_name: 'acme/site', default_branch: 'dev', codebase: 'acme_site' })).toEqual({
       owner: 'acme',
       name: 'site',
       fullName: 'acme/site',
       private: false,
       branch: 'dev',
+      codebase: 'acme_site',
       imported: false,
-      status: 'synced',
+      status: '',
     })
-    expect(github.grant({ name: 'site', fullName: 'site' })).toMatchObject({ owner: '', fullName: 'site' })
+    expect(github.grant({ name: 'site', full_name: 'acme/site' })).toMatchObject({ owner: 'acme', fullName: 'acme/site' })
     expect(github.grant({ name: 'site', owner: 'acme' })).toMatchObject({ fullName: 'acme/site', branch: 'main', status: '' })
     expect(github.grant({ name: 'site' })).toMatchObject({ owner: '', fullName: 'site' })
+    expect(github.grant({ owner: 'acme' })).toBeNull()
     expect(github.accounts({ repos: [github.grant({ name: 'site' })!], unread: [] })).toEqual([])
   })
 })

@@ -201,7 +201,120 @@ export async function catalogue(page: Page) {
   })
 }
 
+// Real shapes, from the cloud's own source (hanzo-inc/cloud), so a stub cannot
+// encode a reading of the platform the platform does not answer.
+
+/** GET /v1/models (hanzoai/ai controllers/model_routes.go): `{object, data}`, rows with `id, owned_by, class, family`; no default is marked. */
+export const MODELS = {
+  object: 'list',
+  data: [
+    { id: 'enso-auto', object: 'model', owned_by: 'hanzo', name: 'Enso', family: 'enso', class: 'ours' },
+    { id: 'enso-flash', object: 'model', owned_by: 'hanzo', name: 'Enso Flash', family: 'enso', class: 'ours' },
+    { id: 'zen6', object: 'model', owned_by: 'hanzo', name: 'Zen6', family: 'zen', class: 'ours' },
+    { id: 'anthropic/claude-opus-5.5', object: 'model', owned_by: 'anthropic', name: 'Claude Opus 5.5', class: 'premium', premium: true },
+  ],
+}
+
+/** One GitHub repository as GET /v1/provider/github/repos lists it (apps/provider github_index.go repoView). */
+export const granted = (owner: string, name: string, o: { private?: boolean; branch?: string; pushed?: string } = {}) => ({
+  owner,
+  name,
+  full_name: `${owner}/${name}`,
+  private: o.private === true,
+  default_branch: o.branch ?? 'main',
+  ...(o.pushed ? { pushed_at: o.pushed } : {}),
+  installation_id: 7,
+  codebase: `${owner}_${name}`.toLowerCase(),
+})
+
+/** One repository link as GET /v1/sync answers it (apps/sync sync_api.go syncView), its forge copy named `forge`. */
+export const linked = (owner: string, name: string, forge: string, status = 'synced', synced = '2026-10-06T08:00:00Z') => ({
+  id: `sync_${owner}_${name}`,
+  kind: 'git',
+  scope: 'repo',
+  source: { provider: 'github', locator: `https://github.com/${owner}/${name}.git` },
+  target: { provider: 'hanzo-git', locator: forge },
+  direction: 'pull',
+  trigger: 'webhook',
+  createdAt: '2026-09-01T00:00:00Z',
+  ...(status === 'pending' ? {} : { updatedAt: synced }),
+  native: { url: `https://git.hanzo.ai/${owner}/${forge}`, clone: `https://git.hanzo.ai/${owner}/${forge}.git`, branch: 'main', status },
+})
+
+/** A unix second, as the task service stamps a row. */
+const sec = (iso: string) => Math.floor(Date.parse(iso) / 1000)
+
+/** A forge issue or pull request as GET /v1/task/board renders one (apps/task source.go forgeIssue). */
+export const filed = (space: string, repo: string, number: number, title: string, o: { pr?: boolean; status?: string; labels?: string[]; assignee?: string; updated?: string; body?: string } = {}) => ({
+  id: String(9000 + number),
+  identifier: `${repo}#${number}`,
+  projectKey: repo,
+  number,
+  kind: o.pr ? 'pr' : 'issue',
+  source: 'git',
+  repo,
+  title,
+  ...(o.body ? { description: o.body } : {}),
+  status: o.status ?? 'todo',
+  priority: 'none',
+  ...(o.assignee ? { assignee: o.assignee } : {}),
+  labels: o.labels ?? [],
+  createdAt: sec('2026-09-01T00:00:00Z'),
+  updatedAt: sec(o.updated ?? '2026-10-01T00:00:00Z'),
+  url: `https://git.hanzo.ai/${space}/${repo}/${o.pr ? 'pulls' : 'issues'}/${number}`,
+})
+
+/** An index row (apps/task source.go indexIssue): a GitHub issue the index mirrors (`extRef` github:…), a Linear one, an agent's. */
+export const indexed = (key: string, number: number, title: string, o: { extRef?: string; repo?: string; status?: string; labels?: string[]; assignee?: string; updated?: string; body?: string } = {}) => ({
+  id: `issue_${key}_${number}`,
+  identifier: `${key}#${number}`,
+  projectKey: key,
+  number,
+  kind: 'issue',
+  source: 'git',
+  ...(o.repo ? { repo: o.repo } : {}),
+  ...(o.extRef ? { extRef: o.extRef } : {}),
+  title,
+  ...(o.body ? { description: o.body } : {}),
+  status: o.status ?? 'todo',
+  priority: 'none',
+  ...(o.assignee ? { assignee: o.assignee } : {}),
+  labels: o.labels ?? [],
+  createdAt: sec('2026-09-01T00:00:00Z'),
+  updatedAt: sec(o.updated ?? '2026-10-01T00:00:00Z'),
+})
+
+/**
+ * The org's work as the task board answers it: issues on the forge, a GitHub
+ * issue the index mirrors onto two boards, a Linear issue whose `repo` is its
+ * team's key (HCC — not a repository), and a finished one.
+ */
+export const WORK = [
+  filed(ORG, REPO, 12, 'Pin the gateway image', { labels: ['infra'], assignee: 'dave', updated: '2026-10-05T10:00:00Z', body: 'Floating tags never reach a cluster.' }),
+  filed(ORG, REPO, 13, 'Bump the chart', { pr: true, updated: '2026-10-04T10:00:00Z' }),
+  indexed('GH', 4, 'A faster home page', { extRef: 'github:acme/site#77', repo: 'site', labels: ['perf'], assignee: 'erin', updated: '2026-10-06T09:00:00Z', body: 'LCP is 4s.' }),
+  indexed('OPS', 2, 'A faster home page', { extRef: 'github:acme/site#77', repo: 'site', labels: ['web'], updated: '2026-10-02T09:00:00Z' }),
+  indexed('LINEAR', 5, 'Console billing page', { extRef: 'linear:HCC-12', repo: 'HCC', status: 'in_progress', updated: '2026-10-03T09:00:00Z' }),
+  filed(ORG, REPO, 9, 'Old outage notes', { status: 'done', updated: '2026-09-10T10:00:00Z' }),
+]
+
+/** The boards as GET /v1/task/projects answers them (apps/task boardView): a forge repository's, and the index's. */
+export const BOARDS = [
+  { id: `${ORG}/${REPO}`, org: ORG, key: REPO, name: REPO, createdAt: 0, updatedAt: 0 },
+  { id: 'prj_gh', org: ORG, key: 'GH', name: 'GitHub', description: 'Mirrored external issues.', createdAt: 1790000000, updatedAt: 1790000000 },
+  { id: 'prj_hcc', org: ORG, key: 'HCC', name: 'Hanzo Cloud/Console Program', createdAt: 1790000000, updatedAt: 1790000000 },
+]
+
 // New: the codebase a run works on, where it runs, and its environment.
+
+/** New holding a board's key where a codebase should be, as an issue once handed it over. */
+export const STRANGER = {
+  [`hanzo.build.new.${ORG}`]: {
+    repo: { owner: ORG, name: 'HCC', full_name: `${ORG}/HCC`, private: true, default_branch: 'main', pushed_at: '', installation_id: 0, forge: true, clone: '' },
+    branch: 'main',
+    ask: 'Console billing page',
+  },
+}
 
 /** New holding the codebase it last worked on. */
 export const KEPT = {
@@ -216,21 +329,30 @@ export const KEPT = {
   },
 }
 
-/** New holding the codebase, which has no environment; a save keeps it, a run starts. */
-export function setup(page: Page) {
-  const env = { repo: REPO, install: '', start: '', secrets: [] as string[], state: 'none', session: '', proposal: null }
+/**
+ * New holding the codebase, which has no environment; a save keeps it, a run
+ * starts. As apps/environment `view` answers: a save that leaves every script
+ * and secret empty is state `none`, with the time it was saved.
+ */
+export function setup(page: Page, kept: Record<string, unknown> = KEPT) {
+  const env: Record<string, unknown> = { repo: REPO, install: '', start: '', secrets: [] as string[], state: 'none' }
   return signIn(
     page,
     ({ method, path, body }) => {
       if (path === `/v1/environment/${REPO}` && method === 'PUT') {
-        Object.assign(env, body, { state: 'ready' })
+        const b = body as { install?: string; start?: string }
+        Object.assign(env, { install: b.install ?? '', start: b.start ?? '', updatedAt: '2026-10-07T00:00:00Z', state: b.install || b.start ? 'ready' : 'none' })
         return { json: env }
       }
       if (path === `/v1/environment/${REPO}`) return { json: env }
+      if (path.startsWith('/v1/environment/')) return { json: { repo: path.split('/').pop(), install: '', start: '', secrets: [], state: 'none' } }
       if (path === '/v1/agent/coding') return { status: 202, json: { sessionId: SESSION, repo: REPO, branch: '' } }
+      if (path === '/v1/git/repos') return { json: { data: [{ name: REPO, org: ORG, defaultBranch: 'main' }] } }
+      if (path === '/v1/sync') return { json: { data: [linked(ORG, 'site', 'site')] } }
+      if (path === '/v1/models') return { json: MODELS }
       return undefined
     },
-    KEPT,
+    kept,
   )
 }
 
@@ -241,7 +363,8 @@ export function landing(page: Page) {
     ({ path }) => {
       if (path === '/v1/agent/targets') return { json: { targets: [{ id: 'tgt_1', label: 'dave-laptop', status: 'online', capacity: '10 vCPU / 32G', metricsAt: '2026-09-27T11:59:40Z' }] } }
       if (path === '/v1/git/repos') return { json: { data: [{ name: REPO, org: ORG, defaultBranch: 'main' }] } }
-      if (path === `/v1/environment/${REPO}`) return { json: { repo: REPO, install: 'pnpm i', start: '', secrets: [], state: 'ready' } }
+      if (path === `/v1/environment/${REPO}`) return { json: { repo: REPO, install: 'pnpm i', start: '', secrets: [], state: 'ready', updatedAt: '2026-10-01T00:00:00Z' } }
+      if (path === '/v1/models') return { json: MODELS }
       return undefined
     },
     KEPT,
@@ -744,7 +867,7 @@ export async function you(page: Page, seed: Partial<World> = {}, kept: Record<st
 
 // The forge: codebases, what GitHub grants, boards and their issues, and automations.
 
-/** Projects, Sync, Issues and Automations, each with something on it. */
+/** Projects, Sync, Issues and Automations, each with something on it, as the platform shapes it. */
 export function forge(page: Page) {
   return signIn(page, ({ path }) => {
     if (path === '/v1/git/repos') {
@@ -759,28 +882,15 @@ export function forge(page: Page) {
     }
     if (path === '/v1/environment') return { json: { data: ENVIRONMENTS } }
     if (path === '/v1/provider/github/repos') {
-      return {
-        json: {
-          repos: [
-            { name: 'widgets', fullName: `${ORG}/widgets`, private: true, defaultBranch: 'main' },
-            { name: 'site', fullName: `${ORG}/site`, imported: true, syncStatus: 'synced' },
-            { name: 'dotfiles', fullName: 'dave-gh/dotfiles' },
-          ],
-          unread: [`${ORG}-labs`],
-        },
-      }
+      return { json: { repos: [granted(ORG, 'widgets', { private: true, pushed: '2026-10-02T00:00:00Z' }), granted(ORG, 'site', { pushed: '2026-10-01T00:00:00Z' }), granted('dave-gh', 'dotfiles')], next: '', total: 3, unread: [`${ORG}-labs`], connected: true } }
     }
-    if (path === '/v1/task/projects') return { json: { data: [{ id: 'p1', key: REPO, name: 'Universe', description: 'The cluster' }, { id: 'p2', key: 'site', name: 'Site' }] } }
-    if (path === '/v1/task/board' || path.startsWith('/v1/task/projects/')) {
-      return {
-        json: {
-          data: [
-            { id: 'i1', projectKey: REPO, number: 12, title: 'Pin the gateway image', status: 'todo', repo: REPO },
-            { id: 'i2', projectKey: 'site', number: 3, title: 'A faster home page', status: 'in_progress' },
-          ],
-        },
-      }
-    }
+    if (path === '/v1/provider/github/installations') return { json: { installations: [{ login: ORG, type: 'Organization', grant: 'all', connected: true }] } }
+    if (path === '/v1/sync') return { json: { data: [linked(ORG, 'site', 'site'), linked(ORG, 'widgets', 'acme_widgets', 'pending')] } }
+    if (path === '/v1/projects') return { json: [{ slug: 'shop', name: 'Shop', repo: { url: `https://git.hanzo.ai/${ORG}/shop.git`, branch: 'main' }, visibility: 'private', updatedAt: sec('2026-09-28T00:00:00Z') }] }
+    if (path === '/v1/task/projects') return { json: BOARDS }
+    if (path === '/v1/task/board') return { json: WORK }
+    const board = path.match(/^\/v1\/task\/projects\/([^/]+)\/issues$/)?.[1]
+    if (board) return { json: WORK.filter((w) => w.projectKey === board || (board === 'HCC' && w.projectKey === 'LINEAR')) }
     if (path === '/v1/auto/automations') {
       const row = { project: null, model: null, permissions: 'ask', notify: false, draft: false, next: null, created: '2026-09-20T10:00:00Z', updated: '2026-09-26T10:00:00Z' }
       return {

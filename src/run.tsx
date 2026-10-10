@@ -33,8 +33,8 @@ import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { approve, followUp, headline, retry, start, type Ask, type Earlier } from './api/coding.ts'
-import { ENSO, limits as readLimits, models } from './api/models.ts'
-import { usePick } from './pick.ts'
+import { ENSO, limits as readLimits } from './api/models.ts'
+import { useCatalog, usePick } from './pick.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
@@ -109,9 +109,9 @@ export function Run({ id }: { id: string }) {
   // The model and effort a run started here uses: New's choice, which a change here changes too.
   const { prefs } = usePrefs()
   const [chose, choose] = useKept<Record<string, unknown> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
-  const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
+  const catalog = useCatalog(t, signed)
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
-  const [model, pickModel] = usePick(text(chose?.model) || prefs.code?.model || ENSO, (id) => choose({ ...chose, model: id }), catalog.value)
+  const [model, pickModel] = usePick(text(chose?.model) || prefs.code?.model || ENSO, (id) => choose({ ...chose, model: id }), catalog.list)
   const pace = EFFORTS.find((e) => e.id === chose?.effort) ?? EFFORTS.find((e) => e.id === prefs.code?.effort) ?? EFFORTS[1]
 
   const mode = record?.mode ?? ''
@@ -212,7 +212,7 @@ export function Run({ id }: { id: string }) {
   }
 
   /** A new run's ask with the model and effort the foot shows. The router is the platform's default, so it is not named. */
-  const tuned = (a: Ask): Ask => ({ ...a, model: model === ENSO ? undefined : model, effort: pace.id })
+  const tuned = (a: Ask): Ask => ({ ...a, model, effort: pace.id })
 
   /**
    * A new run from this one's work, opened. A paused run it carries on is let go
@@ -344,13 +344,13 @@ export function Run({ id }: { id: string }) {
         quiet
         size="sm"
         name="Model"
-        models={catalog.value}
+        models={catalog.shown}
         scope="chat"
         limits={limits}
         value={model}
         onChange={pickModel}
         loading={catalog.loading}
-        error={catalog.error?.message ?? null}
+        error={catalog.error}
       />
       <ChipSelect
         quiet

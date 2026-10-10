@@ -3,9 +3,11 @@
  *
  * A project is a repository, linked from GitHub or started from a template;
  * choosing one opens its workspace, where every run works on it. Issues are
- * the forge's, filed under a board or a repository, and a repository's GitHub
- * issues sync onto it. Choosing an issue opens New with that repository and
- * the issue as the ask.
+ * the forge's and the task index's, merged (merge.ts): the same issue read
+ * from two boards is one row. A repository's GitHub issues sync onto it.
+ * Choosing an issue opens New on the issue's own repository — its GitHub
+ * address, or the forge repository it is filed on, never a board's key — with
+ * the issue as the ask; an issue no project answers to asks which one.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import {
@@ -24,14 +26,14 @@ import {
   RefreshCw,
   Settings,
 } from '@hanzogui/lucide-icons-2'
-import { Button, DropdownMenu, Input } from '@hanzo/ui'
-import { useEffect, useState, type ReactNode } from 'react'
+import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input } from '@hanzo/ui'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { ago } from './ago.ts'
 import { codebases, type Codebase } from './api/codebases.ts'
 import { Automations } from './automations.tsx'
-import { boards, closed, inProject, issues, projectOf, type Board, type Work } from './api/work.ts'
-import { boardKey, pinBoard, pinCodebase, readPending, writePending } from './choice.ts'
+import { boards, everything, sources, type Board, type Sources } from './api/work.ts'
+import { boardKey, pinRepo, readPending, writePending } from './choice.ts'
 import { useKept, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import type { Screen } from './route.ts'
@@ -41,6 +43,7 @@ import { Sync } from './sync.tsx'
 import { connect, connection, grants, syncIssues, type Connection } from './api/github.ts'
 import { here, useBack } from './back.ts'
 import { Out } from './out.tsx'
+import { ask, assemble, attach, closes, facets, handle, home, keyOf, matches, pickProjects, place, type Issue, type Project } from './merge.ts'
 
 function Note({ children }: { children: string }) {
   return (
@@ -406,8 +409,34 @@ const KINDS: Record<Kind, string> = { all: 'Issues and pull requests', issue: 'I
 const ORIGINS: Record<Origin, string> = { all: 'Every source', github: 'GitHub', hanzo: 'Hanzo' }
 const ORDERS: Record<Order, string> = { newest: 'Newest', oldest: 'Oldest', updated: 'Recently updated' }
 
-/** Mirrored from GitHub: filed by the forge's `git` source with its page on github.com. */
-const fromGitHub = (w: Work): boolean => /^https:\/\/github\.com\//.test(w.url)
+/** Mirrored from GitHub: the task index carried it from GitHub (`extRef` github:…). */
+const fromGitHub = (i: Issue): boolean => i.sources.includes('github')
+
+/** Done and canceled are closed; every other column is open work. */
+const closed = (i: Issue): boolean => i.state === 'closed'
+
+/** An RFC 3339 time as milliseconds, 0 when there is none. */
+const ms = (iso: string): number => Date.parse(iso) || 0
+
+/** The repository an issue is for, once the projects have named it, else the forge's name for it, else its board. */
+const projectOf = (i: Issue): string => i.repo || i.forge || i.board
+
+/**
+ * Whether `i` is filed under the project `key`: its board, its forge
+ * repository, or its repository by address or by name — either case. A board
+ * and the repository it is named for are one project, as the forge files them.
+ */
+function inProject(i: Issue, key: string): boolean {
+  const k = key.toLowerCase()
+  return [i.board, i.forge, i.repo, i.repo.split('/')[1] ?? ''].some((v) => v !== '' && v.toLowerCase() === k)
+}
+
+/** How a person refers to an issue: `owner/name#N` on its own repository, the board's handle otherwise, '' with neither. */
+function ref(i: Issue): string {
+  const tag = handle(i)
+  const at = i.repo || i.forge
+  return tag.startsWith('#') && at ? `${at}${tag}` : tag
+}
 
 /** A dropdown that picks one of `options`, its trigger naming the choice. */
 function Pick<K extends string>({ label, value, options, onPick }: { label: string; value: K; options: Record<K, string>; onPick: (k: K) => void }) {
@@ -422,7 +451,7 @@ function Pick<K extends string>({ label, value, options, onPick }: { label: stri
         </XStack>
       }
       items={(Object.keys(options) as K[]).map((k) => ({
-        key: k,
+        key: k || '*',
         label: options[k],
         icon: k === value ? <Check size={14} /> : <YStack width={14} />,
         onSelect: () => onPick(k),
@@ -431,10 +460,13 @@ function Pick<K extends string>({ label, value, options, onPick }: { label: stri
   )
 }
 
-function Mark({ w }: { w: Work }) {
-  if (w.kind === 'pr') return <GitPullRequest size={16} color={closed(w) ? '$soft' : '$ink'} />
-  if (w.status === 'canceled') return <CircleSlash size={16} color="$soft" />
-  if (w.status === 'done') return <CircleCheck size={16} color="$soft" />
+/** The words a list carries as a menu: every one of them, or `all`. */
+const menu = (all: string, values: string[]): Record<string, string> => Object.fromEntries([['', all], ...values.map((v) => [v, v])])
+
+function Mark({ i }: { i: Issue }) {
+  if (i.pull) return <GitPullRequest size={16} color={closed(i) ? '$soft' : '$ink'} />
+  if (i.status === 'canceled') return <CircleSlash size={16} color="$soft" />
+  if (closed(i)) return <CircleCheck size={16} color="$soft" />
   return <CircleDot size={16} color="$ink" />
 }
 
@@ -448,11 +480,96 @@ function Tag({ children }: { children: string }) {
   )
 }
 
+const NONE: Sources = { hub: [], linked: [], held: [], sites: [], owners: [], next: '', unread: [], missing: [] }
+
+/**
+ * Pressing an issue: New, on the issue's own repository, holding the issue. A
+ * GitHub issue runs on GitHub, where its pull request closes it; a forge issue
+ * on the forge. A repository not among the projects read so far is looked up by
+ * its address; an issue no project answers to asks which one it is for — a
+ * board's key or a Linear team's is never taken for a repository.
+ */
+function useOpen(list: Project[], work: Issue[]) {
+  const host = useHost()
+  const t = useTarget()
+  const [asking, setAsking] = useState<Issue | null>(null)
+  const [finding, setFinding] = useState('')
+  const go = (i: Issue, p: Project) => {
+    // A project the person picked for an issue that is not its own closes nothing there.
+    const own = place(i, [p]) !== null
+    const n = own ? closes(i, p) : 0
+    pinRepo(host.org, p, ask(i, n), n, own ? home(i, p) : undefined)
+    setAsking(null)
+    host.go('')
+  }
+  const open = async (i: Issue) => {
+    const p = place(i, list)
+    if (p && (p.forge || p.linked)) return go(i, p)
+    if (i.repo) {
+      setFinding(i.key)
+      const [owner = '', name = ''] = i.repo.split('/')
+      const found = await sources(t, { q: name, owner })
+        .then((s) => assemble({ granted: s.hub, linked: s.linked, held: s.held, sites: s.sites, work }).find((x) => x.key === keyOf(owner, name)) ?? null)
+        .catch(() => null)
+      setFinding('')
+      if (found && (found.forge || found.linked)) return go(i, found)
+    }
+    setAsking(i)
+  }
+  const dialog = <Which issue={asking} list={list} onPick={(p) => asking && go(asking, p)} onClose={() => setAsking(null)} />
+  return { open: (i: Issue) => void open(i), finding, dialog }
+}
+
+/** Asks which project an issue is for, from the org's own list: never a free string. */
+function Which({ issue, list, onPick, onClose }: { issue: Issue | null; list: Project[]; onPick: (p: Project) => void; onClose: () => void }) {
+  const [q, setQ] = useState('')
+  const shown = pickProjects(
+    list.filter((p) => p.forge || p.linked),
+    { q },
+  ).slice(0, 50)
+  const named = issue?.repo || issue?.hint || ''
+  return (
+    <Dialog open={issue !== null} onOpenChange={(o) => (o ? null : onClose())}>
+      <DialogContent maxW={480} gap="$3">
+        <DialogTitle>Which project is this for?</DialogTitle>
+        <SizableText size="$2" color="$soft">
+          {named
+            ? `“${named}” is not one of this organization’s projects. Choose the repository the run works on.`
+            : `This issue names no repository${issue?.board ? `: it is on the ${issue.board} board` : ''}. Choose the one the run works on.`}
+        </SizableText>
+        <Input value={q} onChangeText={setQ} placeholder="Find a project…" aria-label="Find a project" />
+        <YStack gap="$1" maxH={320} overflow="scroll">
+          {shown.length === 0 ? (
+            <Note>{list.length ? 'Nothing matches.' : 'No projects are linked yet.'}</Note>
+          ) : (
+            shown.map((p) => (
+              <XStack key={p.key} render="button" aria-label={`Work on ${p.owner}/${p.name}`} onPress={() => onPick(p)} px="$2.5" py="$2" rounded="$3" items="center" justify="flex-start" hoverStyle={{ bg: '$hover' }}>
+                <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
+                  {`${p.owner}/`}
+                </SizableText>
+                <SizableText size="$2" color="$ink" numberOfLines={1} shrink={1}>
+                  {p.name}
+                </SizableText>
+              </XStack>
+            ))
+          )}
+        </YStack>
+        <XStack justify="flex-end">
+          <Button size="sm" variant="outline" onPress={onClose}>
+            Cancel
+          </Button>
+        </XStack>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /**
  * Every project's issues, read the way GitHub reads them: open or closed, one
- * project or all of them, narrowed by words, kind, source and order. Each project
- * syncs its own issues from GitHub; choosing an issue starts the next run on its
- * codebase with the issue as the ask.
+ * project or all of them, narrowed by words, kind, source, label and assignee,
+ * and ordered. The same issue on two boards is one row. Each project syncs its
+ * own issues from GitHub; choosing an issue starts the next run on the issue's
+ * own repository with the issue as the ask.
  */
 function Issues() {
   const host = useHost()
@@ -463,12 +580,22 @@ function Issues() {
   const [kind, setKind] = useState<Kind>('all')
   const [origin, setOrigin] = useState<Origin>('all')
   const [order, setOrder] = useState<Order>('newest')
+  const [label, setLabel] = useState('')
+  const [assignee, setAssignee] = useState('')
   const [q, setQ] = useState('')
   const [pulled, setPulled] = useState(0)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<{ text: string; connect?: boolean } | null>(null)
-  const list = useRead(signed ? () => issues(t) : null, [] as Work[], [t, signed, pulled])
+  const list = useRead(signed ? () => everything(t) : null, [] as Issue[], [t, signed, pulled])
   const known = useRead(signed ? () => boards(t) : null, [] as Board[], [t, signed])
+  // What the org's projects are made from, so an issue is placed on its own repository.
+  const made = useRead(signed ? () => sources(t) : null, NONE, [t, signed])
+  const projects = useMemo(
+    () => assemble({ granted: made.value.hub, linked: made.value.linked, held: made.value.held, sites: made.value.sites, work: list.value }),
+    [made.value, list.value],
+  )
+  const work = useMemo(() => attach(list.value, projects), [list.value, projects])
+  const { open, finding, dialog } = useOpen(projects, list.value)
 
   // Another screen chose the board (the rail's Issues chooses every board) while this one is open.
   useEffect(() => {
@@ -478,33 +605,34 @@ function Issues() {
   }, [setBoard])
   useEffect(() => setSaid(null), [board])
 
-  // The projects: every board the forge names, and every repository an issue is filed under.
-  const projects = new Map<string, { key: string; name: string; open: number }>()
-  for (const b of known.value) projects.set(b.key.toLowerCase(), { key: b.key, name: b.name, open: 0 })
-  for (const w of list.value) {
-    const key = projectOf(w)
-    if (!key) continue
-    const p = projects.get(key.toLowerCase()) ?? { key, name: key, open: 0 }
-    if (!closed(w)) p.open++
-    projects.set(key.toLowerCase(), p)
+  // The projects: every board the forge names, and every repository an issue is filed under that no board is named for.
+  const column = new Map<string, { key: string; name: string; open: number }>()
+  for (const b of known.value) column.set(b.key.toLowerCase(), { key: b.key, name: b.name, open: 0 })
+  for (const i of work) {
+    const key = projectOf(i)
+    if (key && ![...column.values()].some((p) => inProject(i, p.key))) column.set(key.toLowerCase(), { key, name: key, open: 0 })
   }
-  const rows = [...projects.values()].sort((a, b) => a.name.localeCompare(b.name))
-  const current = board ? projects.get(board.toLowerCase()) : undefined
+  for (const p of column.values()) p.open = work.filter((i) => !closed(i) && inProject(i, p.key)).length
+  const rows = [...column.values()].sort((a, b) => a.name.localeCompare(b.name))
+  const current = board ? column.get(board.toLowerCase()) : undefined
   const title = current?.name ?? board
 
-  const needle = q.trim().toLowerCase()
-  const scoped = list.value
-    .filter((w) => !board || inProject(w, board))
-    .filter((w) => kind === 'all' || (kind === 'pr' ? w.kind === 'pr' : w.kind !== 'pr'))
-    .filter((w) => origin === 'all' || (origin === 'github') === fromGitHub(w))
-    .filter((w) => !needle || [w.title, w.identifier, w.assignee, projectOf(w), ...w.labels].join(' ').toLowerCase().includes(needle))
-  const opened = scoped.filter((w) => !closed(w))
+  const inBoard = work.filter((i) => !board || inProject(i, board))
+  const { labels, assignees } = facets(inBoard)
+  const scoped = inBoard
+    .filter((i) => kind === 'all' || (kind === 'pr') === i.pull)
+    .filter((i) => origin === 'all' || (origin === 'github') === fromGitHub(i))
+    .filter((i) => !label || i.labels.some((l) => l.toLowerCase() === label.toLowerCase()))
+    .filter((i) => !assignee || i.assignees.some((a) => a.toLowerCase() === assignee.toLowerCase()))
+    .filter((i) => matches(q, i.title, ref(i), projectOf(i), ...i.assignees, ...i.labels))
+  const opened = scoped.filter((i) => !closed(i))
   const shut = scoped.filter(closed)
   const shown = (state === 'open' ? opened : shut).slice().sort((a, b) => {
-    if (order === 'updated') return (b.updated || b.created) - (a.updated || a.created)
-    if (order === 'oldest') return a.created - b.created
-    return b.created - a.created
+    if (order === 'updated') return ms(b.updated || b.created) - ms(a.updated || a.created)
+    if (order === 'oldest') return ms(a.created) - ms(b.created)
+    return ms(b.created) - ms(a.created)
   })
+  const narrowed = q.trim() !== '' || kind !== 'all' || origin !== 'all' || label !== '' || assignee !== ''
 
   const pull = async () => {
     setBusy(true)
@@ -530,23 +658,6 @@ function Issues() {
     } catch (e) {
       setSaid({ text: (e as Error).message })
     }
-  }
-
-  const open = (w: Work) => {
-    const name = w.repo || w.project
-    if (name) {
-      pinCodebase(host.org, {
-        org: host.org ?? '',
-        name,
-        description: '',
-        branch: 'main',
-        public: false,
-        clone: '',
-        updated: '',
-        branches: ['main'],
-      }, `${w.identifier ? `${w.identifier} ` : ''}${w.title}`.trim())
-    }
-    host.go('')
   }
 
   const chip = (key: string, name: string, count: number | null) => {
@@ -588,7 +699,7 @@ function Issues() {
               {board ? `Issues · ${title}` : 'Issues'}
             </SizableText>
             <SizableText size="$2" color="$soft">
-              {board ? `Work on ${title}. Choosing an issue starts the next run on that codebase.` : 'Work across every project. Choosing an issue starts the next run on that codebase.'}
+              {board ? `Work on ${title}. Choosing an issue starts the next run on its own repository.` : 'Work across every project. Choosing an issue starts the next run on its own repository.'}
             </SizableText>
           </YStack>
           <Button size="sm" variant="outline" disabled={!signed || busy} onPress={() => void pull()}>
@@ -619,7 +730,7 @@ function Issues() {
             <SizableText size="$1" color="$soft" px="$2.5" pb="$1" $max-md={{ display: 'none' }}>
               Projects
             </SizableText>
-            {chip('', 'All projects', list.value.filter((w) => !closed(w)).length)}
+            {chip('', 'All projects', work.filter((i) => !closed(i)).length)}
             {rows.map((p) => chip(p.key, p.name, p.open))}
           </YStack>
           <YStack flex={1} minW={0} gap="$3" width="100%">
@@ -648,6 +759,8 @@ function Issues() {
                     </XStack>
                   </XStack>
                   <XStack gap="$1" items="center" flexWrap="wrap" shrink={1} minW={0}>
+                    <Pick label="Label" value={label} options={menu('Any label', labels)} onPick={setLabel} />
+                    <Pick label="Assignee" value={assignee} options={menu('Anyone', assignees)} onPick={setAssignee} />
                     <Pick label="Kind" value={kind} options={KINDS} onPick={setKind} />
                     <Pick label="Source" value={origin} options={ORIGINS} onPick={setOrigin} />
                     <Pick label="Sort" value={order} options={ORDERS} onPick={setOrder} />
@@ -655,13 +768,7 @@ function Issues() {
                 </XStack>
                 {shown.length === 0 ? (
                   <YStack px="$3" py="$6" gap="$3" items="center" borderTopWidth={1} borderColor="$borderColor">
-                    <Note>
-                      {state === 'open'
-                        ? needle || kind !== 'all' || origin !== 'all'
-                          ? 'No open issues match.'
-                          : 'Nothing open.'
-                        : 'Nothing closed.'}
-                    </Note>
+                    <Note>{state === 'open' ? (narrowed ? 'No open issues match.' : 'Nothing open.') : 'Nothing closed.'}</Note>
                     {list.value.length === 0 ? (
                       <XStack gap="$2" flexWrap="wrap" justify="center">
                         <Button size="sm" variant="outline" disabled={busy} onPress={() => void pull()}>
@@ -675,61 +782,67 @@ function Issues() {
                     ) : null}
                   </YStack>
                 ) : (
-                  shown.map((w) => (
-                    <XStack key={w.id} items="center" gap="$2" pr="$3" borderTopWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
-                      <XStack
-                        render="button"
-                        aria-label={`Build ${w.identifier || w.title}`}
-                        onPress={() => open(w)}
-                        flex={1}
-                        minW={0}
-                        items="flex-start"
-                        gap="$3"
-                        pl="$3"
-                        py="$2.5"
-                        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
-                      >
-                        <YStack pt={2}>
-                          <Mark w={w} />
-                        </YStack>
-                        <YStack flex={1} minW={0} gap="$1" items="flex-start">
-                          <XStack gap="$2" items="center" flexWrap="wrap" maxW="100%">
-                            <SizableText size="$3" color="$ink" fontWeight="500" numberOfLines={1} shrink={1}>
-                              {w.title}
+                  shown.map((i) => {
+                    const named = ref(i)
+                    return (
+                      <XStack key={i.key || `${i.board}:${i.title}`} items="center" gap="$2" pr="$3" borderTopWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
+                        <XStack
+                          render="button"
+                          aria-label={`Build ${named || i.title}`}
+                          onPress={() => open(i)}
+                          disabled={finding === i.key && i.key !== ''}
+                          flex={1}
+                          minW={0}
+                          items="flex-start"
+                          gap="$3"
+                          pl="$3"
+                          py="$2.5"
+                          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+                        >
+                          <YStack pt={2}>
+                            <Mark i={i} />
+                          </YStack>
+                          <YStack flex={1} minW={0} gap="$1" items="flex-start">
+                            <XStack gap="$2" items="center" flexWrap="wrap" maxW="100%">
+                              <SizableText size="$3" color="$ink" fontWeight="500" numberOfLines={1} shrink={1}>
+                                {i.title}
+                              </SizableText>
+                              {STATUS[i.status] && !closed(i) && i.status !== 'todo' ? <Tag>{STATUS[i.status]}</Tag> : null}
+                              {!STATUS[i.status] ? <Tag>{i.status}</Tag> : null}
+                              {i.priority !== 'none' && i.priority ? <Tag>{i.priority}</Tag> : null}
+                              {i.labels.slice(0, 4).map((l) => (
+                                <Tag key={l}>{l}</Tag>
+                              ))}
+                            </XStack>
+                            <SizableText size="$1" color="$soft" numberOfLines={1}>
+                              {[
+                                named || (i.pull ? 'pr' : i.kind),
+                                !board && projectOf(i) && !named.startsWith(projectOf(i)) ? projectOf(i) : '',
+                                i.created ? `opened ${ago(i.created)}` : '',
+                                i.assignees.length ? `assigned to ${i.assignees.join(', ')}` : '',
+                                fromGitHub(i) ? 'GitHub' : '',
+                                finding === i.key && i.key !== '' ? 'opening…' : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </SizableText>
-                            {STATUS[w.status] && !closed(w) && w.status !== 'todo' ? <Tag>{STATUS[w.status]}</Tag> : null}
-                            {!STATUS[w.status] ? <Tag>{w.status}</Tag> : null}
-                            {w.priority !== 'none' && w.priority ? <Tag>{w.priority}</Tag> : null}
-                            {w.labels.slice(0, 4).map((l) => (
-                              <Tag key={l}>{l}</Tag>
-                            ))}
-                          </XStack>
-                          <SizableText size="$1" color="$soft" numberOfLines={1}>
-                            {[
-                              w.identifier || w.kind,
-                              !board && projectOf(w) ? projectOf(w) : '',
-                              w.created ? `opened ${ago(new Date(w.created).toISOString())}` : '',
-                              w.assignee ? `assigned to ${w.assignee}` : '',
-                              fromGitHub(w) ? 'GitHub' : '',
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </SizableText>
-                        </YStack>
+                          </YStack>
+                        </XStack>
+                        {i.url ? (
+                          <Out href={i.url} label={`Open ${named || i.title} on ${fromGitHub(i) ? 'GitHub' : 'the forge'}`}>
+                            <ExternalLink size={14} opacity={0.6} />
+                          </Out>
+                        ) : null}
                       </XStack>
-                      {w.url ? (
-                        <Out href={w.url} label={`Open ${w.identifier || w.title} on ${fromGitHub(w) ? 'GitHub' : 'the forge'}`}>
-                          <ExternalLink size={14} opacity={0.6} />
-                        </Out>
-                      ) : null}
-                    </XStack>
-                  ))
+                    )
+                  })
                 )}
               </YStack>
             )}
           </YStack>
         </XStack>
       </YStack>
+      {dialog}
     </YStack>
   )
 }

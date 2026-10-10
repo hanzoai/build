@@ -85,8 +85,21 @@ function status(b: Record<string, unknown>, mode: string): string {
 }
 
 /**
+ * Whether an error is a model vendor's own words: a provider's name, its rate
+ * headers, a key, or the JSON body it answers with. Those never reach the run
+ * page — they say whose model it was and nothing a person can act on — so the
+ * run says its plain line alone.
+ */
+export function vendor(error: string): boolean {
+  return /open\s?router|anthropic|openai|azure|bedrock|vertex|gemini|mistral|cohere|deepinfra|fireworks|together\.ai|groq|x-ratelimit|upstream|\bprovider\b|\bsk-[A-Za-z0-9_-]{6,}|"(error|code|message)"\s*:/i.test(error)
+}
+
+/** An error as the run page may show it: its own words, or the plain line when they are a vendor's. */
+export const scrub = (error: string): string => (vendor(error) ? plain(error) : error)
+
+/**
  * A run's error as one plain line with what to do, never the log it came from:
- * that goes in the Error step beside it (cards).
+ * that goes in the Error step beside it (cards), unless it is a vendor's.
  */
 export function plain(error: string): string {
   if (!error) return 'The run hit an error'
@@ -119,7 +132,7 @@ export function said(e: Pick<Event, 'kind' | 'payload'>, mode = ''): string {
         ? `Done — changed ${names.join(', ')}`
         : `Done — changed ${names.length} files`
   }
-  if (str(body.type) === 'error') return str(body.error) || 'The run hit an error'
+  if (str(body.type) === 'error') return scrub(str(body.error)) || 'The run hit an error'
   return str(body.step) || str(body.name)
 }
 
@@ -232,7 +245,7 @@ export function failure(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): stri
     if (e.kind !== 'status') continue
     const b = decode(e.payload)
     if (!b || typeof b === 'string' || !str(b.status)) continue
-    out = str(b.status) === 'error' ? str(b.error) || 'The run hit an error' : ''
+    out = str(b.status) === 'error' ? scrub(str(b.error)) || 'The run hit an error' : ''
   }
   return out
 }
@@ -389,7 +402,8 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
     if (failures.has(message)) return
     failures.add(message)
     out.push({ kind: 'note', key: mint(), text: plain(message) })
-    if (message) out.push({ kind: 'step', key: mint(), name: 'Error', detail: '', output: message, ran: 'error' })
+    // The reason, read whole, when it is the run's own; a vendor's words stay off the page.
+    if (message && !vendor(message)) out.push({ kind: 'step', key: mint(), name: 'Error', detail: '', output: message, ran: 'error' })
   }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     seq = e.seq

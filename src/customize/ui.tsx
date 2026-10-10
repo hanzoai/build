@@ -36,12 +36,7 @@ export function useCount(n: number, onCount: (n: number) => void) {
 }
 
 /** Whether a row answers a search: every word of it somewhere in the row's text. */
-export function matches(q: string, ...text: string[]): boolean {
-  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  if (!words.length) return true
-  const hay = text.join(' ').toLowerCase()
-  return words.every((w) => hay.includes(w))
-}
+export { matches } from '../merge.ts'
 
 /** Cards in as many columns as fit, one column on a phone. */
 export function Grid({ children, label }: { children: ReactNode; label: string }) {

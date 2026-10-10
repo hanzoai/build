@@ -13,8 +13,10 @@ import { Button, Dialog, DialogContent, DialogTitle, Input, Textarea } from '@ha
 import { useEffect, useState } from 'react'
 
 import { start } from './api/coding.ts'
-import { read, refuse, removeSecret, save, setSecret, SETUP, type Environment as Env } from './api/environment.ts'
-import { useRead } from './data.ts'
+import { plain, read, refuse, removeSecret, save, setSecret, SETUP, type Environment as Env } from './api/environment.ts'
+import type { Home, Homes } from './api/work.ts'
+import { useRead, type Read } from './data.ts'
+import { matches } from './merge.ts'
 import { useHost, useTarget } from './host.tsx'
 
 const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
@@ -47,7 +49,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
     return <Soft>This run has no codebase, so it has no environment.</Soft>
   }
   if (env.error) {
-    return <Soft>{env.error.message}</Soft>
+    return <Soft>{`${repo}’s environment could not be read right now.`}</Soft>
   }
   if (!shown) {
     return <Soft>Reading the environment…</Soft>
@@ -67,7 +69,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
       setNote(done)
       return true
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(plain(e, repo, 'save'))
       return false
     } finally {
       setWorking(false)
@@ -81,7 +83,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
       const run = await start(t, { prompt: SETUP, repo, mode: 'setup' })
       host.go(run.session)
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(plain(e, repo, 'start'))
       setWorking(false)
     }
   }
@@ -243,41 +245,75 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
 /**
  * New's offer to set a codebase up. An agent onboards it, or an org admin saves
  * it empty and writes the scripts by hand beside the next run.
+ *
+ * The repository is chosen from the org's own (the forge's, and every linked
+ * repository's copy there), never typed: a name that is not one of them — a
+ * board's key handed over as a codebase — is said so and cannot be set up.
  */
 export function SetupDialog({
   repo,
+  homes,
   open,
   onOpenChange,
   onStart,
   onSaved,
+  onRepo,
 }: {
   repo: string
+  homes: Read<Homes>
   open: boolean
   onOpenChange: (o: boolean) => void
-  onStart: () => Promise<void>
-  onSaved: () => void
+  onStart: (repo: string) => Promise<void>
+  onSaved: (repo: string) => void
+  onRepo: (home: Home) => void
 }) {
   const host = useHost()
   const t = useTarget()
-  const [working, setWorking] = useState(false)
+  const [chosen, setChosen] = useState(repo)
+  const [q, setQ] = useState('')
+  const [working, setWorking] = useState<'' | 'save' | 'start'>('')
   const [note, setNote] = useState('')
+  const [last, setLast] = useState<'save' | 'start' | ''>('')
+  useEffect(() => {
+    if (!open) return
+    setChosen(repo)
+    setQ('')
+    setNote('')
+    setLast('')
+  }, [open, repo])
 
-  const run = async (what: () => Promise<unknown>, done: () => void) => {
-    setWorking(true)
+  const list = homes.value.homes
+  const home = list.find((h) => h.name.toLowerCase() === chosen.toLowerCase()) ?? null
+  // A name the whole list does not hold is not the org's; with part of the list unread, the platform decides.
+  const stranger = Boolean(chosen) && !home && homes.value.whole && !homes.loading
+  const ready = Boolean(chosen) && !stranger && !homes.loading
+  const shown = list.filter((h) => matches(q, h.label, h.name)).slice(0, 6)
+
+  const run = async (what: 'save' | 'start') => {
+    if (!ready) return
+    // The org's own spelling of the name, when the list holds it.
+    const repo = home?.name ?? chosen
+    setWorking(what)
+    setLast(what)
     setNote('')
     try {
-      await what()
-      done()
+      if (what === 'save') {
+        await save(t, repo, { install: '', start: '' })
+        onSaved(repo)
+      } else {
+        await onStart(repo)
+        onOpenChange(false)
+      }
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(plain(e, repo, what))
     } finally {
-      setWorking(false)
+      setWorking('')
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent maxW={440} showCloseButton={false}>
+      <DialogContent maxW={480} showCloseButton={false}>
         <XStack items="center" justify="space-between" gap="$2">
           <DialogTitle>Set up an environment</DialogTitle>
           <XStack render="button" aria-label="Close" p="$1" onPress={() => onOpenChange(false)}>
@@ -289,36 +325,90 @@ export function SetupDialog({
             <SizableText size="$2" color="$soft">
               Repository
             </SizableText>
-            <XStack px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor">
-              <SizableText size="$2" color="$ink" numberOfLines={1}>
-                {repo}
+            <XStack px="$3" py="$2" rounded="$3" borderWidth={1} borderColor={stranger ? '$ink' : '$borderColor'} items="center" gap="$2" aria-label="Chosen repository">
+              <SizableText size="$2" color={home || (chosen && !stranger) ? '$ink' : '$soft'} numberOfLines={1} flex={1} minW={0}>
+                {home ? home.label : chosen || 'Choose a repository'}
               </SizableText>
             </XStack>
+            {stranger ? (
+              <SizableText size="$1" color="$ink" role="alert">
+                {`${chosen} is not one of this organization’s repositories. Choose one below.`}
+              </SizableText>
+            ) : null}
+            <Input value={q} onChangeText={setQ} placeholder="Find a repository…" aria-label="Find a repository" />
+            <YStack gap={2} aria-label="Repositories">
+              {homes.loading && !list.length ? (
+                <SizableText size="$1" color="$soft">
+                  Reading the repositories…
+                </SizableText>
+              ) : homes.error && !list.length ? (
+                <XStack items="center" gap="$2" flexWrap="wrap">
+                  <SizableText size="$1" color="$soft">
+                    The repository list could not be read right now.
+                  </SizableText>
+                  <Button size="sm" variant="outline" onPress={homes.reload}>
+                    Read again
+                  </Button>
+                </XStack>
+              ) : shown.length === 0 ? (
+                <SizableText size="$1" color="$soft">
+                  {list.length ? 'Nothing matches.' : 'This organization has no repositories on the forge yet.'}
+                </SizableText>
+              ) : (
+                shown.map((h) => {
+                  const on = h.name.toLowerCase() === chosen.toLowerCase()
+                  return (
+                    <XStack
+                      key={h.name}
+                      render="button"
+                      aria-pressed={on}
+                      aria-label={`Choose ${h.label}`}
+                      onPress={() => {
+                        setChosen(h.name)
+                        setNote('')
+                        onRepo(h)
+                      }}
+                      px="$2.5"
+                      py="$1.5"
+                      rounded="$2"
+                      bg={on ? '$hover' : 'transparent'}
+                      hoverStyle={{ bg: '$hover' }}
+                    >
+                      <SizableText size="$2" color={on ? '$ink' : '$soft'} numberOfLines={1}>
+                        {h.label}
+                      </SizableText>
+                    </XStack>
+                  )
+                })
+              )}
+            </YStack>
           </YStack>
           <SizableText size="$2" color="$soft">
             An agent onboards the codebase: it explores it, writes the install and start scripts, and names the secrets
             it needs. It takes several minutes. Interrupt it anytime, or take over in the terminal.
           </SizableText>
           {note ? (
-            <SizableText size="$1" color="$soft" role="status">
-              {note}
-            </SizableText>
+            <XStack items="center" gap="$2" flexWrap="wrap">
+              <SizableText size="$1" color="$ink" role="status" flex={1} minW={200}>
+                {note}
+              </SizableText>
+              {last ? (
+                <Button size="sm" variant="outline" disabled={working !== ''} onPress={() => void run(last)}>
+                  Try again
+                </Button>
+              ) : null}
+            </XStack>
           ) : null}
           <XStack gap="$2" justify="space-between" items="center">
             {host.admin ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={working}
-                onPress={() => void run(() => save(t, repo, { install: '', start: '' }), onSaved)}
-              >
-                Skip & save
+              <Button size="sm" variant="secondary" disabled={working !== '' || !ready} onPress={() => void run('save')}>
+                {working === 'save' ? 'Saving…' : 'Skip & save'}
               </Button>
             ) : (
               <YStack />
             )}
-            <Button size="sm" variant="primary" disabled={working} onPress={() => void run(onStart, () => onOpenChange(false))}>
-              Start agent
+            <Button size="sm" variant="primary" disabled={working !== '' || !ready} onPress={() => void run('start')}>
+              {working === 'start' ? 'Starting the agent…' : 'Start agent'}
             </Button>
           </XStack>
         </YStack>

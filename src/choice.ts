@@ -6,6 +6,7 @@
  * model and the machine; it only replaces the fields the caller names.
  */
 import { asRepo, type Codebase, type ForgeRepo } from './api/codebases.ts'
+import type { Project } from './merge.ts'
 
 export interface Choice {
   repo: ForgeRepo | null
@@ -16,6 +17,8 @@ export interface Choice {
   effort: string
   /** A draft handed over by another screen. New copies it once and clears it. */
   ask: string
+  /** The issue that draft is, by the number the run's pull request closes; 0 for none. Handed over with it. */
+  issue: number
 }
 
 const KEY = (org: string | null) => `hanzo.build.new.${org ?? 'none'}`
@@ -40,10 +43,27 @@ function write(org: string | null, value: Record<string, unknown>) {
   }
 }
 
+/**
+ * The choice New opens on, field by field: the last layer that says something
+ * wins. What was kept here, over the person's coding defaults, over the first
+ * run's. A field kept as '' stays '' (the default branch, the sandbox): only a
+ * field that is absent falls through, so a codebase or an issue handed over from
+ * its own screen — which keeps the codebase and the words alone — still opens on
+ * a model, a mode and an effort.
+ */
+export function settle<T extends object>(first: T, ...layers: (Partial<T> | null | undefined)[]): T {
+  let out = { ...first }
+  for (const layer of layers) {
+    if (!layer || typeof layer !== 'object' || Array.isArray(layer)) continue
+    out = { ...out, ...Object.fromEntries(Object.entries(layer).filter(([, v]) => v !== undefined && v !== null)) }
+  }
+  return out
+}
+
 /** Point New at a forge codebase, and optionally a first draft. */
 export function pinCodebase(org: string | null, c: Codebase, ask = '') {
   const repo = asRepo(c)
-  write(org, { ...read(org), repo, branch: repo.default_branch, ask })
+  write(org, { ...read(org), repo, branch: repo.default_branch, ask, issue: 0 })
 }
 
 /** Which board Issues is showing. '' is every board. */
@@ -54,6 +74,27 @@ export function pinBoard(org: string | null, key: string) {
     /* Issues then shows every board */
   }
   window.dispatchEvent(new CustomEvent('hanzo-board', { detail: key }))
+}
+
+/**
+ * Point New at a project, and optionally a first draft (an issue's ask) and the
+ * issue it closes. `where` is where the run works (merge.ts `home`): on the forge
+ * it is chosen by its forge name, which is what a run and its environment
+ * address; on GitHub by GitHub's address, so the run clones and proposes there.
+ * Left out, the forge when the project is there. A project that is neither
+ * cannot be worked on, and is refused here rather than handed to the platform.
+ */
+export function pinRepo(org: string | null, p: Project, ask = '', issue = 0, where: 'github' | 'forge' | null = p.forge ? 'forge' : p.linked ? 'github' : null): void {
+  const branch = p.branch || 'main'
+  let repo: ForgeRepo | HubRepo
+  if (where === 'forge' && p.forge) {
+    repo = { owner: org ?? '', name: p.forge, full_name: org ? `${org}/${p.forge}` : p.forge, private: p.private ?? true, default_branch: branch, pushed_at: '', installation_id: 0, forge: true, clone: '' }
+  } else if (where === 'github' && p.linked) {
+    repo = asHub({ owner: p.owner, name: p.name, full_name: `${p.owner}/${p.name}`, private: p.private ?? true, default_branch: branch, pushed_at: '', installation_id: 0 })
+  } else {
+    throw new Error(`${p.owner}/${p.name} is neither on the forge nor linked from GitHub`)
+  }
+  write(org, { ...read(org), repo, branch, ask, issue })
 }
 
 /**

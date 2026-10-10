@@ -6,14 +6,7 @@
  * this client wrote itself (a name that does not fit) is said as written.
  */
 import { Refusal } from '../api/call.ts'
-
-/** A read that did not answer in time. */
-export class Slow extends Error {
-  constructor() {
-    super('Hanzo is taking too long to answer.')
-    this.name = 'Slow'
-  }
-}
+import { Slow } from '../data.ts'
 
 /** The line call.ts writes when the platform gave no reason: a method, a path and a status. */
 const BARE = /^(GET|POST|PUT|PATCH|DELETE) \S* answered \d+$/

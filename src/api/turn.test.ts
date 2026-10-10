@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { answer, cards, decode, failure, merge, outcome, said, settled, shell, steps, who, type Card } from './turn.ts'
+import { answer, cards, decode, failure, merge, outcome, said, settled, shell, steps, vendor, who, type Card } from './turn.ts'
 
 const ev = (seq: number, kind: string, payload: unknown) => ({ id: `e${seq}`, seq, kind, payload })
 const status = (payload: Record<string, unknown>, mode = '') => said({ kind: 'status', payload }, mode)
@@ -221,6 +221,18 @@ describe('cards', () => {
       { kind: 'note', text: 'The model did not answer. Try again in a moment, or pick another model.' },
       { kind: 'step', name: 'Error', detail: '', output: raw, ran: 'error' },
     ])
+  })
+
+  it('says a model vendor’s error in the plain line alone: its words, its name and its key never reach the page', () => {
+    const raw = 'OpenRouter: 429 Too Many Requests {"error":{"message":"Rate limit exceeded: free-models-per-day","code":429,"metadata":{"provider_name":"Anthropic"}}} sk-or-v1-abcdef123456'
+    const got = cards([ev(1, 'status', { status: 'error', error: raw })]).map(({ key: _, ...c }) => c)
+    expect(got).toEqual([{ kind: 'note', text: 'The model did not answer. Try again in a moment, or pick another model.' }])
+    expect(JSON.stringify(got)).not.toMatch(/openrouter|anthropic|sk-or/i)
+    expect(failure([ev(1, 'status', { status: 'error', error: raw })])).toBe('The model did not answer. Try again in a moment, or pick another model.')
+    expect(said({ kind: 'event', payload: { type: 'error', error: 'upstream provider openai returned 500' } })).toBe('The run stopped with an error. Try again, or follow up with what to change.')
+    // A run's own failure keeps its words: they say what to fix.
+    expect(vendor('git clone failed: repository not found')).toBe(false)
+    expect(vendor('the dev harness exited 1: stream disconnected - retries exhausted')).toBe(false)
   })
 
   it('draws the run’s own steps as they move, naming a step it does not know', () => {

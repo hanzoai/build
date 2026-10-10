@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Refusal } from '../api/call.ts'
 import { within } from './load.ts'
-import { say, Slow } from './say.ts'
+import { Slow } from '../data.ts'
+import { say } from './say.ts'
 
 afterEach(() => vi.useRealTimers())
 

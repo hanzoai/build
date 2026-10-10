@@ -3,7 +3,7 @@
  * against a stubbed platform (stubs.ts).
  */
 import { expect, test } from './fixture.ts'
-import { REPO, SESSION } from './signed.ts'
+import { ORG, REPO, SESSION } from './signed.ts'
 import { setup as platform } from './stubs.ts'
 
 test('New offers to set up a codebase that has no environment', async ({ page }, info) => {
@@ -13,7 +13,7 @@ test('New offers to set up a codebase that has no environment', async ({ page },
   await page.getByRole('button', { name: 'Set up environment' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('Set up an environment')).toBeVisible()
-  await expect(dialog.getByText(REPO, { exact: true })).toBeVisible()
+  await expect(dialog.getByLabel('Chosen repository')).toHaveText(`${ORG}/${REPO}`)
   await expect(dialog.getByRole('button', { name: 'Skip & save' })).toBeVisible()
   await expect(dialog.getByRole('button', { name: 'Start agent' })).toBeVisible()
   await page.screenshot({ path: info.outputPath('setup-dialog.png') })
