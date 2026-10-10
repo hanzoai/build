@@ -24,16 +24,12 @@ async function rows(page: Page): Promise<string[]> {
 }
 
 test.describe('the rail', () => {
-  test('lists New, Projects, Artifacts, then Automations, with the rest under More', async ({ page }, info) => {
+  test('lists every place in view, in the order every rail lists them, with nothing under a More', async ({ page }, info) => {
     await platform(page)
     await page.goto('/')
     await expect(page.getByText('Try Hanzo in Slack')).toBeVisible()
-    const top = await rows(page)
-    expect(top.slice(0, 3)).toEqual(['New', 'Projects', 'Artifacts'])
-    expect(top.indexOf('Automations')).toBe(top.length - 2)
-    expect(top.at(-1)).toBe('More')
-    await page.getByText('More', { exact: true }).click()
-    expect((await rows(page)).slice(top.length)).toEqual(['Issues', 'Templates', 'Machines', 'Docs'])
+    expect(await rows(page)).toEqual(['New', 'Projects', 'Issues', 'Artifacts', 'Templates', 'Automations', 'Machines', 'Environments', 'Customize', 'Docs'])
+    await expect(page.locator('[data-slot="rail-more"]')).toHaveCount(0)
     await page.screenshot({ path: info.outputPath('rail.png') })
     await page.getByText('Machines', { exact: true }).click()
     await expect(page).toHaveURL(/\/-\/settings\/machines$/)

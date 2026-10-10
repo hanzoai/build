@@ -17,7 +17,8 @@
  * The pure half — naming, shares, the banner's words — is also `@hanzo/build/plan`,
  * which loads in Node without the components.
  */
-export { Builder, nav } from './builder.tsx'
+export { Builder } from './builder.tsx'
+export { nav, NEW, type Group } from './nav.tsx'
 export { DevSection, DOTS, useSessions } from './section.tsx'
 export { HostProvider } from './host.tsx'
 export { Slack, useWho, Who } from './foot.tsx'

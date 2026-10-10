@@ -13,8 +13,8 @@
  *   /<org>/<repo> a repository's workspace, in this same window
  *   /<slug>      a deployed site's workspace
  *
- * The rail is the sessions rail every Hanzo surface shares: New, the builder's
- * places with the rest under More, the org's coding runs newest first with a
+ * The rail is the sessions rail every Hanzo surface shares: New, every one of
+ * the builder's places (nav.tsx), the org's coding runs newest first with a
  * live status dot, and at the foot the offer of Hanzo in Slack and the account,
  * whose menu opens Settings, Usage, the plans, help and logging out (foot.tsx).
  * Its collapse is an explicit toggle kept per browser.
@@ -23,24 +23,24 @@
  * panes — and its mark leads back here.
  *
  * A host with a rail of its own mounts `<Builder rail={false}>` and draws the
- * builder's places (`nav`) and runs in that rail (`useSessions`, or `DevSection`,
- * section.tsx): one left column, never two.
+ * builder's places (`nav`, nav.tsx) and runs in that rail (`useSessions`, or
+ * `DevSection`, section.tsx): one left column, never two.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Blocks, BookOpen, CircleDot, Cpu, FolderGit2, LayoutTemplate, Menu, Search, SlidersHorizontal, Workflow } from '@hanzogui/lucide-icons-2'
+import { Menu, Search } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
-import { SessionRail, type RailLink, type RailSession } from '@hanzo/ui/chat'
+import { SessionRail, type RailSession } from '@hanzo/ui/chat'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useEffect, useMemo, useState } from 'react'
 
 import { safe } from './api/projects.ts'
-import { pinBoard } from './choice.ts'
 import { Customize } from './customize/index.tsx'
 import { Editor } from './automations.tsx'
 import { useKept, useRecents } from './data.ts'
 import { Forge } from './forge.tsx'
 import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
 import { Landing } from './landing.tsx'
+import { nav, NEW } from './nav.tsx'
 import { PrefsProvider } from './prefs.tsx'
 import { Project } from './project.tsx'
 import { Plans } from './plans.tsx'
@@ -49,7 +49,7 @@ import { Run } from './run.tsx'
 import { DOTS } from './section.tsx'
 import { Artifacts, Templates } from './shelf.tsx'
 import { Find } from './find.tsx'
-import { DOCS, Slack, useWho, Who } from './foot.tsx'
+import { Slack, useWho, Who } from './foot.tsx'
 import { Settings } from './settings/index.tsx'
 
 type Order = 'newest' | 'running'
@@ -82,7 +82,10 @@ function Shell() {
   // switched from the account menu at the foot. Beside the rail from md up, beside
   // the drawer's button below it — one place at a time.
   const name = <Name onPress={() => go('')} />
-  const { links, more } = nav(host, go)
+  // Every place in view, none behind a More; the rail's own New starts a run.
+  const links = nav(host, go)
+    .flatMap((g) => g.links)
+    .filter((l) => l.id !== NEW)
 
   return (
     <XStack flex={1} minH={0} minW={0} bg="$background">
@@ -91,7 +94,6 @@ function Shell() {
         onNew={() => go('')}
         fresh={r.kind === 'new'}
         links={links}
-        more={more}
         recents={rows}
         active={r.kind === 'run' ? r.id : null}
         onOpen={(id) => go(id)}
@@ -171,50 +173,6 @@ function Shell() {
       <Find open={finding} onOpenChange={setFinding} recents={rows} onOpen={(id) => { setFinding(false); go(id) }} />
     </XStack>
   )
-}
-
-/**
- * The builder's places, as a rail draws them: four in view and the rest under
- * More. Every one moves the builder through `go`, so a host that draws its own
- * rail lists the same places, in the same words, as the builder's rail does.
- */
-export function nav(host: Host, go: (path: string) => void): { links: RailLink[]; more: RailLink[] } {
-  const r = route(host.path)
-  const screen = r.kind === 'screen' ? r.screen : ''
-  const links: RailLink[] = [
-    {
-      id: 'projects',
-      label: 'Projects',
-      icon: <FolderGit2 size={16} />,
-      onPress: () => go(path({ kind: 'screen', screen: 'projects' })),
-      active: screen === 'projects' || screen === 'sync' || r.kind === 'repo',
-    },
-    { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
-    { id: 'customize', label: 'Customize', icon: <SlidersHorizontal size={16} />, onPress: () => go(path({ kind: 'customize', tab: 'skills' })), active: r.kind === 'customize' || screen === 'mcp' },
-    { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' || r.kind === 'automation' },
-  ]
-  const more: RailLink[] = [
-    {
-      id: 'issues',
-      label: 'Issues',
-      icon: <CircleDot size={16} />,
-      onPress: () => {
-        pinBoard(host.org, '')
-        go(path({ kind: 'screen', screen: 'issues' }))
-      },
-      active: screen === 'issues',
-    },
-    { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'templates' })), active: screen === 'templates' },
-    {
-      id: 'machines',
-      label: 'Machines',
-      icon: <Cpu size={16} />,
-      onPress: () => go(path({ kind: 'settings', section: 'machines' })),
-      active: r.kind === 'settings' && r.section === 'machines',
-    },
-    { id: 'docs', label: 'Docs', icon: <BookOpen size={16} />, onPress: () => window.open(DOCS, '_blank', 'noopener,noreferrer') },
-  ]
-  return { links, more }
 }
 
 /** The wordmark: the product's name, as its host calls it, which leads to New. */

@@ -8,6 +8,7 @@
 import type { Page } from '@playwright/test'
 
 import type { Given } from './cov-forge-host.tsx'
+import { expect } from './fixture.ts'
 import type { Reply, Sent } from './signed.ts'
 
 export type { Reply, Sent }
@@ -97,14 +98,15 @@ export async function serve(page: Page, answer: Answer): Promise<Sent[]> {
   return sent
 }
 
-const MORE = ['Issues', 'Templates', 'Machines', 'Docs']
-
-/** Moves to one of the rail's places, opening More when it is under it: no reload, so the page's coverage stays. */
+/**
+ * Moves to one of the rail's places, every one of them in view: no reload, so
+ * the page's coverage stays. It waits for the rail to mark the place, so two
+ * moves in a row are two pages drawn, not one batched into the other.
+ */
 export async function via(page: Page, label: string) {
-  const rail = page.getByRole('navigation', { name: 'Runs' }).first()
-  const row = rail.getByText(label, { exact: true })
-  if (MORE.includes(label) && !(await row.isVisible())) await rail.getByText('More', { exact: true }).click()
+  const row = page.getByRole('navigation', { name: 'Runs' }).first().locator('[data-slot="rail-row"]').filter({ hasText: new RegExp(`^${label}$`) })
   await row.click()
+  await expect(row).toHaveAttribute('aria-current', 'page')
 }
 
 /** Signs the page in as `who`, seeds `kept` into its storage, and answers for the platform; returns what the page sent. */

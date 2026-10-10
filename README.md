@@ -74,7 +74,7 @@ rail={false} />` in its pane and lists the builder in its own rail:
 import { Builder, DevSection } from '@hanzo/build'
 
 <Sidebar>            {/* the host's rail, @hanzo/ui/chat */}
-  <DevSection host={host} />   {/* New run, Artifacts, Templates, the runs */}
+  <DevSection host={host} />   {/* every place, grouped (nav), then the runs */}
 </Sidebar>
 <Builder host={host} rail={false} />
 ```
@@ -85,9 +85,10 @@ pane tokens: `--pane-fill`, `--pane-round`, `--pane-edge`, `--pane-blur`,
 `--pane-gap`, and `--shadow-sheet-2` for the drop. A host retunes the tokens;
 it writes no rule against the builder's slots.
 
-`DevSection` is rows of `@hanzo/ui/chat`'s Sidebar; `useSessions(host)` is its
-data — the org's coding runs, kept live by the org's feed — for a host that
-draws the rows itself. `administers(token, org)` reads the org-admin bit off a
+`DevSection` is rows of `@hanzo/ui/chat`'s Sidebar; `nav(host, go)` is the one
+list of places every rail draws, in groups (Work, Make, Run, Setup) and with
+nothing behind a More; `useSessions(host)` is the runs — the org's coding runs,
+kept live by the org's feed — for a host that draws the rows itself. `administers(token, org)` reads the org-admin bit off a
 hanzo.id token for `Host.admin`. One left column, never two.
 
 ## Addresses
@@ -98,7 +99,7 @@ hanzo.id token for `Host.admin`. One left column, never two.
 | `sess_<32 hex>` | one run, live |
 | `-/automations` | repeating work, read from `/v1/auto/flows` |
 | `-/customize` · `-/customize/connectors` · `/plugins` · `/agents` | Customize: skills, connectors, plugins, agents |
-| `-/mcp` | Connectors → Discover, where the fleet's native MCP servers now live |
+| `-/mcp` | Connectors → Browse with the fleet's native MCP servers listed |
 | `-/projects` | the org's projects: its repositories on the forge |
 | `-/sync` | link repositories from GitHub onto the forge |
 | `-/issues` | the forge's issues |
@@ -116,10 +117,12 @@ one address of two segments, so the forms cannot collide.
 
 **The rail** (this page, or `rail` left on). At the top, the mark. Signed in to an organization,
 that spot is the organization switcher: the org, and the projects under it.
-New, Projects, Artifacts, Customize, Automations, then More (Codebase, Issues,
-Templates, Machines, Docs), then the org's coding runs newest first with a live
-status dot. At the foot, a card offering Hanzo in Slack (dismissed once, gone in
-this browser) and the account, whose menu holds the email, the plan under it
+New, then every place in view (nav.tsx) — Work: Projects, Issues; Make:
+Artifacts, Templates, Automations; Run: Machines, Environments; Setup:
+Customize, Docs — then the org's coding runs newest first with a live status
+dot. Nothing waits behind a More. At the foot, a card offering Hanzo in Slack
+(dismissed once, gone in this browser) and the account, whose menu holds the
+email, the plan under it
 (`Meter`: Max with 20x beside it and the session, day and month as shares;
 Free's allowance left today; the balance only with no plan), Settings, Usage,
 Billing, View all plans, Get help (the docs, in a new tab) and Log out. No money
@@ -139,25 +142,34 @@ drain, claim key (shown once) and removal. API keys: your secret and publishable
 key, a new one shown once, rotated or revoked.
 
 **Customize.** What the agent brings to a run, a tab each — Skills, Connectors,
-Plugins, Agents — and in each, Yours (what the org has) and Discover (what it
-can add), one search and one Add. Skills and connectors ride into every run in
-the org, so they are an org admin's to add, switch and remove, and a member reads
-them; plugins and agents are any member's.
+Plugins, Agents — and in each, Browse (what there is to add, then what Hanzo
+builds in) first and always where the tab opens, then Yours (what the org has,
+counted on its button); one search and one Add. An empty Yours names the next
+step as buttons. A read that fails is said in plain words with Try again, and one
+that takes over fifteen seconds gives up and says so; only a 400, 409 or 422
+carries the platform's own sentence (a failed build, a name taken). Skills and
+connectors ride into every run in the org, so they are an org admin's to add,
+switch and remove, and a member reads them and is told so; plugins and agents
+are any member's.
 
-- Skills: the org's own SKILL.md skills, written, revised and deleted here, and
-  the brand's catalogue (`/.well-known/agent-skills/`) to read and add. Adding is
-  switching `skill_<name>` on, and a switch per skill turns it off again.
-- Connectors: the MCP servers the org added — by URL or off the shelf, a secret
-  sealed in KMS — each with a switch per tool. Adding one switches its tools on.
-  Discover is the shelf (featured first; a listing that ships only a package has
-  no plus) and the fleet's native servers `POST /v1/mcp` lists, which every run
-  can call and nothing adds.
+- Skills: Browse is the brand's catalogue (`/.well-known/agent-skills/`) to read
+  and add; Yours is the org's own SKILL.md skills, written, revised and deleted
+  here, and the catalogue's it added. Adding is switching `skill_<name>` on, and
+  a switch per skill turns it off again.
+- Connectors: Browse is the shelf (featured first; a listing that ships only a
+  package says so and has no Add), then the fleet's native servers, which every
+  run can call and nothing adds — listed by `POST /v1/mcp` only when asked for,
+  since that list starts every subsystem it names. Yours is the MCP servers the
+  org added — by URL or off the shelf, a secret sealed in KMS — each with one
+  switch on its card for all its tools and one per tool inside. Adding one
+  switches its tools on.
 - Plugins: TypeScript connectors built on the platform, from source or from a
-  description of an API; a failed build says why. Discover lists what the
-  deployment mounts.
-- Agents: the org's own — model, instructions, tools, budget — created, edited
-  (only what changed is sent) and deleted; Discover is the platform's presets
-  whose tool calls run on the platform.
+  description of an API; a failed build says why. Browse offers building one and
+  lists what the deployment mounts.
+- Agents: Browse is the platform's presets whose tool calls run on the platform,
+  each a Use that opens a new agent written from it; Yours is the org's own —
+  model, instructions, tools, budget — created, edited (only what changed is
+  sent) and deleted.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
 (Cloud is the platform's sandbox with the codebase's environment; the org's
@@ -277,6 +289,7 @@ src/
   environment.tsx a codebase's environment
   project.tsx   a project's workspace
   shelf.tsx     Artifacts and Templates
+  nav.tsx       the places, once, for every rail
   customize/    Customize: the shell, then one file per tab
   publish.tsx   Add to project / Publish
   find.tsx      finding a run, by status, paged

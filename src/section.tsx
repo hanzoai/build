@@ -10,15 +10,14 @@
  * host's own `go`.
  */
 import { SizableText } from '@hanzo/gui'
-import { Blocks, CircleDot, FolderGit2, LayoutTemplate, SlidersHorizontal, SquarePen, Workflow } from '@hanzogui/lucide-icons-2'
 import { SidebarItem, SidebarSection, StatusDot, type SessionStatus } from '@hanzo/ui/chat'
 import { useMemo, type ReactNode } from 'react'
 
-import { pinBoard } from './choice.ts'
 import type { Session } from './api/sessions.ts'
 import { useRecents, type Read } from './data.ts'
 import type { Host } from './host.tsx'
-import { path, route } from './route.ts'
+import { nav } from './nav.tsx'
+import { route } from './route.ts'
 
 /** A run's status, as the rail's dot draws it. Anything else is idle. */
 export const DOTS: Record<string, SessionStatus> = {
@@ -42,7 +41,7 @@ const Note = ({ children }: { children: string }) => (
 )
 
 /**
- * New, Automations, the forge (Projects, Issues), Artifacts, Templates, then the
+ * The builder's places, grouped as every rail groups them (nav.tsx), then the
  * runs. `children` sit between the places and the runs — where a host lists its
  * own. `onPick` fires after a move, so a host that draws its rail as a drawer
  * on a phone can close it.
@@ -60,45 +59,22 @@ export function DevSection({
 }) {
   const sessions = useSessions(host)
   const r = route(host.path)
-  const go = (p: string) => {
-    host.go(p)
+  // Every row, a place or a run, closes a drawer behind it.
+  const then = (press?: () => void) => () => {
+    press?.()
     onPick?.()
   }
-  const screen = r.kind === 'screen' ? r.screen : ''
   return (
     <>
-      <SidebarItem icon={<SquarePen size={16} aria-hidden />} active={r.kind === 'new'} onPress={() => go('')}>
-        New run
-      </SidebarItem>
-      <SidebarItem icon={<Workflow size={16} aria-hidden />} active={screen === 'automations' || r.kind === 'automation'} onPress={() => go(path({ kind: 'screen', screen: 'automations' }))}>
-        Automations
-      </SidebarItem>
-      <SidebarItem
-        icon={<FolderGit2 size={16} aria-hidden />}
-        active={screen === 'projects' || screen === 'sync' || r.kind === 'repo'}
-        onPress={() => go(path({ kind: 'screen', screen: 'projects' }))}
-      >
-        Projects
-      </SidebarItem>
-      <SidebarItem
-        icon={<CircleDot size={16} aria-hidden />}
-        active={screen === 'issues'}
-        onPress={() => {
-          pinBoard(host.org, '')
-          go(path({ kind: 'screen', screen: 'issues' }))
-        }}
-      >
-        Issues
-      </SidebarItem>
-      <SidebarItem icon={<SlidersHorizontal size={16} aria-hidden />} active={r.kind === 'customize'} onPress={() => go(path({ kind: 'customize', tab: 'connectors' }))}>
-        Customize
-      </SidebarItem>
-      <SidebarItem icon={<Blocks size={16} aria-hidden />} active={screen === 'artifacts'} onPress={() => go(path({ kind: 'screen', screen: 'artifacts' }))}>
-        Artifacts
-      </SidebarItem>
-      <SidebarItem icon={<LayoutTemplate size={16} aria-hidden />} active={screen === 'templates'} onPress={() => go(path({ kind: 'screen', screen: 'templates' }))}>
-        Templates
-      </SidebarItem>
+      {nav(host, host.go).map((g) => (
+        <SidebarSection key={g.id} label={g.label}>
+          {g.links.map((l) => (
+            <SidebarItem key={l.id} icon={l.icon} active={l.active} onPress={then(l.onPress)}>
+              {l.label}
+            </SidebarItem>
+          ))}
+        </SidebarSection>
+      ))}
       {children}
       <SidebarSection label={label}>
         {!host.person ? (
@@ -109,7 +85,7 @@ export function DevSection({
               key={s.id}
               icon={<StatusDot status={DOTS[s.status] ?? 'idle'} />}
               active={r.kind === 'run' && r.id === s.id}
-              onPress={() => go(s.id)}
+              onPress={then(() => host.go(s.id))}
             >
               {s.title || 'Untitled run'}
             </SidebarItem>

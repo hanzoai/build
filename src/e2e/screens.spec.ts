@@ -193,9 +193,6 @@ function tall(page: Page, height: number): Promise<number> {
   }, height)
 }
 
-/** The states a phone draws over the open rail drawer. */
-const DRAWN_OVER = ['rail']
-
 test.describe.configure({ mode: 'parallel' })
 
 for (const [size, box] of Object.entries(SIZES) as [Size, { width: number; height: number }][]) {
@@ -204,10 +201,6 @@ for (const [size, box] of Object.entries(SIZES) as [Size, { width: number; heigh
     for (const s of STATES) {
       if ((s.wide && size === 'phone') || (s.narrow && size !== 'phone')) continue
       test(s.name, async ({ page }) => {
-        // @hanzo/ui 8.27.16 lets touch()'s `position: relative` override the dialog close
-        // button's `absolute`, so a sheet draws its close button in its flow: the rail's
-        // drawer puts it at its foot, half off the window's left edge.
-        test.fail(size === 'phone' && DRAWN_OVER.includes(s.name), 'the drawer’s close button is off the window (@hanzo/ui)')
         const errors: string[] = []
         page.on('pageerror', (e) => errors.push(e.message))
         await s.platform(page)
