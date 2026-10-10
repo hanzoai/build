@@ -100,6 +100,18 @@ nothing behind a More; `useSessions(host)` is the runs — the org's coding runs
 kept live by the org's feed — for a host that draws the rows itself. `administers(token, org)` reads the org-admin bit off a
 hanzo.id token for `Host.admin`. One left column, never two.
 
+## The model, the composer, the panel
+
+One of each, shared with Chat (@hanzo/rooms imports them):
+
+- `useMind` — the model and effort: `GET /v1/models` read once per platform,
+  and the choice kept in this browser (`hanzo.mind`, Enso and Medium until
+  changed). `Tune` is the chip that changes it; Settings → Code writes the same
+  choice. `@hanzo/build/mind` serves the store alone, without the builder.
+- `prompt` / `Prompt` — the composer, as wide as the text above it (`measure`).
+- `Reply` — copy, Listen and Open under an answer.
+- `Panel` over `useDeck` — the side panel and its kept tabs.
+
 ## Addresses
 
 | path | screen |
@@ -196,10 +208,10 @@ are any member's.
 machines follow under remote control, each linked with `hanzo link`), the
 codebase and the branch — the forge's repositories, filtered as you type, read
 again with Refresh list, and a way to Sync for a GitHub repository that is not
-there yet — then the ask. Under it: attach (files ride the prompt as text),
-dictate, Build or Plan, and the model and effort. A codebase can be added to a
-project. Opening a codebase or an issue from its own screen lands here with
-that choice already made.
+there yet — then the ask, in the composer Chat draws too (`prompt`): the paperclip
+and Build or Plan at its start; the model and effort (`Tune`), dictation and
+send at its end. A codebase can be added to a project. Opening a codebase or an
+issue from its own screen lands here with that choice already made.
 
 **A run.** The transcript as it streams, drawn by what each part is: what the
 agent says as markdown, each command it runs as a card that opens onto its
@@ -209,17 +221,14 @@ request once it pushes one. Once it has finished, a follow-up starts a new run
 from the branch it pushed — the same codebase, place and mode — and opens it; a
 paused sandbox run goes on the same way. A plan run ends with its plan and
 Approve and build. Rename it, share a project run's story publicly, and find any
-run by status in Find. Beside it:
-
-- Environment: the codebase's environment, and the run's facts.
-- Git: what it pushed, read from the forge — Diff, Review, Commits.
-- Desktop: its sandbox's screen, framed from the sandbox's own noVNC page. A
-  sandbox run asks for a desktop.
-- Terminal: a shell in the same working tree (a tmux session named for the run,
-  so it reattaches), and the agent's own log.
-- Files: the working tree live from the sandbox, or the run's branch; and
-  Artifacts, what it produced.
-- Subscriptions.
+run by status in Find. Beside it, the side panel (`Panel`, the one Chat opens):
+Preview (what the sandbox serves, or where the run is published), Artifacts,
+Files, Diff (Diff, Review, Commits) and Terminal (a shell in the working tree,
+reattached by the run's name, and the agent's log); `+` opens Desktop (the
+sandbox's screen), Environment and any page. Tabs are dragged to reorder (or
+moved with Ctrl/⌘+Shift+←/→), shut with their cross, and kept as left; the
+header's Panel button and ⌘. / Ctrl+. open and shut it, and a phone opens it as
+a sheet. An answer's Open shows what it wrote there, and a publish opens Preview.
 
 The desktop and the shell are the sandbox's, so they close when the run stops.
 The setup bar says how long setup runs here have taken, once there are three.
@@ -306,6 +315,10 @@ src/
   transcript.tsx  a run's transcript, as cards
   prose.tsx     markdown, drawn as text (markdown.ts reads it)
   desk.tsx      the pane beside a run
+  mind.ts       the model and effort, one choice with Chat
+  prompt.tsx    the composer, and Tune, the model and effort chip
+  reply.tsx     the row under an answer
+  panel.tsx     the side panel; tabs.ts its kept tabs
   pane.ts       how a pane is cut, from the --pane-* tokens
   door.tsx      a run's desktop or shell, framed
   git.tsx       what a run pushed

@@ -15,51 +15,51 @@
  * (apps/coding steer.go), so what continues it is a new run: a paused run is
  * carried on, and a finished one followed up, by `POST /v1/agent/coding` from
  * the branch its work was kept on — the platform's own continue, done here —
- * with the model and effort the composer's foot shows, which New shares.
+ * with the model and effort the composer shows (mind.tsx), which Chat and New share.
  *
  * It reads as a chat: the person's ask opens it, each thing the agent said can
  * be copied and judged (a verdict is `build.verdict` on the event bus, as a
  * project's turns send it), and the title is the menu of what can be done to
  * the run. Share opens its story to the public build route.
  */
-import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ChevronDown, ChevronRight, Copy, ExternalLink, GitPullRequest, Globe, PanelRight, Pencil, Share } from '@hanzogui/lucide-icons-2'
+import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
+import { ChevronDown, ChevronRight, Copy, ExternalLink, GitPullRequest, Globe, Pencil, Share } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type DropdownMenuProps } from '@hanzo/ui'
 import { Steer, type Command } from '@hanzo/ui/agents'
-import { Composer } from '@hanzo/ui/chat'
-import { ChipSelect } from '@hanzo/ui/product'
-import { ModelPicker } from '@hanzo/ui/models'
+import { Failure } from '@hanzo/ui/chat'
 import { useLimits } from '@hanzo/ui/product/useLimits'
+import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { approve, followUp, headline, retry, start, type Ask, type Earlier } from './api/coding.ts'
-import { ENSO, limits as readLimits } from './api/models.ts'
-import { useCatalog, usePick } from './pick.ts'
+import { limits as readLimits } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
-import { Desk } from './desk.tsx'
+import { Desk, SEED } from './desk.tsx'
 import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
-import { EFFORTS } from './landing.tsx'
+import { useMind } from './mind.ts'
 import { Out } from './out.tsx'
 import { gap, pane } from './pane.ts'
-import { usePrefs } from './prefs.tsx'
+import { measure, Prompt, useEar } from './prompt.tsx'
+import { useSpoken } from './voice.ts'
+import { speaker, type Artifact } from './reply.tsx'
+import { PanelToggle } from './panel.tsx'
+import { PAGE, useDeck, useKey, usePanel } from './tabs.ts'
+import { compose, Files, pick, type Attached } from './tools.tsx'
 import { Transcript } from './transcript.tsx'
 
 const LIVE = new Set(['running', 'paused', ''])
 
-// What this browser kept is read as it is found: a stored value that is not a string is none.
-const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-
 type MenuItems = NonNullable<DropdownMenuProps['items']>
 
-/** The side pane's width, px: its default, the floor a drag holds, and what the transcript keeps beside it. */
+/** The side panel's width, px: its default, the floor a drag holds, and what the transcript keeps beside it. */
 const DESK_WIDTH = 480
 const DESK_FLOOR = 240
 const TALK_FLOOR = 300
-/** The most the side pane is drawn at before its row is measured, px. */
+/** The most the side panel is drawn at before its row is measured, px. */
 const DESK_CEIL = 960
 
 /**
@@ -87,17 +87,22 @@ export function Run({ id }: { id: string }) {
   const signed = Boolean(host.person)
   const { detail, record, events, status, refused } = useRun(t, signed ? id : null)
   const [draft, setDraft] = useState('')
+  const [files, setFiles] = useState<Attached[]>([])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [notify, setNotify] = useState(false)
-  const [desk, setDesk] = useKept('hanzo.build.desk', true)
-  // The side pane's width is the reader's, kept, and gives way so the
+  // The side panel: open or shut as Dev was left, its tabs as they were arranged.
+  const wide = useMedia().md
+  const [desk, setDesk] = usePanel('dev', true, wide)
+  const side = useDeck('dev', SEED)
+  useKey(() => setDesk(!desk))
+  // The side panel's width is the reader's, kept, and gives way so the
   // transcript keeps its floor: bounded by the row it is drawn in once that is
   // measured, and by its own `maxWidth` until then.
-  const [side, setSide] = useKept('hanzo.build.desk.span', DESK_WIDTH)
-  const [room, measure] = useWidth()
+  const [reach, setReach] = useKept('hanzo.build.desk.span', DESK_WIDTH)
+  const [room, size] = useWidth()
   const most = room ? Math.max(DESK_FLOOR, room - TALK_FLOOR) : DESK_CEIL
-  const across = Math.round(Math.min(most, Math.max(DESK_FLOOR, typeof side === 'number' ? side : DESK_WIDTH)))
+  const across = Math.round(Math.min(most, Math.max(DESK_FLOOR, typeof reach === 'number' ? reach : DESK_WIDTH)))
   // A drag repaints the pane's width directly and tells React once, on letting go.
   const deskBox = useRef<HTMLElement | null>(null)
   // Stop was pressed here: the run keeps its work after it answers, and says so with its status.
@@ -106,13 +111,11 @@ export function Run({ id }: { id: string }) {
   const [name, setName] = useState('')
   const [copied, setCopied] = useState('')
   const [unfolded, setUnfolded] = useState(false)
-  // The model and effort a run started here uses: New's choice, which a change here changes too.
-  const { prefs } = usePrefs()
-  const [chose, choose] = useKept<Record<string, unknown> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
-  const catalog = useCatalog(t, signed)
+  // The model and effort a run started here uses: the one choice Chat and New share.
+  const mind = useMind(t)
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
-  const [model, pickModel] = usePick(text(chose?.model) || prefs.code?.model || ENSO, (id) => choose({ ...chose, model: id }), catalog.list)
-  const pace = EFFORTS.find((e) => e.id === chose?.effort) ?? EFFORTS.find((e) => e.id === prefs.code?.effort) ?? EFFORTS[1]
+  const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
+  const listen = useMemo(() => speaker(t), [t])
 
   const mode = record?.mode ?? ''
   // A run that narrated no ask of its own opens with the one its title records, once it has said anything.
@@ -133,6 +136,14 @@ export function Run({ id }: { id: string }) {
   useEffect(() => {
     if (end.published) rebuilt()
   }, [end.published, rebuilt])
+  // What a run publishes opens in the panel: the Preview, chosen and shown.
+  useEffect(() => {
+    if (!end.published) return
+    side.open({ kind: 'preview', title: 'Preview' })
+    setDesk(true)
+    // On each publish, not on each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [end.published])
   const site = built.value.find((p) => p.slug === record?.project)?.live ?? ''
   const pr = pull(record?.pr ?? '', record?.repo ?? '')
   const live = LIVE.has(state)
@@ -211,8 +222,25 @@ export function Run({ id }: { id: string }) {
     }
   }
 
-  /** A new run's ask with the model and effort the foot shows. The router is the platform's default, so it is not named. */
-  const tuned = (a: Ask): Ask => ({ ...a, model, effort: pace.id })
+  /**
+   * A new run's ask with the model and effort the composer shows, Enso named as
+   * itself: a run that names none takes the person's saved coding default
+   * (apps/coding start.go), which is not what the composer shows.
+   */
+  const tuned = (a: Ask): Ask => ({ ...a, model: mind.model, effort: mind.effort })
+
+  // A setup run's work IS its environment: the panel opens on it.
+  useEffect(() => {
+    if (mode === 'setup') side.open({ kind: 'environment', title: 'Environment' })
+    // Once the run says what it is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
+
+  /** An answer's artifact, open in the panel as a page rendered from its own bytes. */
+  const look = (a: Artifact) => {
+    side.open({ kind: PAGE, title: a.name, body: a.body, type: a.mime })
+    setDesk(true)
+  }
 
   /**
    * A new run from this one's work, opened. A paused run it carries on is let go
@@ -224,17 +252,19 @@ export function Run({ id }: { id: string }) {
     const ask = how === 'approve' ? approve(earlier, said) : how === 'retry' ? retry(earlier, said) : followUp(earlier, said)
     const run = await start(t, tuned(ask))
     setDraft('')
+    setFiles([])
     host.go(run.session)
     return ''
   }
 
-  // The composer sends only words, and only while it is enabled.
+  // The composer sends words, with any files fenced after them, and only while it is enabled.
   const send = () => {
-    const words = draft.trim()
+    const words = compose(draft.trim(), files)
     if (steering) {
       void act(async () => {
         await message(t, id, words)
         setDraft('')
+        setFiles([])
         return 'Sent — recorded on this run'
       })
       return
@@ -337,38 +367,36 @@ export function Run({ id }: { id: string }) {
             ? 'Follow up — continues in a new run'
             : 'Reading this run…'
 
-  // What a new run from here is made with; words that steer this run use neither.
-  const tuning = signed && !steering ? (
-    <XStack flex={1} items="center" gap="$2" justify="flex-end" flexWrap="wrap" rowGap="$1">
-      <ModelPicker
-        quiet
-        size="sm"
-        name="Model"
-        models={catalog.shown}
-        scope="chat"
-        limits={limits}
-        value={model}
-        onChange={pickModel}
-        loading={catalog.loading}
-        error={catalog.error}
-      />
-      <ChipSelect
-        quiet
-        name="Effort"
-        label={pace.label}
-        chosen={pace}
-        items={EFFORTS}
-        onChange={(e) => choose({ ...chose, effort: e.id })}
-        placement="top-end"
-        width={180}
-      />
-    </XStack>
-  ) : undefined
+  const desk_ = (sheet: boolean) => (
+    <Desk
+      id={id}
+      repo={record?.repo ?? ''}
+      branch={record?.branch ?? ''}
+      base={record?.base ?? ''}
+      environment={record?.environment ?? ''}
+      mode={mode}
+      pr={pr}
+      title={title}
+      project={record?.project ?? ''}
+      sandbox={record?.sandbox ?? ''}
+      site={site}
+      published={end.published}
+      events={events}
+      live={running}
+      menu={[...manage, ...sharing]}
+      refused={signed ? refused || (detail.error ? detail.error.message : '') : 'Sign in to follow this run.'}
+      retry={signed ? 'Retry' : 'Sign in'}
+      onRetry={signed ? detail.reload : () => host.signIn?.()}
+      side={side}
+      sheet={sheet}
+      onHide={() => setDesk(false)}
+    />
+  )
 
   return (
-    <XStack ref={measure} data-slot="run-split" flex={1} minH={0} minW={0} width="100%">
-      <YStack data-slot="run" {...pane} flex={1} minH={0} minW={0} width="100%" px="$6" $max-md={{ px: '$4' }}>
-        <XStack pt="$3" pb="$2" gap="$3" items="center" minH={44}>
+    <XStack ref={size} data-slot="run-split" flex={1} minH={0} minW={0} width="100%">
+      <YStack data-slot="run" {...pane} flex={1} minH={0} minW={0} width="100%">
+        <XStack px="$4" pt="$3" pb="$2" gap="$2" items="center" minH={44}>
           <YStack flex={1} minW={0} items="flex-start">
             <DropdownMenu
               trigger={
@@ -385,12 +413,6 @@ export function Run({ id }: { id: string }) {
               {[state || (detail.loading ? 'reading' : ''), record?.repo, record?.branch, record?.published ? 'shared' : ''].filter(Boolean).join(' · ')}
             </SizableText>
           </YStack>
-          {desk ? null : (
-            // The side pane is drawn from md up, so below it there is nothing to show.
-            <XStack render="button" aria-label="Show the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={() => setDesk(true)} $max-md={{ display: 'none' }}>
-              <PanelRight size={16} />
-            </XStack>
-          )}
           {pr.href ? (
             // From the run's record, which the coding service writes; `pull` draws only a pull request address.
             <Out href={pr.href} label={`Open pull request ${pr.label}`}>
@@ -416,10 +438,24 @@ export function Run({ id }: { id: string }) {
               items={sharing}
             />
           ) : null}
+          <PanelToggle open={desk} onToggle={() => setDesk(!desk)} />
         </XStack>
 
         <Transcript
           cards={shown}
+          onOpen={look}
+          onDiff={() => {
+            side.open({ kind: 'diff', title: 'Diff' })
+            setDesk(true)
+          }}
+          listen={signed ? listen : undefined}
+          end={
+            failed ? (
+              <Failure onRetry={busy ? undefined : () => void act(() => carry(again, 'retry'))}>
+                {end.problem ? 'This run stopped before it finished.' : 'This run stopped with an error. Its work so far is on its branch.'}
+              </Failure>
+            ) : null
+          }
           // A paused run's agent was stopped where it stood; what it was running is cut off.
           live={running && !paused}
           header={
@@ -459,107 +495,109 @@ export function Run({ id }: { id: string }) {
         />
 
         <YStack pb="$3" pt="$2" gap="$2">
-          {end.problem ? (
-            <SizableText size="$1" color="$soft">
-              The branch is pushed, and the pull request could not be opened.
-            </SizableText>
-          ) : null}
-          {note || (signed && refused) ? (
-            <SizableText size="$1" color="$soft" role="status">
-              {note || refused}
-            </SizableText>
-          ) : null}
-          {failed ? (
-            <XStack items="center" gap="$2">
-              <Button size="sm" disabled={busy} onPress={() => void act(() => carry(again, 'retry'))}>
-                {busy ? 'Starting…' : 'Try again'}
-              </Button>
-            </XStack>
-          ) : null}
-          {plan.length ? (
-            // One line until it is opened, so the steps never crowd the transcript.
-            <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-              <XStack
-                render="button"
-                aria-label={`Steps · ${plan.length}`}
-                aria-expanded={unfolded}
-                onPress={() => setUnfolded(!unfolded)}
-                px="$3"
-                py="$1.5"
-                gap="$2"
-                items="center"
-                hoverStyle={{ bg: '$hover' }}
-              >
-                {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                <SizableText size="$2" color="$ink">
-                  {`Steps · ${plan.length}`}
-                </SizableText>
-                {current && !unfolded ? (
-                  <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={{ textAlign: 'right' }}>
-                    {current.name}
-                  </SizableText>
-                ) : null}
-              </XStack>
-              {unfolded
-                ? plan.map((s) => {
-                    const on = s === current
-                    return (
-                      <XStack key={s.name} items="center" gap="$2" px="$3" py="$1.5" borderTopWidth={1} borderColor="$borderColor">
-                        <SizableText size="$2" color={s.done || on ? '$ink' : '$soft'}>
-                          {s.done ? '✓' : on ? '●' : '○'}
-                        </SizableText>
-                        <SizableText size="$2" color={s.done ? '$soft' : '$ink'} numberOfLines={1}>
-                          {s.name}
-                        </SizableText>
-                      </XStack>
-                    )
-                  })
-                : null}
-            </YStack>
-          ) : null}
-          {setup && running && !seen ? <Onboarding onDone={() => setSeen(true)} /> : null}
-          {running ? (
-            <XStack items="center" gap="$2" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" flexWrap="wrap" rowGap="$1">
-              <SizableText size="$2" color="$ink" flex={1} minW={160}>
-                {paused
-                  ? kept.pushed
-                    ? 'Paused — its work so far is on its branch.'
-                    : 'Paused.'
-                  : setup
-                    ? span
-                      ? `Environment setup takes ~${span[0] === span[1] ? span[0] : `${span[0]}–${span[1]}`} minutes.`
-                      : 'Environment setup takes several minutes.'
-                    : 'This run is still working.'}
+          {/* At the text's width, like the composer under it. */}
+          <YStack {...measure} gap="$2">
+            {end.problem ? (
+              <SizableText size="$1" color="$soft">
+                The branch is pushed, and the pull request could not be opened.
               </SizableText>
-              <Steer
-                onCommand={command}
-                withhold={[
-                  ...(paused ? (['pause'] as const) : (['resume'] as const)),
-                  ...(busy || waiting ? (['pause', 'resume', 'stop'] as const) : []),
-                ]}
-              />
-              <Button size="sm" disabled={notify} onPress={() => void ask()}>
-                {notify ? 'You will be notified' : 'Notify me'}
-              </Button>
-            </XStack>
-          ) : null}
-          <Composer
-            inline
-            {...pane}
+            ) : null}
+            {note || (signed && refused) ? (
+              <SizableText size="$1" color="$soft" role="status">
+                {note || refused}
+              </SizableText>
+            ) : null}
+            {plan.length ? (
+              // One line until it is opened, so the steps never crowd the transcript.
+              <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
+                <XStack
+                  render="button"
+                  aria-label={`Steps · ${plan.length}`}
+                  aria-expanded={unfolded}
+                  onPress={() => setUnfolded(!unfolded)}
+                  px="$3"
+                  py="$1.5"
+                  gap="$2"
+                  items="center"
+                  hoverStyle={{ bg: '$hover' }}
+                >
+                  {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  <SizableText size="$2" color="$ink">
+                    {`Steps · ${plan.length}`}
+                  </SizableText>
+                  {current && !unfolded ? (
+                    <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={{ textAlign: 'right' }}>
+                      {current.name}
+                    </SizableText>
+                  ) : null}
+                </XStack>
+                {unfolded
+                  ? plan.map((s) => {
+                      const on = s === current
+                      return (
+                        <XStack key={s.name} items="center" gap="$2" px="$3" py="$1.5" borderTopWidth={1} borderColor="$borderColor">
+                          <SizableText size="$2" color={s.done || on ? '$ink' : '$soft'}>
+                            {s.done ? '✓' : on ? '●' : '○'}
+                          </SizableText>
+                          <SizableText size="$2" color={s.done ? '$soft' : '$ink'} numberOfLines={1}>
+                            {s.name}
+                          </SizableText>
+                        </XStack>
+                      )
+                    })
+                  : null}
+              </YStack>
+            ) : null}
+            {setup && running && !seen ? <Onboarding onDone={() => setSeen(true)} /> : null}
+            {running ? (
+              <XStack items="center" gap="$2" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" flexWrap="wrap" rowGap="$1">
+                <SizableText size="$2" color="$ink" flex={1} minW={160}>
+                  {paused
+                    ? kept.pushed
+                      ? 'Paused — its work so far is on its branch.'
+                      : 'Paused.'
+                    : setup
+                      ? span
+                        ? `Environment setup takes ~${span[0] === span[1] ? span[0] : `${span[0]}–${span[1]}`} minutes.`
+                        : 'Environment setup takes several minutes.'
+                      : 'This run is still working.'}
+                </SizableText>
+                <Steer
+                  onCommand={command}
+                  withhold={[
+                    ...(paused ? (['pause'] as const) : (['resume'] as const)),
+                    ...(busy || waiting ? (['pause', 'resume', 'stop'] as const) : []),
+                  ]}
+                />
+                <Button size="sm" disabled={notify} onPress={() => void ask()}>
+                  {notify ? 'You will be notified' : 'Notify me'}
+                </Button>
+              </XStack>
+            ) : null}
+          </YStack>
+          <Prompt
+            framed
             value={draft}
             onChange={setDraft}
             onSend={send}
+            ready={Boolean(draft.trim())}
             disabled={!signed || busy || waiting || !(running || finished)}
             placeholder={placeholder}
             label={steering ? 'Steer this run' : 'Follow up on this run'}
-            foot={tuning}
+            head={files.length ? <XStack gap="$1.5" flexWrap="wrap"><Files files={files} onFiles={setFiles} /></XStack> : undefined}
+            onAttach={() => pick(files, setFiles, setNote)}
+            // What a new run from here is made with; words that steer this run use neither.
+            mind={signed && !steering ? mind : null}
+            limits={limits}
+            voice={voice}
           />
           <SizableText size="$1" color="$soft" style={{ textAlign: 'center' }}>
             Hanzo is AI and can make mistakes.
           </SizableText>
         </YStack>
       </YStack>
-      {desk ? (
+      {desk && !wide ? desk_(true) : null}
+      {desk && wide ? (
         <YStack
           data-slot="desk"
           ref={(el: unknown) => {
@@ -571,8 +609,6 @@ export function Run({ id }: { id: string }) {
           position="relative"
           shrink={0}
           minH={0}
-          display="none"
-          $md={{ display: 'flex' }}
           style={{ width: across, maxWidth: `calc(100% - ${TALK_FLOOR}px)`, minWidth: DESK_FLOOR }}
         >
           <Grip
@@ -582,34 +618,14 @@ export function Run({ id }: { id: string }) {
             ceil={most}
             reset={Math.min(most, DESK_WIDTH)}
             onSpan={(n) => deskBox.current?.style.setProperty('width', `${n}px`)}
-            onKeep={setSide}
+            onKeep={setReach}
             onShut={() => setDesk(false)}
-            label="Resize the side pane"
+            label="Resize the side panel"
             // In the gutter between the two panes; `left` is measured inside the pane's 1px edge.
             l={`calc(-1 * ${gap} - ${pane.borderWidth}px)`}
             width={gap}
           />
-        <Desk
-          id={id}
-          repo={record?.repo ?? ''}
-          branch={record?.branch ?? ''}
-          base={record?.base ?? ''}
-          environment={record?.environment ?? ''}
-          mode={mode}
-          pr={pr}
-          title={title}
-          project={record?.project ?? ''}
-          sandbox={record?.sandbox ?? ''}
-          site={site}
-          published={end.published}
-          events={events}
-          live={running}
-          menu={[...manage, ...sharing]}
-          refused={signed ? refused || (detail.error ? detail.error.message : '') : 'Sign in to follow this run.'}
-          retry={signed ? 'Retry' : 'Sign in'}
-          onRetry={signed ? detail.reload : () => host.signIn?.()}
-          onHide={() => setDesk(false)}
-        />
+          {desk_(false)}
         </YStack>
       ) : null}
       <Dialog open={naming} onOpenChange={setNaming}>

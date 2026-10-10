@@ -6,11 +6,11 @@
  */
 import type { Page } from '@playwright/test'
 
+import { desk, open as pick } from './desk.ts'
 import { expect, test } from './fixture.ts'
 import { finished, hold, NEXT, ORG, rig, SESSION, to } from './cov-run.ts'
 import { setup, STRANGER } from './stubs.ts'
 
-const desk = (p: Page) => p.getByRole('complementary', { name: 'Run details' })
 const ENV = '/v1/environment/universe'
 const refusal = (detail: string, code = 403) => ({ status: code, json: { detail } })
 const note = (p: Page, says: string) => desk(p).getByRole('status').filter({ hasText: says })
@@ -19,7 +19,7 @@ const note = (p: Page, says: string) => desk(p).getByRole('status').filter({ has
 async function open(p: Page, env: Record<string, unknown>, over?: Parameters<typeof rig>[2], record = finished()) {
   const got = await rig(p, { env, record }, over)
   await p.goto(`/${SESSION}`)
-  await desk(p).getByRole('button', { name: 'Environment', exact: true }).first().click()
+  await pick(p, 'Environment')
   return got
 }
 
@@ -183,7 +183,7 @@ test('a member reads the environment and changes none of it', async ({ page: p }
   await rig(p, { env: { repo: 'universe', install: 'pnpm i', start: 'pnpm dev', secrets: ['TOKEN'], state: 'proposed', proposal: { install: 'pnpm i', start: 'pnpm dev', secrets: ['API_KEY'], note: '' } } })
   await member(p)
   await p.goto(`/${SESSION}`)
-  await desk(p).getByRole('button', { name: 'Environment', exact: true }).first().click()
+  await pick(p, 'Environment')
   await expect(desk(p).getByText('An org admin saves the environment and sets its secrets.')).toBeVisible()
   await expect(desk(p).getByRole('textbox', { name: 'Install Script' })).toBeDisabled()
   for (const b of ['Save', 'New Secret', 'Remove TOKEN', 'Set API_KEY']) await expect(desk(p).getByRole('button', { name: b })).toHaveCount(0)
@@ -195,7 +195,7 @@ test('the environment says it is reading, and why it could not be read', async (
   await rig(p, {}, ({ path }) => (refuse && path === ENV ? refusal('The environment store is down', 503) : undefined))
   const go = await hold(p, ENV)
   await p.goto(`/${SESSION}`)
-  await desk(p).getByRole('button', { name: 'Environment', exact: true }).first().click()
+  await pick(p, 'Environment')
   await expect(desk(p).getByText('Reading the environment…')).toBeVisible()
   refuse = true
   go()

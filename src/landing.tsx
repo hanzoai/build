@@ -2,8 +2,9 @@
  * New: the empty state. A heading at the top of the column, and at the foot of
  * the pane the composer — where the run goes (Cloud: the sandbox with the
  * codebase's environment; or one of the org's machines, under remote control),
- * which repository and branch it starts from, and the ask itself.
- * Under it: attach, dictate, the mode, and the model and effort on the right.
+ * which repository and branch it starts from, and the ask itself — the one
+ * composer Chat draws too (prompt.tsx): attach and the mode at its start, the
+ * model and effort, dictation and send at its end.
  *
  * Sending starts a coding run on a project and opens it. A project is a
  * repository — the org's on the forge, or one its GitHub grants — so a run
@@ -15,10 +16,9 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { ModeSelect } from '@hanzo/ui/agents'
-import { Composer } from '@hanzo/ui/chat'
-import { BranchSelect, ChipSelect, FooterLink, HanzoMark, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
-import { ModelPicker } from '@hanzo/ui/models'
+import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useLimits } from '@hanzo/ui/product/useLimits'
+import { useDictation, useVoice } from '@hanzo/voice'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
@@ -27,28 +27,23 @@ import { repos as githubRepos } from './api/github.ts'
 import { plain, read, SETUP, unset, type Environment } from './api/environment.ts'
 import { homes as readHomes, type Home, type Homes } from './api/work.ts'
 import { SetupDialog } from './environment.tsx'
-import { ENSO, limits as readLimits } from './api/models.ts'
-import { useCatalog, usePick } from './pick.ts'
+import { limits as readLimits } from './api/models.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
 import { asHub, isForge, isHub, settle, type HubRepo } from './choice.ts'
 import { useCached, useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
-import { pane } from './pane.ts'
+import { useMind } from './mind.ts'
 import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
-import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
+import { MEASURE, Prompt, useEar } from './prompt.tsx'
+import { compose, Files, pick, type Attached } from './tools.tsx'
+import { useSpoken } from './voice.ts'
 
 /** One vocabulary for the mode, on New and in a workspace. */
 export const MODES = [
   { id: 'build', label: 'Build', hint: 'Edits, commits and pushes a branch' },
   { id: 'plan', label: 'Plan', hint: 'Plans the change and writes nothing' },
-] as const
-
-export const EFFORTS = [
-  { id: 'low', label: 'Low' },
-  { id: 'medium', label: 'Medium' },
-  { id: 'high', label: 'High' },
 ] as const
 
 /** What a person chose last time, per org. */
@@ -57,8 +52,6 @@ interface Kept {
   branch: string
   place: string
   mode: Mode
-  model: string
-  effort: string
   ask: string
   /** The issue the handed-over words are, by the number the run's pull request closes; 0 for none. */
   issue: number
@@ -67,9 +60,7 @@ interface Kept {
 /** The org's repositories before they have been read: no answer, so nothing is judged from it. */
 const NOHOMES: Homes = { homes: [], whole: false }
 
-const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', model: ENSO, effort: 'medium', ask: '', issue: 0 }
-
-const COLUMN = 768
+const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', ask: '', issue: 0 }
 
 /**
  * What was typed here and not sent, kept in this tab.
@@ -150,9 +141,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   }, [])
 
   const places = usePlaces(t, signed)
-  const catalog = useCatalog(t, signed)
+  // The model and effort Chat shares, and dictation into the ask.
+  const mind = useMind(t)
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
-  const [model, pickModel] = usePick(kept.model, (id) => set({ model: id }), catalog.list)
+  const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
   // The chosen codebase's environment, so New can say when it has none yet.
   const codebase = isForge(kept.repo) ? kept.repo.name : ''
   // The org's repositories on the forge: what a run and an environment can name.
@@ -234,8 +226,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         base: repo ? kept.branch : hub ? kept.branch || hub.default_branch : undefined,
         targetId: place.id,
         mode: kept.mode,
-        model,
-        effort: kept.effort,
+        model: mind.model,
+        effort: mind.effort,
         issue,
       })
       setDraft('')
@@ -261,7 +253,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   /** Start the agent that finds a codebase's environment, and open it: its run is the progress. A refusal is the dialog's to say. */
   const setup = async (repo: string) => {
-    const run = await start(t, { prompt: SETUP, repo, mode: 'setup', model, effort: kept.effort })
+    const run = await start(t, { prompt: SETUP, repo, mode: 'setup', model: mind.model, effort: mind.effort })
     onStarted(run.session)
   }
 
@@ -370,57 +362,15 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     </XStack>
   )
 
-  const foot = (
-    // Wraps at phone width rather than clipping: every control stays reachable.
-    <XStack flex={1} items="center" gap="$2" flexWrap="wrap" rowGap="$1">
-      <Attach files={files} onFiles={setFiles} onNote={setNote} />
-      <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} onNote={setNote} />
-      <ModeSelect
-        modes={MODES}
-        value={kept.mode}
-        onChange={(m) => set({ mode: m as Mode })}
-        bg="transparent"
-        minH={24}
-        px="$1.5"
-        self="center"
-      />
-      <XStack flex={1} />
-      <ModelPicker
-        quiet
-        size="sm"
-        name="Model"
-        models={catalog.shown}
-        scope="chat"
-        limits={limits}
-        value={model}
-        onChange={pickModel}
-        loading={catalog.loading}
-        error={catalog.error}
-      />
-      <ChipSelect
-        quiet
-        name="Effort"
-        label={EFFORTS.find((e) => e.id === kept.effort)?.label ?? 'Medium'}
-        chosen={EFFORTS.find((e) => e.id === kept.effort) ?? null}
-        items={EFFORTS}
-        onChange={(e) => set({ effort: e.id })}
-        placement="top-end"
-        width={180}
-      />
-    </XStack>
-  )
-
   return (
     // The question and the field that answers it sit together in the middle of the
     // page, as they do on claude.ai; a run's own page keeps its composer at the foot.
-    <YStack flex={1} minH={0} minW={0} items="center" justify="center" px="$4" pb="$10" overflow="scroll">
-      <YStack width="100%" maxW={COLUMN} gap="$5">
-        <XStack role="heading" aria-level={1} justify="center" items="center" gap="$3" flexWrap="wrap">
-          <HanzoMark size={26} />
-          <SizableText size="$8" color="$ink" style={{ textAlign: 'center' }}>
-            {prefs.callName ? `What’s up next, ${prefs.callName}?` : 'What’s up next?'}
-          </SizableText>
-        </XStack>
+    // Chat's opening, the same: the heading set as Chat's, the composer as wide as the text.
+    <YStack flex={1} minH={0} minW={0} items="center" justify="center" pb="$10" overflowY="auto" overflowX="hidden">
+      <YStack width="100%" maxW={MEASURE} gap="$5">
+        <SizableText render="h1" fontSize="$7" lineHeight="$7" fontWeight="700" color="$ink" style={{ textAlign: 'center' }}>
+          {prefs.callName ? `What’s up next, ${prefs.callName}?` : 'What’s up next?'}
+        </SizableText>
         <YStack gap="$2">
           {stranger ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" role="alert">
@@ -449,14 +399,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
               )}
             </XStack>
           ) : null}
-          {note || unhonoured(kept.mode, place.id) || catalog.note ? (
+          {note || unhonoured(kept.mode, place.id) || mind.note ? (
             <SizableText size="$1" color="$soft" role="status">
-              {note || unhonoured(kept.mode, place.id) || catalog.note}
+              {note || unhonoured(kept.mode, place.id) || mind.note}
             </SizableText>
           ) : null}
-          <Composer
-            inline
-            {...pane}
+          <Prompt
+            framed
             value={draft}
             onChange={setDraft}
             onSend={() => void send()}
@@ -464,7 +413,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             placeholder="Describe a task or ask a question"
             label="Describe a task or ask a question"
             head={head}
-            foot={foot}
+            onAttach={() => pick(files, setFiles, setNote)}
+            tools={
+              <ModeSelect modes={MODES} value={kept.mode} onChange={(m) => set({ mode: m as Mode })} bg="transparent" minH={24} px="$1.5" self="center" />
+            }
+            mind={mind}
+            limits={limits}
+            voice={voice}
           />
         </YStack>
       </YStack>

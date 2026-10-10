@@ -7,11 +7,10 @@
  */
 import type { Page } from '@playwright/test'
 
+import { desk, open } from './desk.ts'
 import { expect, test } from './fixture.ts'
 import { BOX, finished, hold, PR, rig, SESSION, to, type World } from './cov-run.ts'
 
-const desk = (p: Page) => p.getByRole('complementary', { name: 'Run details' })
-const tab = (p: Page, name: string) => desk(p).getByRole('button', { name, exact: true }).first()
 const CHANGES = `/v1/agent/coding/${SESSION}/changes`
 const MERGE = `/v1/agent/coding/${SESSION}/merge`
 const b64 = (s: string) => Buffer.from(s).toString('base64')
@@ -51,7 +50,7 @@ const pushed = {
 test('the diff opens each file onto its change, or says why it cannot', async ({ page: p }, info) => {
   await rig(p, { changes: pushed })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
+  await open(p, 'Diff')
   await expect(desk(p).getByText('agent/ab12 → main · 5 files +903 −1300')).toBeVisible()
   const show = (path: string) => desk(p).getByRole('button', { name: `Show ${path}` })
   await show('widget.go').click()
@@ -73,8 +72,8 @@ test('the diff opens each file onto its change, or says why it cannot', async ({
 test('the review says where the pull request stands and what each reviewer said', async ({ page: p }, info) => {
   await rig(p, { changes: pushed })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
-  await tab(p, 'Review').click()
+  await open(p, 'Diff')
+  await desk(p).getByRole('button', { name: 'Review', exact: true }).click()
   await expect(desk(p).getByText('#7 Add the widget')).toBeVisible()
   await expect(desk(p).getByText('Open · conflicts with its base')).toBeVisible()
   await expect(desk(p).getByRole('link', { name: 'Open pull request #7' })).toHaveAttribute('href', PR)
@@ -93,9 +92,9 @@ test('the review reads merged, closed, ready and undecided pulls, and links only
   const { world } = await rig(p, { changes: { ...pushed, pull: { ...pushed.pull, state: 'merged', reviews: [] } } })
   await p.goto(`/${SESSION}`)
   const again = async () => {
-    await tab(p, 'Files').click()
-    await tab(p, 'Git').click()
-    await tab(p, 'Review').click()
+    await open(p, 'Files')
+    await open(p, 'Diff')
+    await desk(p).getByRole('button', { name: 'Review', exact: true }).click()
   }
   await again()
   await expect(desk(p).getByText('Merged', { exact: true })).toBeVisible()
@@ -122,8 +121,8 @@ test('Merge lands an open pull request once however often it is pressed, and the
   world = w
   const go = await hold(p, MERGE, 'POST')
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
-  await tab(p, 'Review').click()
+  await open(p, 'Diff')
+  await desk(p).getByRole('button', { name: 'Review', exact: true }).click()
   await expect(desk(p).getByText('Open · ready to merge')).toBeVisible()
   await desk(p).getByRole('button', { name: 'Merge', exact: true }).click()
   await desk(p).getByRole('button', { name: 'Merging…' }).click()
@@ -133,7 +132,7 @@ test('Merge lands an open pull request once however often it is pressed, and the
   await expect(desk(p).getByRole('button', { name: /^Merg/ })).toHaveCount(0)
   expect(to(sent, 'POST', MERGE)).toHaveLength(1)
   // What it changed is read again: merged, the diff from its base is empty.
-  await tab(p, 'Diff').click()
+  await desk(p).getByRole('button', { name: 'Diff', exact: true }).click()
   await expect(desk(p).getByText('No pushed changes')).toBeVisible()
 })
 
@@ -149,8 +148,8 @@ test('a refused merge says the forge’s reason and Merge stays; a merge answere
   })
   world = w
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
-  await tab(p, 'Review').click()
+  await open(p, 'Diff')
+  await desk(p).getByRole('button', { name: 'Review', exact: true }).click()
   await desk(p).getByRole('button', { name: 'Merge', exact: true }).click()
   await expect(desk(p).getByText(why)).toBeVisible()
   await expect(desk(p).getByRole('button', { name: 'Merge', exact: true })).toBeVisible()
@@ -164,9 +163,9 @@ test('a refused merge says the forge’s reason and Merge stays; a merge answere
 test('the commits say who made each and when, as far as the forge says', async ({ page: p }) => {
   await rig(p, { changes: { ...pushed, files: [pushed.files[0]] } })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
+  await open(p, 'Diff')
   await expect(desk(p).getByText('agent/ab12 → main · 1 file +3 −0')).toBeVisible()
-  await tab(p, 'Commits').click()
+  await desk(p).getByRole('button', { name: 'Commits', exact: true }).click()
   const when = await p.evaluate(() => new Date('2026-09-27T10:05:00Z').toLocaleString())
   await expect(desk(p).getByText('a1b2c3d')).toBeVisible()
   await expect(desk(p).getByText(`Hanzo Dev · ${when}`)).toBeVisible()
@@ -178,7 +177,7 @@ test('the commits say who made each and when, as far as the forge says', async (
 test('a branch pushed with no change in it says only where it goes', async ({ page: p }) => {
   await rig(p, { changes: { ...pushed, files: [], pull: null } })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
+  await open(p, 'Diff')
   await expect(desk(p).getByText('agent/ab12 → main', { exact: true })).toBeVisible()
   await expect(desk(p).getByText('No pushed changes')).toBeVisible()
 })
@@ -186,12 +185,12 @@ test('a branch pushed with no change in it says only where it goes', async ({ pa
 test('before a run pushes, each view says there is nothing yet', async ({ page: p }) => {
   await rig(p)
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
+  await open(p, 'Diff')
   await expect(desk(p).getByText('No pushed changes')).toBeVisible()
   await expect(desk(p).getByText(/ → main/)).toHaveCount(0)
-  await tab(p, 'Review').click()
+  await desk(p).getByRole('button', { name: 'Review', exact: true }).click()
   await expect(desk(p).getByText('No pull request yet. The run opens one when it pushes its changes.')).toBeVisible()
-  await tab(p, 'Commits').click()
+  await desk(p).getByRole('button', { name: 'Commits', exact: true }).click()
   await expect(desk(p).getByText('No pushed commits')).toBeVisible()
 })
 
@@ -199,14 +198,14 @@ test('the Git tab says it is reading, and says why the forge would not answer', 
   const { world } = await rig(p, {}, ({ path }) => (path === CHANGES && world.record.title === 'refused' ? { status: 502, json: { detail: 'The forge is unreachable' } } : undefined))
   const go = await hold(p, CHANGES)
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
+  await open(p, 'Diff')
   await expect(desk(p).getByText('Reading the branch…')).toBeVisible()
   go()
   await expect(desk(p).getByText('No pushed changes')).toBeVisible()
   world.record.title = 'refused'
   await expect(p.getByRole('heading', { name: 'refused' })).toBeVisible()
-  await tab(p, 'Files').click()
-  await tab(p, 'Git').click()
+  await open(p, 'Files')
+  await open(p, 'Diff')
   await expect(desk(p).getByText('The forge is unreachable')).toBeVisible()
 })
 
@@ -214,7 +213,7 @@ test('while the run works its changes are read again every little while, and not
   await p.clock.install()
   const { sent, world } = await rig(p, { record: { ...finished(), status: 'running' }, changes: pushed })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Git').click()
+  await open(p, 'Diff')
   await expect(desk(p).getByText('agent/ab12 → main · 5 files +903 −1300')).toBeVisible()
   const reads = () => to(sent, 'GET', CHANGES).length
   const before = reads()
@@ -244,7 +243,7 @@ test.describe('the Files tab', () => {
   test('reads the sandbox as it is: up and down its directories, and each kind of file', async ({ page: p }, info) => {
     const { sent } = await rig(p, { record: live, box })
     await p.goto(`/${SESSION}`)
-    await tab(p, 'Files').click()
+    await open(p, 'Files')
     const where = (w: string) => desk(p).getByText(w, { exact: true })
     await expect(where('/work')).toBeVisible()
     await desk(p).getByRole('button', { name: 'Open src' }).click()
@@ -275,7 +274,7 @@ test.describe('the Files tab', () => {
     await rig(p, { record: live, box: {} })
     const go = await hold(p, '/v1/sandbox/read', 'POST')
     await p.goto(`/${SESSION}`)
-    await tab(p, 'Files').click()
+    await open(p, 'Files')
     await expect(desk(p).getByText('Reading…')).toBeVisible()
     go()
     await expect(desk(p).getByText('No such path in the sandbox')).toBeVisible()
@@ -305,7 +304,7 @@ test.describe('the Files tab', () => {
       },
     })
     await p.goto(`/${SESSION}`)
-    await tab(p, 'Files').click()
+    await open(p, 'Files')
     // No sandbox yet: the branch, with no choice of where to read.
     await expect(desk(p).getByText('hanzoai/universe@agent/ab12', { exact: true })).toBeVisible()
     await expect(desk(p).getByRole('button', { name: 'Live', exact: true })).toHaveCount(0)
@@ -339,7 +338,7 @@ test.describe('the Files tab', () => {
     await rig(p, { record: { ...finished(), branch: '' } }, ({ path }) => (path.endsWith('/tree') ? { status: 502, json: { detail: 'The forge is unreachable' } } : undefined))
     const go = await hold(p, `/v1/agent/coding/${SESSION}/tree`)
     await p.goto(`/${SESSION}`)
-    await tab(p, 'Files').click()
+    await open(p, 'Files')
     await expect(desk(p).getByText('hanzoai/universe', { exact: true })).toBeVisible()
     await expect(desk(p).getByText('Reading…')).toBeVisible()
     go()
@@ -349,15 +348,15 @@ test.describe('the Files tab', () => {
   test('lists what the run produced, each where it leads', async ({ page: p }, info) => {
     await rig(p, { record: { ...finished(), pr: PR, project: 'widgets', mode: 'setup' } })
     await p.goto(`/${SESSION}`)
-    await tab(p, 'Files').click()
-    await desk(p).getByRole('button', { name: 'Artifacts', exact: true }).click()
+    await open(p, 'Files')
+    await open(p, 'Artifacts')
     await expect(desk(p).getByRole('link', { name: 'Pull request #7' })).toHaveAttribute('href', PR)
     await expect(desk(p).getByText('The branch this run pushes to in hanzoai/universe')).toBeVisible()
     await p.screenshot({ path: info.outputPath('artifacts.png') })
     await desk(p).getByRole('button', { name: 'Environment proposal' }).click()
     await expect(desk(p).getByText('This run', { exact: true })).toBeVisible()
-    await tab(p, 'Files').click()
-    await desk(p).getByRole('button', { name: 'Artifacts', exact: true }).click()
+    await open(p, 'Files')
+    await open(p, 'Artifacts')
     await desk(p).getByRole('button', { name: 'widgets' }).click()
     await expect(p).toHaveURL(/\/widgets$/)
   })
@@ -365,13 +364,13 @@ test.describe('the Files tab', () => {
   test('says when a run produced nothing, and names a branch with no repository plainly', async ({ page: p }) => {
     const { world } = await rig(p, { record: { ...finished(), branch: '' } })
     await p.goto(`/${SESSION}`)
-    await tab(p, 'Files').click()
-    await desk(p).getByRole('button', { name: 'Artifacts', exact: true }).click()
+    await open(p, 'Files')
+    await open(p, 'Artifacts')
     await expect(desk(p).getByText('This run has produced no artifacts yet.')).toBeVisible()
     world.record = { ...world.record, repo: '', branch: 'agent/ab12' }
     await expect(desk(p).getByText('The branch this run pushes to', { exact: true })).toBeVisible()
     // Files, beside Artifacts, goes back to the run's files.
-    await desk(p).getByRole('button', { name: 'Files', exact: true }).nth(1).click()
+    await open(p, 'Files')
     await expect(desk(p).getByText('This directory is empty.')).toBeVisible()
   })
 })

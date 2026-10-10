@@ -291,10 +291,13 @@ test.describe('the workspace', () => {
     })
     await page.goto('/shop')
     // The page takes part in the bridge: pick its heading.
+    await expect(page.getByRole('button', { name: 'Pick an element to edit' })).toBeVisible({ timeout: 45_000 })
     await page.getByRole('button', { name: 'Pick an element to edit' }).click()
     await expect(page.getByRole('button', { name: 'Stop picking elements' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByLabel('Attached to the next message')).toContainText('body > h1')
-    await page.locator('input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('use the brand blue') })
+    // The paperclip asks the browser for files, as every composer's does.
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Attach files' }).click()])
+    await chooser.setFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('use the brand blue') })
     await expect(page.getByText('notes.txt')).toBeVisible()
     await page.getByRole('button', { name: 'Mode: Build' }).click()
     await page.getByRole('menuitem', { name: /^Plan/ }).click()
@@ -304,8 +307,8 @@ test.describe('the workspace', () => {
     // Dictated into an empty box the words are the draft; into a draft, they follow it.
     const dictate = async () => {
       await page.getByRole('button', { name: 'Dictate' }).click()
-      await page.waitForTimeout(300)
-      await page.getByRole('button', { name: 'Stop and transcribe' }).click()
+      await page.waitForTimeout(600)
+      await page.getByRole('button', { name: 'Dictating — click to stop' }).click()
     }
     await dictate()
     await expect(box(page)).toHaveValue('in blue')
@@ -347,8 +350,8 @@ test.describe('the workspace', () => {
     await seo.click()
     await expect(page.getByRole('region', { name: 'Chat' }).getByText('Making it blue.')).toBeVisible()
     expect(posted(sent, '/v1/agent/coding')).toHaveLength(1)
-    // The first run on a project follows nothing.
-    expect(posted(sent, '/v1/agent/coding')[0]?.body).toEqual({ prompt: 'Review SEO', project: 'shop', repo: 'shop', base: 'main', mode: 'build', desktop: true })
+    // The first run on a project follows nothing, and carries the kept model and effort: Enso, named as itself.
+    expect(posted(sent, '/v1/agent/coding')[0]?.body).toEqual({ prompt: 'Review SEO', project: 'shop', repo: 'shop', base: 'main', mode: 'build', model: 'enso-auto', effort: 'medium', desktop: true })
   })
 
   test('the page’s bridge follows its links and forwards its console; the device, reload and page picker drive the preview', async ({ page }, info) => {

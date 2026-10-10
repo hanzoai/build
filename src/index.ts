@@ -28,10 +28,22 @@ export { Meter, Title } from './meter.tsx'
 export { Plan } from './settings/plan.tsx'
 export { Credits, SEPARATE } from './settings/credits.tsx'
 export { useStanding, rows, left, type Standing, type Row } from './standing.ts'
-export { kind, label, said, share, spent, ways, when, type Kind, type Label, type Share, type State } from './plan.ts'
+export { kind, label, said, share, spent, ways, when, type Label, type Share, type State } from './plan.ts'
 export type { Limits } from './api/limits.ts'
 export type { Target } from './api/call.ts'
 export type { Host, Person } from './host.tsx'
 export type { Session, Status } from './api/sessions.ts'
 export type { Read } from './data.ts'
 export { href, parse, path, PLACES, route, SESSION, SLUG, type Route, type Screen } from './route.ts'
+
+/**
+ * What Chat draws the same way (@hanzo/rooms imports these): the model and
+ * effort (`useMind`, one choice kept for both, changed by `Tune`), the composer
+ * (`prompt`), the row under an answer (`Reply`), and the side panel (`Panel`
+ * over a `Deck` of tabs).
+ */
+export { catalog, EFFORTS, FIRST, keep, kept, nameOf, reasons, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
+export { cut, GAP, MEASURE, measure, Prompt, prompt, ROUND, Tune, useEar, type PromptOptions } from './prompt.tsx'
+export { artifacts, blob, lead, renders, Reply, Served, speakable, speaker, type Artifact, type Listen } from './reply.tsx'
+export { Page, Panel, PanelToggle, type Kind, type PanelProps } from './panel.tsx'
+export { address, name, PAGE, useDeck, useKey, usePanel, useShown, type Deck, type Tab, type Tabs } from './tabs.ts'

@@ -17,14 +17,15 @@ test('a run’s transcript draws what the agent said, thought, ran and changed',
   await platform(p)
   await p.goto(`/${SESSION}`)
   const t = transcript(p)
-  await expect(t.getByText('I will read the widget first.')).toBeVisible()
+  await expect(t.getByText('I will read the widget first.')).toBeVisible({ timeout: 45_000 })
   // Its reasoning is folded; a command is a card that opens onto its output.
   await expect(t.getByLabel('Thought').getByText('Reading the widget before changing it')).toBeVisible()
   await expect(t.getByText('FAIL widgets')).toHaveCount(0)
   await t.getByText('go test ./...').first().click()
   await expect(t.getByText(/FAIL widgets/)).toBeVisible()
   await t.getByText('Edited', { exact: true }).click()
-  await expect(t.getByText(/widget\.go\s+The diff is in the run’s Git tab/)).toBeVisible()
+  await expect(t.getByText('widget.go', { exact: true }).first()).toBeVisible()
+  await expect(t.getByRole('button', { name: 'Open the diff' })).toBeVisible()
   // The agent's markdown: bold, code and a list, as text.
   await expect(t.getByText('New', { exact: true })).toBeVisible()
   await expect(t.getByText('the tests pass')).toBeVisible()

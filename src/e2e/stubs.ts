@@ -323,8 +323,6 @@ export const KEPT = {
     branch: 'main',
     place: '',
     mode: 'build',
-    model: '',
-    effort: 'medium',
     ask: '',
   },
 }

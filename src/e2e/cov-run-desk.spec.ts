@@ -1,5 +1,5 @@
 /**
- * A run's side pane on a stubbed platform (cov-run.ts): its desktop and shell,
+ * A run's side panel on a stubbed platform (cov-run.ts): its desktop and shell,
  * framed from the sandbox's own pages with a fresh ticket each time — refused,
  * answered with no address, reported failed, asked to retry, silent past the
  * deadline, lied to by other windows, left before the ticket came back, and
@@ -10,11 +10,10 @@
  */
 import type { Page } from '@playwright/test'
 
+import { desk, open } from './desk.ts'
 import { expect, test } from './fixture.ts'
 import { BOX, ev, finished, hold, rig, SESSION, tells, to } from './cov-run.ts'
 
-const desk = (p: Page) => p.getByRole('complementary', { name: 'Run details' })
-const tab = (p: Page, name: string) => desk(p).getByRole('button', { name, exact: true }).first()
 const live = () => ({ ...finished(), status: 'running', sandbox: BOX })
 const SCREEN = `/v1/sandbox/${BOX}/screen/ticket`
 const TERM = `/v1/sandbox/${BOX}/terminal/ticket`
@@ -23,14 +22,14 @@ const screen = (p: Page) => p.frameLocator('iframe[title="The run’s desktop"]'
 test('the desktop waits for a sandbox, opens only while it runs, and says an ended one is gone', async ({ page: p }) => {
   const { world, sent } = await rig(p, { record: { ...finished(), status: 'running' } })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(desk(p).getByText('Starting', { exact: true })).toBeVisible()
   await expect(desk(p).getByText('The desktop opens once the run’s sandbox is up.')).toBeVisible()
   // The run ends and its sandbox parks: looking at it does not wake it.
   world.record = { ...finished(), sandbox: BOX }
   world.held = { status: 'parked', expiresAt: 1790726400 }
   await p.reload()
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(desk(p).getByText('Suspended', { exact: true })).toBeVisible()
   await p.evaluate(() => new Promise((r) => setTimeout(r, 500)))
   expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(0)
@@ -41,7 +40,7 @@ test('the desktop waits for a sandbox, opens only while it runs, and says an end
   expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(1)
   world.held = { status: 'gone' }
   await p.reload()
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(desk(p).getByText('Ended', { exact: true })).toBeVisible()
 })
 
@@ -57,7 +56,7 @@ test('a door asked of a sandbox that stopped as it was asked resumes it once', a
     },
   )
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(screen(p).getByText(/the screen \?ticket=t\d+/)).toBeVisible()
   expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(1)
 })
@@ -92,7 +91,7 @@ test('the Browser frames what the sandbox serves, opens it again when its sandbo
     return r.fulfill({ contentType: 'text/html', body: `<!doctype html><body><p>the app on ${new URL(r.request().url()).host}</p><script>${says}</script></body>` })
   })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Browser').click()
+  await open(p, 'Preview')
   const frame = p.frameLocator(`iframe[title="What the run serves on port 3000"]`)
   await expect(frame.getByText(`the app on sandbox-${BOX}-preview-3000.hanzo.app`)).toBeVisible()
   await expect.poll(() => to(sent, 'POST', `/v1/sandbox/${BOX}/preview`).length).toBe(2)
@@ -112,7 +111,7 @@ test('a preview that keeps saying it cannot serve is not opened again and again'
     r.fulfill({ contentType: 'text/html', body: `<!doctype html><body><script>parent.postMessage({ source: 'hanzo-preview', status: 401 }, '*')</script></body>` }),
   )
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Browser').click()
+  await open(p, 'Preview')
   await expect(desk(p).getByText('This browser keeps the preview’s cookie out of a frame. Open it in a new tab.')).toBeVisible()
   await p.evaluate(() => new Promise((r) => setTimeout(r, 1000)))
   expect(to(sent, 'POST', `/v1/sandbox/${BOX}/preview`)).toHaveLength(1)
@@ -121,7 +120,7 @@ test('a preview that keeps saying it cannot serve is not opened again and again'
 test('the Browser shows where a run published when nothing serves', async ({ page: p }) => {
   await rig(p, { record: live() })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Browser').click()
+  await open(p, 'Preview')
   await expect(desk(p).getByText('Nothing is serving yet', { exact: true }).first()).toBeVisible()
   await expect(desk(p).getByText('When the run starts a server in its sandbox, the page opens here.')).toBeVisible()
 })
@@ -139,7 +138,7 @@ test('the Artifacts tab saves what the run left and opens its previews', async (
   }
   await p.route((u) => u.pathname === `/v1/agent/coding/${SESSION}/artifacts/src/a.ts`, (r) => r.fulfill({ contentType: 'text/plain', body: 'export const a = 1\n' }))
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Artifacts').click()
+  await open(p, 'Artifacts')
   await expect(desk(p).getByText('Changed file · 2.0 KB')).toBeVisible()
   const saved = p.waitForEvent('download')
   await desk(p).getByRole('button', { name: 'src/a.ts' }).click()
@@ -162,7 +161,7 @@ test('a refused ticket says why, and Retry mints a new one that opens', async ({
     },
   )
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(desk(p).getByText('Failed to connect')).toBeVisible()
   await expect(desk(p).getByText('The sandbox has no desktop')).toBeVisible()
   await p.screenshot({ path: info.outputPath('refused.png') })
@@ -177,7 +176,7 @@ test('a refused ticket says why, and Retry mints a new one that opens', async ({
 test('a ticket answered with no address to open is a failed connection', async ({ page: p }) => {
   await rig(p, { record: live() }, ({ path }) => (path === SCREEN ? { status: 201, json: { ticket: 't' } } : undefined))
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(desk(p).getByText('The sandbox answered with no address to open')).toBeVisible()
 })
 
@@ -186,7 +185,7 @@ test('a page that says it failed is a failed connection, in its words or the pan
   // The first page names why; the next says only that it failed.
   world.page.screen = `top.loads = (top.loads || 0) + 1; parent.postMessage({ source: 'hanzo-screen', ready: false, why: top.loads === 1 ? 'VNC refused the connection' : 7 }, '*')`
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(desk(p).getByText('VNC refused the connection')).toBeVisible()
   await desk(p).getByRole('button', { name: 'Retry' }).click()
   await expect(desk(p).getByText('Unable to reach the desktop. The run may have stopped.')).toBeVisible()
@@ -196,7 +195,7 @@ test('a page that asks for a retry gets a new ticket', async ({ page: p }) => {
   const { world } = await rig(p, { record: live() })
   world.page.screen = `top.loads = (top.loads || 0) + 1; parent.postMessage(top.loads === 1 ? { source: 'hanzo-screen', retry: true } : { source: 'hanzo-screen', ready: true }, '*')`
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect.poll(() => p.evaluate(() => (window as unknown as { loads?: number }).loads)).toBe(2)
   const ticket = /ticket=(t\d+)/.exec((await screen(p).locator('p').textContent())!)![1]
   await expect(desk(p).getByText('Connecting to the desktop…')).toHaveCount(0)
@@ -209,13 +208,13 @@ test('a page silent past the deadline has failed; one that answered in time stay
   const { world } = await rig(p, { record: live() })
   world.page.screen = ''
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(desk(p).getByText('Connecting to the desktop…')).toBeVisible()
   await expect(screen(p).getByText(/the screen/)).toBeVisible()
   await p.clock.runFor(20_000)
   await expect(desk(p).getByText('Unable to reach the desktop. The run may have stopped.')).toBeVisible()
   // The shell's page answered at once, so its deadline passes with it open.
-  await tab(p, 'Terminal').click()
+  await open(p, 'Terminal')
   await expect(p.frameLocator('iframe[title="The run’s terminal"]').getByText(/the terminal/)).toBeVisible()
   await expect(desk(p).getByText('Connecting to the terminal…')).toHaveCount(0)
   await p.clock.runFor(20_000)
@@ -236,7 +235,7 @@ test('only the framed page is heard: other windows, other origins and other door
     tells('hanzo-screen', { ready: 'maybe' }),
   ].join(';')
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(screen(p).getByText(/the screen/)).toBeVisible()
   await expect.poll(() => forged).toBe(1)
   await p.evaluate(() => window.postMessage({ source: 'hanzo-screen', ready: false, why: 'from the page itself' }, '*'))
@@ -272,11 +271,11 @@ test('a door left before its ticket answers does not open with it', async ({ pag
   await expect(shell).toHaveText(/ticket=t\d+/)
   expect(Number(/ticket=t(\d+)/.exec((await shell.textContent())!)![1])).toBeGreaterThan(spent)
   // The desktop's first ticket is refused after it was left: nothing says so.
-  await tab(p, 'Desktop').click()
-  await tab(p, 'Git').click()
+  await open(p, 'Desktop')
+  await open(p, 'Diff')
   screenGo()
   await expect.poll(() => first).toBe(false)
-  await tab(p, 'Desktop').click()
+  await open(p, 'Desktop')
   await expect(screen(p).getByText(/the screen \?ticket=t/)).toBeVisible()
   await expect(desk(p).getByText('Failed to connect')).toHaveCount(0)
 })
@@ -325,7 +324,7 @@ test('the pane’s menu does what the title’s does, and Details opens the run�
 test('the Environment tab names the run’s codebase by its name, and what it runs on', async ({ page: p }) => {
   await rig(p, { record: { ...finished(), environment: 'tgt_1', mode: 'plan', base: '' } })
   await p.goto(`/${SESSION}`)
-  await tab(p, 'Environment').click()
+  await open(p, 'Environment')
   for (const [label, value] of [
     ['Repository', 'universe'],
     ['Branch', 'agent/ab12'],

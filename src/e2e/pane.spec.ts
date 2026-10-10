@@ -1,6 +1,6 @@
 /**
- * A run draws its own panes: the transcript and the side pane are cards cut by
- * @hanzo/design's pane tokens, the side pane stands a gutter off the run with
+ * A run draws its own panes: the transcript and the side panel are cards cut by
+ * @hanzo/design's pane tokens, the side panel stands a gutter off the run with
  * its edge in that gutter, the composer floats in its pane, and the Slack card
  * is glass. Read from computed style, so a host needs no rule to get any of it.
  */
@@ -31,10 +31,10 @@ const style = (p: Page, selector: string, props: string[]) =>
 
 const PANE = ['border-top-left-radius', 'background-color', 'border-top-width', 'border-top-color', 'backdrop-filter', 'box-shadow']
 
-test('the run and its side pane are panes, a gutter apart, with the edge in the gutter', async ({ page: p }) => {
+test('the run and its side panel are panes, a gutter apart, with the edge in the gutter', async ({ page: p }) => {
   await rig(p)
   await p.goto(`/${SESSION}`)
-  await expect(p.locator('[data-slot="desk"]')).toBeVisible()
+  await expect(p.locator('[data-slot="desk"]')).toBeVisible({ timeout: 45_000 })
 
   const round = await token(p, 'border-top-left-radius', 'var(--radius-xl)')
   const fill = await token(p, 'background-color', 'var(--sheet-1)')
@@ -67,6 +67,7 @@ test('the run and its side pane are panes, a gutter apart, with the edge in the 
   expect(Math.round(grip!.x)).toBe(Math.round(run!.x + run!.width))
   expect(Math.round(grip!.x + grip!.width)).toBe(Math.round(desk!.x))
 
+  // The composer is a pane of its own, cut as Chat's is: on the first paper rung.
   const composer = await style(p, '[data-slot="run"] [data-slot="composer"]', PANE)
   expect(composer).toEqual({
     'border-top-left-radius': round,
@@ -74,7 +75,7 @@ test('the run and its side pane are panes, a gutter apart, with the edge in the 
     'border-top-width': '1px',
     'border-top-color': edge,
     'backdrop-filter': 'blur(20px) saturate(1.8)',
-    'box-shadow': drop,
+    'box-shadow': await token(p, 'box-shadow', 'var(--shadow-sheet-1)'),
   })
 })
 

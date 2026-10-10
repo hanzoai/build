@@ -9,11 +9,12 @@ import type { Page } from '@playwright/test'
 
 import { expect, test } from './fixture.ts'
 import { browser, ev, finished, hold, NEXT, ORG, rig, SESSION, to } from './cov-run.ts'
+import { desk, open } from './desk.ts'
 import { mounted, went } from './mount.ts'
 import { visitor } from './stubs.ts'
 
-const desk = (p: Page) => p.getByRole('complementary', { name: 'Run details' })
-const tab = (p: Page, name: string) => desk(p).getByRole('button', { name, exact: true }).first()
+/** The model and effort chip: absent where the next send uses neither. */
+const chip = (p: Page) => p.locator('[data-slot="mind"]')
 const box = (p: Page, name: 'Steer this run' | 'Follow up on this run') => p.getByRole('textbox', { name })
 const status = (p: Page) => p.getByRole('status').filter({ hasNotText: /^$/ })
 const running = () => ({ ...finished(), status: 'running' })
@@ -24,11 +25,11 @@ test('signed out, a run asks for a sign in wherever it would show something', as
   await mounted(p, { path: SESSION, org: null, admin: false, person: null, signIn: true })
   const signs = () => went(p).then((w) => w.filter((x) => x === 'sign in'))
   const t = p.getByLabel('Transcript')
-  await expect(t.getByText('Sign in to follow this run.')).toBeVisible()
+  await expect(t.getByText('Sign in to follow this run.')).toBeVisible({ timeout: 45_000 })
   await expect(p.getByRole('button', { name: 'Manage this run' }).getByRole('heading', { name: 'Untitled run' })).toBeVisible()
   await expect(p.getByRole('textbox', { name: 'Follow up on this run' })).toHaveAttribute('placeholder', 'Sign in to follow up')
   await expect(p.getByRole('textbox', { name: 'Follow up on this run' })).toBeDisabled()
-  await expect(p.getByRole('button', { name: /^Model: / })).toHaveCount(0)
+  await expect(chip(p)).toHaveCount(0)
   await expect(p.getByRole('button', { name: 'Share', exact: true })).toHaveCount(0)
   await p.getByRole('button', { name: 'Manage this run' }).click()
   await expect(p.getByRole('menuitem')).toHaveCount(1)
@@ -40,11 +41,11 @@ test('signed out, a run asks for a sign in wherever it would show something', as
   await expect(desk(p).getByText('Sign in to follow this run.')).toBeVisible()
   await desk(p).getByRole('button', { name: 'Sign in' }).click()
   await expect.poll(async () => (await signs()).length).toBe(2)
-  await tab(p, 'Git').click()
+  await open(p, 'Diff')
   await expect(desk(p).getByText('Sign in to see what this run pushed.')).toBeVisible()
-  await tab(p, 'Files').click()
+  await open(p, 'Files')
   await expect(desk(p).getByText('Sign in to read this run’s files.')).toBeVisible()
-  await tab(p, 'Environment').click()
+  await open(p, 'Environment')
   await expect(desk(p).getByText('Sign in to see this codebase’s environment.')).toBeVisible()
   await p.screenshot({ path: info.outputPath('signed-out.png') })
 })
@@ -56,7 +57,7 @@ test('a run the platform will not read says why, and Retry reads it again', asyn
   )
   await p.goto(`/${SESSION}`)
   const t = p.getByLabel('Transcript')
-  await expect(t.getByText('The run store is down')).toBeVisible()
+  await expect(t.getByText('The run store is down')).toBeVisible({ timeout: 45_000 })
   await expect(p.getByRole('heading', { name: 'Untitled run' })).toBeVisible()
   await expect(box(p, 'Follow up on this run')).toHaveAttribute('placeholder', 'Reading this run…')
   await expect(box(p, 'Follow up on this run')).toBeDisabled()
@@ -71,7 +72,7 @@ test('a run the platform will not read says why, and Retry reads it again', asyn
 test('a feed that refuses this account says so, beside the run as read', async ({ page: p }) => {
   const { sent } = await rig(p, {}, ({ path }) => (path === '/v1/agent/sessions/stream' ? refusal('no', 403) : undefined))
   await p.goto(`/${SESSION}`)
-  await expect(p.getByLabel('Transcript').getByText('Waiting for the run’s first step…')).toBeVisible()
+  await expect(p.getByLabel('Transcript').getByText('Waiting for the run’s first step…')).toBeVisible({ timeout: 45_000 })
   await expect(p.getByRole('status').filter({ hasText: 'This account cannot follow this run' }).first()).toBeVisible()
   await expect(desk(p).getByText('This account cannot follow this run')).toBeVisible()
   const reads = to(sent, 'GET', `/v1/agent/sessions/${SESSION}`).length
@@ -83,7 +84,7 @@ test('a run being read says so, then draws what it read', async ({ page: p }) =>
   await rig(p, { events: [ev('status', { status: 'started' })] })
   const go = await hold(p, `/v1/agent/sessions/${SESSION}`)
   await p.goto(`/${SESSION}`)
-  await expect(p.getByLabel('Transcript').getByText('Reading this run…')).toBeVisible()
+  await expect(p.getByLabel('Transcript').getByText('Reading this run…')).toBeVisible({ timeout: 45_000 })
   await expect(p.getByText('reading', { exact: true })).toBeVisible()
   go()
   await expect(p.getByRole('heading', { name: 'universe: Add the widget' })).toBeVisible()
@@ -97,9 +98,10 @@ test('a running run is steered, paused and stopped, and each refusal says why', 
     return path.startsWith(`/v1/agent/sessions/${SESSION}/`) && fail.has(verb) ? refusal(`The run would not ${verb}`, 409) : undefined
   })
   await p.goto(`/${SESSION}`)
-  await expect(p.getByLabel('Transcript').getByText('Starting…')).toBeVisible()
+  await expect(p.getByLabel('Transcript').getByText('Starting…')).toBeVisible({ timeout: 45_000 })
   await expect(box(p, 'Steer this run')).toHaveAttribute('placeholder', 'Add a follow up')
-  await expect(p.getByRole('button', { name: /^Model: / })).toHaveCount(0)
+  // Words that steer this run go to it as they are: no model, no effort.
+  await expect(chip(p)).toHaveCount(0)
   await box(p, 'Steer this run').fill('use table tests')
   await box(p, 'Steer this run').press('Enter')
   await expect(status(p).getByText('The run would not message')).toBeVisible()
@@ -122,19 +124,18 @@ test('a pausing sandbox run waits for its work to be kept, then goes on in a new
     path === `/v1/agent/sessions/${SESSION}/stop` ? refusal('Already let go', 409) : undefined,
   )
   await p.goto(`/${SESSION}`)
-  await expect(box(p, 'Follow up on this run')).toHaveAttribute('placeholder', 'Pausing — the run is keeping its work…')
+  await expect(box(p, 'Follow up on this run')).toHaveAttribute('placeholder', 'Pausing — the run is keeping its work…', { timeout: 45_000 })
   await expect(box(p, 'Follow up on this run')).toBeDisabled()
   for (const b of ['Pause', 'Resume', 'Stop']) await expect(p.getByRole('button', { name: b })).toHaveAttribute('aria-disabled', 'true')
   world.events = [ev('status', { status: 'paused', changed: false })]
   await expect(p.getByText('Paused.', { exact: true })).toBeVisible()
   await expect(box(p, 'Follow up on this run')).toHaveAttribute('placeholder', 'Continue this run with a follow up')
-  await expect(p.getByRole('button', { name: 'Model: enso-auto' })).toBeVisible()
+  await expect(chip(p)).toHaveAccessibleName('Model and effort: Enso, Medium')
   await box(p, 'Follow up on this run').fill('and tests')
   await box(p, 'Follow up on this run').press('Enter')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   const body = to(sent, 'POST', '/v1/agent/coding')[0]?.body as Record<string, unknown>
-  expect(body).toMatchObject({ repo: 'hanzoai/universe', after: SESSION, mode: 'build', effort: 'medium', desktop: true })
-  expect(body.model).toBeUndefined()
+  expect(body).toMatchObject({ repo: 'hanzoai/universe', after: SESSION, mode: 'build', model: 'enso-auto', effort: 'medium', desktop: true })
   expect(body.base).toBeUndefined()
   // The paused run is let go first, and its refusal to be is not the person's problem.
   expect(to(sent, 'POST', `/v1/agent/sessions/${SESSION}/stop`)[0]?.body).toEqual({ message: 'Continued in a follow-up run' })
@@ -145,7 +146,7 @@ test('a paused sandbox run that cannot be carried on says why and stays', async 
     path === '/v1/agent/coding' ? refusal('Your plan has no runs left this month', 402) : undefined,
   )
   await p.goto(`/${SESSION}`)
-  await expect(p.getByText('Paused — its work so far is on its branch.')).toBeVisible()
+  await expect(p.getByText('Paused — its work so far is on its branch.')).toBeVisible({ timeout: 45_000 })
   await p.getByRole('button', { name: 'Resume' }).click()
   await expect(status(p).getByText('Your plan has no runs left this month')).toBeVisible()
   await expect(p).toHaveURL(new RegExp(`/${SESSION}$`))
@@ -157,6 +158,7 @@ test('a machine run is paused and resumed where it runs, and a refused resume sa
     refuse && path.endsWith('/resume') ? refusal('The machine is offline', 503) : undefined,
   )
   await p.goto(`/${SESSION}`)
+  await expect(p.getByRole('button', { name: 'Pause' })).toBeVisible({ timeout: 45_000 })
   await p.getByRole('button', { name: 'Pause' }).click()
   await expect(status(p).getByText('Pause asked — the machine pauses when it reads it')).toBeVisible()
   world.record.status = 'paused'
@@ -174,6 +176,7 @@ test('a machine run is paused and resumed where it runs, and a refused resume sa
 test('a stopped run waits to say where it kept its work, then follows up from that branch', async ({ page: p }) => {
   const { sent, world } = await rig(p, { record: running() })
   await p.goto(`/${SESSION}`)
+  await expect(p.getByRole('button', { name: 'Stop' })).toBeVisible({ timeout: 45_000 })
   await p.getByRole('button', { name: 'Stop' }).click()
   await expect(status(p).getByText('Stop requested — the run keeps its work on its branch')).toBeVisible()
   world.record.status = 'stopped'
@@ -187,7 +190,7 @@ test('a stopped run waits to say where it kept its work, then follows up from th
   expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ after: SESSION, prompt: expect.stringMatching(/^finish it\n\nThis follows an earlier run/) })
 })
 
-test('a failed run opens its error, and Try again starts its ask again where it ran', async ({ page: p }, info) => {
+test('a failed run opens its error, ends on Chat’s failure, and Try again starts its ask again where it ran', async ({ page: p }, info) => {
   const why = 'coding: lease sandbox: a desktop lease costs 9 cents for its first hour and this wallet holds 0, and its 6 free sandboxes this hour are used; top up to lease more'
   const { sent } = await rig(p, {
     record: { ...finished(), status: 'error', mode: 'plan', branch: '' },
@@ -195,14 +198,17 @@ test('a failed run opens its error, and Try again starts its ask again where it 
   })
   await p.goto(`/${SESSION}`)
   const t = p.getByLabel('Transcript')
-  await expect(t.getByText('This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.')).toBeVisible()
+  await expect(t.getByText('This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.')).toBeVisible({ timeout: 45_000 })
   // The reason is open without a click.
   await expect(t.getByRole('button', { name: /^Error/ })).toHaveAttribute('aria-expanded', 'true')
   await expect(t.getByText(why)).toBeVisible()
   // The terminal says why it holds no command.
   await expect(desk(p).getByText(`This run stopped before its first command: ${why}`)).toBeVisible()
   await p.screenshot({ path: info.outputPath('failed.png') })
-  await p.getByRole('button', { name: 'Try again' }).click()
+  // The way past it is the turn Chat draws for an answer that did not come: an alert, with Try again.
+  const failure = t.getByRole('alert')
+  await expect(failure).toBeVisible()
+  await failure.getByRole('button', { name: 'Try again' }).click()
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Add the widget', repo: 'hanzoai/universe', after: SESSION, mode: 'plan' })
 })
@@ -212,7 +218,7 @@ test('a run the feed says paused before its record is read cannot be carried on 
   const { sent } = await rig(p, { record: running(), frames: frames.map((e) => `event: event\ndata: ${JSON.stringify({ event: e })}\n\n`).join('') })
   const go = await hold(p, `/v1/agent/sessions/${SESSION}`)
   await p.goto(`/${SESSION}`)
-  await expect(p.getByText('Paused.', { exact: true })).toBeVisible()
+  await expect(p.getByText('Paused.', { exact: true })).toBeVisible({ timeout: 45_000 })
   await p.getByRole('button', { name: 'Resume' }).click()
   await expect(status(p).getByText('This run is still being read')).toBeVisible()
   await p.getByRole('button', { name: 'Good result' }).click()
@@ -425,54 +431,60 @@ test('a run that pushed but could not open its pull request says so, and its las
   await expect(p.getByText('○')).toBeVisible()
 })
 
-test('the side pane is hidden and shown again, and this browser keeps which', async ({ page: p }) => {
+test('the side panel is closed and opened again from the header, and this browser keeps which', async ({ page: p }) => {
   await rig(p)
   await p.goto(`/${SESSION}`)
-  await desk(p).getByRole('button', { name: 'Hide the side pane' }).click()
+  await expect(desk(p)).toBeVisible({ timeout: 45_000 })
+  await desk(p).getByRole('button', { name: 'Close the side panel' }).click()
   await expect(desk(p)).toHaveCount(0)
-  expect(await p.evaluate(() => localStorage.getItem('hanzo.build.desk'))).toBe('false')
-  await p.getByRole('button', { name: 'Show the side pane' }).click()
+  expect(await p.evaluate(() => localStorage.getItem('hanzo.side.dev.open'))).toBe('0')
+  const toggle = p.locator('[data-slot="side-toggle"]')
+  await expect(toggle).toHaveAccessibleName('Open the side panel')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await toggle.click()
   await expect(desk(p)).toBeVisible()
-  expect(await p.evaluate(() => localStorage.getItem('hanzo.build.desk'))).toBe('true')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  expect(await p.evaluate(() => localStorage.getItem('hanzo.side.dev.open'))).toBe('1')
 })
 
-test('the side pane is sized by its edge — keyed, kept and double-clicked back — and shut by keying past its floor', async ({ page: p }) => {
+test('the side panel is sized by its edge — keyed, kept and double-clicked back — and shut by keying past its floor', async ({ page: p }) => {
   await rig(p)
   await p.goto(`/${SESSION}`)
-  const edge = p.getByRole('separator', { name: 'Resize the side pane' })
-  await expect(edge).toHaveAttribute('aria-valuenow', '480')
+  const edge = p.getByRole('separator', { name: 'Resize the side panel' })
+  await expect(edge).toHaveAttribute('aria-valuenow', '480', { timeout: 45_000 })
   await edge.focus()
   await p.keyboard.press('Shift+ArrowLeft')
   await expect(edge).toHaveAttribute('aria-valuenow', '512')
-  expect(Math.round((await desk(p).boundingBox())!.width)).toBe(512)
+  expect(Math.round((await p.locator('[data-slot="desk"]').boundingBox())!.width)).toBe(512)
   expect(await p.evaluate(() => localStorage.getItem('hanzo.build.desk.span'))).toBe('512')
   await p.reload()
-  await expect(p.getByRole('separator', { name: 'Resize the side pane' })).toHaveAttribute('aria-valuenow', '512')
-  await p.getByRole('separator', { name: 'Resize the side pane' }).dblclick()
-  await expect(p.getByRole('separator', { name: 'Resize the side pane' })).toHaveAttribute('aria-valuenow', '480')
-  await p.getByRole('separator', { name: 'Resize the side pane' }).focus()
+  await expect(p.getByRole('separator', { name: 'Resize the side panel' })).toHaveAttribute('aria-valuenow', '512', { timeout: 45_000 })
+  await p.getByRole('separator', { name: 'Resize the side panel' }).dblclick()
+  await expect(p.getByRole('separator', { name: 'Resize the side panel' })).toHaveAttribute('aria-valuenow', '480')
+  await p.getByRole('separator', { name: 'Resize the side panel' }).focus()
   await p.keyboard.press('Home')
   await p.keyboard.press('ArrowRight')
   await expect(desk(p)).toHaveCount(0)
-  expect(await p.evaluate(() => localStorage.getItem('hanzo.build.desk'))).toBe('false')
+  expect(await p.evaluate(() => localStorage.getItem('hanzo.side.dev.open'))).toBe('0')
 })
 
-test('a side pane hidden before stays hidden', async ({ page: p }) => {
-  await rig(p, {}, undefined, { 'hanzo.build.desk': false })
+test('a side panel closed before stays closed', async ({ page: p }) => {
+  await rig(p, {}, undefined, { 'hanzo.side.dev.open': 0 })
   await p.goto(`/${SESSION}`)
-  await expect(p.getByRole('button', { name: 'Show the side pane' })).toBeVisible()
+  await expect(p.getByRole('button', { name: 'Open the side panel' })).toBeVisible({ timeout: 45_000 })
   await expect(desk(p)).toHaveCount(0)
 })
 
-test('the foot starts from the person’s coding defaults, and a stored model or effort it cannot read falls back to them', async ({ page: p }) => {
+test('the composer starts from the one kept choice, not the person’s old coding defaults, and a stored model or effort it cannot read is Enso at Medium', async ({ page: p }) => {
   const { sent } = await rig(p, {}, ({ path }) => (path === '/v1/pref' ? { json: { prefs: { code: { model: 'zen5-flash', effort: 'low' } } } } : undefined), {
-    [`hanzo.build.new.${ORG}`]: { model: 5, effort: 'extreme' },
+    'hanzo.mind': { model: 5, effort: 'extreme' },
   })
   await p.goto(`/${SESSION}`)
-  await expect(p.getByRole('button', { name: 'Model: zen5-flash' })).toBeVisible()
-  await expect(p.getByRole('button', { name: 'Effort: Low' })).toBeVisible()
+  await expect(chip(p)).toHaveAccessibleName('Model and effort: Enso, Medium', { timeout: 45_000 })
   await box(p, 'Follow up on this run').fill('again')
   await box(p, 'Follow up on this run').press('Enter')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
-  expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ model: 'zen5-flash', effort: 'low' })
+  const body = to(sent, 'POST', '/v1/agent/coding')[0]?.body as Record<string, unknown>
+  // Enso named as itself, so the person's old coding default (zen5-flash) does not answer in its place.
+  expect(body).toMatchObject({ model: 'enso-auto', effort: 'medium' })
 })

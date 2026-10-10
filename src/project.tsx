@@ -72,9 +72,10 @@ import {
   type PreviewHandle,
   type Verdict,
 } from '@hanzo/ui/agents'
-import { Composer, Message } from '@hanzo/ui/chat'
+import { Message } from '@hanzo/ui/chat'
 import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { HanzoMark } from '@hanzo/ui/product'
+import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { read as pushed, type Pull } from './api/changes.ts'
@@ -91,10 +92,13 @@ import { Merge } from './git.tsx'
 import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { MODES } from './landing.tsx'
+import { useMind } from './mind.ts'
 import { Out } from './out.tsx'
+import { Prompt, useEar } from './prompt.tsx'
+import { useSpoken } from './voice.ts'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
-import { Attach, compose, Dictate, Files, type Attached } from './tools.tsx'
+import { compose, Files, pick, type Attached } from './tools.tsx'
 
 type ViewId = 'preview' | 'files' | 'code' | 'layers'
 
@@ -281,6 +285,9 @@ export function Project({ at }: { at: Where }) {
   const [note, setNote] = useState('')
   const [picked, setPicked] = useState<Attachment[]>([])
   const [attached, setAttached] = useState<Attached[]>([])
+  // The model and effort Chat and New share, and dictation into the ask.
+  const mind = useMind(t)
+  const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
   const [bridge, setBridge] = useState(false)
   const [editing, setEditing] = useState(false)
   const [pageLines, setPageLines] = useState<Line[]>([])
@@ -439,6 +446,9 @@ export function Project({ at }: { at: Where }) {
         base: named ? forge.value?.branch : project?.branch,
         after: current ?? undefined,
         mode,
+        // Enso named as itself: a run that names none takes the person's saved coding default.
+        model: mind.model,
+        effort: mind.effort,
       })
       setDraft('')
       setPicked([])
@@ -591,7 +601,8 @@ export function Project({ at }: { at: Where }) {
             <Files files={attached} onFiles={setAttached} />
           </XStack>
         ) : null}
-        <Composer
+        <Prompt
+          framed
           value={draft}
           onChange={setDraft}
           onSend={() => void (current && running ? steer(current) : send())}
@@ -605,15 +616,13 @@ export function Project({ at }: { at: Where }) {
               : undefined
           }
           busy={busy || (running && !draft.trim())}
-          rows={3}
           placeholder={running ? 'Steer this run' : 'Ask Hanzo for edits'}
           label="Ask Hanzo for edits"
-        >
-          <Attach files={attached} onFiles={setAttached} onNote={setNote} />
-          <XStack flex={1} />
-          <ModeSelect modes={MODES} value={mode} onChange={(m) => setMode(m as Mode)} self="center" />
-          <Dictate onText={(said) => setDraft((d) => (d ? `${d} ${said}` : said))} onNote={setNote} />
-        </Composer>
+          onAttach={() => pick(attached, setAttached, setNote)}
+          tools={<ModeSelect modes={MODES} value={mode} onChange={(m) => setMode(m as Mode)} bg="transparent" minH={24} px="$1.5" self="center" />}
+          mind={running ? null : mind}
+          voice={voice}
+        />
       </YStack>
       {/* In the gutter between the chat and the work. */}
       {wide && !shut ? (

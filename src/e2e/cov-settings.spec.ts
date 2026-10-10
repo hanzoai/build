@@ -711,29 +711,41 @@ test('Memory remembers across a reload, keeps what a refusal left unsaid, and sa
   ])
 })
 
-test('Code reads a default no longer offered as saved, warns of a plan on a machine, says a refusal, and keeps the defaults across a reload', async ({ page }) => {
-  const p = await platform(page, (w) => (w.prefs = { code: { model: 'zen-old', place: 'tgt_gone' } }))
+test('Code reads a model no longer offered as kept, warns of a plan on a machine, says a refusal, and keeps the defaults across a reload', async ({ page }) => {
+  const p = await platform(page, (w) => (w.prefs = { code: { model: 'zen-older', place: 'tgt_gone' } }))
+  // The model and effort are the browser's one choice (hanzo.mind), kept from an earlier visit.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('mind')) return
+    sessionStorage.setItem('mind', '1')
+    localStorage.setItem('hanzo.mind', JSON.stringify({ model: 'zen-old', effort: 'medium' }))
+  })
   await page.goto('/-/settings/code')
-  await expect(page.getByRole('button', { name: 'Default model: zen-old' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Default model: zen-old' })).toBeVisible({ timeout: 45_000 })
   await expect(page.getByRole('button', { name: 'Default place: tgt_gone' })).toBeVisible()
   await pick(page, /^Default mode: /, 'Plan')
   await expect(page.getByText('A plan runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Cloud, or switch to Build.')).toBeVisible()
   await pick(page, /^Default place: /, 'Default')
   await expect(page.getByText(/^A plan runs in the Hanzo sandbox/)).toHaveCount(0)
+  // A model saved there before is not read, and none is written back.
   expect(p.writes()).toEqual([
-    ['PATCH /v1/pref', { code: { model: 'zen-old', place: 'tgt_gone', mode: 'plan' } }],
-    ['PATCH /v1/pref', { code: { model: 'zen-old', place: '', mode: 'plan' } }],
+    ['PATCH /v1/pref', { code: { place: 'tgt_gone', mode: 'plan' } }],
+    ['PATCH /v1/pref', { code: { place: '', mode: 'plan' } }],
   ])
 
-  p.fail('PATCH /v1/pref', refusal('preferences document exceeds 16384 bytes', 413))
+  // The effort is the browser's: kept at once, with nothing for the platform to refuse.
   await pick(page, /^Default effort: /, 'High')
+  await expect(page.getByRole('button', { name: 'Default effort: High' })).toBeVisible()
+  expect(p.writes()).toHaveLength(2)
+  p.fail('PATCH /v1/pref', refusal('preferences document exceeds 16384 bytes', 413))
+  await pick(page, /^Default mode: /, 'Build')
   await expect(page.getByRole('status').filter({ hasText: 'preferences document exceeds 16384 bytes' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Default effort: Medium' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Default mode: Plan' })).toBeVisible()
 
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Default mode: Plan' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Default mode: Plan' })).toBeVisible({ timeout: 45_000 })
   await expect(page.getByRole('button', { name: 'Default place: Default' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Default model: zen-old' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Default effort: High' })).toBeVisible()
 })
 
 test('Code offers the sandbox alone, and says so, when the models and the machines cannot be read', async ({ page }) => {
@@ -741,9 +753,11 @@ test('Code offers the sandbox alone, and says so, when the models and the machin
   p.fail('GET /v1/models', refusal('The model catalog is down', 503))
   p.fail('GET /v1/agent/targets', refusal('The machine registry is down', 503))
   await page.goto('/-/settings/code')
-  await expect(page.getByRole('button', { name: 'Default model: enso-auto' })).toBeVisible()
-  await page.getByRole('button', { name: 'Default model: enso-auto' }).click()
-  await expect(page.getByText('The model catalog is down')).toBeVisible()
+  // With no list read, the router alone, by its name; why there is no list in a reader's words, never the platform's.
+  await expect(page.getByRole('button', { name: 'Default model: Enso' })).toBeVisible()
+  await page.getByRole('button', { name: 'Default model: Enso' }).click()
+  await expect(page.getByText('The model list could not be read right now.')).toBeVisible()
+  await expect(page.getByText('The model catalog is down')).toHaveCount(0)
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Default place: Default' }).click()
   await expect(page.getByText('The machine registry is down')).toBeVisible()

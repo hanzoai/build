@@ -48,10 +48,11 @@ afterEach(() => vi.unstubAllGlobals())
 describe('pref', () => {
   it('reads the builder’s keys and nothing another surface saved', async () => {
     const seen = answer(200, {
-      prefs: { theme: 'light', density: 'compact', text: 'huge', callName: 'Z', code: { model: 'zen5.8', effort: 'max', place: '' } },
+      prefs: { theme: 'light', density: 'compact', text: 'huge', callName: 'Z', code: { model: 'zen5.8', effort: 'high', mode: 'plan', place: '' } },
       updatedAt: 7,
     })
-    expect(await read(T)).toEqual({ theme: 'light', callName: 'Z', code: { model: 'zen5.8', place: '' } })
+    // The model and effort are the browser's one choice (mind.tsx), never read from here.
+    expect(await read(T)).toEqual({ theme: 'light', callName: 'Z', code: { mode: 'plan', place: '' } })
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/pref')
     expect(seen[0].headers.get('x-org-id')).toBe('hanzo')
   })
@@ -71,7 +72,7 @@ describe('pref', () => {
   })
 
   it('merges the way the platform does: shallow, null deletes', () => {
-    const base = { theme: 'dark', text: 'large', code: { model: 'a', effort: 'low' } } as const
+    const base = { theme: 'dark', text: 'large', code: { mode: 'build', place: '' } } as const
     expect(merge(base, { text: null, code: { mode: 'plan' } })).toEqual({ theme: 'dark', code: { mode: 'plan' } })
   })
 

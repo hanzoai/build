@@ -16,10 +16,12 @@ export type Theme = 'system' | 'light' | 'dark'
 export type Text = 'small' | 'medium' | 'large'
 export type Motion = 'system' | 'reduced'
 
-/** Where and how a new run starts when New has no choice of its own kept. */
+/**
+ * Where and how a new run starts when New has no choice of its own kept. The
+ * model and effort are not here: they are the one choice Chat and Dev share,
+ * kept in the browser (mind.tsx).
+ */
 export interface Code {
-  model?: string
-  effort?: 'low' | 'medium' | 'high'
   mode?: 'build' | 'plan'
   /** A machine's id, or '' for the sandbox. */
   place?: string
@@ -46,7 +48,6 @@ export type Patch = { [K in keyof Prefs]?: Prefs[K] | null }
 const THEMES: readonly Theme[] = ['system', 'light', 'dark']
 const TEXTS: readonly Text[] = ['small', 'medium', 'large']
 const MOTIONS: readonly Motion[] = ['system', 'reduced']
-const EFFORTS = ['low', 'medium', 'high'] as const
 const MODES = ['build', 'plan'] as const
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
@@ -61,8 +62,6 @@ function defined<T extends object>(o: T): T {
 export function code(raw: unknown): Code | undefined {
   const c = obj(raw)
   const out = defined<Code>({
-    model: text(c.model),
-    effort: one(c.effort, EFFORTS),
     mode: one(c.mode, MODES),
     place: typeof c.place === 'string' ? c.place : undefined,
   })

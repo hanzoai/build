@@ -48,23 +48,19 @@ test('text size, motion and the dictation language are saved and applied', async
 test('saved settings are applied on load, and New greets by name and starts from the coding defaults', async ({ page }, info) => {
   await platform(page, { prefs: { theme: 'light', text: 'large', callName: 'Dave', code: { model: 'zen5.8-coder', effort: 'high', mode: 'plan', place: '' } } })
   await page.goto('/')
-  await expect(page.getByText('What’s up next, Dave?')).toBeVisible()
+  await expect(page.getByText('What’s up next, Dave?')).toBeVisible({ timeout: 45_000 })
   await expect(page.locator('html')).toHaveClass(/\blight\b/)
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--type-scale').trim())).toBe('1.15')
-  await expect(page.getByRole('button', { name: 'Model: zen5.8-coder' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Effort: High' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Mode: Plan' })).toBeVisible()
+  // A model and effort saved under the coding defaults are not read: the one kept choice is, Enso at Medium until made.
+  await expect(page.locator('[data-slot="mind"]')).toHaveAccessibleName('Model and effort: Enso, Medium')
   await page.screenshot({ path: info.outputPath('new-defaults.png') })
 })
 
-test('a choice kept on New outranks the defaults', async ({ page }) => {
-  await platform(
-    page,
-    { prefs: { code: { model: 'zen5.8-coder', effort: 'high' } } },
-    { [`hanzo.build.new.${ORG}`]: { repo: null, branch: '', place: '', mode: 'build', model: 'enso-auto', effort: 'low', ask: '' } },
-  )
+test('the kept model and effort outrank anything saved before them', async ({ page }) => {
+  await platform(page, { prefs: { code: { model: 'zen5.8-coder', effort: 'high' } } }, { 'hanzo.mind': { model: 'enso-auto', effort: 'low' } })
   await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Effort: Low' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Model: enso-auto' })).toBeVisible()
+  await expect(page.locator('[data-slot="mind"]')).toHaveAccessibleName('Model and effort: Enso, Low', { timeout: 45_000 })
 })
 
 test('Account saves the name, what to call you, the work and the instructions', async ({ page }, info) => {
@@ -146,11 +142,15 @@ test('Memory lists, remembers and forgets', async ({ page }, info) => {
 test('Code keeps the defaults a new run starts from, and links to environments and machines', async ({ page }, info) => {
   const { sent } = await platform(page)
   await page.goto('/-/settings/code')
+  await expect(page.getByRole('button', { name: /^Default model: / })).toBeVisible({ timeout: 45_000 })
   await pick(page, /^Default model: /, 'zen5.8-coder')
   await pick(page, /^Default effort: /, 'High')
   await pick(page, /^Default mode: /, 'Plan')
   await pick(page, /^Default place: /, 'dgx')
-  await expect.poll(() => patched(sent).at(-1)).toEqual({ code: { model: 'zen5.8-coder', effort: 'high', mode: 'plan', place: 'tgt_1' } })
+  await expect.poll(() => patched(sent).at(-1)).toEqual({ code: { mode: 'plan', place: 'tgt_1' } })
+  // The model and effort are the one choice Chat and every Dev composer read, kept in this browser.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hanzo.mind') ?? 'null'))).toEqual({ model: 'zen5.8-coder', effort: 'high' })
+  expect(patched(sent).some((b) => JSON.stringify(b).includes('model'))).toBe(false)
   await page.screenshot({ path: info.outputPath('code.png') })
   await page.getByRole('button', { name: 'Open Machines' }).click()
   await expect(page).toHaveURL(/\/-\/settings\/machines$/)

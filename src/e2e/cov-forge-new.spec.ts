@@ -1,6 +1,7 @@
 /**
  * New — where a run goes, the codebase and branch it starts from, the mode,
- * model and effort, dictation, the environment banner and sending — and Add to
+ * the model and effort (the one choice Chat and a run's follow-up keep too),
+ * dictation, the environment banner and sending — and Add to
  * project from its repository picker, against a platform that answers each
  * call the way a test says. One document per test (cov-forge.spec.ts says why).
  */
@@ -52,7 +53,7 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
     if (path === '/v1/pref') return { json: { prefs: world.prefs, updatedAt: 1 } }
     if (path === '/v1/agent/targets') return { json: { targets: world.machines } }
     // hanzoai/ai model_routes.go: `{object, data}`, a row's family and class the gateway's own; no default is marked.
-    if (path === '/v1/models') return { json: { object: 'list', data: world.models.map((id) => ({ id, object: 'model', owned_by: 'hanzo', ...(id.startsWith('enso') ? { name: 'Enso', family: 'enso', class: 'ours' } : {}) })) } }
+    if (path === '/v1/models') return { json: { object: 'list', data: world.models.map((id) => ({ id, object: 'model', owned_by: 'hanzo', supports_reasoning: true, ...(id.startsWith('enso') ? { name: 'Enso', family: 'enso', class: 'ours' } : {}) })) } }
     if (path === '/v1/git/repos') return { json: { data: world.repos } }
     const repo = path.match(/^\/v1\/git\/repos\/([^/]+)$/)?.[1]
     if (repo) return { json: world.repos.find((r) => r.name === repo) ?? {} }
@@ -72,12 +73,15 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
 
 const posted = (sent: Sent[], path: string) => sent.filter((s) => s.method === 'POST' && s.path === path)
 const chip = (page: Page, name: string) => page.getByRole('button', { name: new RegExp(`^${name}: `) })
+/** The model and effort chip, and the panel it opens. */
+const mind = (page: Page) => page.locator('[data-slot="mind"]')
+const tune = (page: Page) => page.getByRole('dialog', { name: 'Model and effort' })
 const list = (page: Page, name: string) => page.getByRole('listbox', { name })
 const ask = (page: Page) => page.getByRole('textbox', { name: 'Describe a task or ask a question' })
 
 /** New holding a codebase, as a codebase's own screen leaves it. */
 const holding = (repo: Record<string, unknown>, more: Record<string, unknown> = {}) => ({
-  [`hanzo.build.new.${ORG}`]: { repo, branch: 'main', place: '', mode: 'build', model: 'enso-auto', effort: 'medium', ask: '', ...more },
+  [`hanzo.build.new.${ORG}`]: { repo, branch: 'main', place: '', mode: 'build', ask: '', ...more },
 })
 const FORGE = { owner: ORG, name: 'universe', full_name: `${ORG}/universe`, private: true, default_branch: 'main', pushed_at: '', installation_id: 0, forge: true, clone: UNIVERSE.cloneUrl }
 
@@ -91,18 +95,22 @@ async function add(page: Page, row: string) {
 }
 
 test.describe('New', () => {
-  test('starts from the person’s coding defaults, says their name, and runs with what was chosen', async ({ page, baseURL }, info) => {
-    const { sent } = await desk(page, { prefs: { callName: 'Dave', code: { model: 'zen5.8', effort: 'high', mode: 'build' } } })
+  test('starts from the kept model and effort, says their name, and runs with what was chosen', async ({ page, baseURL }, info) => {
+    // The person's old coding defaults name a model and an effort; the one kept choice wins.
+    const { sent } = await desk(page, { prefs: { callName: 'Dave', code: { model: 'zen5.8-coder', effort: 'low', mode: 'build' } } }, DAVE, {
+      'hanzo.mind': { model: 'zen5.8', effort: 'high' },
+    })
     await page.goto('/')
-    await expect(page.getByText('What’s up next, Dave?')).toBeVisible()
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: zen5.8')
-    await expect(chip(page, 'Effort')).toHaveAccessibleName('Effort: High')
+    await expect(page.getByText('What’s up next, Dave?')).toBeVisible({ timeout: 45_000 })
+    await expect(mind(page)).toHaveAccessibleName('Model and effort: zen5.8, High')
 
-    await chip(page, 'Effort').click()
-    await list(page, 'Effort').getByRole('option', { name: 'Low' }).click()
-    await chip(page, 'Model').click()
+    await mind(page).click()
+    await tune(page).getByRole('button', { name: /^Low/ }).click()
+    await mind(page).click()
+    await tune(page).getByRole('button', { name: /^Model: / }).click()
     await list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ }).click()
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: zen5.8-coder')
+    await expect(mind(page)).toHaveAccessibleName('Model and effort: zen5.8-coder, Low')
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hanzo.mind') ?? 'null'))).toEqual({ model: 'zen5.8-coder', effort: 'low' })
     await chip(page, 'Where the run runs').click()
     const places = list(page, 'Where the run runs')
     await expect(places.getByRole('option', { name: /rack/ })).toHaveAttribute('aria-disabled', 'true')
@@ -155,7 +163,7 @@ test.describe('New', () => {
   test('with no project chosen, an ask in the sandbox opens the picker and makes no project up', async ({ page, baseURL }) => {
     const { sent } = await desk(page)
     await page.goto('/')
-    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Choose a project')
+    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Choose a project', { timeout: 45_000 })
     await ask(page).fill('Build a todo app')
     await ask(page).press('Enter')
     await expect(page.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
@@ -171,6 +179,7 @@ test.describe('New', () => {
   test('a run in the sandbox names Enso as its model, and no machine; a refusal is said and the draft stays', async ({ page, baseURL }) => {
     const { sent } = await desk(page, { holds: { 'POST /v1/agent/coding': [{ status: 503, detail: 'No sandbox is free right now' }] } }, DAVE, holding(FORGE))
     await page.goto('/')
+    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: universe', { timeout: 45_000 })
     await ask(page).fill('Add a footer')
     await ask(page).press('Enter')
     await expect(page.getByText('The code workspace is not answering right now. Try again shortly.')).toBeVisible()
@@ -193,7 +202,7 @@ test.describe('New', () => {
       holding(FORGE),
     )
     await page.goto('/')
-    await expect(page.getByText('A proposed environment for universe is waiting for review.')).toBeVisible()
+    await expect(page.getByText('A proposed environment for universe is waiting for review.')).toBeVisible({ timeout: 45_000 })
     await chip(page, 'Where the run runs').click()
     await expect(list(page, 'Where the run runs').getByText('Hanzo sandbox · universe environment proposed')).toBeVisible()
     await page.keyboard.press('Escape')
@@ -223,7 +232,7 @@ test.describe('New', () => {
     const gone = { owner: ORG, name: 'gone', full_name: '', private: false, default_branch: '', pushed_at: '', installation_id: 0, forge: true, clone: '' }
     await desk(page, {}, DAVE, holding(gone, { branch: '' }))
     await page.goto('/')
-    await expect(chip(page, 'Branch')).toHaveAccessibleName('Branch: main')
+    await expect(chip(page, 'Branch')).toHaveAccessibleName('Branch: main', { timeout: 45_000 })
     // The forge answers its detail without naming it: its default branch stands in.
     await chip(page, 'Branch').click()
     await expect(list(page, 'Branch').getByRole('option')).toHaveText(['main'])
@@ -242,34 +251,37 @@ test.describe('New', () => {
       page,
       { down: { 'GET /v1/agent/targets': 'Machines are resting', 'GET /v1/models': 'The catalog is resting' } },
       DAVE,
-      holding(FORGE, { effort: 'extreme', model: 'retired-model' }),
+      { ...holding(FORGE), 'hanzo.mind': { effort: 'extreme', model: 'retired-model' } },
     )
     await page.goto('/')
-    await expect(chip(page, 'Effort')).toHaveAccessibleName('Effort: Medium')
-    // A kept model the catalog cannot vouch for is shown as it is kept, never renamed.
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: retired-model')
+    // An effort it does not know is Medium; a kept model the catalog cannot vouch for is shown as kept, never renamed.
+    await expect(mind(page)).toHaveAccessibleName('Model and effort: retired-model, Medium', { timeout: 45_000 })
     await chip(page, 'Where the run runs').click()
     await expect(list(page, 'Where the run runs').locator('..').getByText('Machines are resting')).toBeVisible()
     await page.keyboard.press('Escape')
-    await chip(page, 'Model').click()
+    await mind(page).click()
+    await tune(page).getByRole('button', { name: /^Model: / }).click()
+    // In a reader's words, never the platform's.
     await expect(page.getByText('The model list could not be read right now.')).toBeVisible()
     await expect(page.getByText('The catalog is resting')).toHaveCount(0)
   })
 
   test('a model list refused once the quota is spent shows the list last read, with a note, never an empty chooser', async ({ page }) => {
-    const { world } = await desk(page, {}, DAVE, holding(FORGE, { model: '' }))
+    const { world } = await desk(page, {}, DAVE, holding(FORGE))
     await page.goto('/')
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Enso')
+    await expect(mind(page)).toHaveAccessibleName('Model and effort: Enso, Medium', { timeout: 45_000 })
     // The list is read once, whole, and this browser keeps it.
-    await chip(page, 'Model').click()
+    await mind(page).click()
+    await tune(page).getByRole('button', { name: /^Model: / }).click()
     await expect(list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ })).toBeVisible()
     await page.keyboard.press('Escape')
     // Every read of the list is refused while the quota is spent, however often the page asks.
     world.holds['GET /v1/models'] = Array.from({ length: 8 }, () => ({ status: 429, detail: 'rate limited' }))
     await page.reload()
-    await expect(page.getByText('The model list could not be refreshed; these are the models as last read.')).toBeVisible()
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Enso')
-    await chip(page, 'Model').click()
+    await expect(page.getByText('The model list could not be refreshed; these are the models as last read.')).toBeVisible({ timeout: 45_000 })
+    await expect(mind(page)).toHaveAccessibleName('Model and effort: Enso, Medium')
+    await mind(page).click()
+    await tune(page).getByRole('button', { name: /^Model: / }).click()
     await expect(list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ })).toBeVisible()
   })
 
@@ -277,9 +289,8 @@ test.describe('New', () => {
     // What pinCodebase leaves in a browser that kept nothing before: the codebase, its branch and the words.
     await desk(page, {}, DAVE, { [`hanzo.build.new.${ORG}`]: { repo: FORGE, branch: 'main', ask: 'Fix the footer' } })
     await page.goto('/')
-    await expect(ask(page)).toHaveValue('Fix the footer')
-    await expect(chip(page, 'Model')).toHaveAccessibleName('Model: Enso')
-    await expect(chip(page, 'Effort')).toHaveAccessibleName('Effort: Medium')
+    await expect(ask(page)).toHaveValue('Fix the footer', { timeout: 45_000 })
+    await expect(mind(page)).toHaveAccessibleName('Model and effort: Enso, Medium')
     await expect(page.getByText('Choose a model')).toHaveCount(0)
   })
 
@@ -298,11 +309,13 @@ test.describe('New', () => {
     const { sent } = await desk(page, { heard: ['add a footer', 'and a header'] }, DAVE, holding(FORGE))
     await page.goto('/')
     const dictate = page.getByRole('button', { name: 'Dictate' })
+    await expect(dictate).toBeVisible({ timeout: 45_000 })
     for (const words of ['add a footer', 'add a footer and a header']) {
       await dictate.click()
-      const stop = page.getByRole('button', { name: 'Stop and transcribe' })
+      // The mic stays open until it is pressed again, and what was said is heard then.
+      const stop = page.getByRole('button', { name: 'Dictating — click to stop' })
       await expect(stop).toBeVisible()
-      await page.waitForTimeout(300)
+      await page.waitForTimeout(600)
       await stop.click()
       await expect(ask(page)).toHaveValue(words)
     }

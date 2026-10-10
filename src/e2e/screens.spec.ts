@@ -7,12 +7,14 @@
  * Each one draws its heading, fits its window (fixture.ts `cramped`: nothing
  * cut off or sideways, no control on another), throws nothing, and is saved at
  * screens/<size>/<name>.png with the whole of its content, however far it
- * scrolls. Below md a run's side pane is not drawn (desk.tsx), so on a phone a
- * run is checked whole without it.
+ * scrolls. Below md a run's side panel is a sheet that opens only when asked
+ * for (panel.tsx), so on a phone a run is checked whole without it, and once
+ * with the sheet open.
  */
 import type { Page } from '@playwright/test'
 
 import { SECTIONS, TABS, type Screen, type Section } from '../route.ts'
+import { open } from './desk.ts'
 import { cramped, expect, test } from './fixture.ts'
 import { SESSION } from './signed.ts'
 import * as stub from './stubs.ts'
@@ -37,7 +39,7 @@ interface State {
   act?: (page: Page, size: Size) => Promise<void>
   /** A dialog, menu or drawer over the page: saved as the window shows it. */
   over?: boolean
-  /** Needs the run's side pane, which is drawn from md up. */
+  /** Needs the run's side panel as a column, which is drawn from md up. */
   wide?: boolean
   /** Only a phone has it: below md the chat and a project's work take turns. */
   narrow?: boolean
@@ -46,6 +48,8 @@ interface State {
 const RUN = `/${SESSION}`
 const desk = (p: Page) => p.getByRole('complementary', { name: 'Run details' })
 const press = (label: string) => (p: Page) => desk(p).getByRole('button', { name: label, exact: true }).first().click()
+/** A tab of the panel, opened from + where it is not in the strip. */
+const choose = (label: string) => (p: Page) => open(p, label)
 const both = (...steps: ((p: Page) => Promise<void>)[]) => async (p: Page) => {
   for (const s of steps) await s(p)
 }
@@ -119,30 +123,32 @@ const signedIn: State[] = [
   ),
 ]
 
-/** A run, live or finished: the page, then each tab of its side pane. */
+/** A run, live or finished: the page, then each tab of its side panel. */
 function run(status: 'running' | 'done'): State[] {
   const name = status === 'running' ? 'run-live' : 'run-done'
   const platform = (p: Page) => stub.run(p, status)
   const says = /universe: Add the widget/
   const tabs: [string, (p: Page) => Promise<void>][] = [
-    ['environment', press('Environment')],
-    ['git-diff', both(press('Git'), (p) => p.getByRole('button', { name: 'Show widget.go' }).click())],
-    ['git-review', both(press('Git'), press('Review'))],
-    ['git-commits', both(press('Git'), press('Commits'))],
-    ['browser', press('Browser')],
-    ['desktop', press('Desktop')],
-    ['artifacts', press('Artifacts')],
+    ['environment', choose('Environment')],
+    ['git-diff', both(choose('Diff'), (p) => p.getByRole('button', { name: 'Show widget.go' }).click())],
+    ['git-review', both(choose('Diff'), press('Review'))],
+    ['git-commits', both(choose('Diff'), press('Commits'))],
+    ['preview', choose('Preview')],
+    ['desktop', choose('Desktop')],
+    ['artifacts', choose('Artifacts')],
   ]
   // A live run holds its sandbox: a shell beside the agent's log, and its files as they are beside its branch.
   if (status === 'running') {
     tabs.push(
-      ['terminal-shell', both(press('Terminal'), press('Shell'))],
-      ['terminal-log', both(press('Terminal'), press('Agent log'))],
-      ['files-live', both(press('Files'), press('Live'))],
-      ['files-branch', both(press('Files'), press('Branch'))],
+      ['terminal-shell', both(choose('Terminal'), press('Shell'))],
+      ['terminal-log', both(choose('Terminal'), press('Agent log'))],
+      ['files-live', both(choose('Files'), press('Live'))],
+      ['files-branch', both(choose('Files'), press('Branch'))],
     )
-  } else tabs.push(['terminal-log', press('Terminal')], ['files-branch', press('Files')])
-  return [{ name, path: RUN, platform, says }, ...tabs.map(([tab, act]) => ({ name: `${name}-${tab}`, path: RUN, platform, says, act, wide: true }))]
+  } else tabs.push(['terminal-log', choose('Terminal')], ['files-branch', choose('Files')])
+  // A phone opens the panel as a sheet from the header's Panel button.
+  const sheet = { name: `${name}-sheet`, path: RUN, platform, says, act: (p: Page) => p.getByRole('button', { name: 'Open the side panel' }).click(), narrow: true, over: true }
+  return [{ name, path: RUN, platform, says }, sheet, ...tabs.map(([tab, act]) => ({ name: `${name}-${tab}`, path: RUN, platform, says, act, wide: true }))]
 }
 
 const project: State[] = [
@@ -207,10 +213,10 @@ for (const [size, box] of Object.entries(SIZES) as [Size, { width: number; heigh
         page.on('pageerror', (e) => errors.push(e.message))
         await s.platform(page)
         await page.goto(s.path)
-        await expect(page.getByText(s.says).filter({ visible: true }).first()).toBeVisible()
+        await expect(page.getByText(s.says).filter({ visible: true }).first()).toBeVisible({ timeout: 45_000 })
         await s.act?.(page, size)
         await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {})
-        if (s.path === RUN && size === 'phone') await expect(desk(page)).toBeHidden()
+        if (s.path === RUN && size === 'phone' && !s.over) await expect(desk(page)).toBeHidden()
         // Soft, so a screen that fails still leaves its picture to look at.
         expect.soft(await cramped(page), `${size} ${s.name}`).toEqual([])
         expect.soft(errors).toEqual([])

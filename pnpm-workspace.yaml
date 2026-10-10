@@ -28,12 +28,13 @@ minimumReleaseAge: 0
 
 catalog:
   '@playwright/test': 1.63.0
+  '@hanzo/composer': 0.2.0
   '@hanzo/font': 1.9.3
   '@hanzo/gui': 8.3.5
   '@hanzo/iam': 0.21.28
   '@hanzo/ui': 8.27.77
   '@hanzo/vite': 0.1.4
-  '@hanzo/voice': 0.1.8
+  '@hanzo/voice': 0.1.18
   '@hanzogui/lucide-icons-2': 8.3.5
   '@hanzogui/next-theme': 8.3.5
   '@types/node': 26.5.0

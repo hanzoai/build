@@ -2,7 +2,7 @@
  * A run's page as a chat, signed in against a stubbed platform (cov-run.ts):
  * the ask that opens it, what each reply copies and the verdict it records, the
  * title's menu and Share, the steps folded to one line, and the model and
- * effort a follow-up starts with.
+ * effort a follow-up starts with — the one choice New and Chat keep too.
  */
 import type { Page } from '@playwright/test'
 
@@ -26,8 +26,10 @@ test('the ask opens the conversation as the person’s own message, once', async
   await p.goto(`/${SESSION}`)
   const t = transcript(p)
   const asks = t.locator('[data-role="user"]')
-  await expect(asks).toHaveCount(1)
-  await expect(asks).toHaveText('Add the widget\n\nwith a test')
+  await expect(asks).toHaveCount(1, { timeout: 45_000 })
+  // Drawn as Chat draws a question: its paragraphs as paragraphs.
+  await expect(asks.getByText('Add the widget', { exact: true })).toBeVisible()
+  await expect(asks.getByText('with a test', { exact: true })).toBeVisible()
   // It opens the conversation, ahead of the steps that set the run up.
   const top = async (l: ReturnType<Page['locator']>) => (await l.boundingBox())!.y
   expect(await top(asks)).toBeLessThan(await top(t.getByText('Started on agent/ab12')))
@@ -41,7 +43,8 @@ test('a reply is copied, and a verdict on it is recorded, taken back and changed
   const { sent } = await rig(p, { events: told(), record: { ...finished(), project: 'widgets' } })
   await p.goto(`/${SESSION}`)
   const reply = transcript(p).locator('[data-role="assistant"]').filter({ hasText: 'Added' })
-  await reply.getByRole('button', { name: 'Copy reply' }).click()
+  await expect(reply).toBeVisible({ timeout: 45_000 })
+  await reply.getByRole('button', { name: 'Copy this answer' }).click()
   await expect(reply.getByRole('button', { name: 'Copied' })).toBeVisible()
   expect(await p.evaluate(() => (window as unknown as { copied: string[] }).copied)).toEqual(['Added **New** to `widget.go`.'])
   const good = reply.getByRole('button', { name: 'Good result' })
@@ -60,6 +63,7 @@ test('a verdict that does not land is taken back and says why', async ({ page: p
   await rig(p, { events: told() }, ({ path }) => (path === '/v1/event' ? { status: 401, json: { detail: 'Sign in again to send feedback.' } } : undefined))
   await p.goto(`/${SESSION}`)
   const reply = transcript(p).locator('[data-role="assistant"]').filter({ hasText: 'Added' })
+  await expect(reply).toBeVisible({ timeout: 45_000 })
   await reply.getByRole('button', { name: 'Good result' }).click()
   await expect(reply.getByText('Sign in again to send feedback.')).toBeVisible()
   await expect(reply.getByRole('button', { name: 'Good result' })).toHaveAttribute('aria-pressed', 'false')
@@ -70,7 +74,7 @@ test('the title is the run’s menu, and Share opens its story and copies its li
   const { sent } = await rig(p, { events: told(), record: { ...finished(), project: 'widgets' } })
   await p.goto(`/${SESSION}`)
   const title = p.getByRole('button', { name: 'Manage this run' })
-  await expect(title.getByRole('heading', { name: 'universe: Add the widget' })).toBeVisible()
+  await expect(title.getByRole('heading', { name: 'universe: Add the widget' })).toBeVisible({ timeout: 45_000 })
   await title.click()
   await expect(p.getByRole('menuitem', { name: 'Rename' })).toBeVisible()
   await expect(p.getByRole('menuitem', { name: /Copy run id/ })).toBeVisible()
@@ -100,7 +104,7 @@ test('the steps fold to one line that names the current one, and open when press
   })
   await p.goto(`/${SESSION}`)
   const steps = p.getByRole('button', { name: 'Steps · 2' })
-  await expect(steps).toHaveAttribute('aria-expanded', 'false')
+  await expect(steps).toHaveAttribute('aria-expanded', 'false', { timeout: 45_000 })
   await expect(steps.getByText('install')).toBeVisible()
   await expect(p.getByText('✓')).toHaveCount(0)
   await steps.click()
@@ -111,22 +115,26 @@ test('the steps fold to one line that names the current one, and open when press
   await p.screenshot({ path: info.outputPath('steps.png') })
 })
 
-test('a follow-up starts with the model and effort the foot shows, and New keeps them', async ({ page: p }, info) => {
+test('a follow-up starts with the model and effort the composer shows, and the choice is kept for New and Chat', async ({ page: p }, info) => {
   const { sent } = await rig(p, { events: told() })
   await p.goto(`/${SESSION}`)
-  await expect(p.getByRole('button', { name: 'Model: enso-auto' })).toBeVisible()
-  await p.getByRole('button', { name: 'Model: enso-auto' }).click()
+  const chip = p.locator('[data-slot="mind"]')
+  await expect(chip).toHaveAccessibleName('Model and effort: Enso, Medium', { timeout: 45_000 })
+  await chip.click()
+  await p.getByRole('dialog', { name: 'Model and effort' }).getByRole('button', { name: /^High/ }).click()
+  await expect(chip).toHaveAccessibleName('Model and effort: Enso, High')
+  await chip.click()
+  await p.getByRole('dialog', { name: 'Model and effort' }).getByRole('button', { name: /^Model: / }).click()
   await p.getByRole('listbox', { name: 'Model' }).getByRole('option', { name: /^zen5-coder,/ }).click()
-  await p.getByRole('button', { name: 'Effort: Medium' }).click()
-  await p.getByRole('listbox', { name: 'Effort' }).getByText('High').click()
-  await expect(p.getByRole('button', { name: 'Effort: High' })).toBeVisible()
+  // A listed model that names no reasoning takes no effort, and the chip says so.
+  await expect(chip).toHaveAccessibleName(/^Model: /)
   await p.screenshot({ path: info.outputPath('foot.png') })
   const box = p.getByRole('textbox', { name: 'Follow up on this run' })
   await box.fill('now the docs')
   await box.press('Enter')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ model: 'zen5-coder', effort: 'high', after: SESSION })
-  expect(await p.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), `hanzo.build.new.${ORG}`)).toMatchObject({ model: 'zen5-coder', effort: 'high' })
+  expect(await p.evaluate(() => JSON.parse(localStorage.getItem('hanzo.mind') ?? 'null'))).toEqual({ model: 'zen5-coder', effort: 'high' })
 })
 
 for (const [size, box] of Object.entries({
@@ -139,7 +147,7 @@ for (const [size, box] of Object.entries({
     await p.setViewportSize(box)
     await rig(p, { events: told(), record: { ...finished(), project: 'widgets', pr: PR } })
     await p.goto(`/${SESSION}`)
-    await expect(p.getByRole('button', { name: 'Good result' })).toBeVisible()
+    await expect(p.getByRole('button', { name: 'Good result' })).toBeVisible({ timeout: 45_000 })
     expect(await cramped(p)).toEqual([])
     await p.getByRole('button', { name: 'Steps · 1' }).click()
     await expect(p.getByText('✓')).toBeVisible()

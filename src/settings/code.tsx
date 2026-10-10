@@ -1,8 +1,9 @@
 /**
- * Code: where and how a new run starts — the model, the effort, the mode and
- * the place — for anyone whose New has no choice of its own kept yet. Saved to
- * the person's own settings. Beside them, the codebases' environments and the
- * organization's machines, each on its own page.
+ * Code: where and how a new run starts — the mode and the place, saved to the
+ * person's own settings for anyone whose New has no choice of its own kept yet
+ * — and the model and effort, which are the one choice Chat and Dev share
+ * (mind.tsx): changed here, changed in both composers. Beside them, the
+ * codebases' environments and the organization's machines, each on its own page.
  */
 import { YStack } from '@hanzo/gui'
 import { ChevronRight } from '@hanzogui/lucide-icons-2'
@@ -11,12 +12,13 @@ import { ModelPicker } from '@hanzo/ui/models'
 import { useState } from 'react'
 
 import { unhonoured } from '../api/coding.ts'
-import { ENSO, models } from '../api/models.ts'
+import { ENSO } from '../api/models.ts'
 import { SANDBOX } from '../api/places.ts'
 import type { Code as Defaults } from '../api/pref.ts'
-import { usePlaces, useRead } from '../data.ts'
+import { usePlaces } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
-import { EFFORTS, MODES } from '../landing.tsx'
+import { MODES } from '../landing.tsx'
+import { EFFORTS, useCatalog, useChoice } from '../mind.ts'
 import { usePrefs } from '../prefs.tsx'
 import { path } from '../route.ts'
 import { Card, Group, Heading, Note, Row, Soft } from './ui.tsx'
@@ -26,7 +28,8 @@ export function Code() {
   const t = useTarget()
   const signed = Boolean(host.person)
   const { prefs, save } = usePrefs()
-  const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
+  const catalog = useCatalog(t)
+  const [choice, choose] = useChoice()
   const places = usePlaces(t, signed)
   const [note, setNote] = useState('')
 
@@ -39,7 +42,7 @@ export function Code() {
     )
   }
 
-  const now: Required<Defaults> = { model: ENSO, effort: 'medium', mode: 'build', place: '', ...prefs.code }
+  const now = { mode: 'build' as const, place: '', ...prefs.code }
   const keep = (change: Defaults) => {
     setNote('')
     save({ code: { ...prefs.code, ...change } }).catch((e: unknown) => setNote((e as Error).message))
@@ -55,14 +58,14 @@ export function Code() {
   // The sandbox is always listed, so a place not found is a machine that is not: it reads as its id.
   const place = where.find((w) => w.place === now.place) ?? { id: now.place, label: now.place, place: now.place }
   // A default is never premium: a premium model is picked for one run, in New.
-  const offered = catalog.value.filter((m) => m.class !== 'premium')
+  const offered = catalog.models.filter((m) => m.class !== 'premium')
   const go = (section: 'environments' | 'machines') => host.go(path({ kind: 'settings', section }))
-  const effort = EFFORTS.find((e) => e.id === now.effort)!
+  const effort = EFFORTS.find((e) => e.id === choice.effort)!
   const mode = MODES.find((m) => m.id === now.mode)!
 
   return (
     <YStack gap="$6">
-      <Heading title="Code" detail="How a new run starts. New begins from these until you choose otherwise there." />
+      <Heading title="Code" detail="How a new run starts. The model and effort are the ones Chat uses too." />
       <Group title="Defaults">
         <Card>
           <Row
@@ -75,10 +78,10 @@ export function Code() {
                 name="Default model"
                 models={offered}
                 scope="chat"
-                value={now.model || ENSO}
-                onChange={(id) => keep({ model: id })}
+                value={choice.model || ENSO}
+                onChange={(id) => choose({ model: id })}
                 loading={catalog.loading}
-                error={catalog.error?.message ?? null}
+                error={catalog.error}
               />
             }
           />
@@ -91,7 +94,7 @@ export function Code() {
                 label={effort.label}
                 chosen={effort}
                 items={EFFORTS}
-                onChange={(e) => keep({ effort: e.id })}
+                onChange={(e) => choose({ effort: e.id })}
                 placement="bottom-end"
                 width={180}
               />

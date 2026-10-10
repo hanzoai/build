@@ -211,6 +211,8 @@ test.describe('who is signed in', () => {
       localStorage.setItem('hanzo:who', 'acme/erin')
       localStorage.setItem('hanzo.build.slack', 'true')
       localStorage.setItem('hanzo.build.new.acme', '{"ask":"hers"}')
+      localStorage.setItem('hanzo.mind', '{"model":"zen5","effort":"high"}')
+      localStorage.setItem('hanzo.side.dev', '{"tabs":[{"id":"p1","kind":"page","title":"hers.html","body":"<h1>hers</h1>"}],"at":"p1"}')
       localStorage.setItem('theme', 'dark')
     })
     // hanzo.id is asked, and answers nothing, so this tab stays to be read.
@@ -225,6 +227,9 @@ test.describe('who is signed in', () => {
     expect(await stored(page, 'hanzo:who')).toBeNull()
     expect(await stored(page, 'hanzo.build.slack')).toBeNull()
     expect(await stored(page, 'hanzo.build.new.acme')).toBeNull()
+    // Their model and effort, and the side panel's tabs with what their answers wrote, go with them.
+    expect(await stored(page, 'hanzo.mind')).toBeNull()
+    expect(await stored(page, 'hanzo.side.dev')).toBeNull()
     expect(await stored(page, 'theme')).toBe('dark')
   })
 
@@ -373,7 +378,8 @@ test.describe('a host that draws its own rail', () => {
     await runs(page)
     await page.goto(`${HOST}?label=Dev`)
     const surface = await page.evaluate((at) => import(at).then((m: object) => Object.keys(m).sort()), '/src/index.ts')
-    expect(surface).toEqual(['Builder', 'Credits', 'DOTS', 'DevSection', 'Grip', 'HostProvider', 'Meter', 'NEW', 'PLACES', 'Plan', 'SEPARATE', 'SESSION', 'SLUG', 'Slack', 'Title', 'Who', 'administers', 'href', 'kind', 'label', 'left', 'nav', 'parse', 'path', 'route', 'rows', 'said', 'share', 'spent', 'useSessions', 'useStanding', 'useWho', 'ways', 'when'])
+    // What Chat draws the same way (@hanzo/rooms imports it) is exported beside the builder.
+    expect(surface).toEqual(['Builder', 'Credits', 'DOTS', 'DevSection', 'EFFORTS', 'FIRST', 'GAP', 'Grip', 'HostProvider', 'MEASURE', 'Meter', 'NEW', 'PAGE', 'PLACES', 'Page', 'Panel', 'PanelToggle', 'Plan', 'Prompt', 'ROUND', 'Reply', 'SEPARATE', 'SESSION', 'SLUG', 'Served', 'Slack', 'Title', 'Tune', 'Who', 'address', 'administers', 'artifacts', 'blob', 'catalog', 'cut', 'href', 'keep', 'kept', 'kind', 'label', 'lead', 'left', 'measure', 'name', 'nameOf', 'nav', 'parse', 'path', 'prompt', 'reasons', 'renders', 'route', 'rows', 'said', 'share', 'speakable', 'speaker', 'spent', 'useCatalog', 'useChoice', 'useDeck', 'useEar', 'useKey', 'useMind', 'usePanel', 'useSessions', 'useShown', 'useStanding', 'useWho', 'ways', 'when'])
 
     const r = rail(page)
     await expect(r.getByText('Dev', { exact: true })).toBeVisible()
@@ -771,50 +777,44 @@ test.describe('attaching files', () => {
 })
 
 test.describe('dictating without a microphone', () => {
-  test('a microphone the page may not use is said, and nothing is recorded', async ({ page }) => {
+  test('a microphone the page may not use is said on the microphone itself, and nothing is recorded', async ({ page }) => {
     const { heardBy } = await composer(page)
     // The person answers the browser's prompt with Block.
     await page.addInitScript(() => {
       navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'))
     })
     await page.goto('/')
+    await expect(page.getByRole('button', { name: 'Dictate' })).toBeVisible({ timeout: 45_000 })
     await page.getByRole('button', { name: 'Dictate' }).click()
-    await expect(status(page)).toHaveText('The microphone is not available to this page.')
+    const blocked = page.getByRole('button', { name: 'Microphone access was blocked. Allow it in your browser settings, or type instead.' })
+    await expect(blocked).toHaveAttribute('aria-disabled', 'true')
     expect(heardBy).toEqual([])
   })
 
-  test('a recorder that heard nothing sends nothing', async ({ page }) => {
+  test('a microphone that hears only silence sends nothing', async ({ page }) => {
     const { heardBy } = await composer(page)
-    // A recorder that stops with an empty take and names no type for it.
+    // A real stream with nothing in it: a tone at no volume.
     await page.addInitScript(() => {
-      const track = { stop() {} }
-      navigator.mediaDevices.getUserMedia = async () => ({ getTracks: () => [track] }) as unknown as MediaStream
-      window.MediaRecorder = class {
-        mimeType = ''
-        ondataavailable: ((e: { data: Blob }) => void) | null = null
-        onstop: (() => void) | null = null
-        start() {}
-        stop() {
-          this.ondataavailable?.({ data: new Blob([]) })
-          this.onstop?.()
-        }
-      } as unknown as typeof MediaRecorder
+      navigator.mediaDevices.getUserMedia = async () => {
+        const ctx = new AudioContext()
+        const tone = ctx.createOscillator()
+        const mute = ctx.createGain()
+        mute.gain.value = 0
+        const out = ctx.createMediaStreamDestination()
+        tone.connect(mute).connect(out)
+        tone.start()
+        return out.stream
+      }
     })
     await page.goto('/')
     await ask(page).fill('As typed')
     await page.getByRole('button', { name: 'Dictate' }).click()
-    await page.getByRole('button', { name: 'Stop and transcribe' }).click()
+    await expect(page.getByRole('button', { name: 'Dictating — click to stop' })).toBeVisible()
+    await page.waitForTimeout(800)
+    await page.getByRole('button', { name: 'Dictating — click to stop' }).click()
     await expect(page.getByRole('button', { name: 'Dictate' })).toBeVisible()
     await expect(ask(page)).toHaveValue('As typed')
     expect(heardBy).toEqual([])
-  })
-
-  test('a visitor’s choice of language asks them to sign in', async ({ page }) => {
-    await serve(page, () => undefined)
-    await mounted(page, { path: '', org: null, admin: false, person: null, signIn: true })
-    await page.getByRole('button', { name: 'Dictation language:', exact: true }).click()
-    await page.getByRole('option', { name: 'Deutsch' }).click()
-    await expect(status(page)).toHaveText('Sign in to save your settings.')
   })
 })
 

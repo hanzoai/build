@@ -21,6 +21,7 @@
     "cover": "node cover/run.ts"
   },
   "devDependencies": {
+    "@hanzo/composer": "catalog:",
     "@hanzo/font": "catalog:",
     "@hanzo/gui": "catalog:",
     "@hanzo/iam": "catalog:",
@@ -61,6 +62,11 @@
       "import": "./lib/route.js",
       "default": "./lib/route.js"
     },
+    "./mind": {
+      "types": "./lib/mind.d.ts",
+      "import": "./lib/mind.js",
+      "default": "./lib/mind.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -82,6 +88,7 @@
     "@hanzo/ui": ">=8.27.67",
     "@hanzogui/lucide-icons-2": ">=8.3.5",
     "react": ">=19.2.8",
-    "@hanzo/voice": ">=0.1.8"
+    "@hanzo/voice": ">=0.1.16",
+    "@hanzo/composer": ">=0.2.0"
   }
 }

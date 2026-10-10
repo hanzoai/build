@@ -1,16 +1,11 @@
 /**
- * The composer's quiet controls, once, for every composer the builder draws:
- * attach files (which ride the prompt as text — nothing is uploaded anywhere
- * else) and dictate (recorded here, transcribed by the platform).
+ * Files with an ask, for every composer the builder draws: they ride the
+ * prompt as text — nothing is uploaded anywhere else. The paperclip is the
+ * composer's (prompt.tsx); this reads what it picks and draws the chips.
  */
 import { SizableText, XStack } from '@hanzo/gui'
-import { ChevronDown, Mic, MicOff, Paperclip, Plus, X } from '@hanzogui/lucide-icons-2'
+import { Paperclip, X } from '@hanzogui/lucide-icons-2'
 import { ComposerTool } from '@hanzo/ui/chat'
-import { ChipSelect } from '@hanzo/ui/product'
-import { useRef } from 'react'
-
-import { useTarget } from './host.tsx'
-import { useDictation } from './voice.ts'
 
 export interface Attached {
   name: string
@@ -47,32 +42,20 @@ export async function read(have: Attached[], list: FileList): Promise<{ files: A
   return { files, note }
 }
 
-export function Attach({ files, onFiles, onNote }: { files: Attached[]; onFiles: (f: Attached[]) => void; onNote: (n: string) => void }) {
-  const picker = useRef<HTMLInputElement | null>(null)
-  return (
-    <>
-      <ComposerTool label="Attach files" icon={<Plus size={14} />} onPress={() => picker.current?.click()} />
-      <input
-        ref={picker}
-        type="file"
-        multiple
-        hidden
-        // `hidden` alone loses to a reset that sets `display` on inputs.
-        style={{ display: 'none' }}
-        tabIndex={-1}
-        aria-hidden
-        onChange={(e) => {
-          const input = e.currentTarget
-          // A file input always holds a list, empty or not.
-          void read(files, input.files!).then(({ files: next, note }) => {
-            onFiles(next)
-            onNote(note)
-            input.value = ''
-          })
-        }}
-      />
-    </>
-  )
+/** Ask the browser for files and read them in, within the caps; the picker is minted per press. */
+export function pick(have: Attached[], onFiles: (f: Attached[]) => void, onNote: (n: string) => void): void {
+  if (typeof document === 'undefined') return
+  const ask = document.createElement('input')
+  ask.type = 'file'
+  ask.multiple = true
+  ask.onchange = () => {
+    if (!ask.files?.length) return
+    void read(have, ask.files).then(({ files, note }) => {
+      onFiles(files)
+      onNote(note)
+    })
+  }
+  ask.click()
 }
 
 /** The attached files as small removable marks. */
@@ -89,31 +72,5 @@ export function Files({ files, onFiles }: { files: Attached[]; onFiles: (f: Atta
         </XStack>
       ))}
     </>
-  )
-}
-
-export function Dictate({ onText, onNote }: { onText: (text: string) => void; onNote: (note: string) => void }) {
-  const voice = useDictation(useTarget(), onText, onNote)
-  return (
-    <XStack items="center">
-      <ComposerTool
-        label={!voice.able ? 'Dictation needs a microphone this page can record' : voice.on ? 'Stop and transcribe' : voice.busy ? 'Transcribing…' : 'Dictate'}
-        icon={voice.on ? <MicOff size={14} /> : <Mic size={14} />}
-        onPress={() => void voice.toggle()}
-        disabled={!voice.able || voice.busy}
-        aria-pressed={voice.on}
-      />
-      <ChipSelect
-        quiet
-        name="Dictation language"
-        icon={<ChevronDown size={12} />}
-        label=""
-        chosen={voice.languages.find((l) => l.id === voice.language)!}
-        items={voice.languages}
-        onChange={(l) => voice.setLanguage(l.id)}
-        placeholder="Search languages…"
-        disabled={!voice.able}
-      />
-    </XStack>
   )
 }

@@ -1,17 +1,8 @@
 /**
- * Dictation into the draft, heard by the platform.
- *
- * The microphone is recorded in this browser and the recording is transcribed
- * by `POST /v1/audio/transcriptions` on the platform, through `@hanzo/voice` —
- * never by a browser's built-in recognizer, which ships the audio to its
- * vendor. Press to record, press again to stop; the words land in the draft.
- * Where there is no microphone or no recorder, `able` is false and the control
- * says so rather than recording into nothing.
+ * The language dictation listens in. The microphone itself is the composer's
+ * (prompt.tsx, @hanzo/voice): heard by the platform, never by a browser's
+ * built-in recognizer, which ships the audio to its vendor.
  */
-import { speech } from '@hanzo/voice'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-import type { Target } from './api/call.ts'
 import { usePrefs } from './prefs.tsx'
 
 export const LANGUAGES = [
@@ -29,70 +20,8 @@ export function spoken(): string {
   return LANGUAGES.some((l) => l.id === nav) ? nav! : 'en'
 }
 
-/** Whether this browser can record the microphone at all. A page that is not a secure context has no media devices. */
-function recordable(): boolean {
-  return typeof window.MediaRecorder === 'function' && Boolean(navigator.mediaDevices?.getUserMedia)
-}
-
-export function useDictation(t: Target, onText: (text: string) => void, onNote: (note: string) => void) {
-  const [on, setOn] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [able, setAble] = useState(false)
-  const rec = useRef<MediaRecorder | null>(null)
-  const said = useRef(onText)
-  said.current = onText
-  const note = useRef(onNote)
-  note.current = onNote
-  // The person's saved language (Settings → General), else this browser's, else English.
-  const kept = usePrefs()
-  const language = LANGUAGES.some((l) => l.id === kept.prefs.language) ? kept.prefs.language! : spoken()
-  const setLanguage = useCallback(
-    (id: string) => kept.save({ language: id }).catch((e: unknown) => note.current((e as Error).message)),
-    [kept],
-  )
-  const ear = useMemo(() => speech({ baseUrl: t.api, token: t.token, ear: 'whisper' }), [t])
-
-  useEffect(() => setAble(recordable()), [])
-
-  const toggle = useCallback(async () => {
-    if (rec.current) {
-      rec.current.stop()
-      return
-    }
-    let stream: MediaStream
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
-    } catch {
-      note.current('The microphone is not available to this page.')
-      return
-    }
-    const chunks: Blob[] = []
-    const r = new MediaRecorder(stream)
-    r.ondataavailable = (e) => {
-      if (e.data.size) chunks.push(e.data)
-    }
-    r.onstop = () => {
-      rec.current = null
-      setOn(false)
-      for (const track of stream.getTracks()) track.stop()
-      const audio = new Blob(chunks, { type: r.mimeType || 'audio/webm' })
-      if (!audio.size) return
-      setBusy(true)
-      ear
-        .transcribe(audio, { language })
-        .then((text) => {
-          const words = text.trim()
-          if (words) said.current(words)
-        })
-        .catch((e: unknown) => note.current((e as Error).message))
-        .finally(() => setBusy(false))
-    }
-    rec.current = r
-    r.start()
-    setOn(true)
-  }, [ear, language])
-
-  useEffect(() => () => rec.current?.stop(), [])
-
-  return { on, busy, able, toggle, language, setLanguage, languages: LANGUAGES }
+/** The person's saved language (Settings → General), else this browser's, else English. */
+export function useSpoken(): string {
+  const { prefs } = usePrefs()
+  return LANGUAGES.some((l) => l.id === prefs.language) ? prefs.language! : spoken()
 }

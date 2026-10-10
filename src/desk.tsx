@@ -1,15 +1,15 @@
 /**
- * The pane beside a run's transcript, as tabs: the Browser showing what the run's
- * sandbox serves (or where the run is published), its sandbox's Desktop and
- * Terminal, what it produced, its files, what it pushed, and its codebase's
- * environment.
+ * The run's side panel: Dev's kinds of tab in the one panel (panel.tsx) — the
+ * Preview of what the run's sandbox serves (or where it is published), its
+ * Artifacts, Files, Diff and Terminal, and on asking its Desktop and its
+ * codebase's Environment.
  *
  * The sandbox outlives the run: kept when the run ends, parked while nobody
  * watches, retired a day after it parks. The bar under the tabs says which and
  * suspends or resumes it; a tab that needs it running resumes it (sandbox.ts).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ExternalLink, Info, MoreHorizontal, PanelRightClose, RefreshCcw } from '@hanzogui/lucide-icons-2'
+import { ExternalLink, Info, MoreHorizontal, RefreshCcw } from '@hanzogui/lucide-icons-2'
 import { Button, DropdownMenu, type DropdownMenuProps } from '@hanzo/ui'
 import { PreviewFrame, type PreviewHandle } from '@hanzo/ui/agents'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -23,13 +23,22 @@ import { Artifacts, Files } from './files.tsx'
 import { Git } from './git.tsx'
 import { useTarget } from './host.tsx'
 import { away, Out } from './out.tsx'
+import { Panel, type Kind } from './panel.tsx'
+import type { Deck, Tabs } from './tabs.ts'
 
-type Tab = 'browser' | 'desktop' | 'terminal' | 'artifacts' | 'files' | 'git' | 'environment'
+/** A run's panel before anyone has arranged it: what a run is read by, the terminal chosen. */
+export const SEED: Tabs = {
+  tabs: [
+    { id: 'preview', kind: 'preview', title: 'Preview' },
+    { id: 'artifacts', kind: 'artifacts', title: 'Artifacts' },
+    { id: 'files', kind: 'files', title: 'Files' },
+    { id: 'diff', kind: 'diff', title: 'Diff' },
+    { id: 'terminal', kind: 'terminal', title: 'Terminal' },
+  ],
+  at: 'terminal',
+}
 
-/** The tabs that are a surface of their own, drawn edge to edge. */
-const BLEED: Tab[] = ['browser', 'desktop', 'terminal']
-
-/** How often the sandbox's state, and what it serves, is read while the pane is open. */
+/** How often the sandbox's state, and what it serves, is read while the panel is open. */
 const EVERY = 10_000
 const PORTS = 5_000
 
@@ -52,6 +61,8 @@ export function Desk({
   refused,
   retry,
   onRetry,
+  side,
+  sheet,
   onHide,
 }: {
   id: string
@@ -77,89 +88,74 @@ export function Desk({
   /** The refusal's one action: Retry, or Sign in when nobody is. */
   retry: string
   onRetry: () => void
+  side: Deck
+  sheet: boolean
   onHide: () => void
 }) {
-  // Until a tab is picked it follows the run: a setup run's work IS the
-  // environment, a published run opens on its site, any other on its terminal.
-  const [picked, setTab] = useState<Tab | null>(null)
-  const tab = picked ?? (mode === 'setup' ? 'environment' : site ? 'browser' : 'terminal')
   const name = repo.split('/').filter(Boolean).pop() || repo
   const lines = shell(events)
   const failed = failure(events)
-  const bleed = BLEED.includes(tab)
   const box = useBox(sandbox)
   // Nothing is said of the sandbox until it has been read.
   const held = box.value?.state ?? ''
+  const environ = () => side.open({ kind: 'environment', title: 'Environment' })
+
+  const kinds: Kind[] = [
+    { id: 'preview', label: 'Preview', bleed: true, render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} /> },
+    {
+      id: 'artifacts',
+      label: 'Artifacts',
+      render: () => <Artifacts session={id} sandbox={sandbox} repo={repo} branch={branch} mode={mode} project={project} site={site} pr={pr} onEnvironment={environ} />,
+    },
+    { id: 'files', label: 'Files', render: () => <Files session={id} repo={repo} branch={branch} sandbox={sandbox} live={held === 'running'} /> },
+    { id: 'diff', label: 'Diff', render: () => <Git session={id} title={title} live={live} /> },
+    {
+      id: 'terminal',
+      label: 'Terminal',
+      bleed: true,
+      render: () => <Terminal id={id} sandbox={sandbox} held={held} lines={lines} live={live} failed={failed} refused={refused} retry={retry} onRetry={onRetry} />,
+    },
+    { id: 'desktop', label: 'Desktop', bleed: true, render: () => <Door which="screen" sandbox={sandbox} held={held} session={id} /> },
+    {
+      id: 'environment',
+      label: 'Environment',
+      render: () => (
+        <YStack gap="$2">
+          <Environment repo={name} busy={live && mode === 'setup'} />
+          <SizableText size="$2" color="$ink" pt="$4">
+            This run
+          </SizableText>
+          <Fact label="Run" value={id} />
+          <Fact label="Repository" value={name || '—'} />
+          <Fact label="Branch" value={branch || '—'} />
+          <Fact label="Base" value={base || '—'} />
+          <Fact label="Runs on" value={environment || 'sandbox'} />
+          <Fact label="Sandbox" value={sandbox || '—'} />
+          <Fact label="Mode" value={mode || 'build'} />
+        </YStack>
+      ),
+    },
+  ]
 
   return (
-    // The pane around it is the edge; this takes its corner and cuts what scrolls to it.
-    <YStack role="complementary" aria-label="Run details" flex={1} minW={0} minH={0} overflow="hidden" style={{ borderRadius: 'inherit' }}>
-      <XStack px="$2" py="$2" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
-        {/* The tabs scroll sideways in a narrow pane; hiding the pane and its menu stay put. */}
-        <XStack flex={1} minW={0} gap="$1" overflow="scroll">
-          <TabButton id="browser" tab={tab} onPick={setTab}>
-            Browser
-          </TabButton>
-          <TabButton id="desktop" tab={tab} onPick={setTab}>
-            Desktop
-          </TabButton>
-          <TabButton id="terminal" tab={tab} onPick={setTab}>
-            Terminal
-          </TabButton>
-          <TabButton id="artifacts" tab={tab} onPick={setTab}>
-            Artifacts
-          </TabButton>
-          <TabButton id="files" tab={tab} onPick={setTab}>
-            Files
-          </TabButton>
-          <TabButton id="git" tab={tab} onPick={setTab}>
-            Git
-          </TabButton>
-          <TabButton id="environment" tab={tab} onPick={setTab}>
-            Environment
-          </TabButton>
-        </XStack>
-        <XStack render="button" aria-label="Hide the side pane" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={onHide}>
-          <PanelRightClose size={16} />
-        </XStack>
+    <Panel
+      side={side}
+      kinds={kinds}
+      sheet={sheet}
+      onHide={onHide}
+      label="Run details"
+      bar={sandbox ? <Held box={box} live={live} /> : null}
+      menu={
         <DropdownMenu
           trigger={
-            <XStack render="button" aria-label="Run actions" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+            <XStack render="button" aria-label="Run actions" p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
               <MoreHorizontal size={16} />
             </XStack>
           }
-          items={[...menu, { key: 'details', label: 'Details', icon: <Info size={16} />, onSelect: () => setTab('environment') }]}
+          items={[...menu, { key: 'details', label: 'Details', icon: <Info size={16} />, onSelect: environ }]}
         />
-      </XStack>
-      {sandbox ? <Held box={box} live={live} /> : null}
-      <YStack flex={1} minH={0} overflow={bleed ? 'hidden' : 'scroll'} px={bleed ? 0 : '$3'} py={bleed ? 0 : '$3'}>
-        {tab === 'environment' ? (
-          <YStack gap="$2">
-            <Environment repo={name} busy={live && mode === 'setup'} />
-            <SizableText size="$2" color="$ink" pt="$4">
-              This run
-            </SizableText>
-            <Fact label="Run" value={id} />
-            <Fact label="Repository" value={name || '—'} />
-            <Fact label="Branch" value={branch || '—'} />
-            <Fact label="Base" value={base || '—'} />
-            <Fact label="Runs on" value={environment || 'sandbox'} />
-            <Fact label="Sandbox" value={sandbox || '—'} />
-            <Fact label="Mode" value={mode || 'build'} />
-          </YStack>
-        ) : null}
-        {tab === 'browser' ? <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} /> : null}
-        {tab === 'git' ? <Git session={id} title={title} live={live} /> : null}
-        {tab === 'desktop' ? <Door which="screen" sandbox={sandbox} held={held} session={id} /> : null}
-        {tab === 'terminal' ? (
-          <Terminal id={id} sandbox={sandbox} held={held} lines={lines} live={live} failed={failed} refused={refused} retry={retry} onRetry={onRetry} />
-        ) : null}
-        {tab === 'artifacts' ? (
-          <Artifacts session={id} sandbox={sandbox} repo={repo} branch={branch} mode={mode} project={project} site={site} pr={pr} onEnvironment={() => setTab('environment')} />
-        ) : null}
-        {tab === 'files' ? <Files session={id} repo={repo} branch={branch} sandbox={sandbox} live={held === 'running'} /> : null}
-      </YStack>
-    </YStack>
+      }
+    />
   )
 }
 
@@ -456,27 +452,6 @@ function Site({ site, live, held }: { site: string; live: boolean; held: Box['st
   )
 }
 
-function TabButton({ id, tab, onPick, children }: { id: Tab; tab: Tab; onPick: (t: Tab) => void; children: string }) {
-  const on = tab === id
-  return (
-    <XStack
-      render="button"
-      aria-label={children}
-      aria-pressed={on}
-      onPress={() => onPick(id)}
-      px="$3"
-      py="$1.5"
-      rounded={999}
-      shrink={0}
-      bg={on ? '$edge' : 'transparent'}
-      hoverStyle={{ bg: '$hover' }}
-    >
-      <SizableText size="$2" color={on ? '$ink' : '$soft'}>
-        {children}
-      </SizableText>
-    </XStack>
-  )
-}
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
