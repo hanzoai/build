@@ -373,7 +373,7 @@ test.describe('a host that draws its own rail', () => {
     await runs(page)
     await page.goto(`${HOST}?label=Dev`)
     const surface = await page.evaluate((at) => import(at).then((m: object) => Object.keys(m).sort()), '/src/index.ts')
-    expect(surface).toEqual(['Builder', 'Credits', 'DOTS', 'DevSection', 'Grip', 'HostProvider', 'Meter', 'NEW', 'Plan', 'SEPARATE', 'SESSION', 'SLUG', 'Slack', 'Title', 'Who', 'administers', 'kind', 'label', 'left', 'nav', 'path', 'route', 'rows', 'said', 'share', 'spent', 'useSessions', 'useStanding', 'useWho', 'ways', 'when'])
+    expect(surface).toEqual(['Builder', 'Credits', 'DOTS', 'DevSection', 'Grip', 'HostProvider', 'Meter', 'NEW', 'PLACES', 'Plan', 'SEPARATE', 'SESSION', 'SLUG', 'Slack', 'Title', 'Who', 'administers', 'href', 'kind', 'label', 'left', 'nav', 'parse', 'path', 'route', 'rows', 'said', 'share', 'spent', 'useSessions', 'useStanding', 'useWho', 'ways', 'when'])
 
     const r = rail(page)
     await expect(r.getByText('Dev', { exact: true })).toBeVisible()

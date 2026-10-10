@@ -65,6 +65,15 @@ under the mount (`path`) and how to move (`go`), where to link out
 (`theme`, `chooseTheme`), which follows the person's saved choice. Peers:
 `@hanzo/ui`, `@hanzo/gui`, `@hanzogui/lucide-icons-2`, `react`.
 
+`path` is the builder's own grammar (`route`, `path`). A host that shows real
+paths writes it with `href` and reads it back with `parse`: '' New,
+`/run/<id>`, `/projects/<org>/<repo>` a repository, `/projects/<slug>` a site,
+`/machines` and `/environments` in the rail's own words, and every other place
+at its name (`/projects`, `/issues`, `/customize/connectors`, `/settings/usage`).
+`PLACES` lists every address that names no record, for a host that writes a page
+per address ahead of time. `@hanzo/build/route` is that module alone, with no
+React, for server code and for pages that must not carry the builder.
+
 ### In a host that has its own rail
 
 The Hanzo app already has a left column, so it mounts `<Builder host={host}
