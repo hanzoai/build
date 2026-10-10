@@ -14,7 +14,8 @@ const find = (sent: Sent[], method: string, path: string) => sent.find((s) => s.
 test('Billing shows the plan, the cards, the invoices, and cancels at the period end', async ({ page }, info) => {
   const sent = await platform(page)
   await page.goto('/-/settings/billing')
-  await expect(page.getByText('Max plan')).toBeVisible()
+  // The plan by its family, never a slug.
+  await expect(page.locator('[data-slot="billing-plan"] [data-slot="plan-name"]')).toHaveText('Max')
   await expect(page.getByText('$100 a month. Renews on Oct 27, 2026.')).toBeVisible()
   await expect(page.getByText('Visa •••• 4242')).toBeVisible()
   await expect(page.getByText('Expires 12/27 · Default')).toBeVisible()
@@ -127,18 +128,22 @@ test('Plans marks the current plan and upgrades with the saved card, yearly', as
   await expect(page).toHaveURL(/\/-\/settings\/billing$/)
 })
 
-test('Usage shows the limits, the balance and the month, buys more and sets a monthly limit', async ({ page }, info) => {
+test('Usage is the plan as shares; Credits in Billing show the balance and the month, buy more and set a monthly limit', async ({ page }, info) => {
   const sent = await platform(page)
   await page.goto('/-/settings/usage')
-  await expect(page.getByText('Today · 1,800 of 2,500 requests')).toBeVisible()
-  await expect(page.getByText('This week · 3,000 of 12,000 requests')).toBeVisible()
-  await expect(page.getByText('$30 of $100')).toBeVisible()
+  const view = page.locator('[data-slot="plan-usage"]')
+  await expect(view).toHaveAttribute('data-kind', 'plan')
+  for (const t of ['Session', 'Today', 'Premium models', 'Hanzo models']) await expect(view.getByText(t, { exact: true })).toBeVisible()
+  expect(await view.innerText(), 'shares, never money').not.toMatch(/\$\s?\d/)
+  await page.screenshot({ path: info.outputPath('usage.png'), fullPage: true })
+
+  // Credits live in Billing: the balance, the grants and the month's spend by kind.
+  await page.goto('/-/settings/billing')
   await expect(page.getByText('$42', { exact: true })).toBeVisible()
   await expect(page.getByText('$15', { exact: true })).toBeVisible()
   await expect(page.getByText('$52.50', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('LLM', { exact: true })).toBeVisible()
-  await expect(page.getByRole('progressbar')).toHaveCount(6)
-  await page.screenshot({ path: info.outputPath('usage.png'), fullPage: true })
+  await expect(page.getByRole('progressbar')).toHaveCount(3)
 
   await page.getByRole('button', { name: 'Buy more' }).click()
   await expect(page.getByText('Charged to Visa •••• 4242')).toBeVisible()
@@ -242,11 +247,10 @@ test('a member reads the limits, the roster and the connectors, and changes none
   const member = [b64({ alg: 'none' }), b64({ sub: `${ORG}/zed`, email: 'zed@acme.test', orgs: [{ org: ORG, role: 'member' }] }), 'x'].join('.')
   await page.addInitScript((t) => localStorage.setItem('hanzo_iam_access_token', t), member)
 
-  await page.goto('/-/settings/usage')
+  await page.goto('/-/settings/billing')
   await expect(page.getByText('An org admin sets the monthly limit.')).toBeVisible()
   await expect(page.getByLabel('Monthly limit in dollars')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Buy more' })).toHaveCount(0)
-  await page.goto('/-/settings/billing')
   await expect(page.getByText('Invoices', { exact: true })).toBeVisible()
   await expect(page.getByText('Visa •••• 4242')).toBeVisible()
   await expect(page.getByText('An org admin adds and removes cards.')).toBeVisible()

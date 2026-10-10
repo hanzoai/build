@@ -75,12 +75,21 @@ function fresh() {
     processor: { provider: 'square', applicationId: 'sandbox-sq0idb-test', locationId: 'L1', environment: 'sandbox', live: false } as Row,
     balance: { balance: 4200, available: 4200 } as Row,
     credit: { balances: [{ currency: 'usd', available: 1500 }] } as Row,
-    rollup: {
-      plan: 'max',
-      period: '2026-09',
-      included: { monthlyCents: 10000, consumedCents: 3000 },
-      windows: [{ span: 'day', limit: 2500, used: 1800, resets: '2026-09-28T00:00:00Z' }],
+    // GET /v1/ai/limits as cloud's limits_ops.go writes it for a Max payer: windows and classes as shares.
+    limits: {
+      plan: 'max-20x',
+      period_start: '2026-10-01T00:00:00Z',
+      period_end: '2026-11-01T00:00:00Z',
+      state: 'ok',
+      classes: { premium: { percent: 30, state: 'ok', paying: 'plan', resets_at: '2026-11-01T00:00:00Z' }, ours: { percent: 10, state: 'ok', paying: 'plan', resets_at: '2026-11-01T00:00:00Z' } },
+      session: { percent: 20, state: 'ok', resets_at: null },
+      day: { percent: 5, state: 'ok', resets_at: '2026-10-08T00:00:00Z' },
+      actions: [{ kind: 'topup', label: 'Add prepaid credit', url: 'https://hanzo.ai/pay' }],
+      credits_after_allowance: false,
     } as Row,
+    tier: { user: `${ORG}/dave`, plan: 'max', subscription: 'sub_1', tier: { name: 'pro', displayName: 'Pro' }, balance: {} } as Row,
+    recharge: { subject: ORG, enabled: false, thresholdCents: 0, amountCents: 0, currency: 'usd', stored: false } as Row,
+    grants: [{ id: 'cg_1', name: 'Welcome credit', amountCents: 2000, remainingCents: 1500, currency: 'usd', active: true, voided: false, expiresAt: '2027-01-01T00:00:00Z' }] as Row[],
     spend: { spend: { available: true, mtdCents: 5250, byCategory: [{ category: 'LLM', cents: 4000 }] } } as Row,
     caps: [] as Row[],
     // GET /v1/allowance: the paid plan above bounds nothing and is not pooled.
@@ -195,11 +204,21 @@ function answer(w: World, s: Sent): Reply | undefined {
     case 'POST /v1/billing/topup':
       w.balance = { available: Number(w.balance.available) + Number(b.amountCents) }
       return { json: { status: 'ok', balanceCents: w.balance.available } }
-    case 'GET /v1/billing/usage/rollup': {
-      // A window's reset given as \`after\` ms is stated from the moment it is answered.
-      const windows = ((w.rollup.windows ?? []) as Row[]).map(({ after, ...x }) => (after === undefined ? x : { ...x, resets: from(Number(after)) }))
-      return { json: { ...w.rollup, windows } }
-    }
+    case 'GET /v1/ai/limits':
+      return { json: w.limits }
+    case 'PUT /v1/ai/limits':
+      w.limits = { ...w.limits, credits_after_allowance: b.creditsAfterAllowance === true }
+      return { json: w.limits }
+    case 'GET /v1/billing/tier':
+      return { json: w.tier }
+    case 'GET /v1/billing/credits':
+      return { json: { count: w.grants.length, grants: w.grants } }
+    case 'GET /v1/billing/recharge':
+      return { json: w.recharge }
+    case 'PUT /v1/billing/recharge':
+      if (b.enabled && !w.cards.length) return { status: 400, json: { detail: 'add a card before turning on auto-reload' } }
+      w.recharge = { ...w.recharge, enabled: b.enabled, thresholdCents: b.thresholdCents, amountCents: b.amountCents, stored: true }
+      return { json: w.recharge }
     case 'GET /v1/usage/summary':
       return { json: w.spend }
     case 'GET /v1/allowance':
@@ -1019,7 +1038,7 @@ test('Billing: seats and no period end, an ending plan kept after a refusal, car
     ]
   })
   await page.goto('/-/settings/billing')
-  await expect(page.getByText('Team plan')).toBeVisible()
+  await expect(page.locator('[data-slot="billing-plan"] [data-slot="plan-name"]')).toHaveText('Team')
   await expect(page.getByText('$72 a month for 3 seats.', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   const ending = page.getByRole('dialog', { name: 'Cancel your plan?' })
@@ -1236,19 +1255,8 @@ test('the card form says a processor that is not set up, one that does not load,
 
 const RESETS = from(4 * DAY)
 
-test('Usage draws every kind of window and limit, buys more after a refusal, and lifts the monthly limit across a reload', async ({ page }) => {
+test('Credits in Billing: every kind of spend limit, buying more after a refusal, the monthly limit lifted and auto-reload armed, across a reload', async ({ page }) => {
   const p = await platform(page, (w) => {
-    w.rollup = {
-      plan: '',
-      included: {},
-      windows: [
-        { span: 'hour', limit: 100, used: 150, after: 30 * MIN + 25_000 },
-        { span: 'minute', limit: 10, used: 2, after: 185 * MIN + 25_000 },
-        { span: 'week', limit: 0, used: 5 },
-        { span: 'day', limit: 50, used: 1, after: -MIN },
-        { span: 'month', limit: 1000, used: 10, resets: 'soon' },
-      ],
-    }
     w.spend = { spend: { available: false } }
     w.caps = [
       { id: 'al_1', title: 'Monthly limit', threshold: 50000, enforce: true, project: '', service: '', resetsAt: RESETS },
@@ -1257,27 +1265,20 @@ test('Usage draws every kind of window and limit, buys more after a refusal, and
     ]
   })
   p.fail('GET /v1/billing/balance', refusal('The wallet is not answering', 503))
-  await page.goto('/-/settings/usage')
-  await expect(page.getByText('What the plan includes.')).toBeVisible()
-  await expect(page.getByText('This hour · 150 of 100 requests')).toBeVisible()
-  await expect(page.getByText('100% used · Resets in 30 min')).toBeVisible()
-  await expect(page.getByText('minute · 2 of 10 requests')).toBeVisible()
-  await expect(page.getByText('20% used · Resets in 3 hr 5 min')).toBeVisible()
-  await expect(page.getByText('Today · 1 of 50 requests')).toBeVisible()
-  await expect(page.getByText('2% used · Resets now')).toBeVisible()
-  await expect(page.getByText('This month · 10 of 1,000 requests')).toBeVisible()
-  await expect(page.getByText('1% used', { exact: true })).toBeVisible()
-  await expect(page.getByText(/^This week/)).toHaveCount(0)
-  await expect(page.getByRole('progressbar').first()).toHaveAttribute('aria-valuenow', '100')
-  await expect(page.getByText('Unavailable', { exact: true })).toBeVisible()
-  await expect(page.getByText('The ledger did not answer, so this is not a measurement')).toBeVisible()
-  await expect(page.getByText('Nothing spent this month.')).toBeVisible()
-  await expect(page.getByText('$500 a month', { exact: true })).toBeVisible()
-  await expect(page.getByText(`Spend unknown · Resets ${drawn(RESETS)}`)).toBeVisible()
-  await expect(page.getByText('project shop · service llm · warns only')).toBeVisible()
-  await expect(page.getByText('—', { exact: true })).toBeVisible()
-  await expect(page.getByText('service compute · refuses spend past it')).toBeVisible()
-  await expect(page.getByText('$99', { exact: true })).toBeVisible()
+  await page.goto('/-/settings/billing')
+  const credits = page.locator('[data-slot="credits"]')
+  await expect(credits.getByText(/^Credits are separate from your plan’s usage allowance\./)).toBeVisible()
+  await expect(credits.getByText('Unavailable', { exact: true })).toHaveCount(1)
+  await expect(credits.getByText('$15', { exact: true })).toBeVisible()
+  await expect(credits.getByText('$15 left of $20 · expires Jan 1, 2027')).toBeVisible()
+  await expect(credits.getByText('The ledger did not answer, so this is not a measurement')).toBeVisible()
+  await expect(credits.getByText('Nothing spent this month.')).toBeVisible()
+  await expect(credits.getByText('$500 a month', { exact: true })).toBeVisible()
+  await expect(credits.getByText(`Spend unknown · Resets ${drawn(RESETS)}`)).toBeVisible()
+  await expect(credits.getByText('project shop · service llm · warns only')).toBeVisible()
+  await expect(credits.getByText('—', { exact: true })).toBeVisible()
+  await expect(credits.getByText('service compute · refuses spend past it')).toBeVisible()
+  await expect(credits.getByText('$99', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Monthly limit in dollars')).toHaveAttribute('placeholder', '500')
 
   await page.getByLabel('Monthly limit in dollars').fill('lots')
@@ -1291,17 +1292,32 @@ test('Usage draws every kind of window and limit, buys more after a refusal, and
   await expect(page.getByRole('status').filter({ hasText: 'The monthly limit is lifted' })).toBeVisible()
   await expect(page.getByText('No monthly limit')).toBeVisible()
 
+  // Auto-reload: off until armed, armed with both figures, and off again.
+  await expect(credits.getByRole('switch', { name: 'Auto-reload' })).not.toBeChecked()
+  await credits.getByRole('button', { name: 'Turn on' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Enter the balance to reload below and the amount to add, in dollars' })).toBeVisible()
+  await page.getByLabel('Reload below, in dollars').fill('5')
+  await page.getByLabel('Amount to add, in dollars').fill('25')
+  await credits.getByRole('button', { name: 'Turn on' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Adds $25 whenever the balance falls below $5' })).toBeVisible()
+  await expect(credits.getByText('Adds $25 below $5')).toBeVisible()
+  await expect(credits.getByRole('switch', { name: 'Auto-reload' })).toBeChecked()
+
   p.pass('GET /v1/billing/balance')
   await page.reload()
   await expect(page.getByText('No monthly limit')).toBeVisible()
-  await expect(page.getByText('$42', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Buy more' }).click()
+  await expect(credits.getByText('Adds $25 below $5')).toBeVisible()
+  await expect(page.getByLabel('Reload below, in dollars')).toHaveValue('5')
+  await credits.getByRole('switch', { name: 'Auto-reload' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Auto-reload is off' })).toBeVisible()
+  await expect(credits.getByText('$42', { exact: true })).toBeVisible()
+  await credits.getByRole('button', { name: 'Buy more' }).click()
   await page.getByLabel('Amount in dollars').fill('a lot')
   await page.getByRole('button', { name: 'Add funds' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Enter an amount in dollars' })).toBeVisible()
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).first().click()
   await expect(page.getByLabel('Amount in dollars')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Buy more' }).click()
+  await credits.getByRole('button', { name: 'Buy more' }).click()
   await page.getByLabel('Amount in dollars').fill('25')
   p.fail('POST /v1/billing/topup', refusal('The card was declined', 402))
   await page.getByRole('button', { name: 'Add $25' }).click()
@@ -1309,102 +1325,125 @@ test('Usage draws every kind of window and limit, buys more after a refusal, and
   p.pass('POST /v1/billing/topup')
   await page.getByRole('button', { name: 'Add $25' }).click()
   await expect(page.getByRole('status').filter({ hasText: '$25 is added to the balance' })).toBeVisible()
-  await expect(page.getByText('$67', { exact: true })).toBeVisible()
+  await expect(credits.getByText('$67', { exact: true })).toBeVisible()
   await page.reload()
-  await expect(page.getByText('$67', { exact: true })).toBeVisible()
+  await expect(credits.getByText('$67', { exact: true })).toBeVisible()
   expect(p.writes()).toEqual([
     ['DELETE /v1/billing/alerts/al_1', null],
     ['DELETE /v1/billing/alerts/al_1', null],
+    ['PUT /v1/billing/recharge', { enabled: true, thresholdCents: 500, amountCents: 2500, currency: 'usd' }],
+    ['PUT /v1/billing/recharge', { enabled: false, thresholdCents: 500, amountCents: 2500, currency: 'usd' }],
     ['POST /v1/billing/topup', { amountCents: 2500, paymentMethodId: 'pm_1' }],
     ['POST /v1/billing/topup', { amountCents: 2500, paymentMethodId: 'pm_1' }],
   ])
-
-  // The month's included spend, run over, with no windows; then a plan that includes nothing.
-  p.w.rollup = { plan: 'max', included: { monthlyCents: 10000, consumedCents: 12000 }, overageCents: 2000, windows: [{ span: 'day', limit: 10, used: 1, after: 3 * DAY }] }
-  await page.reload()
-  await expect(page.getByText('Included with max.')).toBeVisible()
-  await expect(page.getByText('$120 of $100 · $20 over')).toBeVisible()
-  await expect(page.getByText(/^10% used · Resets [A-Z][a-z]{2} \d+, \d{4}$/)).toBeVisible()
-  p.w.rollup = { plan: 'free', included: { monthlyCents: 0 }, windows: [] }
-  await page.reload()
-  await expect(page.getByText('This plan sets no usage limits. Usage is paid from the balance.')).toBeVisible()
 })
 
-test('Usage on the Free plan says it is limited and pooled, with what is left and the pool’s state, and a paid plan says neither', async ({ page }) => {
-  const now = Math.floor(Date.now() / 1000)
-  const hour = new Date((now + 40 * 60) * 1000)
-  const hhmm = (d: Date) => `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`
-  const today = (d: Date) => d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10)
+test('Usage on a plan is shares only, and paying from credits past it is turned on and off, a refusal said', async ({ page }) => {
+  const p = await platform(page)
+  await page.goto('/-/settings/usage')
+  const view = page.locator('[data-slot="plan-usage"]')
+  await expect(view).toHaveAttribute('data-kind', 'plan')
+  await expect(view.locator('[data-slot="plan-name"]')).toContainText('Max')
+  await expect(view.getByText('20% used · Starts with your next request')).toBeVisible()
+  await expect(view.getByText(/^5% used · Resets /)).toBeVisible()
+  await expect(view.getByText('Premium models', { exact: true })).toBeVisible()
+  expect(await view.innerText()).not.toMatch(/\$\s?\d/)
+  const choice = view.getByRole('switch', { name: 'Use credits when my plan’s allowance runs out' })
+  p.fail('PUT /v1/ai/limits', refusal('only an admin of this org may choose how its usage is paid', 403))
+  await choice.click()
+  await expect(page.getByRole('status').filter({ hasText: 'only an admin of this org may choose how its usage is paid' })).toBeVisible()
+  await expect(choice).not.toBeChecked()
+  p.pass('PUT /v1/ai/limits')
+  await choice.click()
+  await expect(choice).toBeChecked()
+  await page.reload()
+  await expect(page.getByRole('switch', { name: 'Use credits when my plan’s allowance runs out' })).toBeChecked()
+  await page.getByRole('switch', { name: 'Use credits when my plan’s allowance runs out' }).click()
+  await expect(page.getByRole('switch', { name: 'Use credits when my plan’s allowance runs out' })).not.toBeChecked()
+  await page.locator('[data-slot="plan-usage"]').getByRole('button', { name: 'Billing' }).click()
+  await expect(page).toHaveURL(/\/-\/settings\/billing$/)
+  expect(p.writes().filter(([k]) => k === 'PUT /v1/ai/limits')).toEqual([
+    ['PUT /v1/ai/limits', { creditsAfterAllowance: true }],
+    ['PUT /v1/ai/limits', { creditsAfterAllowance: true }],
+    ['PUT /v1/ai/limits', { creditsAfterAllowance: false }],
+  ])
+})
+
+test('Usage on the Free plan says it is limited and pooled, with the share left and the pool’s state, and a paid plan says neither', async ({ page }) => {
+  const hour = new Date(Date.now() + 40 * MIN)
+  const midnight = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1))
   const p = await platform(page, (w) => {
     w.subs = []
-    w.allowance = {
+    w.tier = { user: `${ORG}/dave`, tier: { name: 'free', displayName: 'Free' }, balance: {} }
+    w.balance = { available: 0 }
+    w.limits = {
       plan: 'free',
-      limit: 10,
-      used: 3,
-      spent: false,
-      window: 'hour',
-      resets: Math.floor(hour.getTime() / 1000),
-      pooled: true,
-      pool: { state: 'busy' },
+      state: 'ok',
+      classes: {},
+      actions: [
+        { kind: 'upgrade', label: 'Upgrade to Pro', plan: 'dev', url: 'https://hanzo.ai/pay/cart?plan=dev' },
+        { kind: 'topup', label: 'Add prepaid credit', url: 'https://hanzo.ai/pay' },
+      ],
+      upgrade: 'dev',
+      credits_after_allowance: false,
     }
+    w.allowance = { plan: 'free', limit: 10, used: 3, spent: false, window: 'hour', resets: Math.floor(hour.getTime() / 1000), pooled: true, pool: { state: 'busy' } }
   })
   await page.goto('/-/settings/usage')
-  await expect(page.getByText('Free plan', { exact: true })).toBeVisible()
-  await expect(page.getByText('Free — limited usage, from a pool shared by all free users.')).toBeVisible()
-  await expect(page.getByText('7 of 10 left this hour')).toBeVisible()
-  await expect(page.getByText(today(hour) ? `3 used · Refills at ${hhmm(hour)}` : /^3 used · Refills /)).toBeVisible()
-  await expect(page.getByText('Shared pool')).toBeVisible()
-  await expect(page.getByText('Try again in a minute')).toBeVisible()
-  await expect(page.getByText('Busy', { exact: true })).toBeVisible()
+  const view = page.locator('[data-slot="plan-usage"]')
+  await expect(view).toHaveAttribute('data-kind', 'free')
+  await expect(view.getByText('Limited usage of free models, from a pool every free account shares.')).toBeVisible()
+  await expect(view.getByText('This hour', { exact: true })).toBeVisible()
+  await expect(view.getByText(/^70% left · Resets \d{1,2}:\d{2} (AM|PM)$/)).toBeVisible()
+  await expect(view.getByText('Shared pool')).toBeVisible()
+  await expect(view.getByText('Busy. Try again in a minute.')).toBeVisible()
 
-  // Spent for the day, and the pool used up until midnight: both said, from the platform's numbers.
-  const midnight = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1))
-  p.w.allowance = {
-    ...p.w.allowance,
-    limit: 50,
-    used: 50,
-    spent: true,
-    window: 'day',
-    resets: midnight.getTime() / 1000,
-    pool: { state: 'exhausted', resets: midnight.getTime() / 1000 },
-  }
+  // Spent for the day, and the pool used up until midnight.
+  p.w.allowance = { ...p.w.allowance, limit: 50, used: 50, spent: true, window: 'day', resets: midnight.getTime() / 1000, pool: { state: 'exhausted', resets: midnight.getTime() / 1000 } }
   await page.reload()
-  await expect(page.getByText('0 of 50 left today')).toBeVisible()
-  await expect(page.getByText('Used up', { exact: true })).toBeVisible()
-  await expect(page.getByText(/^Refills [A-Z][a-z]{2} \d+, \d{4}, 00:00 UTC$/)).toBeVisible()
-  await expect(page.getByRole('progressbar').first()).toHaveAttribute('aria-valuenow', '100')
+  await expect(view.getByText('Today', { exact: true })).toBeVisible()
+  await expect(view.getByText(/^0% left · Resets /)).toBeVisible()
+  await expect(view.getByText(/^Used up until /)).toBeVisible()
+  await expect(view.getByRole('progressbar').first()).toHaveAttribute('aria-valuenow', '100')
+  // Every free account shares the pool; a reader who would rather pay as they go adds credits in Billing.
+  await view.getByRole('button', { name: 'Add credits' }).click()
+  await expect(page).toHaveURL(/\/-\/settings\/billing$/)
 
   // The way up is the Plans screen.
-  await page.getByRole('button', { name: 'Upgrade', exact: true }).click()
+  await page.goto('/-/settings/usage')
+  await view.getByRole('button', { name: 'Upgrade to Pro' }).click()
   await expect(page).toHaveURL(/\/-\/plans$/)
 
   // A pool the platform could not read is not drawn; the allowance still is.
   p.w.allowance = { ...p.w.allowance, pool: undefined }
   await page.goto('/-/settings/usage')
-  await expect(page.getByText('0 of 50 left today')).toBeVisible()
-  await expect(page.getByText('Shared pool')).toHaveCount(0)
+  await expect(view.getByText(/^0% left/)).toBeVisible()
+  await expect(view.getByText('Shared pool')).toHaveCount(0)
 
-  // A paid plan is metered in money: no Free plan, no pool.
+  // A paid plan: no free allowance, no pool.
+  p.w.tier = fresh().tier
+  p.w.limits = fresh().limits
   p.w.allowance = { plan: 'max', limit: 0, used: 0, spent: false, resets: 0, pooled: false }
   await page.reload()
-  await expect(page.getByText('Included with max.')).toBeVisible()
-  await expect(page.getByText('Free plan', { exact: true })).toHaveCount(0)
-  await expect(page.getByText('Shared pool')).toHaveCount(0)
+  await expect(view).toHaveAttribute('data-kind', 'plan')
+  await expect(view.getByText('Shared pool')).toHaveCount(0)
+  await expect(view.getByText(/free models, from a pool/)).toHaveCount(0)
 })
 
-test('Usage sends someone with no card to Billing, and says it is reading the cards until they come', async ({ page }) => {
+test('Credits send someone with no card to add one, and say they are reading the cards until they come', async ({ page }) => {
   const p = await platform(page, (w) => (w.cards = []))
-  await page.goto('/-/settings/usage')
-  await page.getByRole('button', { name: 'Buy more' }).click()
-  await expect(page.getByText('Add a card in Billing to buy more.')).toBeVisible()
+  await page.goto('/-/settings/billing')
+  const credits = page.locator('[data-slot="credits"]')
+  await credits.getByRole('button', { name: 'Buy more' }).click()
+  await expect(credits.getByText('Add a card to buy more.')).toBeVisible()
   const release = p.hold((s) => s.path === '/v1/billing/methods')
   await page.reload()
-  await page.getByRole('button', { name: 'Buy more' }).click()
-  await expect(page.getByText('Reading cards…')).toBeVisible()
+  await credits.getByRole('button', { name: 'Buy more' }).click()
+  await expect(credits.getByText('Reading cards…')).toBeVisible()
   release()
-  await expect(page.getByText('Add a card in Billing to buy more.')).toBeVisible()
-  await page.getByText('Add a card in Billing to buy more.').locator('..').getByRole('button', { name: 'Billing' }).click()
-  await expect(page).toHaveURL(/\/-\/settings\/billing$/)
+  await expect(credits.getByText('Add a card to buy more.')).toBeVisible()
+  await credits.getByRole('button', { name: 'Add card' }).click()
+  await expect(page.getByRole('dialog').getByText('Add a card')).toBeVisible()
 })
 
 test('Plans moves back to Free at the period’s end, after a refusal and a second thought, across a reload', async ({ page }) => {
@@ -1797,8 +1836,8 @@ test('every section says it is reading until the platform answers', async ({ pag
   const release = p.hold((s) => s.method === 'GET' && !s.path.startsWith('/v1/iam/oauth') && s.path !== '/v1/pref')
   const reads: [string, string[]][] = [
     ['privacy', ['Reading your answers…', 'Reading projects…']],
-    ['billing', ['Reading your plan…', 'Reading cards…', 'Reading invoices…']],
-    ['usage', ['Reading the plan’s limits…', 'Reading spend…', '…']],
+    ['billing', ['Reading your plan…', 'Reading cards…', 'Reading invoices…', 'Reading auto-reload…', 'Reading spend…', '…']],
+    ['usage', ['Reading the plan…']],
     ['capabilities', ['Reading tools…']],
     ['memory', ['Reading memories…']],
     ['environments', ['Reading environments…']],
@@ -1840,7 +1879,10 @@ test('every section says the platform’s refusal of what it reads', async ({ pa
     'GET /v1/billing/subscriptions',
     'GET /v1/billing/methods',
     'GET /v1/billing/invoices',
-    'GET /v1/billing/usage/rollup',
+    'GET /v1/billing/tier',
+    'GET /v1/ai/limits',
+    'GET /v1/allowance',
+    'GET /v1/billing/recharge',
     'GET /v1/billing/balance',
     'GET /v1/billing/credit-balance',
     'GET /v1/usage/summary',
@@ -1861,8 +1903,8 @@ test('every section says the platform’s refusal of what it reads', async ({ pa
     p.fail(key, refusal(down, 503))
   const counts: [string, number][] = [
     ['privacy', 2],
-    ['billing', 3],
-    ['usage', 3],
+    ['billing', 6],
+    ['usage', 1],
     ['capabilities', 1],
     ['memory', 1],
     ['environments', 1],
@@ -1876,7 +1918,7 @@ test('every section says the platform’s refusal of what it reads', async ({ pa
     await page.goto(`/-/settings/${section}`)
     await expect(page.getByText(down, { exact: true }), section).toHaveCount(n)
   }
-  await page.goto('/-/settings/usage')
+  await page.goto('/-/settings/billing')
   await expect(page.getByText('Unavailable', { exact: true })).toHaveCount(3)
   await page.goto('/-/plans')
   await expect(page.getByText(down, { exact: true })).toBeVisible()
@@ -1894,7 +1936,12 @@ test('every section says when there is nothing yet', async ({ page }) => {
       subs: [],
       cards: [],
       invoices: [],
-      rollup: {},
+      tier: { user: `${ORG}/dave`, tier: { name: 'free' }, balance: {} },
+      limits: { plan: 'free', state: 'ok', classes: {}, actions: [], credits_after_allowance: false },
+      balance: { available: 0 },
+      credit: { balances: [] },
+      grants: [],
+      allowance: { plan: 'free', limit: 20, used: 0, spent: false, window: 'day', resets: 0, pooled: true },
       spend: { spend: { available: true } },
       caps: [],
       roster: [],
@@ -1907,8 +1954,8 @@ test('every section says when there is nothing yet', async ({ page }) => {
   })
   const empty: [string, string[]][] = [
     ['privacy', ['Your organization has no projects yet.']],
-    ['billing', ['Free plan', 'No paid plan. Usage is paid from the balance.', 'No card on file.', 'No invoices yet.']],
-    ['usage', ['This plan sets no usage limits. Usage is paid from the balance.', 'Nothing spent this month.', 'No monthly limit', '$0']],
+    ['billing', ['Free', 'No paid plan. Usage is paid from credits.', 'No card on file.', 'No invoices yet.', 'Nothing spent this month.', 'No monthly limit', '$0', 'Off']],
+    ['usage', ['Free', '100% left']],
     ['capabilities', ['No tools are available to this organization yet.']],
     ['memory', ['Nothing yet. What you tell Hanzo to remember shows here.']],
     ['environments', ['No codebase has an environment yet. Set one up from New, or from a run’s Environment tab.']],
@@ -1936,7 +1983,7 @@ test('signed in to no organization, each section says so', async ({ page }) => {
     ['members', 'Choose an organization to see its members.'],
     ['capabilities', 'What the agent may use in this organization. A tool that is off is refused when the agent calls it.'],
     ['billing', 'The plan this organization is on, the cards it pays with, and its invoices.'],
-    ['usage', 'What this organization has used, has left, and may spend.'],
+    ['usage', 'What this organization’s plan includes, and how much of it is used.'],
     ['integrations', 'What this organization and you have connected.'],
     ['notifications', 'Webhooks: events in this organization, POSTed and signed to an address you run.'],
   ]
@@ -1988,9 +2035,11 @@ test('a member reads every admin’s control as it stands, and changes none of t
   await page.goto('/-/settings/billing')
   await expect(page.getByText('Your plan ends on Oct 27, 2026')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Keep plan' })).toHaveCount(0)
-  await page.goto('/-/settings/usage')
   await expect(page.getByText('$1 spent', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Buy more' })).toHaveCount(0)
+  await expect(page.getByRole('switch', { name: 'Auto-reload' })).toHaveCount(0)
+  await expect(page.getByText('An org admin sets auto-reload.')).toBeVisible()
   await page.goto('/-/settings/integrations')
   await expect(page.getByText('Acme HQ')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toHaveCount(1)

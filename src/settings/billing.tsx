@@ -1,7 +1,8 @@
 /**
- * Billing: the plan this organization is on and the way to change it, the cards
- * it pays with, its invoices, and ending the plan. Changing plan is the Plans
- * screen; this page says what is true now.
+ * Billing: the plan this organization is on and the way to change it, its
+ * credits (`Credits`: the balance, grants, top-ups, auto-reload, this month's
+ * spend and its limit), the cards it pays with, its invoices, and ending the
+ * plan. Changing plan is the Plans screen; this page says what is true now.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { CreditCard, Download, Plus, X } from '@hanzogui/lucide-icons-2'
@@ -22,6 +23,7 @@ import {
   pdf,
   reactivate,
   subscriptions,
+  tier,
   updateMethod,
   type Address,
   type Invoice,
@@ -30,8 +32,11 @@ import {
 } from '../api/billing.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
+import { Title } from '../meter.tsx'
+import { label as named } from '../plan.ts'
 import { path } from '../route.ts'
 import { AddCard } from './card.tsx'
+import { Credits } from './credits.tsx'
 import { Card, day, Field, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
 export function Billing() {
@@ -41,6 +46,7 @@ export function Billing() {
   const subs = useRead(signed ? () => subscriptions(t) : null, [] as Subscription[], [t, signed])
   const cards = useRead(signed ? () => methods(t) : null, [] as Method[], [t, signed])
   const bills = useRead(signed ? () => invoices(t) : null, [] as Invoice[], [t, signed])
+  const billed = useRead(signed ? () => tier(t) : null, null, [t, signed])
   const [adding, setAdding] = useState(false)
   const [ending, setEnding] = useState(false)
   const [editingBilling, setEditingBilling] = useState<Method | null>(null)
@@ -58,6 +64,12 @@ export function Billing() {
   }
 
   const plan = current(subs.value)
+  // The plan by its family, `Max` with `20x` beside it; the subscription names
+  // it, else the rung billing serves.
+  const title = named(plan?.plan || billed.value?.plan, billed.value?.tier) ?? (plan ? { name: plan.name, tag: '' } : null)
+  // Nothing is said about the plan until both reads have answered: a page that
+  // has not asked yet is not a page on Free.
+  const reading = (subs.loading && !subs.value.length) || (billed.value === null && !billed.error && !subs.error)
   const empty = !cards.error && !cards.loading && cards.value.length === 0
   const defaultCard = chosen(cards.value)
 
@@ -81,22 +93,24 @@ export function Billing() {
       <Heading title="Billing" detail={`The plan ${host.org ?? 'this organization'} is on, the cards it pays with, and its invoices.`} />
 
       <XStack items="center" gap="$3" px="$4" py="$4" borderWidth={1} borderColor="$borderColor" rounded="$3" flexWrap="wrap">
-        <YStack flex={1} minW={200} gap="$1">
-          <SizableText size="$5" color="$ink">
-            {subs.loading && !subs.value.length ? 'Reading your plan…' : plan ? `${plan.name} plan` : 'Free plan'}
-          </SizableText>
+        <YStack flex={1} minW={200} gap="$1" data-slot="billing-plan">
+          {reading ? (
+            <SizableText size="$5" color="$ink">
+              Reading your plan…
+            </SizableText>
+          ) : (
+            <Title label={title ?? { name: 'Free', tag: '' }} size="$5" />
+          )}
           <SizableText size="$2" color="$soft">
-            {subs.error
-              ? subs.error.message
-              : plan
-                ? terms(plan)
-                : 'No paid plan. Usage is paid from the balance.'}
+            {subs.error ? subs.error.message : plan ? terms(plan) : title ? 'Your plan.' : 'No paid plan. Usage is paid from credits.'}
           </SizableText>
         </YStack>
         <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'plans' }))}>
           Adjust plan
         </Button>
       </XStack>
+
+      <Credits target={t} admin={host.admin} onCard={() => setAdding(true)} />
 
       <Group
         title="Payment"

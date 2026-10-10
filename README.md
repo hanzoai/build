@@ -119,8 +119,11 @@ that spot is the organization switcher: the org, and the projects under it.
 New, Projects, Artifacts, Customize, Automations, then More (Codebase, Issues,
 Templates, Machines, Docs), then the org's coding runs newest first with a live
 status dot. At the foot, a card offering Hanzo in Slack (dismissed once, gone in
-this browser) and the account, whose menu holds the email, Settings, Usage, View
-all plans, Get help (the docs, in a new tab) and Log out. Collapse is an explicit
+this browser) and the account, whose menu holds the email, the plan under it
+(`Meter`: Max with 20x beside it and the session, day and month as shares;
+Free's allowance left today; the balance only with no plan), Settings, Usage,
+Billing, View all plans, Get help (the docs, in a new tab) and Log out. No money
+sits beside a plan: credits live in Billing. Collapse is an explicit
 toggle kept in this browser. A host with its own rail draws `DevSection` there
 instead.
 
@@ -245,7 +248,8 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/billing/plans` · `…/subscriptions` · `POST …/subscribe/card` · `…/subscriptions/{id}/cancel`·`/reactivate` | Plans, and the plan in Billing |
 | `GET`/`POST`/`DELETE /v1/billing/methods` · `GET /v1/billing/settings` | saved cards; a card is added from the processor's own field |
 | `GET /v1/billing/invoices` · `…/invoices/{id}/pdf` | invoices |
-| `GET /v1/billing/balance` · `…/credit-balance` · `…/usage/rollup` · `POST …/topup` · `GET /v1/usage/summary` | Usage |
+| `GET`/`PUT /v1/ai/limits` · `GET /v1/billing/tier` · `GET /v1/allowance` | the plan's windows as shares, and credits past the allowance (Usage, the menu's `Meter`) |
+| `GET /v1/billing/balance` · `…/credit-balance` · `…/credits` · `…/usage/rollup` · `GET`/`PUT …/recharge` · `POST …/topup` · `GET /v1/usage/summary` | Credits, in Billing: prepaid, granted, top-up, auto-reload, spend |
 | `GET`/`POST`/`PATCH`/`DELETE /v1/billing/alerts` | the monthly limit (org admin) |
 | `GET /v1/iam/memberships?org=` · `GET`/`POST`/`DELETE /v1/iam/invitations` | Members |
 | `GET /v1/provider/{slack,github}` · `POST …/connect`·`/disconnect` · `GET /v1/provider/slack/channels` · `GET /v1/provider/github/installations` | Integrations |

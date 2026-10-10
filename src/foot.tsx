@@ -1,16 +1,19 @@
 /**
  * The rail's foot: the card that offers Hanzo in Slack, and the menu the account
- * row opens — who is signed in, the organization they act in, Settings, Usage,
- * the plans, help and logging out.
+ * row opens — who is signed in, the plan and its meter (`Meter`), the
+ * organization they act in, Settings, Usage, Billing, the plans, help and
+ * logging out.
  * Everything it opens is an address of this page, but help, which is the
  * documentation.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Popover, SizableText, XStack, YStack } from '@hanzo/gui'
-import { Gauge, LifeBuoy, LogOut, Settings, Slack as Mark, Sparkles, X } from '@hanzogui/lucide-icons-2'
+import { CreditCard, Gauge, LifeBuoy, LogOut, Settings, Slack as Mark, Sparkles, X } from '@hanzogui/lucide-icons-2'
 import { MenuLabel, MenuRow, MenuRule } from '@hanzo/ui/product'
 
-import { useHost } from './host.tsx'
+import { useHost, useTarget } from './host.tsx'
+import { Meter } from './meter.tsx'
+import { useStanding } from './standing.ts'
 import { path } from './route.ts'
 
 export const DOCS = 'https://docs.hanzo.ai/docs/dev'
@@ -74,6 +77,7 @@ export function useWho(): { open: boolean; onOpenChange: (o: boolean) => void; t
  */
 export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChange: (o: boolean) => void; narrow: boolean }) {
   const host = useHost()
+  const standing = useStanding(useTarget(), open)
   // The organizations this person acts in; choosing one reloads the page scoped to it.
   const orgs = host.memberships ?? (host.org ? [host.org] : [])
   const go = (p: string) => {
@@ -99,6 +103,12 @@ export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChang
           <SizableText size="$2" color="$soft" px="$2" py="$1.5" numberOfLines={1}>
             {host.person?.email || host.person?.name || ''}
           </SizableText>
+          <MenuRule />
+          <Meter
+            read={standing}
+            onPlans={() => go(path({ kind: 'screen', screen: 'plans' }))}
+            onBilling={() => go(path({ kind: 'settings', section: 'billing' }))}
+          />
           {orgs.length ? (
             <>
               <MenuRule />
@@ -121,6 +131,7 @@ export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChang
           <MenuRule />
           <MenuRow label="Settings" icon={<Settings size={16} />} onPress={() => go(path({ kind: 'settings', section: 'general' }))} />
           <MenuRow label="Usage" icon={<Gauge size={16} />} onPress={() => go(path({ kind: 'settings', section: 'usage' }))} />
+          <MenuRow label="Billing" icon={<CreditCard size={16} />} onPress={() => go(path({ kind: 'settings', section: 'billing' }))} />
           <MenuRow label="View all plans" icon={<Sparkles size={16} />} onPress={() => go(path({ kind: 'screen', screen: 'plans' }))} />
           <MenuRow
             label="Get help"

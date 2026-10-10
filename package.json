@@ -51,6 +51,11 @@
       "import": "./lib/index.js",
       "default": "./lib/index.js"
     },
+    "./plan": {
+      "types": "./lib/plan.d.ts",
+      "import": "./lib/plan.js",
+      "default": "./lib/plan.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

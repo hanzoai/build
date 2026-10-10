@@ -63,7 +63,7 @@ test.describe('the rail', () => {
     let menu = await open()
     await expect(menu.getByText('dave@acme.test')).toBeVisible()
     await expect(menu.getByRole('radiogroup', { name: 'Organizations' }).getByText('acme', { exact: true })).toBeVisible()
-    for (const row of ['Settings', 'Usage', 'View all plans', 'Get help', 'Log out']) await expect(menu.getByRole('menuitem', { name: row })).toBeVisible()
+    for (const row of ['Settings', 'Usage', 'Billing', 'View all plans', 'Get help', 'Log out']) await expect(menu.getByRole('menuitem', { name: row })).toBeVisible()
     await page.screenshot({ path: info.outputPath('account-menu.png') })
     await menu.getByRole('menuitem', { name: 'Usage' }).click()
     await expect(page).toHaveURL(new URL('/-/settings/usage', baseURL).href)

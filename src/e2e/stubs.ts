@@ -386,6 +386,23 @@ export async function org(page: Page, o: { paid?: boolean; cards?: boolean } = {
         return { json: { userId: ORG, balances: [{ currency: 'usd', available: 1500 }] } }
       case 'POST /v1/billing/topup':
         return { json: { status: 'ok', balanceCents: 6700, transactionId: 'tx_1' } }
+      // The plan as apps/billing `Tier` and apps/ai/limits_ops.go `view` answer it: Max, its windows as shares.
+      case 'GET /v1/billing/tier':
+        return { json: { user: `${ORG}/dave`, plan: 'max', subscription: 'sub_1', tier: { name: 'pro', displayName: 'Pro' }, balance: { currency: 'usd', prepaidAvailable: 4200, creditsRemaining: 1500, dailyRemaining: 0, effectiveAvailable: 5700 } } }
+      case 'GET /v1/ai/limits':
+        return {
+          json: {
+            plan: 'max',
+            period_start: '2026-09-27T00:00:00Z',
+            period_end: '2026-10-27T00:00:00Z',
+            state: 'ok',
+            classes: { premium: { percent: 72, state: 'ok', paying: 'plan', resets_at: '2026-10-27T00:00:00Z' }, ours: { percent: 25, state: 'ok', paying: 'plan', resets_at: '2026-10-27T00:00:00Z' } },
+            session: { percent: 40, state: 'ok', resets_at: '2026-09-28T03:00:00Z' },
+            day: { percent: 72, state: 'ok', resets_at: '2026-09-28T00:00:00Z' },
+            actions: [],
+            credits_after_allowance: false,
+          },
+        }
       case 'GET /v1/billing/usage/rollup':
         return {
           json: {

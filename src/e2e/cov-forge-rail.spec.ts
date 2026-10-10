@@ -174,8 +174,8 @@ test.describe('the account menu', () => {
     await frame(page, {}, { sub: 'acme/anon', orgs: [{ org: ORG, role: 'member' }] })
     await page.goto('/')
     await page.getByRole('button', { name: `Account: ${ORG}`, exact: true }).click()
-    // Nothing above the organizations: no name to say.
-    await expect(account(page)).toHaveText(new RegExp(`^Organization${ORG}Settings`))
+    // The plan leads (Free, with nothing else read), then the organizations: no name to say.
+    await expect(account(page)).toHaveText(new RegExp(`^FreeUpgradeOrganization${ORG}Settings`))
   })
 
   test('someone in two organizations who has chosen neither picks one, and the page is scoped to it', async ({ page, baseURL }, info) => {

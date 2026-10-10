@@ -88,7 +88,7 @@ const HEADINGS: Record<Section, [Platform, RegExp]> = {
   account: [you, /Your Hanzo identity/],
   privacy: [you, /What Hanzo may do with your data/],
   billing: [org, /The plan acme is on/],
-  usage: [org, /What acme has used/],
+  usage: [org, /What acme.s plan includes/],
   capabilities: [you, /What the agent may use in acme/],
   memory: [you, /What Hanzo remembers about you here/],
   code: [you, /How a new run starts/],
