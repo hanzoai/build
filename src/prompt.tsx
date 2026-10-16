@@ -15,7 +15,7 @@
  * thread column's own gutters, centred (`measure`). A transcript reads at
  * `MEASURE` and this lines up with its words.
  */
-import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { ArrowUp, AudioLines, Check, ChevronDown, Mic, Plus, Square } from '@hanzogui/lucide-icons-2'
 import { Control } from '@hanzo/composer'
 import { Popover, PopoverContent, PopoverTrigger, Separator, Tooltip, TooltipContent, TooltipTrigger } from '@hanzo/ui'
@@ -96,6 +96,8 @@ export interface PromptOptions {
   framed?: boolean
   /** Centred just above the pill: what every message is sent under. */
   note?: ReactNode
+  /** A phone: the field takes the pill's whole width above the controls, whatever the draft. */
+  narrow?: boolean
 }
 
 /** Enso's mark: the ring. */
@@ -271,7 +273,7 @@ export function prompt(o: PromptOptions): ComposerProps {
   // A draft past a line takes the pill's width above the controls. The same
   // field either way, moved by flex order alone: a different tree would remount
   // it and drop the caret mid-word.
-  const tall = o.value.includes('\n') || o.value.length > LINE
+  const tall = Boolean(o.narrow) || o.value.includes('\n') || o.value.length > LINE
   const head = o.head || o.note ? (
     <YStack {...measure} gap="$1.5" data-slot="prompt-head">
       {o.head}
@@ -370,5 +372,6 @@ export function prompt(o: PromptOptions): ComposerProps {
 
 /** The composer drawn on its own. */
 export function Prompt(o: PromptOptions) {
-  return <Composer {...prompt(o)} />
+  const media = useMedia()
+  return <Composer {...prompt({ ...o, narrow: o.narrow ?? !media.sm })} />
 }
