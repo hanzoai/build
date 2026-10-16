@@ -1,9 +1,11 @@
 /**
  * The side panel (panel.tsx over tabs.ts) on a run, at a laptop and a phone:
- * opened and closed from the header's Panel button and from ⌘. / Ctrl+.,
- * kept as it was left; tabs added from +, shut and reordered, and kept; on a
- * phone a sheet that opens only when asked; and an answer's artifact opened
- * in it with one press, rendered from its own bytes.
+ * shown from the header while hidden and hidden from its own strip while shown,
+ * and by Ctrl+Shift+B and ⌘. / Ctrl+., kept as it was left; tabs added from +,
+ * shut and reordered, and kept; a page tab's bar — Back and Forward through
+ * what it visited, the address, its menu — and an empty tab's suggestions; on a
+ * phone a sheet that opens only when asked; and an answer's artifact opened in
+ * it with one press, rendered from its own bytes.
  */
 import type { Page } from '@playwright/test'
 
@@ -33,33 +35,70 @@ const stored = (p: Page, key: string) => p.evaluate((k) => localStorage.getItem(
 test.describe('at 1440', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
-  test('the header’s Panel button and Ctrl+. open and close it, and a reload keeps which', async ({ page: p }) => {
+  test('Show tabs in the header, Hide tabs in the strip, Ctrl+Shift+B and Ctrl+. open and close it, and a reload keeps which', async ({ page: p }) => {
     await platform(p)
     await p.goto(`/${SESSION}`)
     await expect(desk(p)).toBeVisible({ timeout: 45_000 })
-    await expect(toggle(p)).toHaveAccessibleName('Close the side panel')
-    await expect(toggle(p)).toHaveAttribute('aria-pressed', 'true')
-    await expect(toggle(p)).toHaveAttribute('aria-keyshortcuts', 'Meta+Period Control+Period')
+    // Shown: the strip holds the one toggle, and the header none.
+    await expect(toggle(p)).toHaveCount(1)
+    await expect(toggle(p)).toHaveAccessibleName('Hide tabs')
+    await expect(toggle(p)).toHaveAttribute('aria-expanded', 'true')
+    await expect(toggle(p)).toHaveAttribute('aria-keyshortcuts', 'Control+Shift+B Meta+Shift+B Control+Period Meta+Period')
+    await expect(desk(p).locator('[data-slot="side-toggle"]')).toHaveCount(1)
     await shot(p, 'panel-1440-open.png')
 
     await toggle(p).click()
     await expect(desk(p)).toHaveCount(0)
-    await expect(toggle(p)).toHaveAccessibleName('Open the side panel')
+    await expect(toggle(p)).toHaveAccessibleName('Show tabs')
     expect(await stored(p, 'hanzo.side.dev.open')).toBe('0')
     await shot(p, 'panel-1440-closed.png')
     await p.reload()
-    await expect(toggle(p)).toHaveAccessibleName('Open the side panel', { timeout: 45_000 })
+    await expect(toggle(p)).toHaveAccessibleName('Show tabs', { timeout: 45_000 })
     await expect(desk(p)).toHaveCount(0)
 
-    await p.keyboard.press('Control+.')
+    await p.keyboard.press('Control+Shift+B')
     await expect(desk(p)).toBeVisible()
     expect(await stored(p, 'hanzo.side.dev.open')).toBe('1')
-    await p.keyboard.press('Control+.')
+    await p.keyboard.press('Control+Shift+B')
     await expect(desk(p)).toHaveCount(0)
     await p.keyboard.press('Control+.')
     await expect(desk(p)).toBeVisible()
     await p.reload()
     await expect(desk(p)).toBeVisible({ timeout: 45_000 })
+  })
+
+  test('a page tab is a browser’s: an empty one suggests, the bar goes, and Back and Forward walk what it visited', async ({ page: p }) => {
+    await platform(p)
+    await p.goto(`/${SESSION}`)
+    await expect(desk(p)).toBeVisible({ timeout: 45_000 })
+    await desk(p).getByRole('button', { name: 'Open a tab' }).click()
+    await p.getByRole('menuitem', { name: /^Page/ }).click()
+    await expect(tab(p, 'New tab')).toHaveAttribute('aria-selected', 'true')
+    const bar = desk(p).getByRole('textbox', { name: 'Address' })
+    await expect(bar).toHaveAttribute('placeholder', 'Search or enter a URL')
+    await expect(desk(p).getByText('Suggested', { exact: true })).toBeVisible()
+    await expect(desk(p).getByRole('button', { name: 'Back' })).toHaveAttribute('aria-disabled', 'true')
+    await shot(p, 'panel-1440-new-tab.png')
+
+    // Our own host frames; another site is offered in a new window, never a frame it refuses.
+    await bar.fill(new URL(p.url()).host)
+    await bar.press('Enter')
+    await expect(desk(p).locator('iframe')).toHaveCount(1)
+    await bar.fill('example.com/two')
+    await bar.press('Enter')
+    await expect(desk(p).getByRole('button', { name: 'Open in a new window' })).toBeVisible()
+    await expect(desk(p).locator('iframe')).toHaveCount(0)
+    await shot(p, 'panel-1440-elsewhere.png')
+
+    await desk(p).getByRole('button', { name: 'Back' }).click()
+    await expect(bar).toHaveValue(new RegExp(new URL(p.url()).host))
+    await expect(desk(p).getByRole('button', { name: 'Forward' })).not.toHaveAttribute('aria-disabled', 'true')
+    await desk(p).getByRole('button', { name: 'Forward' }).click()
+    await expect(bar).toHaveValue('https://example.com/two')
+    // Words are looked up.
+    await bar.fill('what is enso')
+    await bar.press('Enter')
+    await expect(bar).toHaveValue(/duckduckgo\.com\/\?q=what%20is%20enso/)
   })
 
   test('a tab added from +, a tab shut and a tab moved — by dragging and by the keyboard — are kept across a reload', async ({ page: p }) => {
@@ -166,7 +205,7 @@ test.describe('at 390', () => {
 
     await toggle(p).click()
     await expect(sheet).toBeVisible()
-    await desk(p).getByRole('button', { name: 'Close the side panel' }).click()
+    await desk(p).getByRole('button', { name: 'Hide tabs' }).click()
     await expect(sheet).toHaveCount(0)
 
     // An artifact opened from its answer opens the sheet on it.

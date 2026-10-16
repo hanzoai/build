@@ -12,6 +12,8 @@
  * new page; a tab is dragged to reorder (Ctrl/⌘+Shift+←/→ from the keyboard)
  * and shut with its cross (Delete). A page's own bytes are kept with it, so an
  * artifact's tab survives a reload; an object URL does not and is not kept.
+ * A page keeps the addresses it went through (`back`, `ahead`), so its bar's
+ * Back and Forward walk them as a browser's do.
  *
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
@@ -26,6 +28,9 @@ export interface Tab {
   /** A page's own bytes, rendered as `type`. */
   body?: string
   type?: string
+  /** The addresses a page came from, oldest first, and those Back stepped over, nearest first. */
+  back?: string[]
+  ahead?: string[]
 }
 
 /** The tabs in a scope, in order, and the chosen one. */
@@ -132,8 +137,35 @@ export interface Deck extends Tabs {
   pick: (id: string) => void
   shut: (id: string) => void
   move: (id: string, to: number) => void
-  /** Point a page somewhere else. */
+  /** Point a page somewhere else: where it was goes on its Back, and Forward is forgotten. */
   go: (id: string, url: string) => void
+  /** A page's Back and Forward. */
+  back: (id: string) => void
+  forward: (id: string) => void
+  /** A page's title, as what it shows calls itself. */
+  rename: (id: string, title: string) => void
+}
+
+/** How many addresses a page's Back keeps. */
+const DEPTH = 50
+
+/** A page pointed at `url`, where it was on its Back. */
+export function went(t: Tab, url: string): Tab {
+  if (url === t.url) return t
+  const back = t.url ? [...(t.back ?? []), t.url].slice(-DEPTH) : (t.back ?? [])
+  return { ...t, url, title: name(url), body: undefined, type: undefined, back, ahead: [] }
+}
+
+/** A page one step back, or forward: the address it leaves goes the other way. */
+export function stepped(t: Tab, way: 'back' | 'forward'): Tab {
+  const from = way === 'back' ? (t.back ?? []) : (t.ahead ?? [])
+  const url = way === 'back' ? from.at(-1) : from[0]
+  if (!url) return t
+  const rest = way === 'back' ? from.slice(0, -1) : from.slice(1)
+  const here = t.url ? [t.url] : []
+  return way === 'back'
+    ? { ...t, url, title: name(url), back: rest, ahead: [...here, ...(t.ahead ?? [])] }
+    : { ...t, url, title: name(url), ahead: rest, back: [...(t.back ?? []), ...here].slice(-DEPTH) }
 }
 
 /** A scope's tabs: as kept, else `seed`, and every change kept. */
@@ -147,7 +179,10 @@ export function useDeck(scope: string, seed: Tabs): Deck {
     pick: (id) => change((was) => ({ ...was, at: id })),
     shut: (id) => change((was) => shut(was, id)),
     move: (id, to) => change((was) => moved(was, id, to)),
-    go: (id, url) => change((was) => ({ ...was, tabs: was.tabs.map((t) => (t.id === id ? { ...t, url, title: name(url) } : t)) })),
+    go: (id, url) => change((was) => ({ ...was, tabs: was.tabs.map((t) => (t.id === id ? went(t, url) : t)) })),
+    back: (id) => change((was) => ({ ...was, tabs: was.tabs.map((t) => (t.id === id ? stepped(t, 'back') : t)) })),
+    forward: (id) => change((was) => ({ ...was, tabs: was.tabs.map((t) => (t.id === id ? stepped(t, 'forward') : t)) })),
+    rename: (id, title) => change((was) => ({ ...was, tabs: was.tabs.map((t) => (t.id === id && title && t.title !== title ? { ...t, title } : t)) })),
   }
 }
 
@@ -193,16 +228,27 @@ export function usePanel(mode: string, first: boolean, wide: boolean): readonly 
   return wide ? ([kept, keep] as const) : ([sheet, setSheet] as const)
 }
 
-/** ⌘. on a Mac, Ctrl+. elsewhere: the panel, from anywhere on the page. */
+/** Whether a key went to something the reader types in, where it is theirs. */
+const typing = (e: KeyboardEvent): boolean => {
+  const el = e.target as HTMLElement | null
+  return !!el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')
+}
+
+/**
+ * The panel's keys, from anywhere on the page but a field: Ctrl+Shift+B (⌘⇧B on
+ * a Mac), the tabs' own, and ⌘. / Ctrl+., which it had first.
+ */
 export function useKey(toggle: () => void): void {
   const now = useRef(toggle)
   now.current = toggle
   useEffect(() => {
     const press = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key === '.') {
-        e.preventDefault()
-        now.current()
-      }
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || typing(e)) return
+      const tabs = e.shiftKey && e.key.toLowerCase() === 'b'
+      const dot = !e.shiftKey && e.key === '.'
+      if (!tabs && !dot) return
+      e.preventDefault()
+      now.current()
     }
     window.addEventListener('keydown', press)
     return () => window.removeEventListener('keydown', press)
@@ -217,6 +263,25 @@ export function name(url: string): string {
   } catch {
     return url
   }
+}
+
+/** Where words typed in a page's bar are looked up. */
+export const SEARCH = 'https://duckduckgo.com/?q='
+
+/** Whether what was typed in a page's bar is an address rather than words to look up. */
+export function located(typed: string): boolean {
+  const t = typed.trim()
+  if (!t || /\s/.test(t)) return false
+  if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(t)) return true
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t) || /^(about|blob|data):/i.test(t)) return true
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(:\d+)?(\/.*)?$/i.test(t)
+}
+
+/** What a page's bar opens for what was typed: the address, or a search for the words. */
+export function destination(typed: string): string {
+  const t = typed.trim()
+  if (!t) return ''
+  return located(t) ? address(t) : SEARCH + encodeURIComponent(t)
 }
 
 /** An address as typed, made one that opens: https for a host, http for this machine. */

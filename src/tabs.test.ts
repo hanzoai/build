@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { address, moved, name, opened, PAGE, read, shut, type Tabs } from './tabs.ts'
+import { address, destination, located, moved, name, opened, PAGE, read, SEARCH, shut, stepped, went, type Tab, type Tabs } from './tabs.ts'
 
 const SEED: Tabs = {
   tabs: [
@@ -74,5 +74,30 @@ describe('the panel’s tabs', () => {
     expect(address('hanzo.ai')).toBe('https://hanzo.ai')
     expect(address('localhost:3000')).toBe('http://localhost:3000')
     expect(address('  ')).toBe('')
+  })
+
+  it('keeps a page’s way back and forward as a browser does', () => {
+    const blank: Tab = { id: 'p', kind: PAGE, title: 'New tab', url: '' }
+    const a = went(blank, 'https://hanzo.ai')
+    expect(a.back).toEqual([])
+    const b = went(a, 'https://hanzo.ai/docs')
+    expect(b).toMatchObject({ url: 'https://hanzo.ai/docs', title: 'hanzo.ai/docs', back: ['https://hanzo.ai'], ahead: [] })
+    const back = stepped(b, 'back')
+    expect(back).toMatchObject({ url: 'https://hanzo.ai', back: [], ahead: ['https://hanzo.ai/docs'] })
+    expect(stepped(back, 'back')).toBe(back)
+    const ahead = stepped(back, 'forward')
+    expect(ahead).toMatchObject({ url: 'https://hanzo.ai/docs', back: ['https://hanzo.ai'], ahead: [] })
+    // Going somewhere new forgets Forward.
+    expect(went(back, 'https://hanzo.app')).toMatchObject({ back: ['https://hanzo.ai'], ahead: [] })
+    // A page of bytes pointed at an address is that address now.
+    expect(went({ id: 'q', kind: PAGE, title: 'a.html', body: '<p>', type: 'text/html' }, 'https://hanzo.ai')).toMatchObject({ body: undefined, type: undefined })
+  })
+
+  it('opens what was typed in the bar: an address as itself, words as a search', () => {
+    for (const a of ['hanzo.ai', 'https://hanzo.ai/x', 'docs.hanzo.ai/dev', 'localhost:3000', 'about:blank']) expect(located(a), a).toBe(true)
+    for (const w of ['hanzo', 'what is enso', 'kai 1.4', '']) expect(located(w), w).toBe(false)
+    expect(destination('hanzo.ai')).toBe('https://hanzo.ai')
+    expect(destination('what is enso')).toBe(`${SEARCH}what%20is%20enso`)
+    expect(destination('  ')).toBe('')
   })
 })

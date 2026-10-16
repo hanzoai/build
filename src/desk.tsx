@@ -144,6 +144,8 @@ export function Desk({
       sheet={sheet}
       onHide={onHide}
       label="Run details"
+      // An empty tab offers what this run made: its site and its pull request.
+      suggested={[...(site ? [{ title: name || site, url: site }] : []), ...(pr.href ? [{ title: `Pull request ${pr.label}`, url: pr.href }] : [])]}
       bar={sandbox ? <Held box={box} live={live} /> : null}
       menu={
         <DropdownMenu

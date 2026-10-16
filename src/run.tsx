@@ -590,10 +590,8 @@ export function Run({ id }: { id: string }) {
             mind={signed && !steering ? mind : null}
             limits={limits}
             voice={voice}
+            note="Hanzo is AI and can make mistakes."
           />
-          <SizableText size="$1" color="$soft" style={{ textAlign: 'center' }}>
-            Hanzo is AI and can make mistakes.
-          </SizableText>
         </YStack>
       </YStack>
       {desk && !wide ? desk_(true) : null}

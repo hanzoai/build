@@ -1,7 +1,10 @@
 /**
- * The composer, once, for Chat and Dev: the field, and under it in the frame
- * the attach button and the surface's own tools at the start, then the model
- * and effort (`Tune`), dictation, talk and send at the end.
+ * The composer, once, for Chat and Dev: one pill. While the draft is a line,
+ * the pill is one row — attach (`+`) and the surface's own tools at the start,
+ * the field, then the model and effort (`Tune`), dictation, talk and send. A
+ * draft longer than a line takes the pill's whole width above, and the
+ * controls keep the bottom row. A note the surface owes every message (the
+ * "can make mistakes" line) stands centred just above the pill.
  *
  * `prompt` builds @hanzo/ui's `Composer` props, so a surface that draws the
  * composer through `Chat` (its `composer` prop) and one that draws it directly
@@ -13,7 +16,7 @@
  * `MEASURE` and this lines up with its words.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ArrowUp, AudioLines, Check, ChevronDown, Mic, Paperclip, Square } from '@hanzogui/lucide-icons-2'
+import { ArrowUp, AudioLines, Check, ChevronDown, Mic, Plus, Square } from '@hanzogui/lucide-icons-2'
 import { Control } from '@hanzo/composer'
 import { Popover, PopoverContent, PopoverTrigger, Separator, Tooltip, TooltipContent, TooltipTrigger } from '@hanzo/ui'
 import { Composer, type ComposerProps } from '@hanzo/ui/chat'
@@ -34,8 +37,15 @@ export const GAP = 20
 /** The composer's width: the measure less the thread column's 0.75rem gutters, centred, so its edges are the text's. */
 export const measure = { width: 'calc(100% - 1.5rem)', maxW: `calc(${MEASURE} - 1.5rem)`, mx: 'auto' } as const
 
-/** The round controls' box, px: a line of the footer row. */
-export const ROUND = 30
+/** The round controls' box, px: the pill's row less its padding. */
+export const ROUND = 32
+
+/** The pill's height on one line, px, and the corner a taller draft keeps. */
+const PILL = 44
+const CORNER = 22
+
+/** About a line of draft at the measure: past it, or past a newline, the field takes the pill's width. */
+const LINE = 72
 
 /**
  * The frame as a pane of its own, floating on the pane it is drawn in: the
@@ -84,6 +94,8 @@ export interface PromptOptions {
   talk?: Machine
   /** Drawn on a pane: the frame is cut as a pane of its own (`cut`). */
   framed?: boolean
+  /** Centred just above the pill: what every message is sent under. */
+  note?: ReactNode
 }
 
 /** Enso's mark: the ring. */
@@ -116,11 +128,9 @@ export function Tune({ mind, limits, disabled = false }: { mind: Mind; limits?: 
           items="center"
           gap="$1.5"
           px="$2.5"
-          height={30}
+          height={ROUND}
           maxW={220}
-          rounded="$10"
-          borderWidth={1}
-          borderColor="$borderColor"
+          rounded={999}
           cursor={disabled ? 'default' : 'pointer'}
           hoverStyle={disabled ? undefined : { bg: '$hover' }}
           focusVisibleStyle={{ outlineColor: '$outlineColor', outlineWidth: 2, outlineStyle: 'solid' }}
@@ -236,13 +246,13 @@ export function Tune({ mind, limits, disabled = false }: { mind: Mind; limits?: 
   )
 }
 
-/** The paperclip, with its name on hover. */
+/** The pill's `+`: files go with the message. Its name on hover. */
 function Attach({ onAttach, disabled }: { onAttach: () => void; disabled: boolean }) {
   return (
     <Tooltip>
       <TooltipTrigger>
         <Control type="button" size={ROUND} aria-label="Attach files" aria-disabled={disabled || undefined} onClick={disabled ? undefined : onAttach}>
-          <Paperclip size={15} />
+          <Plus size={18} />
         </Control>
       </TooltipTrigger>
       <TooltipContent>
@@ -258,6 +268,20 @@ export function prompt(o: PromptOptions): ComposerProps {
   const busy = Boolean(o.busy)
   const disabled = Boolean(o.disabled)
   const live = busy ? Boolean(o.onStop) : lit && !disabled
+  // A draft past a line takes the pill's width above the controls. The same
+  // field either way, moved by flex order alone: a different tree would remount
+  // it and drop the caret mid-word.
+  const tall = o.value.includes('\n') || o.value.length > LINE
+  const head = o.head || o.note ? (
+    <YStack {...measure} gap="$1.5" data-slot="prompt-head">
+      {o.head}
+      {o.note ? (
+        <SizableText data-slot="prompt-note" fontSize={12} color="$soft" text="center" self="center">
+          {o.note}
+        </SizableText>
+      ) : null}
+    </YStack>
+  ) : undefined
   return {
     value: o.value,
     onChange: o.onChange,
@@ -267,23 +291,41 @@ export function prompt(o: PromptOptions): ComposerProps {
     disabled,
     ...(o.placeholder ? { placeholder: o.placeholder } : {}),
     ...(o.label ? { label: o.label } : {}),
-    ...(o.field ? { field: o.field } : {}),
-    // Above the frame and at its width, so a chip lines up with the field's edge.
-    head: o.head ? (
-      <YStack {...measure} gap="$1.5" data-slot="prompt-head">
-        {o.head}
-      </YStack>
-    ) : undefined,
+    // The field: first and the pill's width on a tall draft, after `+` on a line.
+    // inline-style: flex `order`, which no gui prop carries; the field keeps its node either way.
+    // An empty field keeps its placeholder to the line, cut short rather than wrapped inside the pill.
+    field: {
+      ...o.field,
+      style: { ...((o.field as { style?: object } | undefined)?.style ?? {}), order: tall ? 0 : 1, ...(o.value ? null : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }) },
+      ...(tall ? { width: '100%', flexBasis: '100%', px: '$2' } : null),
+      // A phone keeps the field a readable width: what does not fit beside it goes to a second row.
+      '$max-sm': { minW: 140 },
+    },
+    // Above the pill and at its width, so a chip lines up with the field's edge.
+    head,
+    inline: true,
     ...measure,
-    ...(o.framed ? cut : null),
+    minH: PILL,
+    rounded: tall ? CORNER : 999,
+    pl: 6,
+    pr: 6,
+    gap: 4,
+    items: tall ? 'flex-end' : 'center',
+    flexWrap: tall ? 'wrap' : 'nowrap',
+    '$max-sm': { flexWrap: 'wrap', rounded: CORNER },
+    borderColor: '$borderColor',
+    bg: '$edge',
+    ...(o.framed ? { boxShadow: 'var(--shadow-sheet-1)' } : null),
     children: (
-      <XStack items="center" gap="$2" data-slot="prompt-start">
+      // inline-style: flex `order` (the field's comment says why).
+      <XStack items="center" gap={2} data-slot="prompt-start" style={{ order: tall ? 1 : 0 }} shrink={0}>
         {o.onAttach ? <Attach onAttach={o.onAttach} disabled={disabled} /> : null}
         {o.tools}
       </XStack>
     ),
     send: (
-      <XStack items="center" gap="$2" data-slot="prompt-end">
+      // inline-style: flex `order` (the field's comment says why).
+      <XStack items="center" gap={2} data-slot="prompt-end" style={{ order: 2 }} ml={tall ? 'auto' : 0} $max-sm={{ ml: 'auto' }} shrink={0}>
         {o.mind ? <Tune mind={o.mind} limits={o.limits} disabled={disabled && !busy} /> : null}
         {o.voice ? (
           <Control asChild size={ROUND}>
@@ -308,6 +350,7 @@ export function prompt(o: PromptOptions): ComposerProps {
           type="button"
           size={ROUND}
           fill
+          rounded={999}
           data-slot="composer-send"
           aria-label={busy ? 'Stop' : 'Send'}
           aria-disabled={!live || undefined}

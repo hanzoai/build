@@ -147,7 +147,7 @@ function run(status: 'running' | 'done'): State[] {
     )
   } else tabs.push(['terminal-log', choose('Terminal')], ['files-branch', choose('Files')])
   // A phone opens the panel as a sheet from the header's Panel button.
-  const sheet = { name: `${name}-sheet`, path: RUN, platform, says, act: (p: Page) => p.getByRole('button', { name: 'Open the side panel' }).click(), narrow: true, over: true }
+  const sheet = { name: `${name}-sheet`, path: RUN, platform, says, act: (p: Page) => p.getByRole('button', { name: 'Show tabs' }).click(), narrow: true, over: true }
   return [{ name, path: RUN, platform, says }, sheet, ...tabs.map(([tab, act]) => ({ name: `${name}-${tab}`, path: RUN, platform, says, act, wide: true }))]
 }
 

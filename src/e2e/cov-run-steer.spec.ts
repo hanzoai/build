@@ -435,15 +435,17 @@ test('the side panel is closed and opened again from the header, and this browse
   await rig(p)
   await p.goto(`/${SESSION}`)
   await expect(desk(p)).toBeVisible({ timeout: 45_000 })
-  await desk(p).getByRole('button', { name: 'Close the side panel' }).click()
+  await desk(p).getByRole('button', { name: 'Hide tabs' }).click()
   await expect(desk(p)).toHaveCount(0)
   expect(await p.evaluate(() => localStorage.getItem('hanzo.side.dev.open'))).toBe('0')
+  // One toggle at a time: the header's while the tabs are hidden, the strip's while they show.
   const toggle = p.locator('[data-slot="side-toggle"]')
-  await expect(toggle).toHaveAccessibleName('Open the side panel')
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await expect(toggle).toHaveAccessibleName('Show tabs')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   await toggle.click()
   await expect(desk(p)).toBeVisible()
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await expect(toggle).toHaveAccessibleName('Hide tabs')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
   expect(await p.evaluate(() => localStorage.getItem('hanzo.side.dev.open'))).toBe('1')
 })
 
@@ -471,7 +473,7 @@ test('the side panel is sized by its edge — keyed, kept and double-clicked bac
 test('a side panel closed before stays closed', async ({ page: p }) => {
   await rig(p, {}, undefined, { 'hanzo.side.dev.open': 0 })
   await p.goto(`/${SESSION}`)
-  await expect(p.getByRole('button', { name: 'Open the side panel' })).toBeVisible({ timeout: 45_000 })
+  await expect(p.getByRole('button', { name: 'Show tabs' })).toBeVisible({ timeout: 45_000 })
   await expect(desk(p)).toHaveCount(0)
 })
 

@@ -7,7 +7,7 @@
  * session, a router and a rail). Everything that differs between them is here,
  * as values, so no host forks the builder and the builder imports no host.
  */
-import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, type ComponentType, type ReactNode } from 'react'
 
 import type { Target } from './api/call.ts'
 import type { Theme } from './api/pref.ts'
@@ -17,6 +17,44 @@ export interface Person {
   email: string
   /** An https image, or '' for the initial. */
   avatar: string
+}
+
+/**
+ * A page tab's address, drawn by the host rather than in a frame: what the
+ * window can show of any site, where a browser page can frame only the sites
+ * that allow it. `onGo` is a move the page made itself (a link followed), and
+ * `onTitle` the title it gave itself.
+ */
+export type Browse = ComponentType<{ url: string; title: string; onGo: (url: string) => void; onTitle?: (title: string) => void }>
+
+/** A page as the host's browser is asked about it: the tab, and what it shows. */
+export interface Shown {
+  id: string
+  url: string
+  title: string
+}
+
+/**
+ * What the host's browser can do to the page a tab shows, each the row of the
+ * same name in the tab's menu. A host draws only the rows it supplies, so the
+ * menu offers nothing the window cannot do; a browser page supplies none and
+ * draws what a page itself can (panel.tsx).
+ */
+export interface Browser {
+  find?: (page: Shown) => void
+  print?: (page: Shown) => void
+  /** Zoom the page to `percent` (100 is its own size). */
+  zoom?: (page: Shown, percent: number) => void
+  devices?: (page: Shown) => void
+  /** The page's pixels, as an image. */
+  capture?: (page: Shown) => Promise<Blob>
+  /** What the reader has selected in the page. */
+  selection?: (page: Shown) => Promise<string>
+  passwords?: () => void
+  downloads?: () => void
+  history?: () => void
+  clear?: () => void
+  settings?: () => void
 }
 
 export interface Host {
@@ -61,6 +99,10 @@ export interface Host {
   open: (href: string) => void
   signIn?: () => void
   signOut?: () => void
+  /** A page tab's remote address, shown by the host (Hanzo Desktop: a native webview). Absent, a browser frames what it may. */
+  browse?: Browse
+  /** What the host's browser does to a page, row by row in the tab's menu. */
+  browser?: Browser
 }
 
 const Context = createContext<Host | null>(null)
@@ -73,6 +115,16 @@ export function useHost(): Host {
   const h = useContext(Context)
   if (!h) throw new Error('The builder was rendered without a host')
   return h
+}
+
+/** The host's way of showing a page, where one is mounted and has one. The side panel is drawn without a host too (hanzo.team's rooms). */
+export function useBrowse(): Browse | null {
+  return useContext(Context)?.browse ?? null
+}
+
+/** The host's browser, where one is mounted and has one. */
+export function useBrowser(): Browser | null {
+  return useContext(Context)?.browser ?? null
 }
 
 /** The call target for this host — stable while the host's api, token reader and org are. */
