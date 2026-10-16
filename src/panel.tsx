@@ -7,7 +7,7 @@
  * the panel is a sheet over the page instead (`sheet`).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ExternalLink, PanelRight, PanelRightClose, Plus, RotateCw, X } from '@hanzogui/lucide-icons-2'
+import { ExternalLink, PanelRightClose, Plus, RotateCw, TableOfContents, X } from '@hanzogui/lucide-icons-2'
 import { DropdownMenu } from '@hanzo/ui'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -27,10 +27,11 @@ export interface Kind {
 const KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘.' : 'Ctrl+.'
 
 /**
- * The header's Panel button: a word beside the mark while the panel is shut on
- * a laptop, because a glyph alone was a control nobody found; the mark alone
- * below `lg`, where the header has no room for the word, and while it is open,
- * when the panel and its own close are in view (below `lg` it steps aside).
+ * The header's Panel button: an icon among the header's icons, the summary's
+ * mark rather than a sidebar's, because the window's own sidebar toggle is the
+ * one at its top-left and two of that glyph read as one control drawn twice.
+ * Its name and its keys say what it does; lit while the panel is open. Below
+ * `lg`, open, it steps aside: the panel and its own close are in view.
  */
 export function PanelToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
@@ -44,27 +45,19 @@ export function PanelToggle({ open, onToggle }: { open: boolean; onToggle: () =>
       {...({ title: `${open ? 'Close' : 'Open'} the side panel (${KEY})` } as object)}
       onPress={onToggle}
       items="center"
-      gap="$1.5"
-      px="$2"
-      $lg={{ px: open ? '$2' : '$2.5' }}
+      justify="center"
+      width={32}
+      height={32}
       // Open below `lg`, the panel's own close stands beside it and the header keeps its room for the title.
       $max-lg={open ? { display: 'none' } : undefined}
-      height={30}
       rounded="$3"
-      borderWidth={1}
-      borderColor="$borderColor"
       bg={open ? '$hover' : 'transparent'}
       cursor="pointer"
       shrink={0}
       hoverStyle={{ bg: '$hover' }}
+      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
     >
-      {open ? <PanelRightClose size={14} /> : <PanelRight size={14} />}
-      {open ? null : (
-        // A tablet's run header has no room for the word beside a title, Share and a pull request.
-        <SizableText size="$2" color="$ink" $max-lg={{ display: 'none' }}>
-          Panel
-        </SizableText>
-      )}
+      <TableOfContents size={16} />
     </XStack>
   )
 }
