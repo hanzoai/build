@@ -20,7 +20,7 @@
  * the panel is a sheet over the page instead (`sheet`).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Link2, Maximize2, Minus, MoreHorizontal, Plus, RotateCcw, RotateCw, SquarePlus, X } from '@hanzogui/lucide-icons-2'
+import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Maximize2, Minus, MoreHorizontal, Pin, Plus, RotateCcw, RotateCw, SquarePlus, X } from '@hanzogui/lucide-icons-2'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -290,6 +290,8 @@ export interface PageProps extends Acts {
   onForward?: () => void
   /** The title the page gave itself. */
   onTitle?: (title: string) => void
+  /** Pin the tab, or let it go. */
+  onPin?: (on: boolean) => void
   suggested?: readonly Suggestion[]
 }
 
@@ -386,6 +388,7 @@ function Actions({
   onLevel,
   acts,
   browser,
+  onPin,
 }: {
   tab: Tab
   /** The page shown, or null on an empty tab. */
@@ -399,6 +402,7 @@ function Actions({
   onLevel: (percent: number) => void
   acts: Acts
   browser: Browser | null
+  onPin?: (on: boolean) => void
 }) {
   const shown = here ? { id: tab.id, ...here } : null
   const none = !shown
@@ -429,6 +433,7 @@ function Actions({
     acts.skills?.length ? <Skills key="skills" skills={acts.skills} here={here} /> : null,
     <Row key="out" label="Open in a new window" disabled={none} onSelect={() => popOut(tab)} />,
     <Row key="copy" label="Copy link" disabled={none || !tab.url} onSelect={() => tab.url && void navigator.clipboard?.writeText(tab.url)} />,
+    onPin ? <Row key="pin" label={tab.pinned ? 'Unpin tab' : 'Pin tab'} onSelect={() => onPin(!tab.pinned)} /> : null,
   ].filter(Boolean)
   const page = [
     browser?.find ? <Row key="find" label="Find in page" disabled={none} onSelect={() => shown && browser.find?.(shown)} /> : null,
@@ -467,7 +472,7 @@ function Actions({
  * an answer wrote runs without `allow-same-origin`, never with our storage. A
  * remote page takes its own origin, and withholding same-origin breaks it.
  */
-export function Page({ tab, onGo, onBack, onForward, onTitle, suggested = [], ...acts }: PageProps) {
+export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested = [], ...acts }: PageProps) {
   const Browse = useBrowse()
   const browser = useBrowser()
   const frame = useRef<HTMLIFrameElement | null>(null)
@@ -578,6 +583,7 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, suggested = [], ..
           onLevel={zoomTo}
           acts={acts}
           browser={browser}
+          onPin={onPin}
         />
       </XStack>
       {!src ? (
@@ -617,7 +623,7 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, suggested = [], ..
 
 const DRAG = 'text/x-hanzo-tab'
 
-/** One tab in the strip: its mark, its title, and its cross. */
+/** One tab in the strip: its mark, its title, and its cross, or its pin when it is pinned. */
 function Leaf({ tab, on, side, index, label, icon }: { tab: Tab; on: boolean; side: Deck; index: number; label: string; icon: ReactNode }) {
   return (
     <XStack
@@ -642,7 +648,7 @@ function Leaf({ tab, on, side, index, label, icon }: { tab: Tab; on: boolean; si
       {...({
         // A middle press shuts any tab, as a browser's does; the chosen one also has its cross.
         onAuxClick: (e: React.MouseEvent) => {
-          if (e.button !== 1) return
+          if (e.button !== 1 || tab.pinned) return
           e.preventDefault()
           side.shut(tab.id)
         },
@@ -686,7 +692,7 @@ function Leaf({ tab, on, side, index, label, icon }: { tab: Tab; on: boolean; si
             queueMicrotask(() => document.getElementById(`side-tab-${next.id}`)?.focus())
             return
           }
-          if (e.key === 'Delete' || e.key === 'Backspace') {
+          if ((e.key === 'Delete' || e.key === 'Backspace') && !tab.pinned) {
             e.preventDefault?.()
             side.shut(tab.id)
           }
@@ -706,25 +712,46 @@ function Leaf({ tab, on, side, index, label, icon }: { tab: Tab; on: boolean; si
           {label}
         </SizableText>
       </XStack>
-      <XStack
-        render="button"
-        role="button"
-        aria-label={`Close ${label}`}
-        tabIndex={-1}
-        onPress={() => side.shut(tab.id)}
-        width={22}
-        height={22}
-        items="center"
-        justify="center"
-        rounded={6}
-        cursor="pointer"
-        opacity={on ? 0.8 : 0.45}
-        hoverStyle={{ bg: '$hover', opacity: 1 }}
-        // The chosen tab's cross: the others keep their room for their titles when the strip is shared.
-        display={on ? 'flex' : 'none'}
-      >
-        <X size={12} />
-      </XStack>
+      {tab.pinned ? (
+        // A pinned tab's end is its pin, always shown: pressing it lets the tab go.
+        <XStack
+          render="button"
+          role="button"
+          aria-label={`Unpin ${label}`}
+          tabIndex={-1}
+          onPress={() => side.unpin(tab.id)}
+          width={22}
+          height={22}
+          items="center"
+          justify="center"
+          rounded={6}
+          cursor="pointer"
+          opacity={on ? 0.8 : 0.55}
+          hoverStyle={{ bg: '$hover', opacity: 1 }}
+        >
+          <Pin size={12} />
+        </XStack>
+      ) : (
+        <XStack
+          render="button"
+          role="button"
+          aria-label={`Close ${label}`}
+          tabIndex={-1}
+          onPress={() => side.shut(tab.id)}
+          width={22}
+          height={22}
+          items="center"
+          justify="center"
+          rounded={6}
+          cursor="pointer"
+          opacity={on ? 0.8 : 0.45}
+          hoverStyle={{ bg: '$hover', opacity: 1 }}
+          // The chosen tab's cross: the others keep their room for their titles when the strip is shared.
+          display={on ? 'flex' : 'none'}
+        >
+          <X size={12} />
+        </XStack>
+      )}
     </XStack>
   )
 }
@@ -842,6 +869,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
             onBack={() => side.back(tab.id)}
             onForward={() => side.forward(tab.id)}
             onTitle={(t) => side.rename(tab.id, t)}
+            onPin={(on) => (on ? side.pin(tab.id) : side.unpin(tab.id))}
             suggested={suggested}
             {...acts}
           />

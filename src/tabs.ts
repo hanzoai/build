@@ -15,6 +15,11 @@
  * A page keeps the addresses it went through (`back`, `ahead`), so its bar's
  * Back and Forward walk them as a browser's do.
  *
+ * A PINNED tab leads the strip and closes only on purpose: its own close (`shut`)
+ * takes it, and nothing that closes tabs in bulk (`clear`) does. Pinned tabs
+ * keep their order among themselves, the others theirs; a tab moved stays in
+ * its group.
+ *
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
@@ -31,6 +36,8 @@ export interface Tab {
   /** The addresses a page came from, oldest first, and those Back stepped over, nearest first. */
   back?: string[]
   ahead?: string[]
+  /** Leads the strip, and closes only on purpose. */
+  pinned?: boolean
 }
 
 /** The tabs in a scope, in order, and the chosen one. */
@@ -79,7 +86,7 @@ export function read(scope: string): Tabs | null {
     if (raw) {
       const v = JSON.parse(raw) as Partial<Tabs>
       // An object URL dies with the document that minted it: a page holding only one is not kept.
-      const tabs = (Array.isArray(v.tabs) ? v.tabs.filter(isTab) : []).filter((t) => t.kind !== PAGE || t.body !== undefined || !t.url?.startsWith('blob:'))
+      const tabs = ranked((Array.isArray(v.tabs) ? v.tabs.filter(isTab) : []).filter((t) => t.kind !== PAGE || t.body !== undefined || !t.url?.startsWith('blob:')))
       held = { tabs, at: tabs.some((t) => t.id === v.at) ? (v.at as string) : (tabs[0]?.id ?? null) }
     }
   } catch {
@@ -100,6 +107,11 @@ function write(scope: string, next: Tabs): void {
   announce()
 }
 
+/** Pinned tabs first, each group in the order it had. */
+function ranked(tabs: Tab[]): Tab[] {
+  return [...tabs.filter((t) => t.pinned), ...tabs.filter((t) => !t.pinned)]
+}
+
 let minted = 0
 const mint = () => `p${Date.now().toString(36)}${(minted++).toString(36)}`
 
@@ -110,7 +122,7 @@ export function opened(was: Tabs, tab: Omit<Tab, 'id'> & { id?: string }): Tabs 
   )
   if (same) return { ...was, at: same.id }
   const id = tab.id ?? (tab.kind === PAGE ? mint() : tab.kind)
-  return { tabs: [...was.tabs, { ...tab, id }], at: id }
+  return { tabs: ranked([...was.tabs, { ...tab, id }]), at: id }
 }
 
 /** A tab shut: the one to its right is chosen, else the one to its left, as a browser does. */
@@ -122,14 +134,35 @@ export function shut(was: Tabs, id: string): Tabs {
   return { tabs, at: (tabs[gone] ?? tabs[gone - 1])?.id ?? null }
 }
 
-/** A tab moved to `to`, the others closing up around it. */
+/** A tab moved to `to`, the others closing up around it, and kept in its group: pinned or not. */
 export function moved(was: Tabs, id: string, to: number): Tabs {
   const from = was.tabs.findIndex((t) => t.id === id)
   if (from < 0) return was
   const tabs = was.tabs.slice()
   const [tab] = tabs.splice(from, 1)
-  tabs.splice(Math.max(0, Math.min(tabs.length, to)), 0, tab!)
+  const pins = tabs.filter((t) => t.pinned).length
+  const [low, high] = tab!.pinned ? [0, pins] : [pins, tabs.length]
+  tabs.splice(Math.max(low, Math.min(high, to)), 0, tab!)
   return { ...was, tabs }
+}
+
+/** A tab pinned, or let go: it joins the end of the pinned tabs, or leads the rest. */
+export function pinned(was: Tabs, id: string, on: boolean): Tabs {
+  const tab = was.tabs.find((t) => t.id === id)
+  if (!tab || Boolean(tab.pinned) === on) return was
+  const rest = was.tabs.filter((t) => t.id !== id)
+  const pins = rest.filter((t) => t.pinned)
+  const others = rest.filter((t) => !t.pinned)
+  const plain = { ...tab }
+  delete plain.pinned
+  return { ...was, tabs: on ? [...pins, { ...tab, pinned: true }, ...others] : [...pins, plain, ...others] }
+}
+
+/** Every tab closed but the pinned ones and those `keep` names; the chosen one stays if it is left. */
+export function cleared(was: Tabs, keep: (t: Tab) => boolean = () => false): Tabs {
+  const tabs = was.tabs.filter((t) => t.pinned || keep(t))
+  if (tabs.length === was.tabs.length) return was
+  return { tabs, at: tabs.some((t) => t.id === was.at) ? was.at : (tabs[0]?.id ?? null) }
 }
 
 export interface Deck extends Tabs {
@@ -137,6 +170,11 @@ export interface Deck extends Tabs {
   pick: (id: string) => void
   shut: (id: string) => void
   move: (id: string, to: number) => void
+  /** Pin a tab: it leads the strip and closes only on purpose. */
+  pin: (id: string) => void
+  unpin: (id: string) => void
+  /** Close every tab but the pinned ones and those `keep` names. */
+  clear: (keep?: (t: Tab) => boolean) => void
   /** Point a page somewhere else: where it was goes on its Back, and Forward is forgotten. */
   go: (id: string, url: string) => void
   /** A page's Back and Forward. */
@@ -179,6 +217,9 @@ export function useDeck(scope: string, seed: Tabs): Deck {
     pick: (id) => change((was) => ({ ...was, at: id })),
     shut: (id) => change((was) => shut(was, id)),
     move: (id, to) => change((was) => moved(was, id, to)),
+    pin: (id) => change((was) => pinned(was, id, true)),
+    unpin: (id) => change((was) => pinned(was, id, false)),
+    clear: (keep) => change((was) => cleared(was, keep)),
     go: (id, url) => change((was) => ({ ...was, tabs: was.tabs.map((t) => (t.id === id ? went(t, url) : t)) })),
     back: (id) => change((was) => ({ ...was, tabs: was.tabs.map((t) => (t.id === id ? stepped(t, 'back') : t)) })),
     forward: (id) => change((was) => ({ ...was, tabs: was.tabs.map((t) => (t.id === id ? stepped(t, 'forward') : t)) })),

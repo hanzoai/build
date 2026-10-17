@@ -49,7 +49,7 @@ test.describe('on a browser page', () => {
   test('an empty tab draws only what a page can do, dim until there is a page', async ({ page: p }) => {
     await open(p, {})
     await menu(p).click()
-    expect(await rows(p)).toEqual(['Ask about this page', 'Skills', 'Open in a new window', 'Copy link'])
+    expect(await rows(p)).toEqual(['Ask about this page', 'Skills', 'Open in a new window', 'Copy link', 'Pin tab'])
     await expect(p.getByRole('menuitem', { name: 'Ask about this page' })).toHaveAttribute('aria-disabled', 'true')
     await shot(p, 'menu-web-empty.png')
   })
@@ -57,7 +57,7 @@ test.describe('on a browser page', () => {
   test('a frame of this origin can be printed and zoomed; a site we host opens in Dev', async ({ page: p }) => {
     await open(p, { at: '/' })
     await menu(p).click()
-    expect(await rows(p)).toEqual(['Ask about this page', 'Skills', 'Open in a new window', 'Copy link', '—', 'Print', 'Zoom'])
+    expect(await rows(p)).toEqual(['Ask about this page', 'Skills', 'Open in a new window', 'Copy link', 'Pin tab', '—', 'Print', 'Zoom'])
     await p.getByRole('button', { name: 'Zoom in' }).click()
     await expect(p.locator('[data-slot="page-zoom"]')).toContainText('110%')
     await p.getByRole('menuitem', { name: 'Ask about this page' }).click()
@@ -68,7 +68,7 @@ test.describe('on a browser page', () => {
     await bar.fill('acme.hanzo.app')
     await bar.press('Enter')
     await menu(p).click()
-    expect(await rows(p)).toEqual(['Ask about this page', 'Open in Dev', 'Skills', 'Open in a new window', 'Copy link', '—', 'Zoom'])
+    expect(await rows(p)).toEqual(['Ask about this page', 'Open in Dev', 'Skills', 'Open in a new window', 'Copy link', 'Pin tab', '—', 'Zoom'])
     await p.getByRole('menuitem', { name: 'Open in Dev' }).click()
     expect((await went(p)).at(-1)).toBe('dev https://acme.hanzo.app')
   })
@@ -88,7 +88,7 @@ test.describe('in a window whose browser does the rest', () => {
           'Open in Dev',
           'Skills',
           'Open in a new window',
-          'Copy link',
+          'Copy link', 'Pin tab',
           '—',
           'Find in page',
           'Print',
@@ -117,3 +117,28 @@ test.describe('in a window whose browser does the rest', () => {
         expect(await went(p)).toContain('find https://acme.hanzo.app')
       })
 })
+
+test.describe('pinning', () => {
+  test.use({ viewport: { width: 1280, height: 900 } })
+
+  test('a tab pinned from its menu shows its pin, leads the strip, and closes only on purpose', async ({ page: p }) => {
+    await open(p, { at: '/' })
+    await menu(p).click()
+    await p.getByRole('menuitem', { name: 'Pin tab' }).click()
+    const strip = p.getByRole('tablist', { name: 'Tabs' })
+    const unpin = p.getByRole('button', { name: /^Unpin / })
+    await expect(unpin).toBeVisible()
+    await expect(p.getByRole('button', { name: /^Close / })).toHaveCount(0)
+    // Delete on a pinned tab is not a close.
+    await strip.getByRole('tab').first().focus()
+    await p.keyboard.press('Delete')
+    await expect(strip.getByRole('tab')).toHaveCount(1)
+    await menu(p).click()
+    await expect(p.getByRole('menuitem', { name: 'Unpin tab' })).toBeVisible()
+    await p.keyboard.press('Escape')
+    await shot(p, 'tab-pinned.png')
+    await unpin.click()
+    await expect(p.getByRole('button', { name: /^Close / })).toBeVisible()
+  })
+})
+

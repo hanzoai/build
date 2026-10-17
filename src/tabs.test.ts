@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { address, destination, located, moved, name, opened, PAGE, read, SEARCH, shut, stepped, went, type Tab, type Tabs } from './tabs.ts'
+import { address, cleared, destination, located, moved, name, opened, PAGE, pinned, read, SEARCH, shut, stepped, went, type Tab, type Tabs } from './tabs.ts'
 
 const SEED: Tabs = {
   tabs: [
@@ -99,5 +99,44 @@ describe('the panel’s tabs', () => {
     expect(destination('hanzo.ai')).toBe('https://hanzo.ai')
     expect(destination('what is enso')).toBe(`${SEARCH}what%20is%20enso`)
     expect(destination('  ')).toBe('')
+  })
+
+  it('pins a tab to the end of the pinned ones, and lets it go to lead the rest', () => {
+    const one = pinned(SEED, 'terminal', true)
+    expect(one.tabs.map((t) => t.id)).toEqual(['terminal', 'artifacts', 'preview'])
+    const two = pinned(one, 'preview', true)
+    expect(two.tabs.map((t) => [t.id, Boolean(t.pinned)])).toEqual([['terminal', true], ['preview', true], ['artifacts', false]])
+    const back = pinned(two, 'terminal', false)
+    expect(back.tabs.map((t) => t.id)).toEqual(['preview', 'terminal', 'artifacts'])
+    expect(back.tabs.find((t) => t.id === 'terminal')).not.toHaveProperty('pinned')
+    expect(pinned(back, 'preview', true)).toBe(back)
+  })
+
+  it('keeps a moved tab in its group', () => {
+    const pins = pinned(pinned(SEED, 'terminal', true), 'artifacts', true)
+    expect(moved(pins, 'preview', 0).tabs.map((t) => t.id), 'a plain tab cannot pass the pinned ones').toEqual(['terminal', 'artifacts', 'preview'])
+    expect(moved(pins, 'terminal', 9).tabs.map((t) => t.id), 'a pinned tab cannot pass the plain ones').toEqual(['artifacts', 'terminal', 'preview'])
+  })
+
+  it('opens a new tab after the pinned ones, and a pinned one among them', () => {
+    const pins = pinned(SEED, 'terminal', true)
+    expect(opened(pins, { kind: 'files', title: 'Files' }).tabs.map((t) => t.id)).toEqual(['terminal', 'artifacts', 'preview', 'files'])
+    expect(opened(pins, { kind: 'diff', title: 'Diff', pinned: true }).tabs.map((t) => t.id)).toEqual(['terminal', 'diff', 'artifacts', 'preview'])
+  })
+
+  it('closes a pinned tab only on purpose: its own close takes it, a clear leaves it', () => {
+    const pins = pinned(SEED, 'preview', true)
+    expect(shut(pins, 'preview').tabs.map((t) => t.id)).toEqual(['artifacts', 'terminal'])
+    const left = cleared(pins, (t) => t.kind === 'artifacts')
+    expect(left.tabs.map((t) => t.id)).toEqual(['preview', 'artifacts'])
+    expect(left.at, 'the chosen tab went, so the first left is chosen').toBe('preview')
+    expect(cleared({ ...pins, at: 'preview' }).tabs.map((t) => t.id)).toEqual(['preview'])
+    expect(cleared(pinned(pins, 'artifacts', true), (t) => t.kind === 'terminal').tabs).toHaveLength(3)
+  })
+
+  it('reads the pinned tabs first from what was kept', () => {
+    const kept: Tabs = { tabs: [{ id: 'a', kind: 'a', title: 'A' }, { id: 'b', kind: 'b', title: 'B', pinned: true }], at: 'a' }
+    vi.stubGlobal('window', { localStorage: { getItem: () => JSON.stringify(kept), setItem: () => {} } })
+    expect(read('pins-first')?.tabs.map((t) => t.id)).toEqual(['b', 'a'])
   })
 })
