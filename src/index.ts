@@ -46,4 +46,5 @@ export { catalog, EFFORTS, FIRST, keep, kept, nameOf, reasons, useCatalog, useCh
 export { cut, GAP, MEASURE, measure, Prompt, prompt, ROUND, Tune, useEar, type PromptOptions } from './prompt.tsx'
 export { artifacts, blob, lead, renders, Reply, Served, speakable, speaker, type Artifact, type Listen } from './reply.tsx'
 export { frames, Page, Panel, PanelToggle, type Kind, type PageProps, type PanelProps, type Suggestion } from './panel.tsx'
+export { kinds, Summary, useKinds, type Entry, type Section } from './summary.tsx'
 export { address, destination, located, name, PAGE, SEARCH, useDeck, useKey, usePanel, useShown, type Deck, type Tab, type Tabs } from './tabs.ts'

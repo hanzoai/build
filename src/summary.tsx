@@ -1,0 +1,191 @@
+/**
+ * A surface's summary: what it made and what went into it, as sections of
+ * rows, each one press from a tab beside it. Chat draws its Outputs and Sources
+ * here; Studio its artifacts. The rows are the caller's: this draws them and
+ * knows nothing of a conversation.
+ *
+ * `Summary` is the popover off the header's outline mark: each section's
+ * heading with what it adds at its end, its leading action (Chat's Create file
+ * or site), its rows, and one quiet line when it has none. `useKinds` makes
+ * each section a kind of tab for `Panel`, the same rows in the panel.
+ */
+import { useMemo, useState, type ReactNode } from 'react'
+import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { ListTodo } from '@hanzogui/lucide-icons-2'
+import { Popover, PopoverContent, PopoverTrigger } from '@hanzo/ui'
+import type { Kind } from './panel.tsx'
+
+/** One row: what it is called, its mark, and what pressing it opens. */
+export interface Entry {
+  id: string
+  title: string
+  icon?: ReactNode
+  /** A quieter second line: what a lookup asked, what came back. */
+  detail?: string
+  open?: () => void
+}
+
+/** A section: its heading, its rows, and what it says with none. */
+export interface Section {
+  id: string
+  title: string
+  entries: readonly Entry[]
+  /** The line drawn when it has no rows; none, and it draws only its heading. */
+  empty?: string
+  /** At the heading's end: what adds to it (Chat's `+` on Sources). */
+  action?: ReactNode
+  /** A row before the others that does something rather than opens something. */
+  lead?: { title: string; run: () => void }
+}
+
+/** A row of the summary: its mark and its name, one press from a tab. */
+function Line({ icon, children, detail, onPress, quiet = false }: { icon?: ReactNode; children: ReactNode; detail?: string; onPress?: () => void; quiet?: boolean }) {
+  return (
+    <XStack
+      render={onPress ? 'button' : undefined}
+      role={onPress ? 'button' : undefined}
+      onPress={onPress}
+      items="center"
+      gap="$2.5"
+      px="$2"
+      minH={30}
+      width="100%"
+      rounded="$3"
+      cursor={onPress ? 'pointer' : undefined}
+      hoverStyle={onPress ? { bg: '$hover' } : undefined}
+      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+    >
+      {icon ? (
+        <XStack width={16} justify="center" shrink={0} opacity={0.75}>
+          {icon}
+        </XStack>
+      ) : null}
+      <YStack flex={1} minW={0} py={detail ? '$1' : 0}>
+        <SizableText fontSize={13} color={quiet ? '$soft' : '$ink'} numberOfLines={1}>
+          {children}
+        </SizableText>
+        {detail ? (
+          <SizableText fontSize={12} color="$soft" numberOfLines={2}>
+            {detail}
+          </SizableText>
+        ) : null}
+      </YStack>
+    </XStack>
+  )
+}
+
+/** A section's heading, with what it adds at its end. */
+const Head = ({ children, action }: { children: string; action?: ReactNode }) => (
+  <XStack items="center" justify="space-between" px="$2" pt="$1.5" pb="$1" minH={28}>
+    <SizableText fontSize={13} color="$soft">
+      {children}
+    </SizableText>
+    {action}
+  </XStack>
+)
+
+/** One section's rows; `done` runs after a row is pressed (the popover puts itself away). */
+function Rows({ section, done, details = false }: { section: Section; done?: () => void; details?: boolean }) {
+  const { entries, empty, lead } = section
+  return (
+    <>
+      {lead ? (
+        <Line
+          quiet
+          onPress={() => {
+            done?.()
+            lead.run()
+          }}
+        >
+          {lead.title}
+        </Line>
+      ) : null}
+      {entries.map((e) => (
+        <Line
+          key={e.id}
+          icon={e.icon}
+          detail={details ? e.detail : undefined}
+          onPress={
+            e.open
+              ? () => {
+                  done?.()
+                  e.open?.()
+                }
+              : undefined
+          }
+        >
+          {e.title}
+        </Line>
+      ))}
+      {!entries.length && empty ? <Line quiet>{empty}</Line> : null}
+    </>
+  )
+}
+
+/**
+ * The summary, from the outline mark in a header. `onOpen` runs after a row is
+ * pressed, for the host to show the panel the row opened a tab in.
+ */
+export function Summary({ sections, onOpen, label = 'Summary' }: { sections: readonly Section[]; onOpen?: () => void; label?: string }) {
+  const [open, setOpen] = useState(false)
+  const done = () => {
+    setOpen(false)
+    onOpen?.()
+  }
+  return (
+    <Popover open={open} onOpenChange={setOpen} allowFlip>
+      <PopoverTrigger>
+        <XStack
+          render="button"
+          data-slot="summary-toggle"
+          aria-label={label}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          {...({ title: label } as object)}
+          width={32}
+          height={32}
+          rounded="$3"
+          items="center"
+          justify="center"
+          cursor="pointer"
+          bg={open ? '$hover' : 'transparent'}
+          hoverStyle={{ bg: '$hover' }}
+          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+        >
+          <ListTodo size={16} aria-hidden />
+        </XStack>
+      </PopoverTrigger>
+      <PopoverContent solid align="end" p={6} width={300}>
+        <YStack data-slot="summary" role="dialog" aria-label={label} gap={1} self="stretch" width="100%" maxH="min(70dvh, 520px)" overflowY="auto" overflowX="hidden">
+          {sections.map((s, i) => (
+            <YStack key={s.id} gap={1}>
+              {i ? <XStack height={1} bg="$borderColor" my="$1.5" mx="$1" /> : null}
+              <Head action={s.action}>{s.title}</Head>
+              <Rows section={s} done={done} />
+            </YStack>
+          ))}
+        </YStack>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** Each section as a kind of tab for `Panel`: the same rows, with their second lines. */
+export function kinds(sections: readonly Section[], icons: Record<string, ReactNode> = {}): Kind[] {
+  return sections.map((s) => ({
+    id: s.id,
+    label: s.title,
+    icon: icons[s.id],
+    render: () => (
+      <YStack gap={1}>
+        <Head action={s.action}>{s.title}</Head>
+        <Rows section={s} details />
+      </YStack>
+    ),
+  }))
+}
+
+/** `kinds`, kept while the sections are the same. */
+export function useKinds(sections: readonly Section[], icons?: Record<string, ReactNode>): Kind[] {
+  return useMemo(() => kinds(sections, icons), [sections, icons])
+}
