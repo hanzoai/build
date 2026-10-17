@@ -252,7 +252,7 @@ export function Tune({ mind, limits, disabled = false }: { mind: Mind; limits?: 
 function Attach({ onAttach, disabled }: { onAttach: () => void; disabled: boolean }) {
   return (
     <Tooltip>
-      <TooltipTrigger>
+      <TooltipTrigger asChild>
         <Control type="button" size={ROUND} aria-label="Attach files" aria-disabled={disabled || undefined} onClick={disabled ? undefined : onAttach}>
           <Plus size={18} />
         </Control>
