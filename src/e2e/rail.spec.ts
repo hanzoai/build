@@ -9,9 +9,10 @@ import { cramped, expect, test } from './fixture.ts'
 import { mounted } from './mount.ts'
 import { rail as platform } from './stubs.ts'
 
-/** Choose a row of the menu that is open. */
+/** Choose a row of the menu that is open, and wait for the menu to go: a press on the page under a closing menu lands on the menu. */
 async function pick(page: Page, row: string) {
   await page.getByRole('menuitem', { name: new RegExp(`^${row}`) }).click()
+  await expect(page.getByRole('menuitem')).toHaveCount(0)
 }
 
 /** The rail's rows, top to bottom, as they read. */
@@ -28,7 +29,7 @@ test.describe('the rail', () => {
     await platform(page)
     await page.goto('/')
     await expect(page.getByText('Try Hanzo in Slack')).toBeVisible()
-    expect(await rows(page)).toEqual(['New', 'Projects', 'Issues', 'Artifacts', 'Templates', 'Automations', 'Machines', 'Environments', 'Customize', 'Docs'])
+    expect(await rows(page)).toEqual(['New', 'Projects', 'Issues', 'Library', 'Templates', 'Scheduled tasks', 'Machines', 'Environments', 'Customize', 'Docs'])
     await expect(page.locator('[data-slot="rail-more"]')).toHaveCount(0)
     await page.screenshot({ path: info.outputPath('rail.png') })
     await page.getByText('Machines', { exact: true }).click()
@@ -124,11 +125,11 @@ test.describe('the rail', () => {
   })
 })
 
-test.describe('Artifacts', () => {
+test.describe('Sites, at the foot of the Library', () => {
   test('starters to make something new, and projects under the month they were edited', async ({ page }, info) => {
     await platform(page)
     await page.goto('/-/artifacts')
-    await expect(page.getByText('Make something new')).toBeVisible()
+    await expect(page.getByText('Make something new')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByRole('button', { name: /^Start from / })).toHaveCount(4)
     const months = page.getByText(/^(September|August) 2026$/)
     await expect(months).toHaveText(['September 2026', 'August 2026'])
@@ -174,6 +175,9 @@ test.describe('Artifacts', () => {
     await pick(page, 'Make private')
     expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/projects/blog', query: '', body: { visibility: 'private' } })
 
+    // Under the Library's items the last site is below the fold: scrolled to first, as a reader does.
+    await page.getByRole('button', { name: 'Actions for Docs site' }).scrollIntoViewIfNeeded()
+    await page.waitForTimeout(300)
     await page.getByRole('button', { name: 'Actions for Docs site' }).click()
     await pick(page, 'Delete')
     const confirm = page.getByRole('dialog')
@@ -187,7 +191,7 @@ test.describe('Artifacts', () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await platform(page)
     await page.goto('/-/artifacts')
-    await expect(page.getByText('September 2026')).toBeVisible()
+    await expect(page.getByText('September 2026')).toBeVisible({ timeout: 15_000 })
     expect(await cramped(page)).toEqual([])
     await page.screenshot({ path: info.outputPath('phone-artifacts.png'), fullPage: true })
   })

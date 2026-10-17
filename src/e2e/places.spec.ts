@@ -13,9 +13,9 @@ import { rail as platform } from './stubs.ts'
 const PLACES: [string, RegExp][] = [
   ['Projects', /\/-\/projects$/],
   ['Issues', /\/-\/issues$/],
-  ['Artifacts', /\/-\/artifacts$/],
+  ['Library', /\/-\/artifacts$/],
   ['Templates', /\/-\/templates$/],
-  ['Automations', /\/-\/automations$/],
+  ['Scheduled tasks', /\/-\/automations$/],
   ['Machines', /\/-\/settings\/machines$/],
   ['Environments', /\/-\/settings\/environments$/],
   ['Customize', /\/-\/customize$/],

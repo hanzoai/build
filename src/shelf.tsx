@@ -1,6 +1,6 @@
 /**
- * The two shelves the rail opens: what this org has built (Artifacts), and the
- * public starters (Templates).
+ * Two shelves: the sites this org has deployed (Sites, drawn at the foot of the
+ * Library — library.tsx), and the public starters (Templates).
  *
  * A project is a real row — `/v1/projects`, the same one a deployed site is
  * served from — so opening one opens its workspace at its own address. A
@@ -103,12 +103,13 @@ function edited(s: number): string {
 }
 
 /**
- * What this org has built: a few starters to make something new from, then
- * every project under the month it was last edited, whether it is public or
- * private, and its rename, visibility and delete. A project belongs to the org
- * and names no author, so the list does not split yours from a colleague's.
+ * What this org has deployed: a few starters to make something new from, then
+ * every site under the month it was last edited, whether it is public or
+ * private, and its rename, visibility and delete. A site belongs to the org and
+ * names no author, so the list does not split yours from a colleague's — which
+ * is why it is a section of its own under the Library's items, which are yours.
  */
-export function Artifacts() {
+export function Sites() {
   const t = useTarget()
   const host = useHost()
   const list = useProjects(t, Boolean(host.person))
@@ -132,9 +133,16 @@ export function Artifacts() {
 
   const said = failed || note
   return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" items="center" $max-md={{ px: '$4' }}>
-      <YStack width="100%" maxW={1080}>
-        <Head title="Artifacts" says="What this organization has built. Open one to keep building it." />
+    <YStack width="100%" role="region" aria-label="Sites">
+      <YStack width="100%">
+        <YStack gap="$1" pb="$4">
+          <SizableText render="h2" size="$5" color="$ink">
+            Sites
+          </SizableText>
+          <SizableText size="$2" color="$soft">
+            What this organization has built. Open one to keep building it.
+          </SizableText>
+        </YStack>
         {said ? (
           <SizableText size="$2" color="$soft" role="status" pb="$3">
             {said}

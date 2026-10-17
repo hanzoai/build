@@ -31,7 +31,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { ago } from './ago.ts'
 import { codebases, type Codebase } from './api/codebases.ts'
-import { Automations } from './automations.tsx'
+import { Scheduled } from './scheduled.tsx'
 import { boards, everything, sources, type Board, type Sources } from './api/work.ts'
 import { boardKey, pinRepo, readPending, writePending } from './choice.ts'
 import { useKept, useRead } from './data.ts'
@@ -62,7 +62,7 @@ const STATUS: Record<string, string> = {
 }
 
 export function Forge({ screen }: { screen: Exclude<Screen, 'artifacts' | 'templates'> }) {
-  if (screen === 'automations') return <Automations />
+  if (screen === 'automations') return <Scheduled />
   if (screen === 'sync') return <Sync />
   // The fleet's native servers are Connectors → Discover now; the old address lands there.
   if (screen === 'mcp') return <Customize tab="connectors" view="discover" />

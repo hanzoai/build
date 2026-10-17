@@ -1,26 +1,25 @@
 /**
- * Automations: work that runs itself in this organization, on a schedule or
- * when someone presses Run. Each run is one Dev run.
+ * One scheduled task: what it does and when, its switch, Run now and its runs.
+ * The list of them all is Scheduled (scheduled.tsx).
  *
- *   -/automations        the org's automations; a row opens its editor
  *   -/automations/new    a new one: its name, what it does, when it runs
  *   -/automations/<id>   its editor, its switch, Run now and its runs
  *
- * Every read and write is /v1/auto/automations (api/auto.ts), scoped to the
- * org the builder is in. A save sends only what changed; the switch sends
- * `enabled` alone, so turning one on or off never changes who it runs as.
+ * Every read and write is /v1/auto/automations (api/auto.ts), the caller's
+ * own: a task is its person's, in the org the builder is in. A save sends only
+ * what changed; the switch sends `enabled` alone, so turning one on or off never
+ * changes who it runs as.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ChevronLeft, Plus, Workflow } from '@hanzogui/lucide-icons-2'
+import { ChevronLeft } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { StatusDot, type SessionStatus } from '@hanzo/ui/chat'
 import { ModelPicker } from '@hanzo/ui/models'
 import { ChipSelect } from '@hanzo/ui/product'
 import { useLimits } from '@hanzo/ui/product/useLimits'
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { ago } from './ago.ts'
-import { automation, automations, changes, create, remove, review, runs, save, start, starters, words, type Automation, type Draft, type Kind, type Run, type Schedule, type Starter } from './api/auto.ts'
+import { automation, changes, create, remove, review, runs, save, start, starters, words, type Automation, type Draft, type Kind, type Run, type Schedule, type Starter } from './api/auto.ts'
 import { current, subscriptions, type Subscription } from './api/billing.ts'
 import { SOCIAL } from './api/provider.ts'
 import { Out } from './out.tsx'
@@ -30,9 +29,11 @@ import { ENSO, limits as readLimits, models } from './api/models.ts'
 import { Choice, Confirm, Field, Line, Sheet } from './customize/ui.tsx'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { SOURCE } from './api/library.ts'
+import { Outputs } from './library.tsx'
 import { path } from './route.ts'
 
-const zone = (): string => {
+export const zone = (): string => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   } catch {
@@ -40,8 +41,9 @@ const zone = (): string => {
   }
 }
 
-const KINDS: readonly { id: Kind; label: string }[] = [
+export const KINDS: readonly { id: Kind; label: string }[] = [
   { id: 'manual', label: 'When I run it' },
+  { id: 'once', label: 'Once' },
   { id: 'hourly', label: 'Every hour' },
   { id: 'daily', label: 'Every day' },
   { id: 'weekdays', label: 'Weekdays' },
@@ -65,8 +67,8 @@ const PERMISSIONS = [
 ] as const
 
 /** A run's status as the rail's dot draws it. */
-const DOT: Record<string, SessionStatus> = { succeeded: 'done', failed: 'error', running: 'running', queued: 'running', review: 'paused', skipped: 'stopped', refused: 'stopped' }
-const WORD: Record<string, string> = {
+export const DOT: Record<string, SessionStatus> = { succeeded: 'done', failed: 'error', running: 'running', queued: 'running', review: 'paused', skipped: 'stopped', refused: 'stopped' }
+export const WORD: Record<string, string> = {
   succeeded: 'Succeeded',
   failed: 'Failed',
   running: 'Running',
@@ -76,15 +78,24 @@ const WORD: Record<string, string> = {
   refused: 'Refused',
 }
 const NAME: Record<string, string> = Object.fromEntries(SOCIAL.map((p) => [p.id, p.name]))
-const live = (s: string): boolean => s === 'running' || s === 'queued'
+export const live = (s: string): boolean => s === 'running' || s === 'queued'
+
+/** A local date and time an hour from now, as a once schedule's `at`. */
+const soon = (): string => {
+  const d = new Date(Date.now() + 3_600_000)
+  const two = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:00`
+}
 
 /** The schedule a kind starts from, keeping whatever of `was` still applies. */
-function shaped(kind: Kind, was: Schedule): Schedule {
+export function shaped(kind: Kind, was: Schedule): Schedule {
   // A schedule that runs only when asked keeps no zone worth keeping: leaving it takes the person's own.
   const tz = was.kind === 'manual' || !was.tz ? zone() : was.tz
   switch (kind) {
     case 'manual':
       return { kind }
+    case 'once':
+      return { kind, at: soon(), tz }
     case 'hourly':
       return { kind, at: `00:${(was.at ?? '00:00').slice(3) || '00'}`, tz }
     case 'daily':
@@ -98,14 +109,15 @@ function shaped(kind: Kind, was: Schedule): Schedule {
 }
 
 /** What is wrong with a schedule before it is sent, or ''. */
-function unready(s: Schedule): string {
+export function unready(s: Schedule): string {
   if ((s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly') && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(s.at ?? '')) return 'Time of day is HH:MM on a 24-hour clock.'
+  if (s.kind === 'once' && s.at && !/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(s.at)) return 'Once is a date and a time: YYYY-MM-DDTHH:MM.'
   if (s.kind === 'cron' && (s.cron ?? '').trim().split(/\s+/).length !== 5) return 'Cron is five fields: minute, hour, day of month, month, day of week.'
   return ''
 }
 
 /** A schedule as the platform reads it: an hourly minute in two digits. */
-function tidy(d: Draft): Draft {
+export function tidy(d: Draft): Draft {
   const s = d.schedule
   if (s.kind !== 'hourly') return d
   const m = Math.min(59, Number((s.at ?? '').slice(3)) || 0)
@@ -113,7 +125,7 @@ function tidy(d: Draft): Draft {
 }
 
 /** A local time and date for an RFC 3339 instant. */
-const local = (iso: string): string => {
+export const local = (iso: string): string => {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
@@ -128,6 +140,7 @@ const drafted = (a: Automation): Draft => ({
   notify: a.notify,
   postTo: a.postTo,
   enabled: a.draft ? true : a.enabled,
+  source: a.source,
 })
 
 /** `next`, keeping each field of `cur` the person changed from `was` since. */
@@ -140,141 +153,56 @@ function rebase(cur: Draft, was: Draft, next: Draft): Draft {
 }
 
 /** A run the platform refused for want of a plan: a free org with no credit for the run fee. */
-const unplanned = (e: unknown): boolean => e instanceof Refusal && e.status === 402
-const PLAN = 'Automations run on a paid plan; on Free each run needs $1 of credit, and this organization has none. Upgrade to run it.'
+export const unplanned = (e: unknown): boolean => e instanceof Refusal && e.status === 402
+export const PLAN = 'Automations run on a paid plan; on Free each run needs $1 of credit, and this organization has none. Upgrade to run it.'
 
 
-export function Automations() {
-  const host = useHost()
-  const t = useTarget()
-  const signed = Boolean(host.person)
-  const [q, setQ] = useState('')
-  const [problem, setProblem] = useState('')
-  const list = useRead(signed ? () => automations(t) : null, [] as Automation[], [t, signed])
-  const needle = q.trim().toLowerCase()
-  const shown = list.value.filter((a) => !needle || a.name.toLowerCase().includes(needle) || a.instructions.toLowerCase().includes(needle))
-  const open = (id: string) => host.go(path({ kind: 'automation', id }))
+const BLANK = (): Draft => ({ name: '', instructions: '', model: null, schedule: { kind: 'manual' }, permissions: 'ask', notify: false, postTo: [], enabled: true, source: 'dev' })
 
-  const flip = async (a: Automation, on: boolean) => {
-    setProblem('')
+/** When a task runs, chosen: how often, the day and time, and the zone it is read in. */
+export function When({ s, onChange, disabled }: { s: Schedule; onChange: (s: Schedule) => void; disabled?: boolean }) {
+  const setWhen = (p: Partial<Schedule>) => onChange({ ...s, ...p })
+  const zones = useMemo(() => {
     try {
-      await save(t, a.id, { enabled: on })
-      list.reload()
-    } catch (e) {
-      setProblem(`${a.name}: ${(e as Error).message}`)
+      return ['UTC', ...Intl.supportedValuesOf('timeZone').filter((z) => z !== 'UTC')].map((z) => ({ id: z, label: z }))
+    } catch {
+      return [{ id: 'UTC', label: 'UTC' }]
     }
-  }
-
+  }, [])
+  const kind = KINDS.find((k) => k.id === s.kind) ?? KINDS[0]!
   return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6">
-      <YStack width="100%" maxW={1040} mx="auto" gap="$4">
-        <XStack justify="space-between" items="flex-start" gap="$4">
-          <YStack gap="$1" flex={1} minW={0}>
-            <SizableText size="$6" fontWeight="500" color="$ink">
-              Automations
-            </SizableText>
-            <SizableText size="$2" color="$soft">
-              Work that runs itself in this organization, on a schedule or when you run it. Each run is a Dev run.
-            </SizableText>
-          </YStack>
-          <Button size="sm" shrink={0} disabled={!signed} onPress={() => open('new')}>
-            <Plus size={14} />
-            New automation
-          </Button>
-        </XStack>
-        <XStack justify="flex-end">
-          <YStack width={240} maxW="100%">
-            <Input value={q} onChangeText={setQ} placeholder="Search…" aria-label="Search automations" disabled={!signed} />
-          </YStack>
-        </XStack>
-        <Line>{problem}</Line>
-        {list.error ? (
-          <Empty says={list.error.message} />
-        ) : !signed ? (
-          <Empty says="Sign in to see this organization's automations." />
-        ) : list.loading && list.value.length === 0 ? (
-          <Empty says="Reading automations…" />
-        ) : shown.length === 0 ? (
-          <Empty says={list.value.length === 0 ? 'No automations yet.' : 'Nothing matches.'}>
-            {list.value.length === 0 ? (
-              <Button size="sm" onPress={() => open('new')}>
-                New automation
-              </Button>
-            ) : null}
-          </Empty>
-        ) : (
-          <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-            <XStack px="$3" py="$2" gap="$3">
-              <SizableText flex={1} size="$1" color="$soft">
-                Name
-              </SizableText>
-              <SizableText size="$1" color="$soft" width={220}>
-                When
-              </SizableText>
-              <SizableText size="$1" color="$soft" width={150}>
-                Last run
-              </SizableText>
-              <SizableText size="$1" color="$soft" width={56} style={{ textAlign: 'right' }}>
-                On
-              </SizableText>
-            </XStack>
-            {shown.map((a) => (
-              <Item key={a.id} a={a} onOpen={() => open(a.id)} onSwitch={(on) => void flip(a, on)} />
-            ))}
-          </YStack>
-        )}
-      </YStack>
-    </YStack>
-  )
-}
-
-/** One automation in the list: its name opens it, and its switch arms it. */
-function Item({ a, onOpen, onSwitch }: { a: Automation; onOpen: () => void; onSwitch: (on: boolean) => void }) {
-  const about = useId()
-  return (
-    <XStack items="center" gap="$3" px="$3" py="$2.5" borderTopWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
-      <XStack render="button" aria-label={`Open ${a.name}`} aria-describedby={about} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" flexWrap="wrap" rowGap="$1">
-        <Workflow size={14} />
-        <SizableText size="$2" color="$ink" numberOfLines={1} flex={1} minW={120} style={{ textAlign: 'left' }}>
-          {a.name}
-        </SizableText>
-        {/* On a narrow screen what it does and how it last went fold under its name. */}
-        <XStack id={about} items="center" gap="$3" flexWrap="wrap" rowGap="$1" maxW="100%">
-          {a.draft ? (
-            <SizableText size="$1" color="$soft" px="$2" rounded="$2" borderWidth={1} borderColor="$borderColor">
-              Draft
-            </SizableText>
-          ) : null}
-          <SizableText size="$1" color="$soft" width={220} numberOfLines={1} style={{ textAlign: 'left' }}>
-            {a.draft ? 'Needs instructions' : words(a.schedule)}
+    <XStack gap="$2" flexWrap="wrap" rowGap="$2" items="center" opacity={disabled ? 0.6 : 1} pointerEvents={disabled ? 'none' : 'auto'}>
+      <ChipSelect name="When it runs" label={kind.label} chosen={kind} items={KINDS} onChange={(k) => onChange(shaped(k.id, s))} placement="bottom-start" width={200} />
+      {s.kind === 'weekly' ? <ChipSelect name="Day" label={DAYS.find((x) => x.id === s.day)?.label ?? 'Monday'} chosen={DAYS.find((x) => x.id === s.day)} items={DAYS} onChange={(x) => setWhen({ day: x.id })} placement="bottom-start" width={180} /> : null}
+      {s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly' ? (
+        <YStack width={110}>
+          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label="Time of day" inputMode="text" />
+        </YStack>
+      ) : null}
+      {s.kind === 'once' ? (
+        <YStack width={190}>
+          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="2026-10-20T09:00" aria-label="Date and time" autoCapitalize="none" />
+        </YStack>
+      ) : null}
+      {s.kind === 'hourly' ? (
+        <XStack items="center" gap="$2">
+          <SizableText size="$2" color="$soft">
+            at minute
           </SizableText>
-          <XStack width={150} items="center" gap="$2">
-            {a.last ? <StatusDot status={DOT[a.last.status] ?? 'idle'} /> : null}
-            <SizableText size="$1" color="$soft" numberOfLines={1}>
-              {a.last ? `${WORD[a.last.status] ?? a.last.status} · ${ago(a.last.at)}` : 'Never run'}
-            </SizableText>
-          </XStack>
+          <YStack width={70}>
+            <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label="Minute" inputMode="numeric" />
+          </YStack>
         </XStack>
-      </XStack>
-      <XStack width={56} justify="flex-end">
-        <Switch checked={a.enabled} disabled={a.draft} onCheckedChange={onSwitch} aria-label={`${a.name} on`} />
-      </XStack>
+      ) : null}
+      {s.kind === 'cron' ? (
+        <YStack width={200}>
+          <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label="Cron" autoCapitalize="none" />
+        </YStack>
+      ) : null}
+      {s.kind !== 'manual' ? <ChipSelect name="Time zone" label={s.tz || 'UTC'} chosen={{ id: s.tz || 'UTC', label: s.tz || 'UTC' }} items={zones} onChange={(z) => setWhen({ tz: z.id })} placeholder="Search zones…" placement="bottom-start" width={260} /> : null}
     </XStack>
   )
 }
-
-function Empty({ says, children }: { says: string; children?: ReactNode }) {
-  return (
-    <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" px="$4" py="$8" gap="$3" items="center">
-      <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
-        {says}
-      </SizableText>
-      {children}
-    </YStack>
-  )
-}
-
-const BLANK = (): Draft => ({ name: '', instructions: '', model: null, schedule: { kind: 'manual' }, permissions: 'ask', notify: false, postTo: [], enabled: true })
 
 /** One automation: what it does and when, its switch, Run now, and its runs. `new` writes one. */
 export function Editor({ id }: { id: string }) {
@@ -349,16 +277,7 @@ export function Editor({ id }: { id: string }) {
     setUpgrade(false)
     setD((x) => ({ ...x, ...p }))
   }
-  const setWhen = (p: Partial<Schedule>) => set({ schedule: { ...d.schedule, ...p } })
   const wrong = unready(d.schedule)
-
-  const zones = useMemo(() => {
-    try {
-      return ['UTC', ...Intl.supportedValuesOf('timeZone').filter((z) => z !== 'UTC')].map((z) => ({ id: z, label: z }))
-    } catch {
-      return [{ id: 'UTC', label: 'UTC' }]
-    }
-  }, [])
 
   // A draft waits on its instructions: they have the focus when it opens.
   const drafty = Boolean(a?.draft)
@@ -468,9 +387,9 @@ export function Editor({ id }: { id: string }) {
     <YStack flex={1} minH={0}>
       <YStack shrink={0} px="$6" pt="$4" pb="$3" borderBottomWidth={1} borderColor="$borderColor">
         <XStack width="100%" maxW={760} mx="auto" items="center" gap="$3" flexWrap="wrap" rowGap="$2">
-          <Button size="sm" variant="ghost" onPress={back} aria-label="All automations">
+          <Button size="sm" variant="ghost" onPress={back} aria-label="All scheduled tasks">
             <ChevronLeft size={14} />
-            Automations
+            Scheduled tasks
           </Button>
           <SizableText size="$1" color="$soft" role="status">
             {state}
@@ -548,7 +467,7 @@ export function Editor({ id }: { id: string }) {
                 ? 'Name it, say what it should do, and when. It runs as you, in this organization.'
                 : a?.draft
                   ? 'A draft: say what it should do and save it, and it runs.'
-                  : [words(a!.schedule), a!.next && a!.enabled ? `next ${local(a!.next)}` : a!.schedule.kind === 'manual' ? '' : 'off'].filter(Boolean).join(' · ')}
+                  : [`From ${SOURCE[a!.source]}`, words(a!.schedule), a!.next && a!.enabled ? `next ${local(a!.next)}` : a!.schedule.kind === 'manual' ? '' : 'off'].filter(Boolean).join(' · ')}
             </SizableText>
           </YStack>
 
@@ -587,32 +506,8 @@ export function Editor({ id }: { id: string }) {
               rows={7}
             />
           </Field>
-          <Field label="When it runs" hint={s.kind === 'cron' ? 'Five fields: minute, hour, day of month, month, day of week.' : undefined}>
-            <XStack gap="$2" flexWrap="wrap" rowGap="$2" items="center">
-              <ChipSelect name="When it runs" label={KINDS.find((k) => k.id === s.kind)!.label} chosen={KINDS.find((k) => k.id === s.kind)} items={KINDS} onChange={(k) => set({ schedule: shaped(k.id, s) })} placement="bottom-start" width={200} />
-              {s.kind === 'weekly' ? <ChipSelect name="Day" label={DAYS.find((x) => x.id === s.day)?.label ?? 'Monday'} chosen={DAYS.find((x) => x.id === s.day)} items={DAYS} onChange={(x) => setWhen({ day: x.id })} placement="bottom-start" width={180} /> : null}
-              {s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly' ? (
-                <YStack width={110}>
-                  <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label="Time of day" inputMode="text" />
-                </YStack>
-              ) : null}
-              {s.kind === 'hourly' ? (
-                <XStack items="center" gap="$2">
-                  <SizableText size="$2" color="$soft">
-                    at minute
-                  </SizableText>
-                  <YStack width={70}>
-                    <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label="Minute" inputMode="numeric" />
-                  </YStack>
-                </XStack>
-              ) : null}
-              {s.kind === 'cron' ? (
-                <YStack width={200}>
-                  <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label="Cron" autoCapitalize="none" />
-                </YStack>
-              ) : null}
-              {s.kind !== 'manual' ? <ChipSelect name="Time zone" label={s.tz || 'UTC'} chosen={{ id: s.tz || 'UTC', label: s.tz || 'UTC' }} items={zones} onChange={(z) => setWhen({ tz: z.id })} placeholder="Search zones…" placement="bottom-start" width={260} /> : null}
-            </XStack>
+          <Field label="When it runs" hint={s.kind === 'cron' ? 'Five fields: minute, hour, day of month, month, day of week.' : s.kind === 'once' ? 'It runs at that time and then switches itself off.' : undefined}>
+            <When s={s} onChange={(next) => set({ schedule: next })} disabled={locked} />
           </Field>
           <Field label="Model">
             <XStack>
@@ -740,6 +635,7 @@ export function Editor({ id }: { id: string }) {
                             </SizableText>
                           </YStack>
                         ) : null}
+                        {r.outputs.length ? <Outputs ids={r.outputs} /> : null}
                         {r.posts.map((x) => (
                           <XStack key={x.to} items="center" gap="$2" pt="$1">
                             <SizableText size="$1" color="$ink">
@@ -820,9 +716,9 @@ function Page({ title, says, onBack }: { title: string; says: string; onBack: ()
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6">
       <YStack width="100%" maxW={760} mx="auto" gap="$4">
         <XStack>
-          <Button size="sm" variant="ghost" onPress={onBack} aria-label="All automations">
+          <Button size="sm" variant="ghost" onPress={onBack} aria-label="All scheduled tasks">
             <ChevronLeft size={14} />
-            Automations
+            Scheduled tasks
           </Button>
         </XStack>
         <SizableText render="h1" size="$6" color="$ink">

@@ -3,11 +3,11 @@
  *
  *   /            New — the empty state, a composer over the codebase it works on
  *   /sess_…      one run, live
- *   /-/automations work that runs itself; /-/automations/<id> one, to edit and run
+ *   /-/automations scheduled tasks and what ran; /-/automations/<id> one, to edit and run
  *   /-/projects  the org's repositories on the forge: a project is a repository
  *   /-/sync      link repositories from GitHub onto the forge
  *   /-/issues    the forge's issues
- *   /-/artifacts what this org has built
+ *   /-/artifacts the Library: everything you made, in Chat, Dev and Studio
  *   /-/templates the public starters
  *   /-/customize skills, connectors, plugins and agents
  *   /<org>/<repo> a repository's workspace, in this same window
@@ -47,7 +47,8 @@ import { Plans } from './plans.tsx'
 import { path, route } from './route.ts'
 import { Run } from './run.tsx'
 import { DOTS } from './section.tsx'
-import { Artifacts, Templates } from './shelf.tsx'
+import { Library } from './library.tsx'
+import { Templates } from './shelf.tsx'
 import { Find } from './find.tsx'
 import { Slack, useWho, Who } from './foot.tsx'
 import { Settings } from './settings/index.tsx'
@@ -196,7 +197,7 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   if (r.kind === 'customize') return <Customize tab={r.tab} />
   if (r.kind === 'automation') return <Editor key={r.id} id={r.id} />
   if (r.kind === 'screen') {
-    if (r.screen === 'artifacts') return <Artifacts />
+    if (r.screen === 'artifacts') return <Library />
     if (r.screen === 'templates') return <Templates />
     if (r.screen === 'plans') return <Plans />
     return <Forge key={r.screen} screen={r.screen} />

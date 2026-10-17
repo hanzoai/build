@@ -8,7 +8,7 @@
  * Every row moves the builder through `go` with the address `path` writes, so
  * where a place lives is said here and in route.ts and nowhere else.
  */
-import { Blocks, BookOpen, CircleDot, Container, Cpu, FolderGit2, LayoutTemplate, SlidersHorizontal, SquarePen, Workflow } from '@hanzogui/lucide-icons-2'
+import { BookOpen, CircleDot, Clock, Container, Cpu, FolderGit2, LayoutTemplate, Library, SlidersHorizontal, SquarePen } from '@hanzogui/lucide-icons-2'
 import type { RailLink } from '@hanzo/ui/chat'
 
 import { pinBoard } from './choice.ts'
@@ -61,9 +61,9 @@ export function nav(host: Host, go: (path: string) => void): Group[] {
       id: 'make',
       label: 'Make',
       links: [
-        { id: 'artifacts', label: 'Artifacts', icon: <Blocks size={16} />, onPress: to(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
+        { id: 'artifacts', label: 'Library', icon: <Library size={16} />, onPress: to(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
         { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={16} />, onPress: to(path({ kind: 'screen', screen: 'templates' })), active: screen === 'templates' },
-        { id: 'automations', label: 'Automations', icon: <Workflow size={16} />, onPress: to(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' || r.kind === 'automation' },
+        { id: 'automations', label: 'Scheduled tasks', icon: <Clock size={16} />, onPress: to(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' || r.kind === 'automation' },
       ],
     },
     {

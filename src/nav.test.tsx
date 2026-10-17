@@ -6,7 +6,7 @@ import { route } from './route.ts'
 
 // The marks are react-native-svg drawings, which a node test cannot load; what a place is and where it goes is plain data.
 vi.mock('@hanzogui/lucide-icons-2', () =>
-  Object.fromEntries(['Blocks', 'BookOpen', 'CircleDot', 'Container', 'Cpu', 'FolderGit2', 'LayoutTemplate', 'SlidersHorizontal', 'SquarePen', 'Workflow'].map((n) => [n, () => null])),
+  Object.fromEntries(['BookOpen', 'CircleDot', 'Clock', 'Container', 'Cpu', 'FolderGit2', 'LayoutTemplate', 'Library', 'SlidersHorizontal', 'SquarePen'].map((n) => [n, () => null])),
 )
 vi.mock('./foot.tsx', () => ({ DOCS: 'https://docs.hanzo.ai/docs/dev' }))
 
@@ -27,7 +27,7 @@ describe('the builder’s places, once for every rail', () => {
   it('lists every place, grouped in the order a customer asks, and nothing behind a More', () => {
     expect(nav(host(), () => {}).map((g) => [g.label, g.links.map((l) => l.label)])).toEqual([
       ['Work', ['New run', 'Projects', 'Issues']],
-      ['Make', ['Artifacts', 'Templates', 'Automations']],
+      ['Make', ['Library', 'Templates', 'Scheduled tasks']],
       ['Run', ['Machines', 'Environments']],
       ['Setup', ['Customize', 'Docs']],
     ])

@@ -1,5 +1,5 @@
 /**
- * The shelves — Artifacts and Templates — and the two questions an act asks
+ * The shelves — the Library's Sites and Templates — and the two questions an act asks
  * first (ask.tsx): a starter copied into a project, and published when the
  * org's code is in a workspace the platform made; a project renamed, made
  * public or private, and deleted, each refusal said where it was asked. One
@@ -71,7 +71,7 @@ const act = async (page: Page, project: string, row: string) => {
   await page.getByRole('menuitem', { name: new RegExp(`^${row}`) }).click()
 }
 
-test.describe('Artifacts', () => {
+test.describe('Sites', () => {
   test('projects sit under the month they were last edited or made, with the year when it is not this one', async ({ page }, info) => {
     await shelf(page)
     await page.goto('/-/artifacts')
@@ -195,18 +195,18 @@ test.describe('Artifacts', () => {
     world.slow = {}
     await page.getByRole('button', { name: 'New run', exact: true }).click()
     await expect(page).toHaveURL(/\/$/)
-    await via(page, 'Artifacts')
+    await via(page, 'Library')
     world.down['GET /v1/projects'] = 'Projects are resting'
     await via(page, 'Projects')
-    await via(page, 'Artifacts')
+    await via(page, 'Library')
     await expect(page.getByText('Projects are resting')).toBeVisible()
   })
 
-  test('a visitor who takes a starter is asked to sign in', async ({ page }) => {
+  test('a visitor is asked to sign in to see the library', async ({ page }) => {
     await serve(page, ({ path }) => (path === '/v1/templates' ? { json: { data: STARTERS } } : { status: 401, json: { detail: 'Sign in' } }))
     await mounted(page, { path: '-/artifacts', org: null, admin: false, person: null, signIn: true })
-    await expect(page.getByText('Sign in to see what your organization has built.')).toBeVisible()
-    await page.getByRole('button', { name: 'Start from Circle' }).click()
+    await expect(page.getByText('Sign in to see your library.')).toBeVisible()
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     await expect.poll(() => went(page)).toContain('sign in')
   })
 })

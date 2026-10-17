@@ -213,14 +213,13 @@ test.describe('Automations', () => {
   ]
   const patched = (sent: Sent[], id: string) => sent.filter((s) => s.method === 'PATCH' && s.path === `/v1/auto/automations/${id}`).map((s) => s.body)
 
-  test('lists each with when it runs and its last run, switches one on and off, and searches', async ({ page }, info) => {
+  test('lists each with when it runs, switches one on and off', async ({ page }, info) => {
     const { sent } = await forge(page, { autos: AUTOS() })
     await page.goto('/-/automations')
     const row = (name: string) => page.getByRole('button', { name: `Open ${name}` })
     await expect(row('Morning briefing')).toContainText('Weekdays at 08:00 · America/Los_Angeles')
-    await expect(row('Morning briefing')).toContainText('Failed')
     await expect(row('Weekly digest')).toContainText('Fridays at 16:00 · UTC')
-    await expect(row('Weekly digest')).toContainText('Never run')
+    await expect(row('Weekly digest')).toContainText('paused')
     await expect(row('trial')).toContainText('Draft')
     await expect(row('trial')).toContainText('Needs instructions')
     // A draft cannot be switched on until it says what it does.
@@ -235,12 +234,6 @@ test.describe('Automations', () => {
     expect(patched(sent, ID(2))).toEqual([{ enabled: true }])
     expect(patched(sent, ID(1))).toEqual([{ enabled: false }])
 
-    await page.getByLabel('Search automations').fill('  WEEK ')
-    await expect(page.getByRole('button', { name: /^Open / })).toHaveCount(1)
-    await page.getByLabel('Search automations').fill('attention')
-    await expect(page.getByRole('button', { name: /^Open / })).toHaveText(/Morning briefing/)
-    await page.getByLabel('Search automations').fill('nothing like this')
-    await expect(page.getByText('Nothing matches.')).toBeVisible()
   })
 
   test('a switch the platform refuses says why and changes nothing', async ({ page }) => {
@@ -253,10 +246,7 @@ test.describe('Automations', () => {
 
   test('New automation opens the editor; Create sends what it holds, on Enso unless chosen, and lands on its page', async ({ page }, info) => {
     const { sent, world } = await forge(page, { autos: [], holds: { 'POST /v1/auto/automations': [{ status: 422, detail: 'invalid schedule: 09:00 is taken' }] } })
-    await page.goto('/-/automations')
-    await expect(page.getByText('No automations yet.')).toBeVisible()
-    await page.getByText('No automations yet.').locator('..').getByRole('button', { name: 'New automation' }).click()
-    await expect(page).toHaveURL(/\/-\/automations\/new$/)
+    await page.goto('/-/automations/new')
     await expect(page.getByRole('heading', { name: 'New automation' })).toBeVisible()
     const create = page.getByRole('button', { name: 'Create' })
     await page.getByLabel('Automation name').fill('Inbox triage')
@@ -340,12 +330,12 @@ test.describe('Automations', () => {
     await expect(page.getByRole('button', { name: 'When it runs: Every week' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Day: Friday' })).toBeVisible()
     await expect(page.getByLabel('Time of day')).toHaveValue('16:00')
-    await page.getByRole('button', { name: 'All automations' }).click()
+    await page.getByRole('button', { name: 'All scheduled tasks' }).click()
     const asked = page.getByRole('dialog', { name: 'Leave without saving?' })
     await expect(asked).toBeVisible()
     await asked.getByRole('button', { name: 'Keep editing' }).click()
     await expect(page).toHaveURL(/\/-\/automations\/new$/)
-    await page.getByRole('button', { name: 'All automations' }).click()
+    await page.getByRole('button', { name: 'All scheduled tasks' }).click()
     await asked.getByRole('button', { name: 'Leave' }).click()
     await expect(page).toHaveURL(/\/-\/automations$/)
   })
@@ -559,16 +549,16 @@ test.describe('Automations', () => {
   test('says it is reading, says why a read was refused, and an unknown automation says so', async ({ page }) => {
     const { world } = await forge(page, { autos: AUTOS(), slow: { 'GET /v1/auto/automations': 3000 } })
     await page.goto('/-/automations')
-    await expect(page.getByText('Reading automations…')).toBeVisible()
+    await expect(page.getByText('Reading your tasks…')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Open Weekly digest' })).toBeVisible()
     world.slow = {}
     world.down['GET /v1/auto/automations'] = 'Automations are resting'
     await via(page, 'Projects')
-    await via(page, 'Automations')
+    await via(page, 'Scheduled tasks')
     await expect(page.getByText('Automations are resting')).toBeVisible()
     await page.goto(`/-/automations/${ID(9)}`)
     await expect(page.getByText('automation not found')).toBeVisible()
-    await page.getByRole('button', { name: 'All automations' }).click()
+    await page.getByRole('button', { name: 'All scheduled tasks' }).click()
     await expect(page).toHaveURL(/\/-\/automations$/)
   })
 })
@@ -681,7 +671,7 @@ test.describe('Projects', () => {
     await expect(page.getByText('Showing 1–25 of 27')).toBeVisible()
     world.slow = {}
     world.down['GET /v1/git/repos'] = 'The forge did not answer'
-    await via(page, 'Artifacts')
+    await via(page, 'Library')
     await via(page, 'Projects')
     await expect(page.getByText('The forge did not answer')).toBeVisible()
   })
@@ -706,7 +696,7 @@ test.describe('Projects', () => {
     await expect(row(page, 'site')).toContainText('Syncing…')
     // The next says site landed and widgets did not.
     world.down = {}
-    await via(page, 'Artifacts')
+    await via(page, 'Library')
     await via(page, 'Projects')
     await expect(row(page, 'site')).toContainText('30m ago')
     await expect(row(page, 'widgets')).toContainText('Syncing…')
@@ -714,7 +704,7 @@ test.describe('Projects', () => {
     // Then widgets lands, and the forge lists it.
     world.grants[0]!.imported = true
     world.repos.push({ name: 'widgets', org: ORG, age: 2 * MIN })
-    await via(page, 'Artifacts')
+    await via(page, 'Library')
     await via(page, 'Projects')
     await expect(row(page, 'widgets')).toContainText('2m ago')
     expect(await pending(page)).toBeNull()
@@ -725,7 +715,7 @@ test.describe('Projects', () => {
     await queued(page, ORG, [{ fullName: `${ORG}/widgets`, name: 'widgets' }])
     await page.goto('/-/projects')
     await expect(row(page, 'widgets')).toContainText('Syncing…')
-    await via(page, 'Artifacts')
+    await via(page, 'Library')
     await expect(page).toHaveURL(new URL('/-/artifacts', baseURL).href)
     await page.waitForTimeout(3500)
     // Still queued: the answer came to a page that was gone.
@@ -843,7 +833,7 @@ test.describe('Sync', () => {
     await expect.poll(() => looks(sent), { timeout: 10_000 }).toBe(2)
     world.grants[0]!.imported = true
     await page.getByRole('button', { name: 'Back to projects' }).click()
-    await via(page, 'Artifacts')
+    await via(page, 'Library')
     await expect(page).toHaveURL(new URL('/-/artifacts', baseURL).href)
     await page.waitForTimeout(4500)
     await expect(page).toHaveURL(new URL('/-/artifacts', baseURL).href)

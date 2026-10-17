@@ -465,6 +465,7 @@ describe('automations', () => {
     notify: true,
     postTo: [],
     enabled: true,
+    source: 'chat',
     draft: false,
     next: '2026-10-05T15:00:00Z',
     last: { id: 'run_1', status: 'succeeded', at: '2026-10-04T15:00:00Z', summary: 'Three meetings.' },
@@ -480,13 +481,13 @@ describe('automations', () => {
     expect(seen[0].headers.get('x-org-id')).toBe('hanzo')
     expect(rows).toHaveLength(2)
     expect(rows[0]).toEqual(ROW)
-    expect(rows[1]).toMatchObject({ id: 'flow_2', name: 'trial', draft: true, instructions: '', enabled: false, model: null, permissions: 'ask', last: null })
+    expect(rows[1]).toMatchObject({ id: 'flow_2', name: 'trial', draft: true, instructions: '', enabled: false, model: null, permissions: 'ask', last: null, source: 'dev' })
   })
 
   it('creates one with what the editor holds, and reads one by id', async () => {
     const seen = answer(201, ROW)
     const { create, automation } = await import('./auto.ts')
-    const d = { name: 'Morning brief', instructions: 'Summarize my day.', model: null, schedule: { kind: 'weekdays', at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask', notify: true, postTo: [] as string[], enabled: false } as const
+    const d = { name: 'Morning brief', instructions: 'Summarize my day.', model: null, schedule: { kind: 'weekdays', at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask', notify: true, postTo: [] as string[], enabled: false, source: 'dev' } as const
     expect((await create(T, d)).id).toBe('flow_1')
     expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/auto/automations', body: d })
     const one = answer(200, ROW)
@@ -496,7 +497,7 @@ describe('automations', () => {
 
   it('sends a change as only what changed, and switches by enabled alone', async () => {
     const { changes, save } = await import('./auto.ts')
-    const was = { name: 'Morning brief', instructions: 'Summarize my day.', model: 'zen5' as string | null, schedule: { kind: 'weekdays' as const, at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask' as const, notify: true, postTo: [] as string[], enabled: true }
+    const was = { name: 'Morning brief', instructions: 'Summarize my day.', model: 'zen5' as string | null, schedule: { kind: 'weekdays' as const, at: '08:00', tz: 'America/Los_Angeles' }, permissions: 'ask' as const, notify: true, postTo: [] as string[], enabled: true, source: 'dev' as const }
     expect(changes(was, { ...was })).toEqual({})
     expect(changes(was, { ...was, enabled: false })).toEqual({ enabled: false })
     expect(changes(was, { ...was, model: null, schedule: { kind: 'daily' as const, at: '09:00', tz: 'UTC' } })).toEqual({ model: null, schedule: { kind: 'daily', at: '09:00', tz: 'UTC' } })

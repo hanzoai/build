@@ -68,6 +68,8 @@ const forge: Platform = (page) => stub.forge(page)
 const org: Platform = (page) => stub.org(page)
 const you: Platform = (page) => stub.you(page)
 const rail: Platform = (page) => stub.rail(page)
+const library: Platform = (page) => stub.library(page)
+const scheduled: Platform = (page) => stub.scheduled(page)
 const customize: Platform = async (page) => {
   await stub.catalogue(page)
   return stub.customize(page)
@@ -79,11 +81,11 @@ const customize: Platform = async (page) => {
  * added there and not here does not compile.
  */
 const SCREENS: Record<Screen, [Platform, RegExp]> = {
-  automations: [forge, /Work that runs itself in this organization/],
+  automations: [scheduled, /What runs without you watching/],
   sync: [forge, /Select repositories/],
   projects: [forge, /repositories on the forge\. Open one to work on it/],
   issues: [forge, /Work across every project/],
-  artifacts: [rail, /What this organization has built/],
+  artifacts: [library, /Lighthouse at dawn/],
   templates: [rail, /Start from a working app/],
   mcp: [customize, /Hanzo.s own servers/],
   plans: [org, /Plans that grow with you/],

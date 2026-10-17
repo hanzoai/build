@@ -967,3 +967,160 @@ export async function visitor(page: Page) {
     return { status: 401, json: { status: 401, title: 'Unauthorized', detail: 'Sign in to use this.' } }
   })
 }
+
+// The Library and Scheduled tasks: what you made, and what runs without you watching.
+
+const lib = (n: number) => `lib_${String(n).padStart(32, '0')}`
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+/** Noon `days` days ago, local: a day's section whatever the hour the test runs. */
+const noon = (days: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  d.setHours(12, 0, 0, 0)
+  return d.toISOString()
+}
+/** A picture for a tile: a gradient, so a screenshot reads as a library and not as grey squares. */
+const picture = (a: string, b: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="512" height="512" fill="url(#g)"/><circle cx="360" cy="150" r="70" fill="#fff" opacity=".35"/></svg>`
+const SIGNED = 'https://s3.hanzo.ai/hanzo-library'
+const ITEM = (n: number, o: Record<string, unknown>) => ({
+  id: lib(n),
+  kind: 'image',
+  source: 'chat',
+  name: `item-${n}`,
+  mime: 'image/png',
+  bytes: 240_000,
+  width: 1024,
+  height: 1024,
+  seconds: 0,
+  pages: 0,
+  owner: `${ORG}/dave`,
+  mine: true,
+  shared: false,
+  project: '',
+  ref: 'thread_1',
+  origin: '/chat?thread=thread_1',
+  url: `${SIGNED}/${n}?sig=1`,
+  download: `${SIGNED}/${n}?sig=2`,
+  preview: '',
+  expires: hoursAgo(-1),
+  // Today's, minutes apart and newest first: midnight cannot split them.
+  created: new Date(Date.now() - n * 1000).toISOString(),
+  updated: new Date(Date.now() - n * 1000).toISOString(),
+  ...o,
+})
+
+/** What Dave made: Chat's pictures, a Studio poster and its video, Dev's report and patch, a workflow's summary, and one a colleague shared. */
+export const ITEMS = () => [
+  ITEM(1, { name: 'Lighthouse at dawn.png' }),
+  ITEM(2, { name: 'Launch poster.png', source: 'studio', ref: 'srun_1', origin: '/studio?run=srun_1', width: 1080, height: 1350 }),
+  ITEM(3, { name: 'Teaser.mp4', kind: 'video', source: 'studio', mime: 'video/mp4', bytes: 8_400_000, seconds: 12, ref: 'srun_1', origin: '/studio?run=srun_1', preview: `${SIGNED}/3-still?sig=3` }),
+  ITEM(4, { name: 'report.md', kind: 'document', source: 'dev', mime: 'text/markdown', bytes: 3_200, ref: SESSION, origin: `/dev/${SESSION}` }),
+  ITEM(5, { name: 'changes.patch', kind: 'code', source: 'dev', mime: 'text/x-diff', bytes: 9_800, ref: SESSION, origin: `/dev/${SESSION}` }),
+  ITEM(30, { name: 'Monday summary.md', kind: 'document', source: 'workflow', mime: 'text/markdown', bytes: 1_400, ref: 'run_7', origin: '/dev/-/automations/flow_1', created: noon(1), updated: noon(1) }),
+  ITEM(31, { name: 'Brand palette.png', mine: false, shared: true, owner: `${ORG}/erin`, created: noon(1), updated: noon(1) }),
+  ITEM(60, { name: 'Moodboard.png', created: noon(40), updated: noon(40) }),
+]
+
+const COLORS = [['#ff7a59', '#8b5cf6'], ['#22d3ee', '#2563eb'], ['#f59e0b', '#ef4444'], ['#10b981', '#0ea5e9'], ['#a78bfa', '#f472b6']]
+
+/** The Library's platform: Dev's items, each answering its own read, change and delete, and the bytes behind them. */
+export async function library(page: Page, seed = ITEMS()) {
+  const items = seed.map((x) => ({ ...x }))
+  const sent = await signIn(page, ({ method, path, query, body }) => {
+    if (path === '/v1/library' && method === 'GET') {
+      const q = new URLSearchParams(query)
+      const rows = items.filter(
+        (x) =>
+          (!q.get('kind') || x.kind === q.get('kind')) &&
+          (!q.get('source') || x.source === q.get('source')) &&
+          (!q.get('q') || String(x.name).toLowerCase().includes(String(q.get('q')).toLowerCase())) &&
+          (q.get('scope') !== 'mine' || x.mine) &&
+          (q.get('scope') !== 'shared' || !x.mine),
+      )
+      return { json: { data: rows, next: '' } }
+    }
+    const id = path.match(/^\/v1\/library\/(lib_[0-9]{32})$/)?.[1]
+    const i = items.findIndex((x) => x.id === id)
+    if (id && i === -1) return { status: 404, json: { status: 404, title: 'Not Found', detail: 'no such item' } }
+    if (id && method === 'GET') return { json: items[i] }
+    if (id && method === 'PATCH') {
+      items[i] = { ...items[i]!, ...(body as object) }
+      return { json: items[i] }
+    }
+    if (id && method === 'DELETE') {
+      items.splice(i, 1)
+      return { json: {} }
+    }
+    if (path === '/v1/projects') return { json: PROJECTS }
+    return undefined
+  })
+  await page.route(`${SIGNED}/**`, (r) => {
+    const n = Number(new URL(r.request().url()).pathname.split('/').pop()!.split('-')[0]) || 1
+    if (r.request().url().includes('/4?') || r.request().url().includes('/5?') || r.request().url().includes('/30?'))
+      return r.fulfill({ contentType: 'text/plain', body: '# Report\n\nThree things changed this week.\n' })
+    const [a, b] = COLORS[n % COLORS.length]!
+    return r.fulfill({ contentType: 'image/svg+xml', body: picture(a!, b!) })
+  })
+  return { sent, items }
+}
+
+const flow = (n: number) => `flow_${String(n).padStart(32, '0')}`
+const TASK = { project: null, model: null, permissions: 'ask', notify: true, postTo: [], draft: false, last: null, created: hoursAgo(48), updated: hoursAgo(2) }
+export const TASKS = () => [
+  { ...TASK, id: flow(1), name: 'Monday summary', instructions: 'Summarize what changed in my repositories this week.', schedule: { kind: 'weekly', day: 'mon', at: '09:00', tz: 'America/Los_Angeles' }, enabled: true, source: 'chat', next: hoursAgo(-60) },
+  { ...TASK, id: flow(2), name: 'Check the build every 5 minutes', instructions: 'Is main green?', schedule: { kind: 'cron', cron: '*/5 * * * *', tz: 'UTC' }, enabled: true, source: 'dev', next: hoursAgo(-0.05) },
+  { ...TASK, id: flow(3), name: 'Weekly digest', instructions: 'Summarize the week.', schedule: { kind: 'weekly', day: 'fri', at: '16:00', tz: 'UTC' }, enabled: false, source: 'workflow' },
+]
+export const JOBS = () => [
+  { id: 'run_3', product: 'chat', kind: 'automation', title: 'Monday summary', state: 'running', status: 'running', progress: null, automation: flow(1), session: SESSION, ref: 'run_3', origin: `/dev/-/automations/${flow(1)}`, summary: '', error: '', outputs: [], cost: null, started: hoursAgo(0.02), finished: null, updated: hoursAgo(0.01) },
+  { id: 'job_1', product: 'studio', kind: 'render', title: 'Launch poster', state: 'running', status: 'rendering', progress: 0.62, automation: null, session: null, ref: 'srun_1', origin: '/studio?run=srun_1', summary: '', error: '', outputs: [], cost: 18, started: hoursAgo(0.1), finished: null, updated: hoursAgo(0.01) },
+  { id: 'run_2', product: 'dev', kind: 'automation', title: 'Check the build every 5 minutes', state: 'succeeded', status: 'succeeded', progress: null, automation: flow(2), session: SESSION, ref: 'run_2', origin: '', summary: 'Main is green: 412 tests passed.', error: '', outputs: [lib(4)], cost: 3, started: hoursAgo(1), finished: hoursAgo(0.98), updated: hoursAgo(0.98) },
+  { id: 'job_0', product: 'studio', kind: 'video', title: 'Teaser', state: 'failed', status: 'failed', progress: null, automation: null, session: null, ref: 'srun_0', origin: '/studio?run=srun_0', summary: '', error: 'The video model is not answering right now.', outputs: [], cost: 0, started: hoursAgo(26), finished: hoursAgo(25.9), updated: hoursAgo(25.9) },
+]
+
+/** Scheduled's platform: Dave's tasks, what ran, words read as a schedule, and the live stream with one change on it. */
+export async function scheduled(page: Page, seed: { tasks?: Record<string, unknown>[]; jobs?: Record<string, unknown>[] } = {}) {
+  const tasks = (seed.tasks ?? TASKS()).map((x) => ({ ...x }))
+  const jobs = (seed.jobs ?? JOBS()).map((x) => ({ ...x }))
+  const sent = await signIn(page, ({ method, path, body }) => {
+    const b = (body ?? {}) as Record<string, unknown>
+    if (path === '/v1/auto/automations' && method === 'GET') return { json: { data: tasks } }
+    if (path === '/v1/auto/automations' && method === 'POST') {
+      const made = { ...TASK, id: flow(9), ...b, next: hoursAgo(-24), created: hoursAgo(0), updated: hoursAgo(0) }
+      tasks.unshift(made)
+      return { status: 201, json: made }
+    }
+    const id = path.match(/^\/v1\/auto\/automations\/(flow_[0-9]{32})(\/run)?$/)
+    if (id && method === 'PATCH') {
+      const i = tasks.findIndex((x) => x.id === id[1])
+      tasks[i] = { ...tasks[i]!, ...b }
+      return { json: tasks[i] }
+    }
+    if (id && id[2] && method === 'POST') return { status: 201, json: { run: { id: 'run_4', status: 'running' } } }
+    if (id && method === 'DELETE') {
+      tasks.splice(tasks.findIndex((x) => x.id === id[1]), 1)
+      return { json: {} }
+    }
+    if (path === '/v1/auto/jobs') return { json: { data: jobs } }
+    if (path === '/v1/auto/cron') {
+      const text = String(b.text ?? '').toLowerCase()
+      if (text.includes('5 minutes')) return { json: { schedule: { kind: 'cron', cron: '*/5 * * * *', tz: b.tz }, says: 'Every 5 minutes', next: hoursAgo(-0.05) } }
+      if (text.includes('monday')) return { json: { schedule: { kind: 'weekly', day: 'mon', at: '09:00', tz: b.tz }, says: 'Mondays at 09:00', next: hoursAgo(-60) } }
+      return { status: 422, json: { status: 422, title: 'Unprocessable', detail: 'That is not a time I can read.' } }
+    }
+    if (path === '/v1/auto/events') {
+      const done = { ...jobs[0], state: 'succeeded', status: 'succeeded', summary: 'Three repositories changed; one needs you.', outputs: [lib(30)], cost: 4, finished: hoursAgo(0) }
+      return { text: `: open\n\nevent: job\ndata: ${JSON.stringify(done)}\n\n`, type: 'text/event-stream' }
+    }
+    if (path === '/v1/models') return { json: { data: [{ id: 'enso-auto', name: 'Enso', family: 'enso', class: 'ours' }, { id: 'zen5', name: 'Zen5', family: 'zen', class: 'ours' }] } }
+    const lib_ = path.match(/^\/v1\/library\/(lib_[0-9]{32})$/)?.[1]
+    if (lib_) {
+      const x = ITEMS().find((i) => i.id === lib_)
+      return x ? { json: x } : { status: 404, json: { status: 404, title: 'Not Found', detail: 'no such item' } }
+    }
+    return undefined
+  })
+  await page.route(`${SIGNED}/**`, (r) => r.fulfill({ contentType: 'image/svg+xml', body: picture('#22d3ee', '#2563eb') }))
+  return { sent, tasks, jobs }
+}

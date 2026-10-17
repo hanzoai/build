@@ -250,6 +250,7 @@ describe('automations', () => {
       notify: false,
       postTo: [],
       enabled: false,
+      source: 'dev',
       draft: false,
       next: null,
       last: null,
@@ -262,11 +263,11 @@ describe('automations', () => {
     answer(200, { automations: [] })
     expect(await auto.automations(T)).toEqual([])
     answer(200, { data: [{ id: 'run_1', status: 'refused', transcript: 'https://hanzo.ai/dev?run=nope' }, { status: 'failed' }] })
-    expect(await auto.runs(T, 'flow_1')).toEqual([{ id: 'run_1', status: 'refused', at: '', finished: null, summary: '', session: null, draft: '', posts: [] }])
+    expect(await auto.runs(T, 'flow_1')).toEqual([{ id: 'run_1', status: 'refused', at: '', finished: null, summary: '', session: null, draft: '', posts: [], outputs: [] }])
   })
 
   it('says when a write came back without an id, and escapes the id it addresses', async () => {
-    const d = { name: 'n', instructions: 'i', model: null, schedule: { kind: 'manual' as const }, permissions: 'ask' as const, notify: false, postTo: [], enabled: true }
+    const d = { name: 'n', instructions: 'i', model: null, schedule: { kind: 'manual' as const }, permissions: 'ask' as const, notify: false, postTo: [], enabled: true, source: 'dev' as const }
     answer(201, {})
     await expect(auto.create(T, d)).rejects.toThrow('came back without an id')
     const seen = answer(200, {})

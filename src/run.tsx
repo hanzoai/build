@@ -23,7 +23,7 @@
  * the run. Share opens its story to the public build route.
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
-import { ChevronDown, ChevronRight, Copy, ExternalLink, GitPullRequest, Globe, Pencil, Share } from '@hanzogui/lucide-icons-2'
+import { ChevronDown, ChevronRight, Clock, Copy, ExternalLink, GitPullRequest, Globe, Pencil, Share } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type DropdownMenuProps } from '@hanzo/ui'
 import { Steer, type Command } from '@hanzo/ui/agents'
 import { Failure } from '@hanzo/ui/chat'
@@ -47,6 +47,7 @@ import { measure, Prompt, useEar } from './prompt.tsx'
 import { useSpoken } from './voice.ts'
 import { speaker, type Artifact } from './reply.tsx'
 import { PanelToggle } from './panel.tsx'
+import { schedule } from './scheduled.tsx'
 import { PAGE, useDeck, useKey, usePanel } from './tabs.ts'
 import { compose, Files, pick, type Attached } from './tools.tsx'
 import { Transcript } from './transcript.tsx'
@@ -330,6 +331,21 @@ export function Run({ id }: { id: string }) {
         ]
       : []),
     { key: 'copy', label: copied === 'id' ? 'Copied' : 'Copy run id', icon: <Copy size={16} />, description: id, onSelect: () => void copy('id', id) },
+    // What this run was asked, as a task that runs again on a schedule: the ask it opened with.
+    ...(signed && record
+      ? [
+          {
+            key: 'schedule',
+            label: 'Schedule this',
+            icon: <Clock size={16} />,
+            description: 'Run it again on a schedule',
+            onSelect: () => {
+              const first = shown.find((c) => c.kind === 'said' && c.who === 'person')
+              schedule(first && 'text' in first ? first.text : headline(record.title, record.repo), host.go)
+            },
+          },
+        ]
+      : []),
   ]
   // Sharing opens the public build route, which is addressed by the org and the project a run built.
   const link = record?.published ? story(t, record.org || host.org, record.project) : ''

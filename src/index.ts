@@ -18,6 +18,10 @@
  * which loads in Node without the components.
  */
 export { Builder } from './builder.tsx'
+export { Library, Outputs, Preview, Thumb, want } from './library.tsx'
+export { SOURCE, type Item, type Kind as ItemKind, type Source } from './api/library.ts'
+export { Scheduled, schedule } from './scheduled.tsx'
+export { Editor } from './automations.tsx'
 export { nav, NEW, type Group } from './nav.tsx'
 export { DevSection, DOTS, useSessions } from './section.tsx'
 export { HostProvider } from './host.tsx'

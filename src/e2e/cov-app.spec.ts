@@ -379,13 +379,13 @@ test.describe('a host that draws its own rail', () => {
     await page.goto(`${HOST}?label=Dev`)
     const surface = await page.evaluate((at) => import(at).then((m: object) => Object.keys(m).sort()), '/src/index.ts')
     // What Chat draws the same way (@hanzo/rooms imports it) is exported beside the builder.
-    expect(surface).toEqual(['Builder', 'Credits', 'DOTS', 'DevSection', 'EFFORTS', 'FIRST', 'GAP', 'Grip', 'HostProvider', 'MEASURE', 'Meter', 'NEW', 'PAGE', 'PLACES', 'Page', 'Panel', 'PanelToggle', 'Plan', 'Prompt', 'ROUND', 'Reply', 'SEPARATE', 'SESSION', 'SLUG', 'Served', 'Slack', 'Title', 'Tune', 'Who', 'address', 'administers', 'artifacts', 'blob', 'catalog', 'cut', 'href', 'keep', 'kept', 'kind', 'label', 'lead', 'left', 'measure', 'name', 'nameOf', 'nav', 'parse', 'path', 'prompt', 'reasons', 'renders', 'route', 'rows', 'said', 'share', 'speakable', 'speaker', 'spent', 'useCatalog', 'useChoice', 'useDeck', 'useEar', 'useKey', 'useMind', 'usePanel', 'useSessions', 'useShown', 'useStanding', 'useWho', 'ways', 'when'])
+    expect(surface).toEqual(['Builder', 'Credits', 'DOTS', 'DevSection', 'EFFORTS', 'Editor', 'FIRST', 'GAP', 'Grip', 'HostProvider', 'Library', 'MEASURE', 'Meter', 'NEW', 'Outputs', 'PAGE', 'PLACES', 'Page', 'Panel', 'PanelToggle', 'Plan', 'Preview', 'Prompt', 'ROUND', 'Reply', 'SEARCH', 'SEPARATE', 'SESSION', 'SLUG', 'SOURCE', 'Scheduled', 'Served', 'Slack', 'Summary', 'Thumb', 'Title', 'Tune', 'Who', 'address', 'administers', 'artifacts', 'blob', 'catalog', 'cut', 'destination', 'frames', 'href', 'keep', 'kept', 'kind', 'kinds', 'label', 'lead', 'left', 'located', 'measure', 'name', 'nameOf', 'nav', 'parse', 'path', 'prompt', 'reasons', 'renders', 'route', 'rows', 'said', 'schedule', 'share', 'speakable', 'speaker', 'spent', 'useCatalog', 'useChoice', 'useDeck', 'useEar', 'useKey', 'useKinds', 'useMind', 'usePanel', 'useSessions', 'useShown', 'useStanding', 'useWho', 'want', 'ways', 'when'])
 
     const r = rail(page)
     await expect(r.getByText('Dev', { exact: true })).toBeVisible()
     const rows = await r.locator('[data-slot="sidebar-item"]').allInnerTexts()
     // Every place in view, grouped as every rail groups them (nav.tsx), then the host's rows and the runs.
-    expect(rows).toEqual(['New run', 'Projects', 'Issues', 'Artifacts', 'Templates', 'Automations', 'Machines', 'Environments', 'Customize', 'Docs', 'The host’s own row', 'universe: Add the widget', 'Untitled run'])
+    expect(rows).toEqual(['New run', 'Projects', 'Issues', 'Library', 'Templates', 'Scheduled tasks', 'Machines', 'Environments', 'Customize', 'Docs', 'The host’s own row', 'universe: Add the widget', 'Untitled run'])
     for (const label of ['Work', 'Make', 'Run', 'Setup']) await expect(r.getByText(label, { exact: true })).toBeVisible()
     await expect(row(page, 'universe: Add the widget').locator('[data-status]')).toHaveAttribute('data-status', 'running')
     // A status the rail has no dot for is idle.
@@ -436,9 +436,9 @@ test.describe('a host that draws its own rail', () => {
     await runs(page)
     await page.goto(`${HOST}?label=Dev`)
     const at = [
-      ['Automations', '-/automations'],
+      ['Scheduled tasks', '-/automations'],
       ['Projects', '-/projects'],
-      ['Artifacts', '-/artifacts'],
+      ['Library', '-/artifacts'],
       ['Templates', '-/templates'],
       ['Machines', '-/settings/machines'],
       ['Environments', '-/settings/environments'],

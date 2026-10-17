@@ -118,13 +118,14 @@ One of each, shared with Chat (@hanzo/rooms imports them):
 |---|---|
 | `''` | New — the empty state and the composer |
 | `sess_<32 hex>` | one run, live |
-| `-/automations` | repeating work, read from `/v1/auto/flows` |
+| `-/automations` | Scheduled tasks: your tasks, then Activity, every run across products |
+| `-/automations/<id>` | one task's editor and runs; `new` writes one |
 | `-/customize` · `-/customize/connectors` · `/plugins` · `/agents` | Customize: skills, connectors, plugins, agents |
 | `-/mcp` | Connectors → Browse with the fleet's native MCP servers listed |
 | `-/projects` | the org's projects: its repositories on the forge |
 | `-/sync` | link repositories from GitHub onto the forge |
 | `-/issues` | every project's issues, merged: the forge's and the task index's |
-| `-/artifacts` | what the org has built |
+| `-/artifacts` | the Library: everything you made in Chat, Dev and Studio; `?item=<id>` opens one; the org's sites at its foot |
 | `-/templates` | the public starters |
 | `-/plans` | the plans this brand sells, and the move to another |
 | `-/settings/<section>` | Billing, Usage, Members, Integrations, Notifications, … |
@@ -150,7 +151,7 @@ project it is for. A board's key is never taken for a repository.
 **The rail** (this page, or `rail` left on). At the top, the mark. Signed in to an organization,
 that spot is the organization switcher: the org, and the projects under it.
 New, then every place in view (nav.tsx) — Work: Projects, Issues; Make:
-Artifacts, Templates, Automations; Run: Machines, Environments; Setup:
+Library, Templates, Scheduled tasks; Run: Machines, Environments; Setup:
 Customize, Docs — then the org's coding runs newest first with a live status
 dot. Nothing waits behind a More. At the foot, a card offering Hanzo in Slack
 (dismissed once, gone in this browser) and the account, whose menu holds the
@@ -162,10 +163,31 @@ sits beside a plan: credits live in Billing. Collapse is an explicit
 toggle kept in this browser. A host with its own rail draws `DevSection` there
 instead.
 
-**Artifacts.** A few starters to make something new from, each copied into a
-project as Templates does, then every project under the month it was last
-edited, public or private, with rename, visibility and delete. A project belongs
-to the org and names no author, so there is no Yours or Shared with you.
+**Library.** Everything you made — Chat's pictures and files, Dev's patches and
+reports, Studio's posters and videos, a workflow's outputs — newest first under
+Today, Yesterday and the month, as a grid or a list, narrowed by kind, by the
+product that made it and by whose (yours, or what a colleague shared). A tile
+opens its item in the side panel (`Panel`, one tab per item; a sheet on a
+phone), read fresh so its signed URLs are live. Each item opens where it was
+made, downloads, is shared with the org or not, copies its link, is renamed,
+moved to a project, used in Studio or Chat, or deleted; what a colleague shared
+offers only what a reader may do. An item is its person's, so this list splits
+yours from shared, where the sites beneath it do not.
+
+**Sites**, at the Library's foot. A few starters to make something new from,
+each copied into a project as Templates does, then every deployed site under the
+month it was last edited, public or private, with rename, visibility and
+delete. A site belongs to the org and names no author.
+
+**Scheduled tasks.** Your tasks — prompts on a schedule from Chat and Dev, and
+workflows — each with when it runs next, where it came from, a switch that
+pauses and resumes it, and Run now, Edit and Delete; then Activity, every run
+across products (a task's, Dev's background runs, Studio's renders) with its
+state, how long it took, its cost and what it made, kept live by
+`/v1/auto/events`. A run opens with its summary or error, its log (the Dev
+run), its outputs as Library tiles and its cost. New task takes the schedule in
+plain words, which `/v1/auto/cron` reads back before anything is made. A Dev
+run's menu offers Schedule this, which opens New task with the run's ask.
 
 **Settings, Code.** Environments: every codebase that has one, opened in the
 same editor a run shows, forgotten by an org admin. Machines: `hanzo login` and
@@ -259,7 +281,9 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/agent/sessions?kind=coding&status=&after=` | Find, by status, paged |
 | `GET`/`POST /v1/agent/targets` · `PATCH`/`DELETE …/{id}` · `POST …/{id}/key` | the org's machines, and a machine's claim key |
 | `GET`/`POST /v1/account/keys` · `DELETE …/{id}` | your API keys, as many as you need; one revoked at a time |
-| `GET /v1/auto/flows` · `POST /v1/auto/flows` · `POST /v1/auto/flows/{id}/enable` | automations |
+| `GET`/`POST /v1/auto/automations` · `GET`/`PATCH`/`DELETE …/{id}` · `POST …/{id}/run` · `GET …/{id}/runs` | Scheduled tasks, and one task's editor |
+| `GET /v1/auto/jobs` · `…/{id}` · `GET /v1/auto/events` (SSE over fetch) · `POST /v1/auto/cron` | Activity, live, and a schedule from plain words |
+| `GET /v1/library` · `GET`/`PATCH`/`DELETE /v1/library/{id}` · `POST /v1/library` | the Library |
 | `GET /v1/environment` · `GET`/`PUT`/`DELETE /v1/environment/{repo}` · `PUT`/`DELETE …/secrets/{name}` | a codebase's environment |
 | `GET /v1/agent/coding/{session}/changes` · `/tree` · `/blob` | what a run pushed, and its branch's files, from the forge |
 | `POST /v1/sandbox/{id}/screen/ticket` · `…/terminal/ticket` | the run's desktop and shell, framed with a single-use ticket |
@@ -270,7 +294,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/task/projects` · `GET /v1/task/board` · `GET /v1/task/projects/{key}/issues` | boards, and every issue and pull request: the forge's and the task index's |
 | `GET /v1/provider/github/repos` · `…/{owner}/{repo}/branches` | kept for a host that still asks GitHub |
 | `POST /v1/provider/github/user/connect` | connect a person's GitHub |
-| `GET /v1/projects` · `PATCH`/`DELETE /v1/projects/{slug}` · `POST /v1/projects/fork` · `GET /v1/templates` | artifacts, templates |
+| `GET /v1/projects` · `PATCH`/`DELETE /v1/projects/{slug}` · `POST /v1/projects/fork` · `GET /v1/templates` | sites, templates |
 | `GET /v1/git/repos/{name}/tree` · `/blob` | Files and Code |
 | `POST /v1/platform/apps` · `GET /v1/platform/builds` | Add to project, Publish |
 | `POST /v1/mcp` | the native MCP servers, `tools/list` |
@@ -309,7 +333,9 @@ src/
   index.ts      the library surface
   builder.tsx   the rail and the pane the address names
   landing.tsx   New
-  forge.tsx     Automations, Projects, Issues
+  forge.tsx     Projects, Issues, and the screens it hands on
+  library.tsx   the Library; api/library.ts its wire
+  scheduled.tsx Scheduled tasks; activity.ts its words; automations.tsx one task's editor
   merge.ts      what is the same project and the same issue, which repository an issue is for
   run.tsx       one run
   transcript.tsx  a run's transcript, as cards
@@ -325,7 +351,7 @@ src/
   files.tsx     a run's files and artifacts
   environment.tsx a codebase's environment
   project.tsx   a project's workspace
-  shelf.tsx     Artifacts and Templates
+  shelf.tsx     Sites and Templates
   nav.tsx       the places, once, for every rail
   customize/    Customize: the shell, then one file per tab
   publish.tsx   Add to project / Publish
