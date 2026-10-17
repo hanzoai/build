@@ -140,5 +140,17 @@ test.describe('pinning', () => {
     await unpin.click()
     await expect(p.getByRole('button', { name: /^Close / })).toBeVisible()
   })
+
+  test('any tab pins from its own menu, a right press on it, and closes from there too', async ({ page: p }) => {
+    await open(p, { at: '/' })
+    const strip = p.getByRole('tablist', { name: 'Tabs' })
+    await strip.getByRole('tab').first().click({ button: 'right' })
+    await p.getByRole('menuitem', { name: 'Pin tab' }).click()
+    await expect(p.getByRole('button', { name: /^Unpin / })).toBeVisible()
+    await strip.getByRole('tab').first().click({ button: 'right' })
+    await expect(p.getByRole('menuitem', { name: 'Unpin tab' })).toBeVisible()
+    await p.getByRole('menuitem', { name: 'Close tab' }).click()
+    await expect(strip.getByRole('tab')).toHaveCount(0)
+  })
 })
 

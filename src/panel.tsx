@@ -22,6 +22,11 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Maximize2, Minus, MoreHorizontal, Pin, Plus, RotateCcw, RotateCw, SquarePlus, X } from '@hanzogui/lucide-icons-2'
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -623,10 +628,31 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
 
 const DRAG = 'text/x-hanzo-tab'
 
-/** One tab in the strip: its mark, its title, and its cross, or its pin when it is pinned. */
+/**
+ * One tab in the strip: its mark, its title, and its cross, or its pin when it
+ * is pinned. Its own menu (a right press, or a long press on touch) pins it or
+ * lets it go, and closes it, whatever kind it is.
+ */
 function Leaf({ tab, on, side, index, label, icon }: { tab: Tab; on: boolean; side: Deck; index: number; label: string; icon: ReactNode }) {
   return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <Strip tab={tab} on={on} side={side} index={index} label={label} icon={icon} />
+      </ContextMenuTrigger>
+      <ContextMenuContent minW={180} aria-label={`${label} tab`}>
+        <ContextMenuItem onSelect={() => (tab.pinned ? side.unpin(tab.id) : side.pin(tab.id))}>{tab.pinned ? 'Unpin tab' : 'Pin tab'}</ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => side.shut(tab.id)}>Close tab</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+/** The tab itself, as the strip draws it. */
+function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: boolean; side: Deck; index: number; label: string; icon: ReactNode }) {
+  return (
     <XStack
+      {...rest}
       data-slot="side-tab"
       data-tab={tab.id}
       items="center"
