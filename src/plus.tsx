@@ -166,6 +166,8 @@ export function Plus(p: PlusProps) {
   const media = useMedia()
   const wide = media.sm
   const [open, setOpen] = useState(false)
+  // The shelf open beside the menu.
+  const [sub, setSub] = useState<string | null>(null)
   const close = () => setOpen(false)
   const shelves = useMemo(() => SHELVES.filter((s) => p[s.key as Key]), [p])
   const switches = [
@@ -189,13 +191,16 @@ export function Plus(p: PlusProps) {
       {p.upload && shelves.length ? <DropdownMenuSeparator /> : null}
       {shelves.map((s) =>
         wide ? (
-          <DropdownMenuSub key={s.key}>
+          <DropdownMenuSub key={s.key} open={sub === s.key} onOpenChange={(o) => setSub(o ? s.key : sub === s.key ? null : sub)}>
             <DropdownMenuSubTrigger data-slot={`plus-${s.key}`}>
               <Line icon={s.icon} label={s.label} />
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent minW={200} maxW={340} maxH={420} style={{ overflowY: 'auto' }}>
+            {/* Drawn only while open: a closed shelf stays laid out under the menu, and its rows would take its clicks. */}
+            {sub === s.key ? (
+            <DropdownMenuSubContent minW={200} maxW={340} maxH={420} pointerEvents="auto" style={{ overflowY: "auto" }}>
               <Contents shelf={p[s.key as Key]!} name={s.label} close={close} />
             </DropdownMenuSubContent>
+            ) : null}
           </DropdownMenuSub>
         ) : (
           <DropdownMenuItem key={s.key} page={s.key} data-slot={`plus-${s.key}`}>

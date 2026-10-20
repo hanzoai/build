@@ -143,6 +143,8 @@ export interface DictationProps {
 /** The mic and its chevron, one control on the composer's row. */
 export function Dictation({ voice, disabled = false, narrow = false, language = null, onLanguage }: DictationProps) {
   const [open, setOpen] = useState(false)
+  // The Language list, drawn only while open (see plus.tsx).
+  const [lang, setLang] = useState(false)
   const { inputs, allowed, using } = useInputs(open)
   const [device, setDevice] = useState<string | null>(() => (typeof window === 'undefined' ? null : kept()))
   const spoken = LANGUAGES.find((l) => l.id === language)
@@ -218,7 +220,7 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
                   Dictation settings
                 </SizableText>
               </DropdownMenuLabel>
-              <DropdownMenuSub>
+              <DropdownMenuSub open={lang} onOpenChange={setLang}>
                 <DropdownMenuSubTrigger data-slot="dictation-language">
                   <XStack flex={1} items="center" gap={8}>
                     <SizableText fontSize={14} color="$ink" flex={1}>
@@ -229,7 +231,8 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
                     </SizableText>
                   </XStack>
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent minW={160}>
+                {lang ? (
+                <DropdownMenuSubContent minW={160} pointerEvents="auto">
                   {[{ id: '', label: 'Auto' }, ...LANGUAGES].map((l) => (
                     <DropdownMenuItem key={l.id || 'auto'} onSelect={() => onLanguage(l.id || null)}>
                       <XStack flex={1} items="center" gap={8}>
@@ -241,6 +244,7 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuSubContent>
+                ) : null}
               </DropdownMenuSub>
             </>
           ) : null}
