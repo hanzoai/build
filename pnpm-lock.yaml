@@ -22,8 +22,8 @@ catalogs:
       specifier: 0.1.4
       version: 0.1.4
     '@hanzo/voice':
-      specifier: 0.1.18
-      version: 0.1.18
+      specifier: 0.1.19
+      version: 0.1.19
     '@playwright/test':
       specifier: 1.63.0
       version: 1.63.0
@@ -107,7 +107,7 @@ importers:
         version: 0.1.4(react@19.2.8)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(terser@5.51.2))
       '@hanzo/voice':
         specifier: 'catalog:'
-        version: 0.1.18(react@19.2.8)
+        version: 0.1.19(react@19.2.8)
       '@hanzogui/lucide-icons-2':
         specifier: 8.3.5
         version: 8.3.5(react-dom@19.2.8(react@19.2.8))(react-native-svg@15.15.5(react-native@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8))(react@19.2.8)
@@ -730,14 +730,6 @@ packages:
       react:
         optional: true
 
-  '@hanzo/event@0.3.40':
-    resolution: {integrity: sha512-D/qmUHbrTZpbShD4CSvKUzeUTjjIu6LSHQHKZNZLtwfd9Fap6gMGo+JZGHX0sxKimtmRnZDMz6aG+LAmUbn3qQ==}
-    peerDependencies:
-      react: '>=19.2.8'
-    peerDependenciesMeta:
-      react:
-        optional: true
-
   '@hanzo/event@0.3.58':
     resolution: {integrity: sha512-AWOqrV4ijzCLKDBLFtzLATrZRSHxp0jg25ysvesGbThMW5U9ud1AfeF3vgNreITrzMlOt/OykyNlwEVYGkQasw==}
     peerDependencies:
@@ -869,8 +861,8 @@ packages:
     peerDependencies:
       vite: '>=8'
 
-  '@hanzo/voice@0.1.18':
-    resolution: {integrity: sha512-LL36nL8Ae+XSd4rBUGZHbHLNtw81KTrUUA6h/6aT34FkwqmewvaCw3/Pvjjw7vo7qE85MuAewh7AxacWKhugCA==}
+  '@hanzo/voice@0.1.19':
+    resolution: {integrity: sha512-YutRs56u2jAq/DcVujvKLDSq7JeeTdUxk5iIQM4LF7L0WMCD/UL5aiVQEdDIvUP71BrSg2LL0UYTWFNnSrSeXw==}
     peerDependencies:
       react: '>=18'
 
@@ -4049,12 +4041,6 @@ snapshots:
     optionalDependencies:
       react: 19.2.8
 
-  '@hanzo/event@0.3.40(react@19.2.8)':
-    dependencies:
-      '@hanzo/events': 0.2.2
-    optionalDependencies:
-      react: 19.2.8
-
   '@hanzo/event@0.3.58(react@19.2.8)':
     dependencies:
       '@hanzo/events': 0.3.1
@@ -4220,7 +4206,7 @@ snapshots:
     transitivePeerDependencies:
       - react
 
-  '@hanzo/voice@0.1.18(react@19.2.8)':
+  '@hanzo/voice@0.1.19(react@19.2.8)':
     dependencies:
       react: 19.2.8
 
@@ -5162,7 +5148,7 @@ snapshots:
 
   '@hanzogui/telemetry@8.3.5(react@19.2.8)':
     dependencies:
-      '@hanzo/event': 0.3.40(react@19.2.8)
+      '@hanzo/event': 0.3.58(react@19.2.8)
       '@hanzo/observe': 0.1.11(react@19.2.8)
       react: 19.2.8
 

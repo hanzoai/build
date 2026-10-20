@@ -34,7 +34,7 @@ catalog:
   '@hanzo/iam': 0.21.28
   '@hanzo/ui': 8.29.0
   '@hanzo/vite': 0.1.4
-  '@hanzo/voice': 0.1.18
+  '@hanzo/voice': 0.1.19
   '@hanzogui/lucide-icons-2': 8.3.5
   '@hanzogui/next-theme': 8.3.5
   '@types/node': 26.5.0

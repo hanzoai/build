@@ -42,8 +42,9 @@ export const GAP = 20
 /** The composer's width: the measure less the thread column's 0.75rem gutters, centred, so its edges are the text's. */
 export const measure = { width: 'calc(100% - 1.5rem)', maxW: `calc(${MEASURE} - 1.5rem)`, mx: 'auto' } as const
 
-/** The round controls' box, px. */
+/** The round controls' box, px, and a phone's, a finger's width. */
 export const ROUND = 32
+const TAP = 44
 
 /** The frame's corner, px: 12 on a laptop, 22 on a phone. */
 const CORNER = 12
@@ -54,6 +55,9 @@ const ON = 'var(--primary-foreground)'
 
 /** A round control with no ground of its own until it is pointed at. */
 const QUIET = { bg: 'transparent', color: 'var(--foreground)', hoverStyle: { bg: '$hover' } } as const
+
+/** The model rows the menu draws before anything is typed. */
+const SHOWN = 40
 
 /** What every Composer placeholder says, unless a surface names who is listening. */
 export const ASK = 'Type / for skills'
@@ -230,9 +234,21 @@ function Opens({ label, word, dim, children }: { label: string; word: ReactNode;
 function Model({ mind, onUpgrade }: { mind: Mind; onUpgrade?: (model: string) => void }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const groups = useMemo(() => {
+  // The catalog is hundreds long, and drawing all of it is what made the menu slow
+  // to open: until something is typed, the first `SHOWN` rows, Hanzo's families
+  // first, and a line saying the search reaches the rest.
+  const { groups, more } = useMemo(() => {
     const list = mind.models.filter((m) => !ROUTER_IDS.has(m.id) && (m.outputs?.includes('text') ?? true) && (!q.trim() || matchesModel(m, q)))
-    return groupModels(list)
+    const all = groupModels(list)
+    let room = q.trim() ? Infinity : SHOWN
+    const cut = all
+      .map((g) => {
+        const models = g.models.slice(0, Math.max(0, room))
+        room -= models.length
+        return { ...g, models }
+      })
+      .filter((g) => g.models.length)
+    return { groups: cut, more: list.length - cut.reduce((n, g) => n + g.models.length, 0) }
   }, [mind.models, q])
   const routed = mind.model === ENSO
   return (
@@ -244,8 +260,10 @@ function Model({ mind, onUpgrade }: { mind: Mind; onUpgrade?: (model: string) =>
           </Word>
         </XStack>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" minW={280} maxH={420} data-slot="model-menu">
+      <DropdownMenuContent align="end" minW={280} data-slot="model-menu">
         <DropdownMenuSearch value={q} onValueChange={setQ} placeholder="Search models" />
+        {/* The catalog is hundreds long: the rows scroll under the search, which stays. */}
+        <YStack maxH="min(420px, 60vh)" overflowY="auto" overflowX="hidden" data-slot="model-rows">
         {!mind.free && !q.trim() ? (
           <DropdownMenuItem onSelect={() => mind.pick(ENSO)}>
             <XStack flex={1} items="center" gap={8}>
@@ -290,6 +308,12 @@ function Model({ mind, onUpgrade }: { mind: Mind; onUpgrade?: (model: string) =>
             })}
           </YStack>
         ))}
+        {more > 0 ? (
+          <SizableText fontSize={12} color="$hint" px={8} py={8}>
+            {`Type to search ${more} more models`}
+          </SizableText>
+        ) : null}
+        </YStack>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -474,7 +498,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
   const round = (
     <Control
       type="button"
-      size={ROUND}
+      size={narrow ? TAP : ROUND}
       fill
       rounded={999}
       data-slot="composer-send"
@@ -542,10 +566,10 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
     ),
     send: (
       <XStack items="center" gap={6} data-slot="prompt-end" shrink={0}>
-        {o.voice ? <Dictation voice={o.voice} disabled={disabled} language={o.language ?? null} {...(o.onLanguage ? { onLanguage: o.onLanguage } : {})} /> : null}
+        {o.voice ? <Dictation voice={o.voice} disabled={disabled} narrow={narrow} language={o.language ?? null} {...(o.onLanguage ? { onLanguage: o.onLanguage } : {})} /> : null}
         {!busy && !lit && o.talk ? (
           // Voice mode is a plain mark on a laptop, as the mic is, and the filled round on a phone.
-          <Control asChild size={ROUND} fill={narrow} rounded={999} {...(narrow ? null : QUIET)}>
+          <Control asChild size={narrow ? TAP : ROUND} fill={narrow} rounded={999} {...(narrow ? null : QUIET)}>
             <Voice
               voice={o.talk}
               disabled={disabled}
