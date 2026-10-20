@@ -192,7 +192,7 @@ export function Plus(p: PlusProps) {
       {shelves.map((s) =>
         wide ? (
           <DropdownMenuSub key={s.key} open={sub === s.key} onOpenChange={(o) => setSub(o ? s.key : sub === s.key ? null : sub)}>
-            <DropdownMenuSubTrigger data-slot={`plus-${s.key}`}>
+            <DropdownMenuSubTrigger data-slot={`plus-${s.key}`} onPress={() => setSub(s.key)}>
               <Line icon={s.icon} label={s.label} />
             </DropdownMenuSubTrigger>
             {/* Drawn only while open: a closed shelf stays laid out under the menu, and its rows would take its clicks. */}

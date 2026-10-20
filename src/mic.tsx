@@ -221,7 +221,7 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
                 </SizableText>
               </DropdownMenuLabel>
               <DropdownMenuSub open={lang} onOpenChange={setLang}>
-                <DropdownMenuSubTrigger data-slot="dictation-language">
+                <DropdownMenuSubTrigger data-slot="dictation-language" onPress={() => setLang(true)}>
                   <XStack flex={1} items="center" gap={8}>
                     <SizableText fontSize={14} color="$ink" flex={1}>
                       Language

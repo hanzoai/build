@@ -244,7 +244,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     try {
       // What the plugins that are on add: words for the run, or an answer of their own.
       const prepped = carry.preparing ? await carry.prep({ text: draft.trim(), files: [], thread: '' }, new AbortController().signal) : {}
-      if (prepped.reply && !prepped.system) {
+      // An answer of a plugin's own (a deck) is the answer: no run is started for it.
+      if (prepped.reply) {
         setNote(prepped.reply)
         return
       }
