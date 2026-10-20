@@ -55,7 +55,6 @@ export { Plus, type Link, type PlusProps, type Row as ShelfRow, type Shelf, type
 export { BARE, gearOf, MODES, useGear, useLanguage, type Gear, type GearState, type Mode as GearMode } from './gear.ts'
 export { useCarry, type Carry } from './carry.tsx'
 export { Dictation } from './mic.tsx'
-export type { Composer as PluginComposer, Plugin, Prep, Turn } from './plugin.ts'
 export { artifacts, blob, lead, renders, Reply, Served, speakable, speaker, type Artifact, type Listen } from './reply.tsx'
 export { frames, Page, Panel, PanelToggle, type Kind, type PageProps, type PanelProps, type Suggestion } from './panel.tsx'
 export { SideProvider, useSplit, type Split } from './side.tsx'
@@ -69,7 +68,7 @@ export { kinds, Summary, useKinds, type Entry, type Section } from './summary.ts
  * Research switch, `research`).
  */
 export { active, BUILD, merge, prep, shelf, usePlugins, research, type Plugins } from './plugins/index.ts'
-export type { Composer, Plugin, Prep, Turn } from './plugin.ts'
+export type { Composer as PluginComposer, Plugin, Prep, Turn } from './plugin.ts'
 export { address, destination, located, name, PAGE, SEARCH, useDeck, useKey, usePanel, useShown, type Deck, type Tab, type Tabs } from './tabs.ts'
 
 /**
