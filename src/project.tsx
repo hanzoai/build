@@ -58,8 +58,6 @@ import {
   PageSelect,
   PreviewFrame,
   ProjectChip,
-  Suggestions,
-  SUGGESTIONS,
   VIEWS,
   Views,
   Workspace,
@@ -274,7 +272,6 @@ export function Project({ at }: { at: Where }) {
   const [asked, setAsked] = useState(false)
   const shut = cramped ? !asked : collapsed
   const [dock, setDock] = useKept('hanzo.build.dock', 36)
-  const [dismissed, setDismissed] = useKept(`hanzo.build.hints.${slug}`, false)
   const [mode, setMode] = useKept<Mode>('hanzo.build.mode', 'build')
   const [page, setPage] = useState('/')
   const [draft, setDraft] = useState('')
@@ -585,7 +582,6 @@ export function Project({ at }: { at: Where }) {
       </YStack>
       {/* The ask: flush with the column's foot, as wide as the column less its gutter, the chips above it on the same edges. */}
       <YStack data-slot="project-ask" px="$3" pb="$3" gap="$2" minW={0} $md={{ pr: 0 }}>
-        {!dismissed && !running ? <Suggestions items={SUGGESTIONS} onPick={(s) => void send(s)} onDismiss={() => setDismissed(true)} /> : null}
         {/* A run from a workspace always runs in the sandbox, so every mode is honoured there. */}
         {note ? (
           <SizableText size="$1" color="$soft" role="status">

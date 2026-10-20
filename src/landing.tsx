@@ -36,6 +36,7 @@ import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
 import { useCarry } from './carry.tsx'
+import { Suggestions, useSuggestions } from './suggestions.tsx'
 import { MEASURE, Prompt, useEar } from './prompt.tsx'
 import { Monitor as Device } from '@hanzogui/lucide-icons-2'
 import { compose, Files, pick, type Attached } from './tools.tsx'
@@ -150,6 +151,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   // What the run carries beside the ask: skills, memory and the mode, as Chat's turns do.
   const carry = useCarry(t, '', (tab) => host.go(path({ kind: 'customize', tab })))
   const mode: Mode = carry.gear.gear.mode === 'plan' ? 'plan' : 'build'
+  const hints = useSuggestions(t)
   // The chosen codebase's environment, so New can say when it has none yet.
   const codebase = isForge(kept.repo) ? kept.repo.name : ''
   // The org's repositories on the forge: what a run and an environment can name.
@@ -438,6 +440,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             slash={carry.skills}
             mode={{ value: carry.gear.gear.mode, set: (m) => carry.gear.set({ mode: m }) }}
             where={where}
+            below={<Suggestions rows={hints.rows} onPick={setDraft} onDismiss={hints.dismiss} />}
             mind={mind}
             limits={limits}
             onUpgrade={() => host.go(path({ kind: 'screen', screen: 'plans' }))}
