@@ -10,7 +10,7 @@ vi.mock('@hanzo/gui', () => {
   return { SizableText: Draw, XStack: Draw, YStack: Draw }
 })
 vi.mock('@hanzo/ui', () => ({ Popover: () => null, PopoverContent: () => null, PopoverTrigger: () => null }))
-vi.mock('@hanzogui/lucide-icons-2', () => ({ ListTodo: () => null }))
+vi.mock('@hanzogui/lucide-icons-2', () => ({ FilePlus2: () => null, ListTodo: () => null }))
 
 const { kinds } = await import('./summary.tsx')
 
