@@ -61,6 +61,15 @@ export { frames, Page, Panel, PanelToggle, type Kind, type PageProps, type Panel
 export { SideProvider, useSplit, type Split } from './side.tsx'
 export { PrefsProvider } from './prefs.tsx'
 export { kinds, Summary, useKinds, type Entry, type Section } from './summary.tsx'
+
+/**
+ * The composer's plugins, the same in Chat and Dev: `usePlugins` answers those
+ * that run for this person, `shelf` is the `+` menu's Plugins shelf, and `prep`
+ * asks the ones that are on what a message carries (Deep research is the
+ * Research switch, `research`).
+ */
+export { active, BUILD, merge, prep, shelf, usePlugins, research, type Plugins } from './plugins/index.ts'
+export type { Composer, Plugin, Prep, Turn } from './plugin.ts'
 export { address, destination, located, name, PAGE, SEARCH, useDeck, useKey, usePanel, useShown, type Deck, type Tab, type Tabs } from './tabs.ts'
 
 /**
