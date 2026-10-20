@@ -52,3 +52,11 @@ export { artifacts, blob, lead, renders, Reply, Served, speakable, speaker, type
 export { frames, Page, Panel, PanelToggle, type Kind, type PageProps, type PanelProps, type Suggestion } from './panel.tsx'
 export { kinds, Summary, useKinds, type Entry, type Section } from './summary.tsx'
 export { address, destination, located, name, PAGE, SEARCH, useDeck, useKey, usePanel, useShown, type Deck, type Tab, type Tabs } from './tabs.ts'
+
+/**
+ * Up to three suggestions under the composer (above it on a phone), each from
+ * the person's own activity: `useSuggestions` reads and makes them, `Suggestions`
+ * draws them. The row is `Hint` here: `Suggestion` is the side panel's.
+ */
+export { Suggestions, useSuggestions, type Suggested, type SuggestionsProps } from './suggestions.tsx'
+export type { Suggestion as Hint } from './suggest.ts'
