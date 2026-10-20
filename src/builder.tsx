@@ -34,6 +34,7 @@ import { HanzoMark } from '@hanzo/ui/product'
 import { useEffect, useMemo, useState } from 'react'
 
 import { safe } from './api/projects.ts'
+import { Profile } from './customize/agents.tsx'
 import { Customize } from './customize/index.tsx'
 import { Editor } from './automations.tsx'
 import { useKept, useRecents } from './data.ts'
@@ -194,7 +195,8 @@ function Pane({ onStarted }: { onStarted?: (id: string) => void }) {
   const r = route(host.path)
   if (r.kind === 'run') return <Run key={r.id} id={r.id} />
   if (r.kind === 'settings') return <Settings section={r.section} />
-  if (r.kind === 'customize') return <Customize tab={r.tab} />
+  if (r.kind === 'customize') return <Customize key={r.tab} tab={r.tab} />
+  if (r.kind === 'agent') return <Profile key={r.name} name={r.name} />
   if (r.kind === 'automation') return <Editor key={r.id} id={r.id} />
   if (r.kind === 'screen') {
     if (r.screen === 'artifacts') return <Library />

@@ -129,6 +129,63 @@ export async function one(t: Target, ref: string): Promise<Agent> {
   return agent(await call<unknown>(t, 'GET', `/v1/agent/${seg(ref)}`))
 }
 
+/** One run of an agent, as its profile lists it: ok or error, what it was given and what it said. */
+export interface Run {
+  id: string
+  status: string
+  model: string
+  input: string
+  output: string
+  error: string
+  ms: number
+  at: string
+}
+
+export function run(raw: unknown): Run {
+  const o = obj(raw)
+  return { id: str(o.id), status: str(o.status), model: str(o.model), input: str(o.input), output: str(o.output), error: str(o.error), ms: num(o.durationMs), at: str(o.createdAt) }
+}
+
+/** An agent with its instructions and its 20 latest runs, newest first (`recentRuns`). */
+export async function profile(t: Target, ref: string): Promise<{ agent: Agent; runs: Run[] }> {
+  const raw = await call<unknown>(t, 'GET', `/v1/agent/${seg(ref)}`)
+  return { agent: agent(raw), runs: rows(obj(raw).recentRuns).map(run).filter((r) => r.id) }
+}
+
+/** A default agent a host offers: a name, its line, its model and its instructions. */
+export interface Cast {
+  name: string
+  description: string
+  model: string
+  instructions: string
+  /** Its face, an address of the host, when it has one. */
+  avatar?: string
+}
+
+/** What a default agent may spend until its owner says otherwise, in dollars: each month, and one run. */
+export const CAST_CAP = '10'
+export const CAST_TASK = '1'
+
+/** The cast members the org has no agent for, by name in any case. */
+export const missing = (cast: readonly Cast[], have: readonly { name: string }[]): Cast[] => {
+  const names = new Set(have.map((a) => a.name.toLowerCase()))
+  return cast.filter((c) => !names.has(c.name.toLowerCase()))
+}
+
+/** Create every cast member the org lacks, one at a time; the names made, and the first refusal, if any. */
+export async function hire(t: Target, cast: readonly Cast[], have: readonly { name: string }[]): Promise<{ made: string[]; error: unknown }> {
+  const made: string[] = []
+  for (const c of missing(cast, have)) {
+    try {
+      await create(t, { ...EMPTY, name: c.name, description: c.description, model: c.model, instructions: c.instructions, cap: CAST_CAP, task: CAST_TASK, period: 'month' })
+      made.push(c.name)
+    } catch (error) {
+      return { made, error }
+    }
+  }
+  return { made, error: null }
+}
+
 export async function create(t: Target, d: Draft): Promise<Agent> {
   const why = refuse(d)
   if (why) throw new Error(why)

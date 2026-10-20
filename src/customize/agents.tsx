@@ -4,22 +4,26 @@
  *
  * Browse is the platform's presets whose tool calls run on the platform;
  * starting from one opens a new agent written from it. Yours lists the org's
- * agents; opening one edits it in place, and only what changed is sent. An
+ * agents, and Add default agents makes every member of the host's cast the org
+ * has none for (an org starts with none). Opening one is its profile page
+ * (`-/customize/agents/<name>`): its face, part, model, instructions, tools,
+ * budget and runs, edited in place, and only what changed is sent. An
  * agent calls only the tools it names, and only those that are on for the org,
  * so the choices are the tools that are on; "every tool" is whatever the
  * fleet's MCP server serves when it runs. A budget is required: what it may
  * spend each period, and in one run.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Bot } from '@hanzogui/lucide-icons-2'
+import { ArrowLeft, Bot, Users } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { ModelPicker } from '@hanzo/ui/models'
 import { useEffect, useMemo, useState } from 'react'
 
-import { agents, ALL, create, draft, EMPTY, fromPreset, one, PERIODS, presets, remove, update, type Agent, type Draft, type Period, type Preset } from '../api/agents.ts'
+import { agents, ALL, create, draft, EMPTY, fromPreset, hire, missing, one, PERIODS, presets, profile, remove, update, type Agent, type Cast, type Draft, type Period, type Preset, type Run } from '../api/agents.ts'
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useHost, useTarget } from '../host.tsx'
+import { path } from '../route.ts'
 import { useLoad } from './load.ts'
 import { say } from './say.ts'
 import { Add, Choice, Confirm, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
@@ -33,9 +37,26 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const mine = useLoad(signed ? () => agents(t) : null, [] as Agent[], [t, signed])
   const offered = useLoad(view === 'discover' ? () => presets(t) : null, [] as Preset[], [t, view])
   useCount(mine.value.length, onCount)
-  const [opened, setOpened] = useState<Agent | null>(null)
   const [start, setStart] = useState<Draft | null>(null)
   const [note, setNote] = useState('')
+  const [hiring, setHiring] = useState(false)
+  const cast = host.cast ?? []
+  const lacking = missing(cast, mine.value)
+  // The host's cast, made in one press: each member the org has no agent for.
+  const addCast = async () => {
+    setHiring(true)
+    setNote('')
+    const { made, error } = await hire(t, cast, mine.value)
+    setHiring(false)
+    mine.reload()
+    setNote(error ? `${made.length ? `Added ${made.length}. ` : ''}${say(error)}` : `Added ${made.length} default ${made.length === 1 ? 'agent' : 'agents'}`)
+  }
+  const castButton =
+    signed && lacking.length ? (
+      <Button size="sm" variant="outline" disabled={hiring} onPress={() => void addCast()}>
+        <Users size={14} /> {hiring ? 'Adding…' : lacking.length === cast.length ? 'Add default agents' : `Add ${lacking.length} default ${lacking.length === 1 ? 'agent' : 'agents'}`}
+      </Button>
+    ) : null
 
   const closeNew = () => {
     setStart(null)
@@ -51,21 +72,6 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
           onView('yours')
           mine.reload()
           setNote(`${a.name} is saved`)
-        }}
-      />
-    ) : opened ? (
-      <Editor
-        agent={opened}
-        onClose={() => setOpened(null)}
-        onSaved={(a) => {
-          setOpened(null)
-          mine.reload()
-          setNote(`${a.name} is saved`)
-        }}
-        onDeleted={() => {
-          setNote(`${opened.name} is deleted`)
-          setOpened(null)
-          mine.reload()
         }}
       />
     ) : null
@@ -115,7 +121,8 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
       ) : mine.loading && !mine.value.length ? (
         <Soft>Loading your agents…</Soft>
       ) : !mine.value.length ? (
-        <Empty title="No agents yet" detail="Start from a preset, or give a new one a model, instructions and tools.">
+        <Empty title="No agents yet" detail={cast.length ? 'Add the default team, start from a preset, or give a new one a model, instructions and tools.' : 'Start from a preset, or give a new one a model, instructions and tools.'}>
+          {castButton}
           <Button size="sm" variant="outline" onPress={() => onView('discover')}>
             Browse presets
           </Button>
@@ -126,27 +133,129 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
       ) : !shown.length ? (
         <Soft>{`No agent of yours matches “${q.trim()}”.`}</Soft>
       ) : (
-        <Grid label="Your agents">
-          {shown.map((a) => (
-            <Tile
-              key={a.id || a.name}
-              title={a.name}
-              detail={a.description || 'No description.'}
-              meta={[a.model, `${a.runs} ${a.runs === 1 ? 'run' : 'runs'}`, reach(a), a.cap ? `${money(a.spent)} of ${money(a.cap)} this ${a.period || 'period'}` : ''].filter(Boolean).join(' · ')}
-              mark={<Mark name={a.name} icon={a.emoji ? <SizableText size="$4">{a.emoji}</SizableText> : undefined} />}
-              onOpen={() => setOpened(a)}
-            />
-          ))}
-        </Grid>
+        <>
+          {castButton ? <XStack>{castButton}</XStack> : null}
+          <Grid label="Your agents">
+            {shown.map((a) => (
+              <Tile
+                key={a.id || a.name}
+                title={a.name}
+                detail={a.description || 'No description.'}
+                meta={[a.model, `${a.runs} ${a.runs === 1 ? 'run' : 'runs'}`, reach(a), a.cap ? `${money(a.spent)} of ${money(a.cap)} this ${a.period || 'period'}` : ''].filter(Boolean).join(' · ')}
+                mark={<Face agent={a} cast={cast} />}
+                onOpen={() => host.go(path({ kind: 'agent', name: a.name }))}
+              />
+            ))}
+          </Grid>
+        </>
       )}
       {editor}
     </YStack>
   )
 
-  function reach(a: Agent): string {
-    if (a.tools.includes(ALL)) return 'every tool'
-    return a.tools.length === 1 ? '1 tool' : `${a.tools.length} tools`
-  }
+}
+
+function reach(a: Agent): string {
+  if (a.tools.includes(ALL)) return 'every tool'
+  return a.tools.length === 1 ? '1 tool' : `${a.tools.length} tools`
+}
+
+/** An agent's face: the cast member's picture, its emoji, or its initial. */
+function Face({ agent: a, cast, size = 32 }: { agent: Agent; cast: readonly Cast[]; size?: number }) {
+  const avatar = cast.find((c) => c.name.toLowerCase() === a.name.toLowerCase())?.avatar
+  return <Mark name={a.name} size={size} logo={avatar} icon={a.emoji ? <SizableText size={size > 40 ? '$8' : '$4'}>{a.emoji}</SizableText> : undefined} />
+}
+
+/** One agent's page: who it is, what it runs on and reads, what it may call and spend, and what it has done. */
+export function Profile({ name }: { name: string }) {
+  const host = useHost()
+  const t = useTarget()
+  const got = useLoad(host.person ? () => profile(t, name) : null, null as { agent: Agent; runs: Run[] } | null, [t, name])
+  const [editing, setEditing] = useState(false)
+  const back = () => host.go(path({ kind: 'customize', tab: 'agents' }))
+  const a = got.value?.agent
+  return (
+    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
+      <YStack width="100%" maxW={880} mx="auto" gap="$5">
+        <XStack render="button" onPress={back} items="center" gap="$1.5" self="flex-start" cursor="pointer" aria-label="Back to agents">
+          <ArrowLeft size={14} color="$soft" />
+          <SizableText size="$2" color="$soft">
+            Agents
+          </SizableText>
+        </XStack>
+        {!host.person ? (
+          <Visitor>Sign in to see this agent.</Visitor>
+        ) : got.error && !a ? (
+          <Failed error={got.error} onRetry={got.reload} />
+        ) : !a ? (
+          <Soft>Loading the agent…</Soft>
+        ) : (
+          <>
+            <XStack items="center" gap="$4">
+              <Face agent={a} cast={host.cast ?? []} size={64} />
+              <YStack flex={1} minW={0} gap="$1">
+                <SizableText render="h1" size="$7" color="$ink" numberOfLines={1}>
+                  {a.name}
+                </SizableText>
+                <SizableText size="$3" color="$soft">
+                  {a.description || 'No role written yet.'}
+                </SizableText>
+              </YStack>
+              <Button size="sm" variant="outline" onPress={() => setEditing(true)}>
+                Edit
+              </Button>
+            </XStack>
+            <Part title="Model" detail={a.model || 'The deployment’s default'} />
+            <Part title="Instructions" detail={a.instructions ? '' : 'None written: it runs on its model alone.'}>
+              {a.instructions ? (
+                <YStack p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" maxH={320} overflow="scroll">
+                  <SizableText size="$2" color="$ink" style={{ whiteSpace: 'pre-wrap' }}>
+                    {a.instructions}
+                  </SizableText>
+                </YStack>
+              ) : null}
+            </Part>
+            <Part title="Tools" detail={a.tools.includes(ALL) ? 'Every tool the fleet’s MCP server serves.' : a.tools.length ? a.tools.join(', ') : 'None: it calls no tool.'} />
+            <Part
+              title="Budget"
+              detail={a.cap ? `${money(a.spent)} of ${money(a.cap)} spent this ${a.period || 'period'}; at most ${money(a.task)} a run.` : 'No budget set.'}
+            />
+            <Part title="Runs" detail={a.runs ? `${a.runs} in all; the latest ${Math.min(a.runs, got.value!.runs.length)} below.` : 'It has not run yet.'}>
+              {got.value!.runs.map((r) => (
+                <XStack key={r.id} gap="$3" py="$2" borderTopWidth={1} borderColor="$borderColor" items="flex-start">
+                  <SizableText size="$1" color={r.status === 'ok' ? '$soft' : '$bad'} width={44} shrink={0}>
+                    {r.status === 'ok' ? 'ok' : 'failed'}
+                  </SizableText>
+                  <YStack flex={1} minW={0}>
+                    <SizableText size="$2" color="$ink" numberOfLines={1}>
+                      {r.input || '(no input)'}
+                    </SizableText>
+                    <SizableText size="$1" color="$soft" numberOfLines={2}>
+                      {r.status === 'ok' ? r.output : r.error}
+                    </SizableText>
+                  </YStack>
+                  <SizableText size="$1" color="$soft" shrink={0}>
+                    {[r.model, r.at ? new Date(r.at).toLocaleString() : ''].filter(Boolean).join(' · ')}
+                  </SizableText>
+                </XStack>
+              ))}
+            </Part>
+          </>
+        )}
+      </YStack>
+      {editing && a ? (
+        <Editor
+          agent={a}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false)
+            got.reload()
+          }}
+          onDeleted={back}
+        />
+      ) : null}
+    </YStack>
+  )
 }
 
 /** Write a new agent, or change one; an existing agent is read whole first, for its instructions. */

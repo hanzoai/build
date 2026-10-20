@@ -9,6 +9,7 @@
  */
 import { createContext, useContext, useMemo, type ComponentType, type ReactNode } from 'react'
 
+import type { Cast } from './api/agents.ts'
 import type { Target } from './api/call.ts'
 import type { Theme } from './api/pref.ts'
 
@@ -103,6 +104,10 @@ export interface Host {
   browse?: Browse
   /** What the host's browser does to a page, row by row in the tab's menu. */
   browser?: Browser
+  /** The host's sidebar lists Settings' sections and Customize's tabs, so the pages draw neither. */
+  sections?: boolean
+  /** The default agents an org may add in one press (Customize › Agents). Absent, none are offered. */
+  cast?: readonly Cast[]
 }
 
 const Context = createContext<Host | null>(null)

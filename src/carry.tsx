@@ -25,7 +25,7 @@ import { active, authored, document, nameOf as skillOf } from './api/skills.ts'
 import { brand, brands } from './api/studio.ts'
 import { useRead } from './data.ts'
 import { said as designSaid } from './design.ts'
-import { useGear, type GearState, type Mode } from './gear.ts'
+import { DEV_MODES, useGear, type GearState, type Mode } from './gear.ts'
 import type { Composer, Prep, Turn } from './plugin.ts'
 import { active as lighted, prep, shelf as pluginShelf, usePlugins } from './plugins/index.ts'
 import type { Shelf } from './plus.tsx'
@@ -131,7 +131,7 @@ function Allow({ what, onAnswer }: { what: Asked; onAnswer: (v: Leave) => void }
  * `customize(tab)` opens Dev's Customize on that tab; `modes` are the ones this
  * surface offers (a choice it does not offer reads as Auto).
  */
-export function useCarry(t: Target, key: string, customize: (tab: 'skills') => void, lent: Lent, modes: readonly Mode[]): Carry {
+export function useCarry(t: Target, key: string, customize: (tab: 'skills') => void, lent: Lent, modes: readonly Mode[] = DEV_MODES): Carry {
   const gear = useGear(t, key)
   const [dialog, show] = useState<ReactNode>(null)
   // The composer a plugin acts on, read when it acts: the draft moves under it.

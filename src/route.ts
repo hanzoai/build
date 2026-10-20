@@ -6,7 +6,8 @@
  *   -/<screen>      a builder screen
  *   -/automations/<id>      one automation's editor and runs; `new` writes one
  *   -/settings[/<section>]  a section of Settings
- *   -/customize[/<tab>]     skills, connectors and plugins: what the agent brings to a run
+ *   -/customize[/<tab>]     agents, skills, connectors and plugins: what the agent brings to a run
+ *   -/customize/agents/<name>  one agent's profile
  *   -/plans                 the plans an organization can be on
  *   <org>/<repo>    a repository's workspace: a project is a repository on the forge
  *   <slug>          a deployed site's workspace (Artifacts)
@@ -47,8 +48,8 @@ export const SECTIONS = [
 ] as const
 export type Section = (typeof SECTIONS)[number]
 
-/** Customize, one tab each: what the agent brings to a run, yours and to discover. */
-export const TABS = ['skills', 'connectors', 'plugins', 'agents'] as const
+/** Customize, one tab each: what the agent brings to a run, yours and to discover. Agents first. */
+export const TABS = ['agents', 'skills', 'connectors', 'plugins'] as const
 export type Tab = (typeof TABS)[number]
 
 export type Route =
@@ -57,6 +58,7 @@ export type Route =
   | { kind: 'screen'; screen: Screen }
   | { kind: 'settings'; section: Section }
   | { kind: 'customize'; tab: Tab }
+  | { kind: 'agent'; name: string }
   | { kind: 'project'; slug: string }
   | { kind: 'repo'; org: string; name: string }
   | { kind: 'automation'; id: string }
@@ -76,8 +78,12 @@ export function route(path: string): Route {
     const section = (p.slice('-/settings/'.length) || 'general') as Section
     return SECTIONS.includes(section) ? { kind: 'settings', section } : { kind: 'new' }
   }
+  if (p.startsWith('-/customize/agents/')) {
+    const name = p.slice('-/customize/agents/'.length)
+    return NAME.test(name) ? { kind: 'agent', name } : { kind: 'new' }
+  }
   if (p === '-/customize' || p.startsWith('-/customize/')) {
-    const tab = (p.slice('-/customize/'.length) || 'skills') as Tab
+    const tab = (p.slice('-/customize/'.length) || 'agents') as Tab
     return TABS.includes(tab) ? { kind: 'customize', tab } : { kind: 'new' }
   }
   if (p.startsWith('-/automations/')) {
@@ -144,7 +150,9 @@ export function path(r: Route): string {
     case 'settings':
       return r.section === 'general' ? '-/settings' : `-/settings/${r.section}`
     case 'customize':
-      return r.tab === 'skills' ? '-/customize' : `-/customize/${r.tab}`
+      return r.tab === 'agents' ? '-/customize' : `-/customize/${r.tab}`
+    case 'agent':
+      return `-/customize/agents/${r.name}`
     case 'project':
       return r.slug
     case 'repo':

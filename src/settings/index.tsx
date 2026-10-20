@@ -8,6 +8,7 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 
 import { useHost } from '../host.tsx'
 import { path, type Section } from '../route.ts'
+import { heading } from './list.ts'
 import { ENTRIES, GROUPS } from './sections.tsx'
 
 export function Settings({ section }: { section: Section }) {
@@ -18,6 +19,8 @@ export function Settings({ section }: { section: Section }) {
 
   return (
     <XStack flex={1} minH={0} minW={0}>
+      {/* A host whose sidebar lists the sections draws them there; the page is the section, full width. */}
+      {host.sections ? null : (
       <YStack
         role="navigation"
         aria-label="Settings"
@@ -38,12 +41,12 @@ export function Settings({ section }: { section: Section }) {
           const list = ENTRIES.filter((e) => e.group === g)
           return (
             <YStack key={g} gap="$0.5">
-              {/* The first group sits under the page's own "Settings" heading, so it carries no label. */}
-              {g === 'Settings' ? null : (
+              {/* The first group sits under the page's own "Settings" heading, and Code leads its own part: neither is labelled twice. */}
+              {heading(g) ? (
                 <SizableText size="$1" color="$soft" px="$2" pb="$1">
                   {g}
                 </SizableText>
-              )}
+              ) : null}
               {list.map((e) => (
                 <XStack
                   key={e.id}
@@ -66,6 +69,7 @@ export function Settings({ section }: { section: Section }) {
           )
         })}
       </YStack>
+      )}
       <YStack flex={1} minW={0} minH={0} overflow="scroll">
         <XStack flexWrap="wrap" gap="$1.5" px="$4" pt="$3" $md={{ display: 'none' }}>
           {ENTRIES.map((e) => (

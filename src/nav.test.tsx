@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Host } from './host.tsx'
-import { nav, NEW } from './nav.tsx'
+import { nav, NEW, own, sections, tabs } from './nav.tsx'
 import { route } from './route.ts'
 
 // The marks are react-native-svg drawings, which a node test cannot load; what a place is and where it goes is plain data.
 vi.mock('@hanzogui/lucide-icons-2', () =>
-  Object.fromEntries(['BookOpen', 'CircleDot', 'Clock', 'Container', 'Cpu', 'FolderGit2', 'LayoutTemplate', 'Library', 'SlidersHorizontal', 'SquarePen'].map((n) => [n, () => null])),
+  Object.fromEntries(
+    ['Bell', 'BookOpen', 'Bot', 'Brain', 'CircleDot', 'Clock', 'Code', 'Container', 'Cpu', 'CreditCard', 'FolderGit2', 'Gauge', 'Key', 'LayoutTemplate', 'Library', 'Plug', 'Puzzle', 'Settings', 'Shield', 'SlidersHorizontal', 'Sparkles', 'SquarePen', 'User', 'Users'].map((n) => [n, () => null]),
+  ),
 )
 vi.mock('./foot.tsx', () => ({ DOCS: 'https://docs.hanzo.ai/docs/dev' }))
 
@@ -26,8 +28,8 @@ const host = (path = ''): Host => ({
 describe('the builder’s places, once for every rail', () => {
   it('lists every place, grouped in the order a customer asks, and nothing behind a More', () => {
     expect(nav(host(), () => {}).map((g) => [g.label, g.links.map((l) => l.label)])).toEqual([
-      ['Work', ['New run', 'Projects', 'Issues']],
-      ['Make', ['Library', 'Templates', 'Scheduled tasks']],
+      ['Work', ['New run', 'Projects', 'Issues', 'Templates']],
+      ['Make', ['Library', 'Scheduled tasks']],
       ['Run', ['Machines', 'Environments']],
       ['Setup', ['Customize', 'Docs']],
     ])
@@ -43,12 +45,12 @@ describe('the builder’s places, once for every rail', () => {
       { kind: 'new' },
       { kind: 'screen', screen: 'projects' },
       { kind: 'screen', screen: 'issues' },
-      { kind: 'screen', screen: 'artifacts' },
       { kind: 'screen', screen: 'templates' },
+      { kind: 'screen', screen: 'artifacts' },
       { kind: 'screen', screen: 'automations' },
       { kind: 'settings', section: 'machines' },
       { kind: 'settings', section: 'environments' },
-      { kind: 'customize', tab: 'skills' },
+      { kind: 'customize', tab: 'agents' },
     ])
     vi.unstubAllGlobals()
   })
@@ -75,6 +77,7 @@ describe('the builder’s places, once for every rail', () => {
     ['-/settings/machines', 'machines'],
     ['-/settings/environments', 'environments'],
     ['-/customize/agents', 'customize'],
+    ['-/customize/agents/dev', 'customize'],
     ['-/mcp', 'customize'],
   ])('marks %j as %s, and only that one', (path, id) => {
     const lit = nav(host(path), () => {})
@@ -82,5 +85,31 @@ describe('the builder’s places, once for every rail', () => {
       .filter((l) => l.active)
       .map((l) => l.id)
     expect(lit).toEqual([id])
+  })
+})
+
+describe('a host’s sidebar for Dev, Settings and Customize', () => {
+  it('lists Dev’s own places alone where the rail holds the rest', () => {
+    expect(own(host(), () => {}).flatMap((g) => g.links.map((l) => l.label))).toEqual(['New run', 'Projects', 'Issues', 'Templates'])
+  })
+
+  it('lists Settings’ sections, labelling a part only where its first row does not already say it', () => {
+    const groups = sections(host('-/settings/keys'), () => {})
+    expect(groups.map((g) => [g.label, g.links.map((l) => l.label)])).toEqual([
+      ['', ['General', 'Account', 'Privacy', 'Billing', 'Usage', 'Capabilities', 'Memory']],
+      ['', ['Code', 'Environments', 'Machines', 'API keys']],
+      ['Organization', ['Members', 'Integrations', 'Notifications']],
+    ])
+    expect(groups.flatMap((g) => g.links).filter((l) => l.active).map((l) => l.id)).toEqual(['keys'])
+  })
+
+  it('lists Customize’s tabs Agents first, an agent’s page lighting Agents', () => {
+    const groups = tabs(host('-/customize/agents/dev'), () => {})
+    expect(groups[0]!.links.map((l) => [l.label, Boolean(l.active)])).toEqual([
+      ['Agents', true],
+      ['Skills', false],
+      ['Connectors', false],
+      ['Plugins', false],
+    ])
   })
 })

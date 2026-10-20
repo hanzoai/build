@@ -32,10 +32,12 @@ const LABEL: Record<Tab, { title: string; says: string; add: string; find: strin
   agents: { title: 'Agents', says: 'Agents with their own model, instructions and budget.', add: 'New agent', find: 'Search agents', icon: <Bot size={15} /> },
 }
 
+/** Where a tab opens: an org's own agents (and the cast to add) for Agents; Browse for the rest, what there is to add being the page. */
+const opens = (tab: Tab): View => (tab === 'agents' ? 'yours' : 'discover')
+
 export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
   const host = useHost()
-  // Browse first, always: a first visit has nothing of its own to show, and what there is to add is the page.
-  const [view, setView] = useState<View>(first ?? 'discover')
+  const [view, setView] = useState<View>(first ?? opens(tab))
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
   const [count, setCount] = useState(0)
@@ -43,7 +45,7 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
   const pick = (next: Tab) => {
     setQ('')
     setAdding(false)
-    setView('discover')
+    setView(opens(next))
     setCount(0)
     host.go(path({ kind: 'customize', tab: next }))
   }
@@ -54,15 +56,17 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
       <YStack width="100%" maxW={1080} mx="auto" gap="$4">
+        {/* A host whose sidebar lists the tabs heads the page with the tab itself. */}
         <YStack gap="$1">
           <SizableText render="h1" size="$6" color="$ink">
-            Customize
+            {host.sections ? LABEL[tab].title : 'Customize'}
           </SizableText>
           <SizableText size="$2" color="$soft">
-            What your agent can use in every run.
+            {host.sections ? LABEL[tab].says : 'What your agent can use in every run.'}
           </SizableText>
         </YStack>
 
+        {host.sections ? null : (
         <XStack role="tablist" aria-label="Customize" gap="$4" borderBottomWidth={1} borderColor="$borderColor" $max-md={{ gap: '$3' }}>
           {TABS.map((id) => {
             const on = id === tab
@@ -91,10 +95,13 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
             )
           })}
         </XStack>
+        )}
 
-        <SizableText size="$2" color="$soft">
-          {LABEL[tab].says}
-        </SizableText>
+        {host.sections ? null : (
+          <SizableText size="$2" color="$soft">
+            {LABEL[tab].says}
+          </SizableText>
+        )}
 
         <XStack items="center" gap="$2">
           <Choice
