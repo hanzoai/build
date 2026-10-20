@@ -39,7 +39,7 @@ import { useCarry } from './carry.tsx'
 import { Suggestions, useSuggestions } from './suggestions.tsx'
 import { MEASURE, Prompt, useEar } from './prompt.tsx'
 import { Monitor as Device } from '@hanzogui/lucide-icons-2'
-import { compose, Files, pick, type Attached } from './tools.tsx'
+import { compose, Files, pick, read as readFiles, type Attached } from './tools.tsx'
 import { useSpoken } from './voice.ts'
 
 /** One vocabulary for the mode, on New and in a workspace. */
@@ -149,7 +149,24 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
   const talk = useTalk({ baseUrl: t.api, token: () => t.token(), ...(t.org ? { org: t.org } : {}) })
   // What the run carries beside the ask: skills, memory and the mode, as Chat's turns do.
-  const carry = useCarry(t, '', (tab) => host.go(path({ kind: 'customize', tab })))
+  const carry = useCarry(t, '', (tab) => host.go(path({ kind: 'customize', tab })), {
+    draft,
+    setDraft,
+    // A run reads text: a file that is one rides the ask, a picture goes with a chat.
+    attach: (list) => {
+      const text = list.filter((f) => !f.type.startsWith('image/'))
+      if (text.length < list.length) setNote('A run reads text files; send a picture in Chat.')
+      if (text.length) {
+        const dt = new DataTransfer()
+        for (const f of text) dt.items.add(f)
+        void readFiles(files, dt.files).then(({ files: next, note: why }) => {
+          setFiles(next)
+          if (why) setNote(why)
+        })
+      }
+    },
+    go: (href) => (href.startsWith('http') ? host.open(href) : host.go(href)),
+  })
   const mode: Mode = carry.gear.gear.mode === 'plan' ? 'plan' : 'build'
   const hints = useSuggestions(t)
   // The chosen codebase's environment, so New can say when it has none yet.
@@ -225,8 +242,14 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     setBusy(true)
     setNote('')
     try {
+      // What the plugins that are on add: words for the run, or an answer of their own.
+      const prepped = carry.preparing ? await carry.prep({ text: draft.trim(), files: [], thread: '' }, new AbortController().signal) : {}
+      if (prepped.reply && !prepped.system) {
+        setNote(prepped.reply)
+        return
+      }
       const run = await start(t, {
-        prompt: compose([draft.trim(), carry.text].filter(Boolean).join('\n\n---\n'), files),
+        prompt: compose([draft.trim(), carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n---\n'), files),
         // The name alone. The org rides the request, and a slash is not a repo name.
         // An empty base or place is not sent: the default branch, and the sandbox.
         repo: repo?.name ?? hub?.full_name,
@@ -433,11 +456,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             plus={{
               upload: () => pick(files, setFiles, setNote),
               skills: carry.skills,
+              plugins: carry.plugins,
               devices,
               memory: { on: carry.gear.gear.memory, set: (on) => carry.gear.set({ memory: on }) },
             }}
             on={carry.on}
             slash={carry.skills}
+            at={carry.plugins}
             mode={{ value: carry.gear.gear.mode, set: (m) => carry.gear.set({ mode: m }) }}
             where={where}
             below={<Suggestions rows={hints.rows} onPick={setDraft} onDismiss={hints.dismiss} />}
@@ -452,6 +477,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         </YStack>
       </YStack>
       <Publish source={adding} onClose={() => setAdding(null)} />
+      {carry.dialog}
       {codebase ? (
         <SetupDialog
           repo={codebase}

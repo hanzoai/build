@@ -15,12 +15,14 @@
  * (Chat its agents, Dev its devices) beside these.
  */
 import { BookOpen, ListChecks, ScrollText } from '@hanzogui/lucide-icons-2'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { call, query, unwrap, type Target } from './api/call.ts'
 import { active, authored, document, nameOf as skillOf } from './api/skills.ts'
 import { useRead } from './data.ts'
 import { useGear, type GearState } from './gear.ts'
+import type { Composer, Prep, Turn } from './plugin.ts'
+import { active as lighted, prep, shelf as pluginShelf, usePlugins } from './plugins/index.ts'
 import type { Shelf } from './plus.tsx'
 import type { Chip } from './prompt.tsx'
 
@@ -30,9 +32,20 @@ const SKILL_MAX = 16_000
 /** The memories every message carries at most, newest first. */
 const RECALL = 20
 
+/** What the surface lends the plugins: its draft, its files, its way about. */
+export type Lent = Omit<Composer, 'target' | 'show'>
+
 export interface Carry {
   gear: GearState
   skills: Shelf
+  /** The plugins that run for this person (`@` lists the same). */
+  plugins: Shelf
+  /** A dialog a plugin opened, for the surface to draw; null when none is. */
+  dialog: ReactNode
+  /** Whether a plugin that prepares a message is on. */
+  preparing: boolean
+  /** What the plugins that are on add to the message about to go. */
+  prep: (turn: Turn, signal: AbortSignal) => Promise<Prep>
   /** The chips after `+`: the skills on, Research, and Plan. */
   on: Chip[]
   /** The words the gear adds to every message, '' when none. */
@@ -69,8 +82,26 @@ async function said(t: Target, skills: readonly string[], memory: boolean, mode:
  * The conversation `key` names (`''` for one not begun), for target `t`.
  * `customize(tab)` opens Dev's Customize on that tab.
  */
-export function useCarry(t: Target, key: string, customize: (tab: 'skills') => void): Carry {
+export function useCarry(t: Target, key: string, customize: (tab: 'skills') => void, lent: Lent): Carry {
   const gear = useGear(t, key)
+  const [dialog, show] = useState<ReactNode>(null)
+  // The composer a plugin acts on, read when it acts: the draft moves under it.
+  const lentNow = useRef(lent)
+  lentNow.current = lent
+  const composer = useMemo<Composer>(
+    () => ({
+      target: t,
+      get draft() {
+        return lentNow.current.draft
+      },
+      setDraft: (x) => lentNow.current.setDraft(x),
+      attach: (f) => lentNow.current.attach(f),
+      go: (h) => lentNow.current.go(h),
+      show,
+    }),
+    [t],
+  )
+  const found = usePlugins(t)
   const signed = Boolean(t.token())
   const list = useRead(signed ? () => active(t) : null, [], [t, signed])
   const names = useMemo(() => list.value.map((s) => skillOf(s.name)).filter(Boolean), [list.value])
@@ -87,10 +118,16 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     browse: { label: 'Browse skills', onPress: () => customize('skills') },
   }
 
+  const plugins = pluginShelf(found, gear, composer)
+  const lit = lighted(found.plugins, gear.gear)
+
   const on: Chip[] = [
     ...skills.map((n) => ({ id: `skill:${n}`, label: n, icon: <ScrollText size={14} />, onRemove: () => gear.toggle('skills', n) })),
     ...(research ? [{ id: 'research', label: 'Research', icon: <BookOpen size={14} />, onRemove: () => gear.set({ research: false }) }] : []),
     ...(mode === 'plan' ? [{ id: 'plan', label: 'Plan', icon: <ListChecks size={14} />, onRemove: () => gear.set({ mode: 'auto' }) }] : []),
+    ...lit
+      .filter((p) => p.id !== 'research')
+      .map((p) => ({ id: `plugin:${p.id}`, label: p.name, icon: p.icon, onRemove: () => gear.toggle('plugins', p.id) })),
   ]
 
   const signedIn = Boolean(t.token())
@@ -107,5 +144,14 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, signedIn, asked, memory, mode])
 
-  return { gear, skills: shelf, on, text }
+  return {
+    gear,
+    skills: shelf,
+    plugins,
+    dialog,
+    on,
+    text,
+    preparing: lit.length > 0,
+    prep: (turn, signal) => prep(found.plugins, gear.gear, turn, composer, signal),
+  }
 }
