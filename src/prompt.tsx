@@ -432,7 +432,8 @@ function Mention({ shelf, rows, index, onPick, tag, name }: { shelf: Shelf; rows
                 {r.icon}
               </XStack>
             ) : null}
-            <SizableText fontSize={15} color="$ink" numberOfLines={1} flex={1}>
+            {/* A button centres its words unless told: a list reads from the left. */}
+            <SizableText fontSize={15} color="$ink" numberOfLines={1} flex={1} style={{ textAlign: 'left' }}>
               {r.label}
             </SizableText>
             <SizableText fontSize={13} color="$hint">
