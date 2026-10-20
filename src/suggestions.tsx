@@ -33,7 +33,7 @@ import { list } from './api/sessions.ts'
 import { everything } from './api/work.ts'
 import { claims } from './claims.ts'
 import { Out } from './out.tsx'
-import { answer, dismissed, due, inputs, request, seed, shown, sig, skip, stale, TAKE, type Icon, type Input, type Kept, type Seed, type Suggestion } from './suggest.ts'
+import { answer, dismissed, due, fill, inputs, request, seed, sig, skip, stale, TAKE, type Icon, type Input, type Kept, type Seed, type Suggestion } from './suggest.ts'
 
 /** A source that refuses this person (a 4xx other than an expired sign-in or a rate) has nothing for them; any other failure leaves it unknown. */
 function soft<T>(p: Promise<T>, none: T): Promise<T> {
@@ -117,7 +117,7 @@ function load(t: Target): Promise<void> {
 }
 
 export interface Suggested {
-  /** The rows to draw: at most three, none dismissed. */
+  /** The rows to draw: three when any are, none dismissed. */
   rows: Suggestion[]
   /** Dismiss one, remembered by the account. */
   dismiss: (id: string) => void
@@ -137,7 +137,8 @@ export function useSuggestions(t: Target): Suggested {
     )
   }, [t])
   const now = useSyncExternalStore(subscribe, () => doc, () => doc)
-  const rows = useMemo(() => shown(now), [now])
+  // Filled to three with what Hanzo does, so a new account and a quiet one never see one lonely row.
+  const rows = useMemo(() => fill(now), [now])
   const dismiss = useCallback(
     (id: string) => {
       if (!doc) return

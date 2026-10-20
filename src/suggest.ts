@@ -313,9 +313,9 @@ const SYSTEM = [
   '- prompt: the message the person would send Hanzo to do the step, first person, complete on its own, naming the source and its address when it has one.',
   '- href: copied exactly from the input the row is about, or "" when that input has none. Never write an address that is not in the input.',
   '- icon: github for a github.com address, agent for a run or an automation, chat for a conversation, file for a file, task for any other issue or task.',
-  'With no activity, suggest from what the person told us at signup (their role, their work): first things to ask Hanzo, with href "".',
+  'Answer three rows. Take them from the activity first; fill the rest from what the person told us at signup (their role, their work): first things to ask Hanzo, with href "".',
   'Never repeat an item listed under skip. Never suggest the same item twice.',
-  'If nothing is worth saying, answer {"rows": []}. Fewer good rows beat three weak ones.',
+  'With neither activity nor anything from signup worth a row, answer fewer; never pad with a weak one.',
 ].join('\n')
 
 /** The chat completion that asks for rows, or null when there is nothing to make them from. */
@@ -430,6 +430,20 @@ export function kept(raw: unknown): Kept | undefined {
 
 /** The rows to draw: those not dismissed. */
 export const shown = (k: Kept | null | undefined): Suggestion[] => (k ? k.rows.filter((r) => !k.dismissed.includes(r.id)).slice(0, MOST) : [])
+
+/** What Hanzo does, three ways in: what fills the rows a person's activity and signup do not. */
+export const STARTERS: readonly Suggestion[] = [
+  { id: 'start:chat', icon: 'chat', title: 'Think something through', href: '', summary: '', action: 'Ask Hanzo', prompt: 'Help me think through ' },
+  { id: 'start:dev', icon: 'agent', title: 'Build an app or a site', href: '', summary: '', action: 'Describe it', prompt: 'Build me ' },
+  { id: 'start:research', icon: 'file', title: 'Research a topic', href: '', summary: '', action: 'Get a cited brief', prompt: 'Research this and give me a short brief with sources: ' },
+]
+
+/** The kept rows, filled to `MOST` with the starters not dismissed: never one lonely row. */
+export const fill = (k: Kept | null | undefined): Suggestion[] => {
+  if (!k) return []
+  const rows = shown(k)
+  return [...rows, ...STARTERS.filter((r) => !k.dismissed.includes(r.id))].slice(0, Math.max(rows.length, MOST))
+}
 
 /** `k` with `id` dismissed: remembered first, the oldest forgotten past `REMEMBER`. */
 export function dismissed(k: Kept, id: string): Kept {

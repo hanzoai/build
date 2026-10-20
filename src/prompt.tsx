@@ -117,7 +117,7 @@ export interface PromptOptions {
   /** `@` lists these (the plugins) above the frame. */
   at?: Shelf
   /** The mode, as the pill under the frame. */
-  mode?: { value: Mode; set: (m: Mode) => void } | null
+  mode?: { value: Mode; set: (m: Mode) => void; items?: readonly Mode[] } | null
   /** At the start of the row under the frame: Dev's where and which repository. */
   where?: ReactNode
   /** Under the row (above the frame on a phone): the person's suggestions. */
@@ -373,7 +373,7 @@ export function Tune({ mind, mode, where, onUpgrade }: { mind?: Mind | null; mod
             </XStack>
           </PopoverTrigger>
           <PopoverContent solid p={6} width={288} maxW="calc(100vw - 24px)">
-            <Choices title="Mode" items={MODES} value={mode.value} onPick={mode.set} />
+            <Choices title="Mode" items={mode.items ? MODES.filter((m) => mode.items!.includes(m.id)) : MODES} value={mode.value} onPick={mode.set} />
           </PopoverContent>
         </Popover>
       ) : null}

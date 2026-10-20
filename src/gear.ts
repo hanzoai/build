@@ -20,17 +20,23 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { call, type Target } from './api/call.ts'
 
 /** What a run or a turn may do on its own: the permission mode. */
-export type Mode = 'auto' | 'plan'
+export type Mode = 'auto' | 'manual' | 'plan'
 
 /**
- * The modes the platform honours. Manual and Accept edits are not here: a cloud
- * run takes `build` or `plan` (apps/coding) and a chat turn asks before nothing,
- * so offering them would promise a pause that never comes.
+ * The modes, one line each. Chat offers Auto and Manual; Dev adds Plan. Manual
+ * is a real pause: before a plugin runs for a message (a search, a site read, a
+ * deck), the person allows it once, always in this conversation, or not, and a
+ * Dev run is asked for before it starts.
  */
 export const MODES: readonly { id: Mode; label: string; note: string }[] = [
-  { id: 'auto', label: 'Auto', note: 'Hanzo works on its own and stops to ask only if something looks unsafe.' },
-  { id: 'plan', label: 'Plan', note: 'Hanzo lays out the plan first and changes nothing until you say go.' },
+  { id: 'auto', label: 'Auto', note: 'Runs tools on its own; pauses only for anything risky.' },
+  { id: 'manual', label: 'Manual', note: 'Asks before each tool, connector or site it opens.' },
+  { id: 'plan', label: 'Plan', note: 'Writes the plan and waits for your go before changing anything.' },
 ]
+
+/** The modes each surface offers. */
+export const CHAT_MODES: readonly Mode[] = ['auto', 'manual']
+export const DEV_MODES: readonly Mode[] = ['auto', 'manual', 'plan']
 
 export interface Gear {
   /** Skill names (`/v1/tool/skills`). */
@@ -46,6 +52,8 @@ export interface Gear {
   research: boolean
   memory: boolean
   mode: Mode
+  /** In Manual, the plugins allowed for the rest of this conversation. */
+  allowed: string[]
 }
 
 export const BARE: Gear = {
@@ -57,6 +65,7 @@ export const BARE: Gear = {
   research: false,
   memory: true,
   mode: 'auto',
+  allowed: [],
 }
 
 /** What a new conversation carries over from the last: the switches, never a pick. */
@@ -81,6 +90,7 @@ export function gearOf(raw: unknown, base: Gear = BARE): Gear {
     research: typeof o.research === 'boolean' ? o.research : base.research,
     memory: typeof o.memory === 'boolean' ? o.memory : base.memory,
     mode: MODES.some((m) => m.id === o.mode) ? (o.mode as Mode) : base.mode,
+    allowed: 'allowed' in o ? list(o.allowed) : base.allowed,
   }
 }
 

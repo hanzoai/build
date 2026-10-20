@@ -70,7 +70,7 @@ import {
   type Verdict,
 } from '@hanzo/ui/agents'
 import { Message } from '@hanzo/ui/chat'
-import { Button, Dialog, DialogContent, DialogTitle, Grip } from '@hanzo/ui'
+import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -86,6 +86,7 @@ import { decode, outcome, pull, said, scrub, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Merge } from './git.tsx'
+import { Gutter } from './gutter.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { useMind } from './mind.ts'
 import { Out } from './out.tsx'
@@ -612,24 +613,14 @@ export function Project({ at }: { at: Where }) {
           placeholder={running ? 'Steer this run' : 'Ask Hanzo for edits'}
           label="Ask Hanzo for edits"
           plus={{ upload: () => pick(attached, setAttached, setNote) }}
-          mode={running ? null : { value: mode === 'plan' ? 'plan' : 'auto', set: (m) => setMode(m === 'plan' ? 'plan' : 'build') }}
+          mode={running ? null : { value: mode === 'plan' ? 'plan' : 'auto', set: (m) => setMode(m === 'plan' ? 'plan' : 'build'), items: ['auto', 'plan'] }}
           mind={running ? null : mind}
           voice={voice}
         />
       </YStack>
       {/* In the gutter between the chat and the work. */}
       {wide && !shut ? (
-        <Grip
-          side="left"
-          span={across}
-          floor={CHAT_FLOOR}
-          ceil={most}
-          reset={CHAT_WIDTH}
-          onSpan={setSplit}
-          label="Resize the chat"
-          r={-GUTTER}
-          width={GUTTER}
-        />
+        <Gutter side="left" span={across} floor={CHAT_FLOOR} ceil={most} reset={CHAT_WIDTH} onSpan={setSplit} label="Resize the chat" gap={GUTTER} />
       ) : null}
     </YStack>
   )

@@ -9,12 +9,15 @@
  *             field, so the text rides the message
  *   memory    what Hanzo remembers about the person (GET /v1/ai/memory/list):
  *             the platform injects none itself
- *   mode      Plan: lay the plan out and wait; Auto says nothing
+ *   mode      Plan: lay the plan out and wait; Auto says nothing; Manual
+ *             asks the person before each plugin runs for a message (`Allow`)
  *
  * A shelf is offered only where its service answers; a surface adds its own
  * (Chat its agents, Dev its devices) beside these.
  */
+import { SizableText, XStack } from '@hanzo/gui'
 import { BookOpen, ListChecks, Palette, ScrollText } from '@hanzogui/lucide-icons-2'
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '@hanzo/ui'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { call, query, unwrap, type Target } from './api/call.ts'
@@ -22,11 +25,11 @@ import { active, authored, document, nameOf as skillOf } from './api/skills.ts'
 import { brand, brands } from './api/studio.ts'
 import { useRead } from './data.ts'
 import { said as designSaid } from './design.ts'
-import { useGear, type GearState } from './gear.ts'
+import { useGear, type GearState, type Mode } from './gear.ts'
 import type { Composer, Prep, Turn } from './plugin.ts'
 import { active as lighted, prep, shelf as pluginShelf, usePlugins } from './plugins/index.ts'
 import type { Shelf } from './plus.tsx'
-import type { Chip } from './prompt.tsx'
+import type { Chip, PromptOptions } from './prompt.tsx'
 
 /** The most of each skill a message carries. */
 const SKILL_MAX = 16_000
@@ -52,6 +55,10 @@ export interface Carry {
   prep: (turn: Omit<Turn, 'design'>, signal: AbortSignal) => Promise<Prep>
   /** The chips after `+`: the skills on, Research, and Plan. */
   on: Chip[]
+  /** The mode pill: this surface's modes, the conversation's choice among them. */
+  mode: NonNullable<PromptOptions['mode']>
+  /** Whether `what` may run: in Manual the person is asked (once, always in this conversation, or not); else yes. */
+  allow: (what: Asked) => Promise<boolean>
   /** The words the gear adds to every message, '' when none. */
   text: string
 }
@@ -86,11 +93,45 @@ async function said(t: Target, skills: readonly string[], memory: boolean, mode:
   return parts.join('\n\n')
 }
 
+/** What the person answers a plugin about to run in Manual. */
+type Leave = 'once' | 'always' | 'deny'
+
+/** What Manual asks about: a plugin, or a Dev run. `id` is what "always" remembers. */
+export interface Asked {
+  id: string
+  name: string
+  note: string
+}
+
+/** Manual's pause: what is about to run, what it does, and the three answers. Closing it is a no. */
+function Allow({ what, onAnswer }: { what: Asked; onAnswer: (v: Leave) => void }) {
+  return (
+    <Dialog open onOpenChange={(o) => !o && onAnswer('deny')}>
+      <DialogContent maxW={440} width="100%" data-slot="allow">
+        <DialogTitle>{`Allow ${what.name}?`}</DialogTitle>
+        <DialogDescription>{what.note ? `${what.note}. Manual asks before each one runs.` : 'Manual asks before each one runs.'}</DialogDescription>
+        <XStack justify="flex-end" gap="$2" pt="$3" flexWrap="wrap">
+          <Button size="sm" variant="ghost" onPress={() => onAnswer('deny')}>
+            Deny
+          </Button>
+          <Button size="sm" variant="outline" onPress={() => onAnswer('always')}>
+            <SizableText fontSize={14}>Always in this chat</SizableText>
+          </Button>
+          <Button size="sm" onPress={() => onAnswer('once')}>
+            Allow once
+          </Button>
+        </XStack>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /**
  * The conversation `key` names (`''` for one not begun), for target `t`.
- * `customize(tab)` opens Dev's Customize on that tab.
+ * `customize(tab)` opens Dev's Customize on that tab; `modes` are the ones this
+ * surface offers (a choice it does not offer reads as Auto).
  */
-export function useCarry(t: Target, key: string, customize: (tab: 'skills') => void, lent: Lent): Carry {
+export function useCarry(t: Target, key: string, customize: (tab: 'skills') => void, lent: Lent, modes: readonly Mode[]): Carry {
   const gear = useGear(t, key)
   const [dialog, show] = useState<ReactNode>(null)
   // The composer a plugin acts on, read when it acts: the draft moves under it.
@@ -113,7 +154,8 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
   const signed = Boolean(t.token())
   const list = useRead(signed ? () => active(t) : null, [], [t, signed])
   const names = useMemo(() => list.value.map((s) => skillOf(s.name)).filter(Boolean), [list.value])
-  const { skills, research, memory, mode, design } = gear.gear
+  const { skills, research, memory, design } = gear.gear
+  const mode: Mode = modes.includes(gear.gear.mode) ? gear.gear.mode : 'auto'
 
   const shelf: Shelf = {
     rows: names.map((n) => ({ id: n, label: n, icon: <ScrollText size={16} />, on: skills.includes(n) })),
@@ -174,8 +216,33 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, signedIn, asked, memory, mode, design])
 
+  // Manual: what is about to run is asked of the person, unless allowed for the rest of the conversation.
+  const kept = useRef<string[]>([])
+  kept.current = gear.gear.allowed
+  const allow = async (what: Asked): Promise<boolean> => {
+    if (mode !== 'manual' || kept.current.includes(what.id)) return true
+    const v = await new Promise<Leave>((done) =>
+      show(
+        <Allow
+          what={what}
+          onAnswer={(x) => {
+            show(null)
+            done(x)
+          }}
+        />,
+      ),
+    )
+    if (v === 'always') {
+      kept.current = [...kept.current, what.id]
+      gear.set({ allowed: kept.current })
+    }
+    return v !== 'deny'
+  }
+
   return {
     gear,
+    mode: { value: mode, set: (m) => gear.set({ mode: m }), items: modes },
+    allow,
     skills: shelf,
     plugins,
     dialog,
@@ -184,10 +251,13 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     preparing: lit.length > 0,
     design: designs,
     // A design system a plugin made is attached at once, and the maker turns off: it made one.
-    prep: (turn, signal) =>
-      prep(found.plugins, gear.gear, { ...turn, design }, composer, signal).then((p) => {
-        if (p.design) gear.set({ design: p.design, plugins: gear.gear.plugins.filter((x) => x !== 'design') })
-        return p
-      }),
+    prep: async (turn, signal) => {
+      // One plugin at a time, so each pause is its own question.
+      const denied: string[] = []
+      for (const x of lit) if (!signal.aborted && !(await allow({ id: x.id, name: x.name, note: x.note }))) denied.push(x.id)
+      const p = await prep(found.plugins, gear.gear, { ...turn, design }, composer, signal, denied)
+      if (p.design) gear.set({ design: p.design, plugins: gear.gear.plugins.filter((x) => x !== 'design') })
+      return p
+    },
   }
 }

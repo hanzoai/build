@@ -34,7 +34,8 @@ test('the ask opens the conversation as the person’s own message, once', async
   const top = async (l: ReturnType<Page['locator']>) => (await l.boundingBox())!.y
   expect(await top(asks)).toBeLessThan(await top(t.getByText('Started on agent/ab12')))
   await expect(t.locator('[data-role="assistant"]').getByText('New', { exact: true })).toBeVisible()
-  await expect(p.getByText('Hanzo is AI and can make mistakes.')).toBeVisible()
+  // No line above the composer: the notes live at the foot.
+  await expect(p.getByText('Hanzo is AI and can make mistakes.')).toHaveCount(0)
   await p.screenshot({ path: info.outputPath('chat.png') })
 })
 

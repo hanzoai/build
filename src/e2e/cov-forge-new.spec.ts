@@ -95,13 +95,13 @@ async function add(page: Page, row: string) {
 }
 
 test.describe('New', () => {
-  test('starts from the kept model and effort, says their name, and runs with what was chosen', async ({ page, baseURL }, info) => {
+  test('starts from the kept model and effort, and runs with what was chosen', async ({ page, baseURL }, info) => {
     // The person's old coding defaults name a model and an effort; the one kept choice wins.
     const { sent } = await desk(page, { prefs: { callName: 'Dave', code: { model: 'zen5.8-coder', effort: 'low', mode: 'build' } } }, DAVE, {
       'hanzo.mind': { model: 'zen5.8', effort: 'high' },
     })
     await page.goto('/')
-    await expect(page.getByText('What’s up next, Dave?')).toBeVisible({ timeout: 45_000 })
+    await expect(page.getByText('Build what’s next.')).toBeVisible({ timeout: 45_000 })
     await expect(mind(page)).toHaveAccessibleName('Model and effort: zen5.8, High')
 
     await mind(page).click()

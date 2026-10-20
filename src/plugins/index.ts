@@ -131,14 +131,16 @@ export function merge(preps: readonly Prep[]): Prep {
  * fails the message, with its name and its reason: a report asked for and not
  * researched must not arrive looking researched.
  */
-export async function prep(plugins: readonly Plugin[], g: Gear, turn: Turn, c: Composer, signal: AbortSignal): Promise<Prep> {
+export async function prep(plugins: readonly Plugin[], g: Gear, turn: Turn, c: Composer, signal: AbortSignal, denied: readonly string[] = []): Promise<Prep> {
   const preps = await Promise.all(
-    active(plugins, g).map((p) =>
-      p.prepare!(turn, c, signal).catch((e: unknown) => {
-        if (signal.aborted) throw e
-        throw new Error(`${p.name}: ${say(e)}`)
-      }),
-    ),
+    active(plugins, g)
+      .filter((p) => !denied.includes(p.id))
+      .map((p) =>
+        p.prepare!(turn, c, signal).catch((e: unknown) => {
+          if (signal.aborted) throw e
+          throw new Error(`${p.name}: ${say(e)}`)
+        }),
+      ),
   )
   return merge(preps)
 }

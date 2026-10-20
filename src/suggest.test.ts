@@ -19,6 +19,8 @@ import {
   SCHEMA,
   seed,
   shown,
+  fill,
+  STARTERS,
   sig,
   skip,
   stale,
@@ -267,6 +269,14 @@ describe('what the account keeps', () => {
     expect(shown(after).map((r) => r.id)).toEqual(['r2'])
     expect(dismissed(after, 'r1').dismissed).toEqual(['r1'])
     expect(shown(null)).toEqual([])
+  })
+
+  it('fills to three with what Hanzo does, never past a dismissal, and none before the rows are read', () => {
+    const one: Kept = { at: 'a', sig: 's', rows: [row as Kept['rows'][number]], dismissed: [] }
+    expect(fill(one).map((r) => r.id)).toEqual(['r1', STARTERS[0]!.id, STARTERS[1]!.id])
+    expect(fill({ ...one, rows: [] }).map((r) => r.id)).toEqual(STARTERS.map((r) => r.id))
+    expect(fill(dismissed(one, STARTERS[0]!.id)).map((r) => r.id)).toEqual(['r1', STARTERS[1]!.id, STARTERS[2]!.id])
+    expect(fill(null)).toEqual([])
   })
 
   it('forgets the oldest dismissal past the limit', () => {

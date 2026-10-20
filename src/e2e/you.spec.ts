@@ -45,10 +45,10 @@ test('text size, motion and the dictation language are saved and applied', async
   expect(patched(sent).at(-1)).toEqual({ text: null })
 })
 
-test('saved settings are applied on load, and New greets by name and starts from the coding defaults', async ({ page }, info) => {
+test('saved settings are applied on load, and New starts from the coding defaults', async ({ page }, info) => {
   await platform(page, { prefs: { theme: 'light', text: 'large', callName: 'Dave', code: { model: 'zen5.8-coder', effort: 'high', mode: 'plan', place: '' } } })
   await page.goto('/')
-  await expect(page.getByText('What’s up next, Dave?')).toBeVisible({ timeout: 45_000 })
+  await expect(page.getByText('Build what’s next.')).toBeVisible({ timeout: 45_000 })
   await expect(page.locator('html')).toHaveClass(/\blight\b/)
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--type-scale').trim())).toBe('1.15')
   await expect(page.getByRole('button', { name: 'Mode: Plan' })).toBeVisible()
@@ -80,7 +80,7 @@ test('Account saves the name, what to call you, the work and the instructions', 
   await expect(page.getByRole('button', { name: 'Copy organization ID' })).toBeVisible()
   await page.screenshot({ path: info.outputPath('account.png'), fullPage: true })
   await page.getByRole('button', { name: 'New', exact: true }).first().click()
-  await expect(page.getByText('What’s up next, Dave?')).toBeVisible()
+  await expect(page.getByText('Build what’s next.')).toBeVisible()
 })
 
 test('Account sets a new photo', async ({ page }) => {

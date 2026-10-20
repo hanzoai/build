@@ -36,6 +36,7 @@ import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
 import { useCarry } from './carry.tsx'
+import { DEV_MODES } from './gear.ts'
 import { Suggestions, useSuggestions } from './suggestions.tsx'
 import { MEASURE, Prompt, useEar } from './prompt.tsx'
 import { Monitor as Device } from '@hanzogui/lucide-icons-2'
@@ -166,8 +167,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       }
     },
     go: (href) => (href.startsWith('http') ? host.open(href) : host.go(href)),
-  })
-  const mode: Mode = carry.gear.gear.mode === 'plan' ? 'plan' : 'build'
+  }, DEV_MODES)
+  const mode: Mode = carry.mode.value === 'plan' ? 'plan' : 'build'
   const hints = useSuggestions(t)
   // The chosen codebase's environment, so New can say when it has none yet.
   const codebase = isForge(kept.repo) ? kept.repo.name : ''
@@ -248,6 +249,11 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       if (prepped.reply) {
         // Its words, without the page it drew (Chat shows that in the side panel).
         setNote(prepped.reply.split('```')[0]!.trim())
+        return
+      }
+      // Manual: the run is asked for before it starts; it edits, commits and pushes on its own once it has.
+      if (!(await carry.allow({ id: 'run', name: 'Dev to start this run', note: 'It edits, tests, commits and pushes its own branch' }))) {
+        setNote('Not started.')
         return
       }
       const run = await start(t, {
@@ -410,9 +416,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     // page, as they do on claude.ai; a run's own page keeps its composer at the foot.
     // Chat's opening, the same: the heading set as Chat's, the composer as wide as the text.
     <YStack flex={1} minH={0} minW={0} items="center" justify="center" pb="$10" overflowY="auto" overflowX="hidden">
-      <YStack width="100%" maxW={MEASURE} gap="$5">
+      <YStack width="100%" maxW={MEASURE} gap="$3">
         <SizableText render="h1" fontSize="$7" lineHeight="$7" fontWeight="700" color="$ink" style={{ textAlign: 'center' }}>
-          {prefs.callName ? `What’s up next, ${prefs.callName}?` : 'What’s up next?'}
+          Build what’s next.
         </SizableText>
         <YStack gap="$2">
           {stranger ? (
@@ -466,7 +472,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             on={carry.on}
             slash={carry.skills}
             at={carry.plugins}
-            mode={{ value: carry.gear.gear.mode, set: (m) => carry.gear.set({ mode: m }) }}
+            mode={carry.mode}
             where={where}
             below={<Suggestions rows={hints.rows} onPick={setDraft} onDismiss={hints.dismiss} />}
             mind={mind}

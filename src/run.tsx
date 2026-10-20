@@ -24,7 +24,7 @@
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { ChevronDown, ChevronRight, Clock, Copy, ExternalLink, GitPullRequest, Globe, Pencil, Share } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Grip, Input, type DropdownMenuProps } from '@hanzo/ui'
+import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type DropdownMenuProps } from '@hanzo/ui'
 import { Steer, type Command } from '@hanzo/ui/agents'
 import { Failure } from '@hanzo/ui/chat'
 import { useLimits } from '@hanzo/ui/product/useLimits'
@@ -41,6 +41,7 @@ import { Desk, SEED } from './desk.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { useMind } from './mind.ts'
 import { Out } from './out.tsx'
+import { Gutter } from './gutter.tsx'
 import { gap, pane } from './pane.ts'
 import { measure, Prompt, useEar } from './prompt.tsx'
 import { useSpoken } from './voice.ts'
@@ -574,7 +575,6 @@ export function Run({ id }: { id: string }) {
             mind={signed && !steering ? mind : null}
             limits={limits}
             voice={voice}
-            note="Hanzo is AI and can make mistakes."
           />
         </YStack>
       </YStack>
@@ -592,18 +592,8 @@ export function Run({ id }: { id: string }) {
           style={split.asideStyle}
         >
           {split.grip ? (
-            <Grip
-              {...split.grip}
-              label="Resize the side panel"
-              bar="inline"
-              // The handle halfway down the edge, where a hand looks for it.
-              justify="center"
-              // In the gutter between the two panes; `left` is measured inside the pane's 1px edge.
-              l={`calc(-1 * ${gap} - ${pane.borderWidth}px)`}
-              width={gap}
-              // A finger's band, centred on the gutter.
-              $touchable={{ l: `calc(-22px - ${gap} / 2 - ${pane.borderWidth}px)`, width: 44 }}
-            />
+            // In the gutter between the two panes, measured inside the pane's edge.
+            <Gutter {...split.grip} label="Resize the side panel" inset={pane.borderWidth} />
           ) : null}
           <SideProvider value={split.side}>{desk_(false)}</SideProvider>
         </YStack>
