@@ -41,7 +41,7 @@ import { Forge } from './forge.tsx'
 import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
 import { Landing } from './landing.tsx'
 import { nav, NEW } from './nav.tsx'
-import { PrefsProvider } from './prefs.tsx'
+import { Look, PrefsProvider } from './prefs.tsx'
 import { Project } from './project.tsx'
 import { Plans } from './plans.tsx'
 import { path, route } from './route.ts'
@@ -247,6 +247,7 @@ export function Builder({ host, rail = true }: { host: Host; rail?: boolean }) {
   return (
     <HostProvider host={host}>
       <PrefsProvider>
+        <Look />
         <YStack flex={1} minH={0} minW={0} height="100%" bg={rail ? '$background' : undefined}>
           <Screens rail={rail} />
         </YStack>

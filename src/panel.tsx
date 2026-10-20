@@ -16,11 +16,13 @@
  * (`frames`) — and offers any other address in a new window instead of a frame
  * the site would refuse.
  *
- * The column the panel stands in is the host's: its width and edge. On a phone
- * the panel is a sheet over the page instead (`sheet`).
+ * The column the panel stands in is the host's (side.tsx `useSplit`): its
+ * width and edge. The strip reads it for full screen (Escape returns) and, while
+ * the panel has the middle column's room, the way back to it. On a phone the
+ * panel is the whole window instead (`sheet`).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Maximize2, Minus, MoreHorizontal, Pin, Plus, RotateCcw, RotateCw, SquarePlus, X } from '@hanzogui/lucide-icons-2'
+import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Maximize2, Minimize2, Minus, MoreHorizontal, PanelLeftOpen, Pin, Plus, RotateCcw, RotateCw, SquarePlus, X } from '@hanzogui/lucide-icons-2'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -40,6 +42,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 import { useBrowse, useBrowser, type Browser } from './host.tsx'
+import { useSide } from './side.tsx'
 import { destination, PAGE, type Deck, type Tab } from './tabs.ts'
 
 /** A kind of tab the surface offers. */
@@ -800,6 +803,9 @@ export interface PanelProps extends Acts {
 /** The panel: the strip, and the chosen tab. */
 export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = 'Side panel', suggested, ...acts }: PanelProps) {
   const tab = side.tabs.find((t) => t.id === side.at) ?? null
+  // The column it stands in; a phone's sheet is the whole window already.
+  const stands = useSide()
+  const column = sheet ? null : stands
   // The chosen tab is in view in a strip that scrolls: a tab just opened stands at its end.
   useEffect(() => {
     if (side.at) document.getElementById(`side-tab-${side.at}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
@@ -820,6 +826,12 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
   const body = (
     <YStack role="complementary" aria-label={label} data-slot="side" flex={1} minW={0} minH={0} overflow="hidden" style={{ borderRadius: 'inherit' }}>
       <XStack data-slot="side-strip" height={STRIP} px="$2" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
+        {column?.hidden && !column.full ? (
+          <XStack render="button" role="button" data-slot="side-show" onPress={column.show} height={32} px="$2" gap="$1.5" {...quiet()}>
+            <PanelLeftOpen size={16} />
+            <SizableText fontSize={13} color="$ink">{`Show ${column.main}`}</SizableText>
+          </XStack>
+        ) : null}
         {/* The strip scrolls sideways in a narrow panel; `+`, the menu, pop-out and hide stay put. */}
         <XStack role="tablist" aria-label="Tabs" shrink={1} minW={0} gap="$1" items="center" overflowX="auto" overflowY="hidden" $platform-web={{ scrollbarWidth: 'none' }}>
           {side.tabs.map((t, i) => (
@@ -849,8 +861,25 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
           height={28}
           {...quiet(false, !poppable)}
         >
-          <Maximize2 size={14} />
+          <ExternalLink size={14} />
         </XStack>
+        {column ? (
+          <XStack
+            render="button"
+            role="button"
+            data-slot="side-full"
+            aria-label={column.full ? 'Exit full screen' : 'Full screen'}
+            aria-pressed={column.full}
+            aria-keyshortcuts={column.full ? 'Escape' : undefined}
+            {...({ title: column.full ? 'Exit full screen (Esc)' : 'Full screen' } as object)}
+            onPress={() => column.fill(!column.full)}
+            width={28}
+            height={28}
+            {...quiet(column.full)}
+          >
+            {column.full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </XStack>
+        ) : null}
         <XStack
           render="button"
           role="button"
@@ -911,25 +940,21 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
   )
 
   if (!sheet || typeof document === 'undefined') return body
-  // A phone: a sheet from the foot of the window over a dim, the same panel in it.
+  // A phone: the panel over the whole window, clear of the notch and the home
+  // indicator. The strip's toggle puts it away.
   return createPortal(
-    <YStack data-slot="side-sheet" position="fixed" t={0} r={0} b={0} l={0} z={60}>
-      {/* The dim above the sheet: a press on it puts the sheet away. The strip's toggle is its control. */}
-      <YStack aria-hidden onPress={onHide} position="absolute" t={0} r={0} l={0} height="12dvh" bg="var(--surface-scrim)" />
-      <YStack
-        position="absolute"
-        l={0}
-        r={0}
-        b={0}
-        height="88dvh"
-        bg="$background"
-        borderTopWidth={1}
-        borderColor="$borderColor"
-        style={{ borderTopLeftRadius: 16, borderTopRightRadius: 16 }}
-        overflow="hidden"
-      >
-        {body}
-      </YStack>
+    <YStack
+      data-slot="side-sheet"
+      position="fixed"
+      t={0}
+      r={0}
+      b={0}
+      l={0}
+      z={60}
+      bg="$background"
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      {body}
     </YStack>,
     document.body,
   )

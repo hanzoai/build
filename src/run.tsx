@@ -24,12 +24,12 @@
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { ChevronDown, ChevronRight, Clock, Copy, ExternalLink, GitPullRequest, Globe, Pencil, Share } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type DropdownMenuProps } from '@hanzo/ui'
+import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Grip, Input, type DropdownMenuProps } from '@hanzo/ui'
 import { Steer, type Command } from '@hanzo/ui/agents'
 import { Failure } from '@hanzo/ui/chat'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { approve, followUp, headline, retry, start, type Ask, type Earlier } from './api/coding.ts'
 import { limits as readLimits } from './api/models.ts'
@@ -38,7 +38,6 @@ import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Desk, SEED } from './desk.tsx'
-import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { useMind } from './mind.ts'
 import { Out } from './out.tsx'
@@ -48,6 +47,7 @@ import { useSpoken } from './voice.ts'
 import { speaker, type Artifact } from './reply.tsx'
 import { PanelToggle } from './panel.tsx'
 import { schedule } from './scheduled.tsx'
+import { SideProvider, useSplit } from './side.tsx'
 import { PAGE, useDeck, useKey, usePanel } from './tabs.ts'
 import { compose, Files, pick, type Attached } from './tools.tsx'
 import { Transcript } from './transcript.tsx'
@@ -55,31 +55,6 @@ import { Transcript } from './transcript.tsx'
 const LIVE = new Set(['running', 'paused', ''])
 
 type MenuItems = NonNullable<DropdownMenuProps['items']>
-
-/** The side panel's width, px: its default, the floor a drag holds, and what the transcript keeps beside it. */
-const DESK_WIDTH = 480
-const DESK_FLOOR = 240
-const TALK_FLOOR = 300
-/** The most the side panel is drawn at before its row is measured, px. */
-const DESK_CEIL = 960
-
-/**
- * How wide an element is drawn, px, read before the first paint and again as it
- * changes, so what depends on it is right on the first frame. 0 until it is drawn.
- */
-function useWidth(): [number, (el: unknown) => void] {
-  const [width, setWidth] = useState(0)
-  const [el, setEl] = useState<HTMLElement | null>(null)
-  useLayoutEffect(() => {
-    if (!el) return
-    setWidth(el.getBoundingClientRect().width)
-    if (typeof ResizeObserver === 'undefined') return
-    const watch = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 0))
-    watch.observe(el)
-    return () => watch.disconnect()
-  }, [el])
-  return [width, (node) => setEl(node instanceof HTMLElement ? node : null)]
-}
 
 export function Run({ id }: { id: string }) {
   const host = useHost()
@@ -97,15 +72,8 @@ export function Run({ id }: { id: string }) {
   const [desk, setDesk] = usePanel('dev', true, wide)
   const side = useDeck('dev', SEED)
   useKey(() => setDesk(!desk))
-  // The side panel's width is the reader's, kept, and gives way so the
-  // transcript keeps its floor: bounded by the row it is drawn in once that is
-  // measured, and by its own `maxWidth` until then.
-  const [reach, setReach] = useKept('hanzo.build.desk.span', DESK_WIDTH)
-  const [room, size] = useWidth()
-  const most = room ? Math.max(DESK_FLOOR, room - TALK_FLOOR) : DESK_CEIL
-  const across = Math.round(Math.min(most, Math.max(DESK_FLOOR, typeof reach === 'number' ? reach : DESK_WIDTH)))
-  // A drag repaints the pane's width directly and tells React once, on letting go.
-  const deskBox = useRef<HTMLElement | null>(null)
+  // The side panel's column: the person's width, the run hidden behind it, full screen (side.tsx).
+  const split = useSplit(desk && wide, 'run', () => setDesk(false))
   // Stop was pressed here: the run keeps its work after it answers, and says so with its status.
   const [stopping, setStopping] = useState(false)
   const [naming, setNaming] = useState(false)
@@ -410,8 +378,8 @@ export function Run({ id }: { id: string }) {
   )
 
   return (
-    <XStack ref={size} data-slot="run-split" flex={1} minH={0} minW={0} width="100%">
-      <YStack data-slot="run" {...pane} flex={1} minH={0} minW={0} width="100%">
+    <XStack data-slot="run-split" flex={1} minH={0} minW={0} width="100%">
+      <YStack data-slot="run" ref={split.main} style={split.mainStyle} {...pane} flex={1} minH={0} minW={0} width="100%">
         <XStack px="$4" pt="$3" pb="$2" gap="$2" items="center" minH={44}>
           <YStack flex={1} minW={0} items="flex-start">
             <DropdownMenu
@@ -614,32 +582,30 @@ export function Run({ id }: { id: string }) {
       {desk && wide ? (
         <YStack
           data-slot="desk"
-          ref={(el: unknown) => {
-            deskBox.current = el instanceof HTMLElement ? el : null
-          }}
+          ref={split.aside}
           {...pane}
           // A pane of its own beside the run's, the gutter between them.
           ml={gap}
           position="relative"
           shrink={0}
           minH={0}
-          style={{ width: across, maxWidth: `calc(100% - ${TALK_FLOOR}px)`, minWidth: DESK_FLOOR }}
+          style={split.asideStyle}
         >
-          <Grip
-            side="right"
-            span={across}
-            floor={DESK_FLOOR}
-            ceil={most}
-            reset={Math.min(most, DESK_WIDTH)}
-            onSpan={(n) => deskBox.current?.style.setProperty('width', `${n}px`)}
-            onKeep={setReach}
-            onShut={() => setDesk(false)}
-            label="Resize the side panel"
-            // In the gutter between the two panes; `left` is measured inside the pane's 1px edge.
-            l={`calc(-1 * ${gap} - ${pane.borderWidth}px)`}
-            width={gap}
-          />
-          {desk_(false)}
+          {split.grip ? (
+            <Grip
+              {...split.grip}
+              label="Resize the side panel"
+              bar="inline"
+              // The handle halfway down the edge, where a hand looks for it.
+              justify="center"
+              // In the gutter between the two panes; `left` is measured inside the pane's 1px edge.
+              l={`calc(-1 * ${gap} - ${pane.borderWidth}px)`}
+              width={gap}
+              // A finger's band, centred on the gutter.
+              $touchable={{ l: `calc(-22px - ${gap} / 2 - ${pane.borderWidth}px)`, width: 44 }}
+            />
+          ) : null}
+          <SideProvider value={split.side}>{desk_(false)}</SideProvider>
         </YStack>
       ) : null}
       <Dialog open={naming} onOpenChange={setNaming}>

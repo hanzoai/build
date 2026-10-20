@@ -111,6 +111,12 @@ One of each, shared with Chat (@hanzo/rooms imports them):
 - `prompt` / `Prompt` — the composer, as wide as the text above it (`measure`).
 - `Reply` — copy, Listen and Open under an answer.
 - `Panel` over `useDeck` — the side panel and its kept tabs.
+- `useSplit` / `SideProvider` — the column the panel stands in: its edge (the
+  kit's `Grip`), the width the person drags kept in their preferences
+  (`side.width`, `PATCH /v1/pref`), the middle column hidden when the panel is
+  pulled over it (Show chat brings it back), and full screen from the strip
+  (Escape returns). `PrefsProvider` above it keeps the width; without one it
+  lasts the page.
 
 ## Addresses
 
@@ -249,8 +255,11 @@ Files, Diff (Diff, Review, Commits) and Terminal (a shell in the working tree,
 reattached by the run's name, and the agent's log); `+` opens Desktop (the
 sandbox's screen), Environment and any page. Tabs are dragged to reorder (or
 moved with Ctrl/⌘+Shift+←/→), shut with their cross, and kept as left; the
-header's Panel button and ⌘. / Ctrl+. open and shut it, and a phone opens it as
-a sheet. An answer's Open shows what it wrote there, and a publish opens Preview.
+header's Panel button and ⌘. / Ctrl+. open and shut it, and a phone opens it
+over the whole window. Its edge sizes it, the width kept in the person's
+preferences; pulled over the run it takes the run's room until Show run or a
+pull back out, and its strip's button puts it full screen until Escape. An
+answer's Open shows what it wrote there, and a publish opens Preview.
 
 The desktop and the shell are the sandbox's, so they close when the run stops.
 The setup bar says how long setup runs here have taken, once there are three.
@@ -305,7 +314,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `GET /v1/tool/plugins/authored` · `POST /v1/tool/plugins/build` · `DELETE …/authored/{id}` · `GET /v1/tool/plugins` | plugins, and what is mounted |
 | `GET`/`POST /v1/agent` · `GET`/`PATCH`/`DELETE /v1/agent/{ref}` · `GET /v1/agent/chat/presets` | agents, and presets |
 | `GET /v1/models` · `POST /v1/event` | the model list, a verdict |
-| `GET`/`PATCH /v1/pref` | the person's own settings: theme, text size, motion, dictation language, what to call them, their instructions, the coding defaults |
+| `GET`/`PATCH /v1/pref` | the person's own settings: theme, text size, motion, dictation language, what to call them, their instructions, the coding defaults, the side panel's width (`side`) |
 | `PUT /v1/iam/account` · `POST /v1/account/avatar` | the person's name and photo |
 | `GET`/`PUT /v1/iam/consent` | whether Hanzo may train on their data, and usage insights |
 | `GET /v1/tool` · `PUT /v1/tool/activation` | what the agent may use, per kind of tool |
@@ -345,6 +354,7 @@ src/
   prompt.tsx    the composer, and Tune, the model and effort chip
   reply.tsx     the row under an answer
   panel.tsx     the side panel; tabs.ts its kept tabs
+  side.tsx      the column it stands in: width, the middle column, full screen
   pane.ts       how a pane is cut, from the --pane-* tokens
   door.tsx      a run's desktop or shell, framed
   git.tsx       what a run pushed

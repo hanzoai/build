@@ -449,8 +449,13 @@ test('the side panel is closed and opened again from the header, and this browse
   expect(await p.evaluate(() => localStorage.getItem('hanzo.side.dev.open'))).toBe('1')
 })
 
-test('the side panel is sized by its edge — keyed, kept and double-clicked back — and shut by keying past its floor', async ({ page: p }) => {
-  await rig(p)
+test('the side panel is sized by its edge — keyed, kept in the person’s preferences and double-clicked back — and shut by keying past its floor', async ({ page: p }) => {
+  const doc: Record<string, unknown> = {}
+  const { sent } = await rig(p, {}, ({ method, path, body }) => {
+    if (path !== '/v1/pref') return undefined
+    if (method === 'PATCH') Object.assign(doc, body)
+    return { json: { prefs: doc } }
+  })
   await p.goto(`/${SESSION}`)
   const edge = p.getByRole('separator', { name: 'Resize the side panel' })
   await expect(edge).toHaveAttribute('aria-valuenow', '480', { timeout: 45_000 })
@@ -458,7 +463,8 @@ test('the side panel is sized by its edge — keyed, kept and double-clicked bac
   await p.keyboard.press('Shift+ArrowLeft')
   await expect(edge).toHaveAttribute('aria-valuenow', '512')
   expect(Math.round((await p.locator('[data-slot="desk"]').boundingBox())!.width)).toBe(512)
-  expect(await p.evaluate(() => localStorage.getItem('hanzo.build.desk.span'))).toBe('512')
+  await expect.poll(() => doc).toEqual({ side: { width: 512 } })
+  expect(to(sent, 'PATCH', '/v1/pref')).toHaveLength(1)
   await p.reload()
   await expect(p.getByRole('separator', { name: 'Resize the side panel' })).toHaveAttribute('aria-valuenow', '512', { timeout: 45_000 })
   await p.getByRole('separator', { name: 'Resize the side panel' }).dblclick()
