@@ -46,8 +46,13 @@ export { href, parse, path, PLACES, route, SESSION, SLUG, type Route, type Scree
  * (`prompt`), the row under an answer (`Reply`), and the side panel (`Panel`
  * over a `Deck` of tabs).
  */
-export { catalog, EFFORTS, FIRST, keep, kept, nameOf, reasons, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
-export { cut, GAP, MEASURE, measure, Prompt, prompt, ROUND, Tune, useEar, type PromptOptions } from './prompt.tsx'
+export { catalog, EFFORTS, FIRST, FREE, grants, isFree, keep, kept, nameOf, reasons, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
+export { ASK, cut, GAP, MEASURE, measure, Prompt, prompt, ROUND, trigger, Tune, useEar, useMention, useUpload, type Chip, type PromptOptions } from './prompt.tsx'
+export { Plus, type Link, type PlusProps, type Row as ShelfRow, type Shelf, type Switch } from './plus.tsx'
+export { BARE, gearOf, MODES, useGear, type Gear, type GearState, type Mode as GearMode } from './gear.ts'
+export { useCarry, type Carry } from './carry.tsx'
+export { Dictation } from './mic.tsx'
+export type { Composer as PluginComposer, Plugin, Prep, Turn } from './plugin.ts'
 export { artifacts, blob, lead, renders, Reply, Served, speakable, speaker, type Artifact, type Listen } from './reply.tsx'
 export { frames, Page, Panel, PanelToggle, type Kind, type PageProps, type PanelProps, type Suggestion } from './panel.tsx'
 export { kinds, Summary, useKinds, type Entry, type Section } from './summary.tsx'

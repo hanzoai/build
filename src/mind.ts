@@ -16,7 +16,7 @@
  * lists as not reasoning offers none; Enso and a model the catalog does not
  * describe offer all three.
  */
-import { modelName, parseModels } from '@hanzo/ui/models/catalog'
+import { parseModels } from '@hanzo/ui/models/catalog'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import { Refusal, type Target } from './api/call.ts'
@@ -38,6 +38,12 @@ export interface Choice {
 }
 
 export const FIRST: Choice = { model: ENSO, effort: 'medium' }
+
+/** What Free answers on: the catalog's free lane, Enso's first. `free` is an alias of it. */
+export const FREE = 'enso-free'
+
+/** Whether a plan grants only the free lane. An unknown plan is not taken for Free. */
+export const isFree = (plan: string | null | undefined): boolean => plan === 'free'
 
 const KEY = 'hanzo.mind'
 const CHANGE = 'hanzo:mind'
@@ -115,9 +121,23 @@ export function reasons(model: string, catalog: readonly Model[]): boolean {
 /** A model's name as the catalog spells it; Enso for the router. */
 export function nameOf(model: string, catalog: readonly Model[]): string {
   if (model === ENSO) return 'Enso'
+  if (model === 'free') return nameOf(FREE, catalog)
   const row = catalog.find((m) => m.id === model)
-  return modelName(row ?? { id: model })
+  return row?.name ?? spelled(model)
 }
+
+/** An id said as a name: its last path part, each word capitalised (`enso-flash` → Enso Flash). */
+export function spelled(id: string): string {
+  const tail = id.split('/').pop() ?? id
+  return tail
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+/** The ids that are the router under another name: the picker's Enso row stands for all of them. */
+export const ROUTER_IDS: ReadonlySet<string> = new Set([ENSO, 'enso', 'hanzo/enso', 'free'])
 
 // The catalog, once per platform for the page: Chat and Dev read the same list.
 const catalogs = new Map<string, Promise<Model[]>>()
@@ -212,6 +232,12 @@ export function useCatalog(t: Target): Catalog {
   }
 }
 
+/** Whether `model` is one this plan may send: on Free, the catalog's free class alone. */
+export function grants(free: boolean, model: string, catalog: readonly Model[]): boolean {
+  if (!free) return true
+  return catalog.find((m) => m.id === model)?.class === 'free'
+}
+
 /** The chip's whole state: the catalog, what answers next, and how to change either. */
 export interface Mind {
   model: string
@@ -221,14 +247,35 @@ export interface Mind {
   error: string | null
   /** A list shown from before, because this read failed. */
   note: string
+  /** The plan grants only the free lane: anything else is an upgrade, never a pick. */
+  free: boolean
   /** A premium pick holds for this screen; any other is kept. */
   pick: (id: string) => void
   pace: (effort: Effort) => void
 }
 
-export function useMind(t: Target): Mind {
+/**
+ * The model and effort for the plan `plan` names (`GET /v1/ai/limits` `plan`).
+ * On Free the default is `FREE` and a kept pick outside the free lane is set
+ * aside rather than sent — it comes back once the plan grants it.
+ */
+export function useMind(t: Target, plan?: string | null): Mind {
   const [choice, change] = useChoice()
   const { models, list, loading, error, note } = useCatalog(t)
-  const [model, pick] = usePick(choice.model, (id) => change({ model: id }), list)
-  return { model, effort: choice.effort, models, loading, error, note, pick, pace: (effort) => change({ effort }) }
+  const free = isFree(plan)
+  const [picked, pick] = usePick(choice.model, (id) => change({ model: id }), list)
+  const model = free && !grants(true, picked, models) ? FREE : picked
+  return {
+    model,
+    effort: choice.effort,
+    models,
+    loading,
+    error,
+    note,
+    free,
+    pick: (id) => {
+      if (grants(free, id, models)) pick(id)
+    },
+    pace: (effort) => change({ effort }),
+  }
 }

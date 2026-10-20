@@ -15,10 +15,9 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
-import { ModeSelect } from '@hanzo/ui/agents'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useLimits } from '@hanzo/ui/product/useLimits'
-import { useDictation, useVoice } from '@hanzo/voice'
+import { useDictation, useTalk, useVoice } from '@hanzo/voice'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
@@ -36,7 +35,9 @@ import { useMind } from './mind.ts'
 import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
+import { useCarry } from './carry.tsx'
 import { MEASURE, Prompt, useEar } from './prompt.tsx'
+import { Monitor as Device } from '@hanzogui/lucide-icons-2'
 import { compose, Files, pick, type Attached } from './tools.tsx'
 import { useSpoken } from './voice.ts'
 
@@ -110,7 +111,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
-  const { prefs } = usePrefs()
+  const { prefs, save: savePrefs } = usePrefs()
   const [stored, keep] = useKept<Partial<Kept> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
   // What was chosen here, over the person's coding defaults (Settings → Code), over
   // the first run's. Field by field: a codebase or an issue handed over from its own
@@ -142,9 +143,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   const places = usePlaces(t, signed)
   // The model and effort Chat shares, and dictation into the ask.
-  const mind = useMind(t)
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
+  const mind = useMind(t, (limits as { plan?: string } | null)?.plan)
   const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
+  const talk = useTalk({ baseUrl: t.api, token: () => t.token(), ...(t.org ? { org: t.org } : {}) })
+  // What the run carries beside the ask: skills, memory and the mode, as Chat's turns do.
+  const carry = useCarry(t, '', (tab) => host.go(path({ kind: 'customize', tab })))
+  const mode: Mode = carry.gear.gear.mode === 'plan' ? 'plan' : 'build'
   // The chosen codebase's environment, so New can say when it has none yet.
   const codebase = isForge(kept.repo) ? kept.repo.name : ''
   // The org's repositories on the forge: what a run and an environment can name.
@@ -205,7 +210,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       return
     }
     // A plan or a setup routed to a machine is refused here, in its own words, before it leaves the page.
-    const why = unhonoured(kept.mode, place.id)
+    const why = unhonoured(mode, place.id)
     if (why) {
       setNote(why)
       return
@@ -219,13 +224,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     setNote('')
     try {
       const run = await start(t, {
-        prompt: compose(draft.trim(), files),
+        prompt: compose([draft.trim(), await carry.brief(draft)].filter(Boolean).join('\n\n---\n'), files),
         // The name alone. The org rides the request, and a slash is not a repo name.
         // An empty base or place is not sent: the default branch, and the sandbox.
         repo: repo?.name ?? hub?.full_name,
         base: repo ? kept.branch : hub ? kept.branch || hub.default_branch : undefined,
         targetId: place.id,
-        mode: kept.mode,
+        mode,
         model: mind.model,
         effort: mind.effort,
         issue,
@@ -289,7 +294,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   const branch = kept.branch || kept.repo?.default_branch || 'main'
 
-  const head = (
+  const where = (
     <XStack gap={6} items="center" flexWrap="wrap">
       <ChipSelect
         name="Where the run runs"
@@ -358,9 +363,20 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         disabled={!signed}
       />
       {isForge(kept.repo) ? <BranchSelect value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} /> : null}
-      <Files files={files} onFiles={setFiles} />
     </XStack>
   )
+  const head = files.length ? (
+    <XStack gap={6} items="center" flexWrap="wrap">
+      <Files files={files} onFiles={setFiles} />
+    </XStack>
+  ) : undefined
+  // The machines a run can go to, as the `+` menu's Devices: the same choice as `where`'s.
+  const devices = {
+    rows: placeItems.map((i) => ({ id: i.place.id || 'sandbox', label: i.label, note: i.hint, icon: <Device size={16} />, on: i.place.id === place.id })),
+    pick: (id: string) => set({ place: id === 'sandbox' ? '' : id }),
+    loading: places.loading,
+    error: places.error?.message ?? null,
+  }
 
   return (
     // The question and the field that answers it sit together in the middle of the
@@ -399,9 +415,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
               )}
             </XStack>
           ) : null}
-          {note || unhonoured(kept.mode, place.id) || mind.note ? (
+          {note || unhonoured(mode, place.id) || mind.note ? (
             <SizableText size="$1" color="$soft" role="status">
-              {note || unhonoured(kept.mode, place.id) || mind.note}
+              {note || unhonoured(mode, place.id) || mind.note}
             </SizableText>
           ) : null}
           <Prompt
@@ -410,16 +426,25 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             onChange={setDraft}
             onSend={() => void send()}
             busy={busy}
-            placeholder="Describe a task or ask a question"
             label="Describe a task or ask a question"
             head={head}
-            onAttach={() => pick(files, setFiles, setNote)}
-            tools={
-              <ModeSelect modes={MODES} value={kept.mode} onChange={(m) => set({ mode: m as Mode })} bg="transparent" minH={24} px="$1.5" self="center" />
-            }
+            plus={{
+              upload: () => pick(files, setFiles, setNote),
+              skills: carry.skills,
+              devices,
+              memory: { on: carry.gear.gear.memory, set: (on) => carry.gear.set({ memory: on }) },
+            }}
+            on={carry.on}
+            slash={carry.skills}
+            mode={{ value: carry.gear.gear.mode, set: (m) => carry.gear.set({ mode: m }) }}
+            where={where}
             mind={mind}
             limits={limits}
+            onUpgrade={() => host.go(path({ kind: 'screen', screen: 'plans' }))}
             voice={voice}
+            language={prefs.language ?? null}
+            onLanguage={(id) => void savePrefs({ language: id })}
+            talk={talk}
           />
         </YStack>
       </YStack>

@@ -601,7 +601,7 @@ export function Run({ id }: { id: string }) {
             placeholder={placeholder}
             label={steering ? 'Steer this run' : 'Follow up on this run'}
             head={files.length ? <XStack gap="$1.5" flexWrap="wrap"><Files files={files} onFiles={setFiles} /></XStack> : undefined}
-            onAttach={() => pick(files, setFiles, setNote)}
+            plus={{ upload: () => pick(files, setFiles, setNote) }}
             // What a new run from here is made with; words that steer this run use neither.
             mind={signed && !steering ? mind : null}
             limits={limits}

@@ -13,17 +13,19 @@
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
-import type { Target } from './api/call.ts'
-import { read, save } from './api/pref.ts'
+import { call, type Target } from './api/call.ts'
 
 /** What a run or a turn may do on its own: the permission mode. */
-export type Mode = 'manual' | 'auto' | 'accept' | 'plan'
+export type Mode = 'auto' | 'plan'
 
+/**
+ * The modes the platform honours. Manual and Accept edits are not here: a cloud
+ * run takes `build` or `plan` (apps/coding) and a chat turn asks before nothing,
+ * so offering them would promise a pause that never comes.
+ */
 export const MODES: readonly { id: Mode; label: string; note: string }[] = [
-  { id: 'manual', label: 'Manual', note: 'Hanzo asks before using new tools or opening new sites.' },
-  { id: 'auto', label: 'Auto', note: 'Hanzo runs on its own and pauses to ask if anything looks unsafe.' },
-  { id: 'accept', label: 'Accept edits', note: 'Hanzo makes edits and asks you to review them.' },
-  { id: 'plan', label: 'Plan', note: 'Lays out the plan first and changes nothing until you say go.' },
+  { id: 'auto', label: 'Auto', note: 'Hanzo works on its own and stops to ask only if something looks unsafe.' },
+  { id: 'plan', label: 'Plan', note: 'Hanzo lays out the plan first and changes nothing until you say go.' },
 ]
 
 export interface Gear {
@@ -33,8 +35,6 @@ export interface Gear {
   connectors: string[]
   /** Plugin ids. */
   plugins: string[]
-  /** Agents added to the chat. */
-  agents: string[]
   /** A design system's id, or ''. */
   design: string
   /** A machine's id, or '' for none (Chat) or the sandbox (Dev). */
@@ -48,7 +48,6 @@ export const BARE: Gear = {
   skills: [],
   connectors: [],
   plugins: [],
-  agents: [],
   design: '',
   device: '',
   research: false,
@@ -56,10 +55,8 @@ export const BARE: Gear = {
   mode: 'auto',
 }
 
-/** How many conversations keep a choice of their own. */
-export const KEEP = 100
-
-const STORAGE_KEY = 'hanzo.gear.doc'
+/** How many conversations keep a choice of their own: the document holds 16 KiB in all. */
+export const KEEP = 30
 
 const list = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : [])
 const text = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -71,7 +68,6 @@ export function gearOf(raw: unknown, base: Gear = BARE): Gear {
     skills: 'skills' in o ? list(o.skills) : base.skills,
     connectors: 'connectors' in o ? list(o.connectors) : base.connectors,
     plugins: 'plugins' in o ? list(o.plugins) : base.plugins,
-    agents: 'agents' in o ? list(o.agents) : base.agents,
     design: 'design' in o ? text(o.design) : base.design,
     device: 'device' in o ? text(o.device) : base.device,
     research: typeof o.research === 'boolean' ? o.research : base.research,
@@ -91,42 +87,15 @@ export function shelve(gears: Record<string, Gear>, key: string, g: Gear): Recor
   return out
 }
 
-// Load initial doc from localStorage if present
-function initialDoc(): Doc {
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored) as { gear?: unknown; gears?: unknown }
-        const g = gearOf(parsed.gear)
-        const all = parsed.gears && typeof parsed.gears === 'object' ? (parsed.gears as Record<string, unknown>) : {}
-        return { gear: g, gears: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, gearOf(v, g)])) }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return { gear: BARE, gears: {} }
-}
-
 // One document per page, read once per target and shared by every composer on it.
 interface Doc {
   gear: Gear
   gears: Record<string, Gear>
 }
-let doc: Doc = initialDoc()
+let doc: Doc = { gear: BARE, gears: {} }
 let loaded: string | null = null
 const listeners = new Set<() => void>()
-const emit = () => {
-  if (typeof window !== 'undefined') {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(doc))
-    } catch {
-      /* ignore */
-    }
-  }
-  listeners.forEach((f) => f())
-}
+const emit = () => listeners.forEach((f) => f())
 const subscribe = (f: () => void) => {
   listeners.add(f)
   return () => listeners.delete(f)
@@ -136,9 +105,9 @@ function load(t: Target): void {
   const id = `${t.api}|${t.org ?? ''}|${t.token() ? 1 : 0}`
   if (loaded === id || !t.token()) return
   loaded = id
-  void read(t)
-    .then((p) => {
-      const raw = p as unknown as { gear?: unknown; gears?: unknown }
+  void call<{ prefs?: { gear?: unknown; gears?: unknown } }>(t, 'GET', '/v1/pref')
+    .then((r) => {
+      const raw = r?.prefs ?? {}
       const gear = gearOf(raw.gear)
       const all = raw.gears && typeof raw.gears === 'object' ? (raw.gears as Record<string, unknown>) : {}
       doc = { gear, gears: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, gearOf(v, gear)])) }
@@ -154,7 +123,7 @@ export interface GearState {
   /** Change this conversation's choice. */
   set: (patch: Partial<Gear>) => void
   /** Add or take out one id of a list. */
-  toggle: (field: 'skills' | 'connectors' | 'plugins' | 'agents', id: string) => void
+  toggle: (field: 'skills' | 'connectors' | 'plugins', id: string) => void
   /** Make this conversation's choice the person's default. */
   keep: () => void
   /** Whether a save was refused, in the platform's words. */
@@ -178,7 +147,7 @@ export function useGear(t: Target, key = ''): GearState {
       emit()
       if (!t.token()) return
       const patch = key ? { gears: fresh.gears } : { gear: g }
-      save(t, patch as never).then(
+      call(t, 'PATCH', '/v1/pref', patch).then(
         () => setError(null),
         (e: unknown) => setError(e instanceof Error ? e.message : 'Your choice was not saved.'),
       )
@@ -198,7 +167,7 @@ export function useGear(t: Target, key = ''): GearState {
       keep: () => {
         doc = { ...doc, gear }
         emit()
-        if (t.token()) save(t, { gear } as never).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Not saved.'))
+        if (t.token()) call(t, 'PATCH', '/v1/pref', { gear }).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Not saved.'))
       },
     }),
     [gear, error, write, t],

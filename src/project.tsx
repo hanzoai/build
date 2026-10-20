@@ -55,7 +55,6 @@ import {
   Feedback,
   FileTabs,
   FileTree,
-  ModeSelect,
   PageSelect,
   PreviewFrame,
   ProjectChip,
@@ -91,7 +90,6 @@ import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Merge } from './git.tsx'
 import { Grip } from './grip.tsx'
 import { useHost, useTarget } from './host.tsx'
-import { MODES } from './landing.tsx'
 import { useMind } from './mind.ts'
 import { Out } from './out.tsx'
 import { Prompt, useEar } from './prompt.tsx'
@@ -618,8 +616,8 @@ export function Project({ at }: { at: Where }) {
           busy={busy || (running && !draft.trim())}
           placeholder={running ? 'Steer this run' : 'Ask Hanzo for edits'}
           label="Ask Hanzo for edits"
-          onAttach={() => pick(attached, setAttached, setNote)}
-          tools={<ModeSelect modes={MODES} value={mode} onChange={(m) => setMode(m as Mode)} bg="transparent" minH={24} px="$1.5" self="center" />}
+          plus={{ upload: () => pick(attached, setAttached, setNote) }}
+          mode={running ? null : { value: mode === 'plan' ? 'plan' : 'auto', set: (m) => setMode(m === 'plan' ? 'plan' : 'build') }}
           mind={running ? null : mind}
           voice={voice}
         />
