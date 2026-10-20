@@ -10,6 +10,7 @@
  * key another surface saved is left as it was. A value this version does not
  * recognise reads as unset rather than as a choice.
  */
+import { kept, type Kept } from '../suggest.ts'
 import { call, type Target } from './call.ts'
 
 export type Theme = 'system' | 'light' | 'dark'
@@ -47,6 +48,8 @@ export interface Prefs {
   instructions?: string
   code?: Code
   side?: Side
+  /** The suggestions under the composer: when made, from what, the rows, and those dismissed (suggest.ts). */
+  suggest?: Kept
 }
 
 /** A change: a key set to a value, or to null to delete it. */
@@ -93,6 +96,7 @@ export function prefs(raw: unknown): Prefs {
     instructions: text(p.instructions),
     code: code(p.code),
     side: side(p.side),
+    suggest: kept(p.suggest),
   })
 }
 
