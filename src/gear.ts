@@ -9,9 +9,13 @@
  *
  * Both live in the account, so a choice follows the person to every device. A
  * conversation that has none of its own reads the default; changing one writes
- * that conversation's, and "Keep as default" writes the default.
+ * that conversation's. A conversation not begun holds its choice on the page
+ * (`draft`) and hands it to the conversation once it has an id. What carries
+ * over to the next new conversation is only the switches (`STICKY`: Research,
+ * Memory, the mode); a skill or a plugin is picked for the conversation it was
+ * picked in.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 
 import { call, type Target } from './api/call.ts'
 
@@ -55,6 +59,10 @@ export const BARE: Gear = {
   mode: 'auto',
 }
 
+/** What a new conversation carries over from the last: the switches, never a pick. */
+const STICKY = ['research', 'memory', 'mode'] as const
+const pick = (g: Gear): Pick<Gear, (typeof STICKY)[number]> => ({ research: g.research, memory: g.memory, mode: g.mode })
+
 /** How many conversations keep a choice of their own: the document holds 16 KiB in all. */
 export const KEEP = 30
 
@@ -91,10 +99,12 @@ export function shelve(gears: Record<string, Gear>, key: string, g: Gear): Recor
 interface Doc {
   gear: Gear
   gears: Record<string, Gear>
+  /** The conversation not begun yet, on this page. */
+  draft: Gear | null
   /** The dictation language (`language`, the key Settings › General writes), or null for Auto. */
   language: string | null
 }
-let doc: Doc = { gear: BARE, gears: {}, language: null }
+let doc: Doc = { gear: BARE, gears: {}, draft: null, language: null }
 let loaded: string | null = null
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((f) => f())
@@ -113,7 +123,7 @@ function load(t: Target): void {
       const gear = gearOf(raw.gear)
       const all = raw.gears && typeof raw.gears === 'object' ? (raw.gears as Record<string, unknown>) : {}
       const language = typeof raw.language === 'string' && raw.language ? raw.language : null
-      doc = { gear, gears: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, gearOf(v, gear)])), language }
+      doc = { gear, gears: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, gearOf(v, gear)])), draft: doc.draft, language }
       emit()
     })
     .catch(() => {
@@ -141,21 +151,47 @@ export function useGear(t: Target, key = ''): GearState {
   useEffect(() => load(t), [t])
   const now = useSyncExternalStore(subscribe, () => doc, () => doc)
   const [error, setError] = useState<string | null>(null)
-  const gear = key ? (now.gears[key] ?? now.gear) : now.gear
+  // A conversation with no choice of its own starts from the switches alone.
+  const fresh = useMemo(() => ({ ...BARE, ...pick(now.gear) }), [now.gear])
+  const gear = key ? (now.gears[key] ?? fresh) : (now.draft ?? fresh)
 
-  const write = useCallback(
-    (g: Gear) => {
-      const fresh = key ? { ...doc, gears: shelve(doc.gears, key, g) } : { ...doc, gear: g }
-      doc = fresh
-      emit()
+  const save = useCallback(
+    (patch: object) => {
       if (!t.token()) return
-      const patch = key ? { gears: fresh.gears } : { gear: g }
       call(t, 'PATCH', '/v1/pref', patch).then(
         () => setError(null),
         (e: unknown) => setError(e instanceof Error ? e.message : 'Your choice was not saved.'),
       )
     },
-    [key, t],
+    [t],
+  )
+
+  // The conversation just begun takes what was picked before it had an id.
+  const was = useRef(key)
+  useEffect(() => {
+    const from = was.current
+    was.current = key
+    if (from || !key || !doc.draft || doc.gears[key]) return
+    doc = { ...doc, gears: shelve(doc.gears, key, doc.draft), draft: null }
+    emit()
+    save({ gears: doc.gears })
+  }, [key, save])
+
+  const write = useCallback(
+    (g: Gear) => {
+      if (key) {
+        doc = { ...doc, gears: shelve(doc.gears, key, g) }
+        emit()
+        return save({ gears: doc.gears })
+      }
+      // Not begun: the page holds it; the switches become the default too.
+      const sticky = { ...doc.gear, ...pick(g) }
+      const moved = STICKY.some((k) => sticky[k] !== doc.gear[k])
+      doc = { ...doc, draft: g, ...(moved ? { gear: sticky } : null) }
+      emit()
+      if (moved) save({ gear: sticky })
+    },
+    [key, save],
   )
 
   return useMemo(
