@@ -2,7 +2,7 @@ import { renderToString } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { HostProvider, useHost, useTarget, type Host } from './host.tsx'
-import { PrefsProvider, usePrefs } from './prefs.tsx'
+import { Look, PrefsProvider, usePrefs } from './prefs.tsx'
 
 const HOST: Host = {
   name: 'Hanzo',
@@ -48,7 +48,10 @@ describe('the person’s look, before the platform answers', () => {
     vi.stubGlobal('window', { localStorage: { getItem: (k: string) => (k === 'hanzo.build.pref.acme' ? JSON.stringify(kept) : null) } })
     return renderToString(
       <HostProvider host={HOST}>
-        <PrefsProvider>body</PrefsProvider>
+        <PrefsProvider>
+          <Look />
+          body
+        </PrefsProvider>
       </HostProvider>,
     )
   }

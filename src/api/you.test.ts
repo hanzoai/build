@@ -64,6 +64,12 @@ describe('pref', () => {
     expect(prefs({ code: {} })).toEqual({})
   })
 
+  it('reads the side panel’s width as whole pixels, and a width that is not one as unset', () => {
+    expect(prefs({ side: { width: 612.4 } })).toEqual({ side: { width: 612 } })
+    for (const width of [0, -5, '600', Infinity, null]) expect(prefs({ side: { width } })).toEqual({})
+    expect(prefs({ side: 600 })).toEqual({})
+  })
+
   it('saves only the keys it names, with null deleting one', async () => {
     const seen = answer(200, { prefs: { theme: 'dark' }, updatedAt: 8 })
     expect(await save(T, { theme: 'dark', text: null })).toEqual({ theme: 'dark' })

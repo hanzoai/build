@@ -27,6 +27,12 @@ export interface Code {
   place?: string
 }
 
+/** The side panel beside Chat and Dev, once for both. */
+export interface Side {
+  /** How wide it is drawn, px, while the middle column shows. */
+  width?: number
+}
+
 export interface Prefs {
   theme?: Theme
   text?: Text
@@ -40,6 +46,7 @@ export interface Prefs {
   /** What every coding run is told about how they like to work. */
   instructions?: string
   code?: Code
+  side?: Side
 }
 
 /** A change: a key set to a value, or to null to delete it. */
@@ -68,6 +75,11 @@ export function code(raw: unknown): Code | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
+export function side(raw: unknown): Side | undefined {
+  const w = obj(raw).width
+  return typeof w === 'number' && Number.isFinite(w) && w > 0 ? { width: Math.round(w) } : undefined
+}
+
 /** The builder's keys from a whole preference document. */
 export function prefs(raw: unknown): Prefs {
   const p = obj(raw)
@@ -80,6 +92,7 @@ export function prefs(raw: unknown): Prefs {
     work: text(p.work),
     instructions: text(p.instructions),
     code: code(p.code),
+    side: side(p.side),
   })
 }
 

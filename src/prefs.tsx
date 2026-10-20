@@ -7,6 +7,10 @@
  * The last document read is kept in this browser, per org, so the page is
  * drawn the person's way before the platform answers. A save shows at once and
  * is taken back, key by key, if the platform refuses it.
+ *
+ * A host mounts it too, above the builder (the Hanzo app, for Chat's side
+ * panel), and the builder's own then reads through that one: one document, one
+ * read. The look (`Look`) is the builder's alone: a host has its own.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react'
 
@@ -26,6 +30,10 @@ export interface PrefState {
 const Context = createContext<PrefState | null>(null)
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
+  return useContext(Context) ? children : <Keep>{children}</Keep>
+}
+
+function Keep({ children }: { children: ReactNode }) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
@@ -64,17 +72,15 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     () => ({ prefs: kept, loading: doc.loading, error: doc.error, save: write }),
     [kept, doc.loading, doc.error, write],
   )
-  return (
-    <Context.Provider value={value}>
-      <Look prefs={kept} />
-      {children}
-    </Context.Provider>
-  )
+  return <Context.Provider value={value}>{children}</Context.Provider>
 }
 
-export function usePrefs(): PrefState {
+/** The settings; with `false`, null where nothing holds them (the side panel drawn without a host: hanzo.team's rooms). */
+export function usePrefs(): PrefState
+export function usePrefs(need: false): PrefState | null
+export function usePrefs(need = true): PrefState | null {
   const p = useContext(Context)
-  if (!p) throw new Error('The builder was rendered without its settings')
+  if (!p && need) throw new Error('The builder was rendered without its settings')
   return p
 }
 
@@ -91,9 +97,9 @@ const STILL =
  * root re-applies its appearance on mount, and a rule marked important outlasts
  * that, while the builder is on the page and no longer.
  */
-function Look({ prefs }: { prefs: Prefs }) {
+export function Look() {
   const host = useHost()
-  const { theme, text, motion } = prefs
+  const { theme, text, motion } = usePrefs().prefs
   useEffect(() => {
     if (theme && theme !== host.theme) host.chooseTheme?.(theme)
     // The host's theme is followed, not watched: a choice made elsewhere stands until this one changes.
