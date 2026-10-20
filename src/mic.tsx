@@ -3,11 +3,10 @@
  * microphones this browser has, the chosen one's live level, and the language
  * dictation listens in (Auto is the browser's own).
  *
- * The chosen microphone is this browser's (a device id means nothing on
- * another), kept in localStorage and handed to @hanzo/voice (`choose`), so
- * every capture opens it. The meter listens only while the menu is open, and
- * only where the person has already let the page use a microphone: opening a
- * menu never asks for permission.
+ * The microphones are listed as the browser names them, the system's own
+ * input first; dictation opens that one. The meter listens only while the menu
+ * is open, and only where the person has already let the page use a
+ * microphone: opening a menu never asks for permission.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Check, ChevronDown, Mic as MicIcon } from '@hanzogui/lucide-icons-2'
@@ -23,41 +22,19 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@hanzo/ui'
-import { choose, Voice, type Machine } from '@hanzo/voice'
+import { Voice, type Machine } from '@hanzo/voice'
 import { useEffect, useRef, useState } from 'react'
 
 import { LANGUAGES } from './voice.ts'
 
-const KEY = 'hanzo.mic'
-
 /** The mic is a plain mark until it is pointed at. */
 const PLAIN = { bg: 'transparent', color: 'var(--foreground)', hoverStyle: { bg: '$hover' } } as const
 
-function kept(): string | null {
-  try {
-    return window.localStorage.getItem(KEY)
-  } catch {
-    return null
-  }
-}
-
-function keep(id: string | null): void {
-  try {
-    if (id) window.localStorage.setItem(KEY, id)
-    else window.localStorage.removeItem(KEY)
-  } catch {
-    // Kept for the page: `choose` holds it.
-  }
-  choose(id)
-}
-
-// The page's choice reaches every capture from the first one.
-if (typeof window !== 'undefined') choose(kept())
-
 /** The microphones this browser lists; labels only once the page may use one. */
-function useInputs(open: boolean): { inputs: MediaDeviceInfo[]; allowed: boolean } {
+function useInputs(open: boolean): { inputs: MediaDeviceInfo[]; allowed: boolean; using: string } {
   const [inputs, setInputs] = useState<MediaDeviceInfo[]>([])
   const [allowed, setAllowed] = useState(false)
+  const [using, setUsing] = useState('')
   useEffect(() => {
     if (!open || typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return
     let live = true
@@ -65,17 +42,19 @@ function useInputs(open: boolean): { inputs: MediaDeviceInfo[]; allowed: boolean
       if (!live) return
       const mics = all.filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
       setInputs(mics)
+      // The system's own input: the group the browser's "default" entry belongs to, else the first.
+      setUsing(all.find((d) => d.kind === 'audioinput' && d.deviceId === 'default')?.groupId || mics[0]?.groupId || '')
       setAllowed(mics.some((d) => d.label))
     })
     return () => {
       live = false
     }
   }, [open])
-  return { inputs, allowed }
+  return { inputs, allowed, using }
 }
 
-/** The chosen microphone's level while the menu is open, drawn without re-rendering. */
-function Meter({ device, on }: { device: string | null; on: boolean }) {
+/** The microphone's level while the menu is open, drawn without re-rendering. */
+function Meter({ on }: { on: boolean }) {
   const bar = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!on) return
@@ -84,7 +63,7 @@ function Meter({ device, on }: { device: string | null; on: boolean }) {
     let frame = 0
     let live = true
     void navigator.mediaDevices
-      .getUserMedia({ audio: device ? { deviceId: { exact: device } } : true })
+      .getUserMedia({ audio: true })
       .then((s) => {
         if (!live) return s.getTracks().forEach((t) => t.stop())
         stream = s
@@ -109,7 +88,7 @@ function Meter({ device, on }: { device: string | null; on: boolean }) {
       stream?.getTracks().forEach((t) => t.stop())
       void ctx?.close()
     }
-  }, [device, on])
+  }, [on])
   return (
     <XStack items="center" gap={10} px={8} py={8} data-slot="mic-meter" aria-hidden>
       <MicIcon size={14} color="$hint" />
@@ -138,8 +117,7 @@ export interface DictationProps {
 /** The mic and its chevron, one control on the composer's row. */
 export function Dictation({ voice, disabled = false, language = null, onLanguage }: DictationProps) {
   const [open, setOpen] = useState(false)
-  const [device, setDevice] = useState<string | null>(() => (typeof window === 'undefined' ? null : kept()))
-  const { inputs, allowed } = useInputs(open)
+  const { inputs, allowed, using } = useInputs(open)
   const spoken = LANGUAGES.find((l) => l.id === language)
   return (
     <XStack
@@ -176,7 +154,7 @@ export function Dictation({ voice, disabled = false, language = null, onLanguage
           </XStack>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" minW={200} data-slot="dictation-panel">
-          <Meter device={device} on={open && allowed} />
+          <Meter on={open && allowed} />
           {inputs.length === 0 ? (
             <DropdownMenuLabel>
               <SizableText fontSize={14} color="$hint">
@@ -184,26 +162,16 @@ export function Dictation({ voice, disabled = false, language = null, onLanguage
               </SizableText>
             </DropdownMenuLabel>
           ) : (
-            inputs.map((d, i) => {
-              const on = device ? d.deviceId === device : i === 0
-              return (
-                <DropdownMenuItem
-                  key={d.deviceId || i}
-                  preventCloseOnSelect
-                  onSelect={() => {
-                    setDevice(d.deviceId)
-                    keep(d.deviceId)
-                  }}
-                >
-                  <XStack flex={1} items="center" gap={8}>
-                    <SizableText fontSize={14} color="$ink" numberOfLines={1} flex={1}>
-                      {d.label || `Microphone ${i + 1}`}
-                    </SizableText>
-                    {on ? <Check size={14} color="var(--primary)" aria-hidden /> : null}
-                  </XStack>
-                </DropdownMenuItem>
-              )
-            })
+            inputs.map((d, i) => (
+              <DropdownMenuLabel key={d.deviceId || i}>
+                <XStack items="center" gap={8}>
+                  <SizableText fontSize={14} color="$ink" numberOfLines={1} flex={1}>
+                    {d.label || `Microphone ${i + 1}`}
+                  </SizableText>
+                  {d.groupId === using ? <Check size={14} color="var(--primary)" aria-label="In use" /> : null}
+                </XStack>
+              </DropdownMenuLabel>
+            ))
           )}
           {onLanguage ? (
             <>
