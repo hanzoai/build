@@ -30,6 +30,9 @@ import { LANGUAGES } from './voice.ts'
 
 const KEY = 'hanzo.mic'
 
+/** The mic is a plain mark until it is pointed at. */
+const PLAIN = { bg: 'transparent', color: 'var(--foreground)', hoverStyle: { bg: '$hover' } } as const
+
 function kept(): string | null {
   try {
     return window.localStorage.getItem(KEY)
@@ -148,7 +151,7 @@ export function Dictation({ voice, disabled = false, language = null, onLanguage
       hoverStyle={{ borderColor: '$borderColor' }}
       shrink={0}
     >
-      <Control asChild size={30}>
+      <Control asChild size={30} {...PLAIN}>
         <Voice voice={voice} disabled={disabled} says={{ idle: 'Dictate', listening: 'Dictating — click to stop' }}>
           {(state) => <MicIcon size={16} fill={state === 'idle' ? 'none' : 'currentColor'} />}
         </Voice>

@@ -224,7 +224,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     setNote('')
     try {
       const run = await start(t, {
-        prompt: compose([draft.trim(), await carry.brief(draft)].filter(Boolean).join('\n\n---\n'), files),
+        prompt: compose([draft.trim(), carry.text].filter(Boolean).join('\n\n---\n'), files),
         // The name alone. The org rides the request, and a slash is not a repo name.
         // An empty base or place is not sent: the default branch, and the sandbox.
         repo: repo?.name ?? hub?.full_name,

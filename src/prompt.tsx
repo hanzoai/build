@@ -49,6 +49,9 @@ export const ROUND = 32
 const CORNER = 12
 const CORNER_PHONE = 22
 
+/** A round control with no ground of its own until it is pointed at. */
+const QUIET = { bg: 'transparent', color: 'var(--foreground)', hoverStyle: { bg: '$hover' } } as const
+
 /** What every Composer placeholder says, unless a surface names who is listening. */
 export const ASK = 'Type / for skills'
 
@@ -294,13 +297,15 @@ export function Tune({ mind, mode, where, onUpgrade }: { mind?: Mind | null; mod
   const thinks = mind ? reasons(mind.model, mind.models) : false
   const pace = mind ? EFFORTS.find((e) => e.id === mind.effort)! : null
   return (
-    <XStack data-slot="tune" width="100%" items="center" gap={2} flexWrap="wrap">
+    <XStack data-slot="tune" width="100%" items="center" gap={2} flexWrap="wrap" rowGap={4}>
       {where ? (
-        <XStack items="center" gap={2} flexWrap="wrap" minW={0}>
+        // On a phone where the run goes takes its own line, and the model, effort and mode the next.
+        <XStack items="center" gap={2} flexWrap="wrap" minW={0} $max-sm={{ width: '100%' }}>
           {where}
         </XStack>
       ) : null}
-      <XStack flex={1} />
+      <XStack flex={1} $max-sm={{ display: 'none' }} />
+      <XStack items="center" gap={2} ml="auto" shrink={0}>
       {mind ? <Model mind={mind} onUpgrade={onUpgrade} /> : null}
       {mind && thinks && pace ? (
         <Opens label={`Effort: ${pace.label}`} word={pace.label} dim>
@@ -345,6 +350,7 @@ export function Tune({ mind, mode, where, onUpgrade }: { mind?: Mind | null; mod
           </PopoverContent>
         </Popover>
       ) : null}
+      </XStack>
     </XStack>
   )
 }
@@ -535,7 +541,8 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
       <XStack items="center" gap={6} data-slot="prompt-end" shrink={0}>
         {o.voice ? <Dictation voice={o.voice} disabled={disabled} language={o.language ?? null} {...(o.onLanguage ? { onLanguage: o.onLanguage } : {})} /> : null}
         {!busy && !lit && o.talk ? (
-          <Control asChild size={ROUND} fill rounded={999}>
+          // Voice mode is a plain mark on a laptop, as the mic is, and the filled round on a phone.
+          <Control asChild size={ROUND} fill={narrow} rounded={999} {...(narrow ? null : QUIET)}>
             <Voice
               voice={o.talk}
               disabled={disabled}
