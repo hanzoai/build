@@ -32,6 +32,41 @@ export interface Start {
   input: Record<string, unknown>
   title?: string
   parent?: string
+  /** A brand (design system) the run reads as brand.* — its palette, type and voice. */
+  brand?: string
+}
+
+/**
+ * A design system: one of Studio's brands, the one store for them. Its tokens
+ * are W3C design tokens (color, font, type, space, radius) and two groups of our
+ * own, `components` and `voice`, each a line a model follows.
+ *
+ *   GET  /v1/studio/brands        {data: [brand]}   the ones you may read
+ *   GET  /v1/studio/brands/{id}   one
+ *   POST /v1/studio/brands        {name, tokens, shared?} → brand
+ */
+export interface Brand {
+  id: string
+  name: string
+  tokens: Record<string, unknown>
+}
+
+export function brandOf(raw: unknown): Brand {
+  const o = obj(raw)
+  return { id: str(o.id), name: str(o.name), tokens: obj(o.tokens) }
+}
+
+export async function brands(t: Target, init?: { signal?: AbortSignal }): Promise<Brand[]> {
+  const raw = obj(await call<unknown>(t, 'GET', '/v1/studio/brands', undefined, init))
+  return (Array.isArray(raw.data) ? raw.data : []).map(brandOf).filter((b) => b.id)
+}
+
+export async function brand(t: Target, id: string, init?: { signal?: AbortSignal }): Promise<Brand> {
+  return brandOf(await call<unknown>(t, 'GET', `/v1/studio/brands/${seg(id)}`, undefined, init))
+}
+
+export async function keepBrand(t: Target, b: { name: string; tokens: Record<string, unknown> }, signal?: AbortSignal): Promise<Brand> {
+  return brandOf(await call<unknown>(t, 'POST', '/v1/studio/brands', { name: b.name, tokens: b.tokens }, { signal }))
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')

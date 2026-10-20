@@ -46,7 +46,7 @@ export async function deck(turn: Turn, t: Target, signal: AbortSignal): Promise<
   const ask = turn.text.trim()
   if (!ask) return {}
   const last = turn.thread ? decks.get(turn.thread) : undefined
-  const r = await make(t, { template: 'slides', title: ask.slice(0, 80), input: { brief: last ? revision(last, ask) : ask, format: 'pptx' } }, signal)
+  const r = await make(t, { template: 'slides', title: ask.slice(0, 80), input: { brief: last ? revision(last, ask) : ask, format: 'pptx' }, ...(turn.design ? { brand: turn.design } : {}) }, signal)
   if (turn.thread) decks.set(turn.thread, r)
   return { reply: told(r) }
 }

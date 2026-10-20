@@ -14,12 +14,14 @@
  * A shelf is offered only where its service answers; a surface adds its own
  * (Chat its agents, Dev its devices) beside these.
  */
-import { BookOpen, ListChecks, ScrollText } from '@hanzogui/lucide-icons-2'
+import { BookOpen, ListChecks, Palette, ScrollText } from '@hanzogui/lucide-icons-2'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { call, query, unwrap, type Target } from './api/call.ts'
 import { active, authored, document, nameOf as skillOf } from './api/skills.ts'
+import { brand, brands } from './api/studio.ts'
 import { useRead } from './data.ts'
+import { said as designSaid } from './design.ts'
 import { useGear, type GearState } from './gear.ts'
 import type { Composer, Prep, Turn } from './plugin.ts'
 import { active as lighted, prep, shelf as pluginShelf, usePlugins } from './plugins/index.ts'
@@ -38,6 +40,8 @@ export type Lent = Omit<Composer, 'target' | 'show'>
 export interface Carry {
   gear: GearState
   skills: Shelf
+  /** The design systems (Studio brands): attach one, or make one by chat. */
+  design: Shelf
   /** The plugins that run for this person (`@` lists the same). */
   plugins: Shelf
   /** A dialog a plugin opened, for the surface to draw; null when none is. */
@@ -45,7 +49,7 @@ export interface Carry {
   /** Whether a plugin that prepares a message is on. */
   preparing: boolean
   /** What the plugins that are on add to the message about to go. */
-  prep: (turn: Turn, signal: AbortSignal) => Promise<Prep>
+  prep: (turn: Omit<Turn, 'design'>, signal: AbortSignal) => Promise<Prep>
   /** The chips after `+`: the skills on, Research, and Plan. */
   on: Chip[]
   /** The words the gear adds to every message, '' when none. */
@@ -61,8 +65,12 @@ async function remembered(t: Target): Promise<string[]> {
 }
 
 /** The words `skills`, `memory` and `mode` add to a message. */
-async function said(t: Target, skills: readonly string[], memory: boolean, mode: string): Promise<string> {
+async function said(t: Target, skills: readonly string[], memory: boolean, mode: string, design: string): Promise<string> {
   const parts: string[] = []
+  if (design) {
+    const b = await brand(t, design).catch(() => null)
+    if (b?.name) parts.push(designSaid(b))
+  }
   if (skills.length) {
     const own = await authored(t).catch(() => [])
     for (const n of skills) {
@@ -105,7 +113,7 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
   const signed = Boolean(t.token())
   const list = useRead(signed ? () => active(t) : null, [], [t, signed])
   const names = useMemo(() => list.value.map((s) => skillOf(s.name)).filter(Boolean), [list.value])
-  const { skills, research, memory, mode } = gear.gear
+  const { skills, research, memory, mode, design } = gear.gear
 
   const shelf: Shelf = {
     rows: names.map((n) => ({ id: n, label: n, icon: <ScrollText size={16} />, on: skills.includes(n) })),
@@ -119,12 +127,34 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
   }
 
   const plugins = pluginShelf(found, gear, composer)
+
+  // The design systems: Studio's brands, the one store for them.
+  const kits = useRead(signed ? () => brands(t) : null, [], [t, signed, design])
+  const named = kits.value.find((b) => b.id === design)
+  const designs: Shelf = {
+    rows: kits.value.map((b) => {
+      const c = (b.tokens.color ?? {}) as Record<string, { $value?: unknown }>
+      return { id: b.id, label: b.name, note: [c.primary?.$value, c.accent?.$value].filter(Boolean).join(' '), icon: <Palette size={16} />, on: b.id === design }
+    }),
+    pick: (id) => gear.set({ design: design === id ? '' : id }),
+    loading: kits.loading,
+    error: kits.error ? 'The design systems could not be read.' : null,
+    empty: 'No design systems yet',
+    create: {
+      label: 'Create design system',
+      onPress: () => {
+        if (!gear.gear.plugins.includes('design')) gear.toggle('plugins', 'design')
+        lentNow.current.setDraft('Make me a design system for ')
+      },
+    },
+  }
   const lit = lighted(found.plugins, gear.gear)
 
   const on: Chip[] = [
     ...skills.map((n) => ({ id: `skill:${n}`, label: n, icon: <ScrollText size={14} />, onRemove: () => gear.toggle('skills', n) })),
     ...(research ? [{ id: 'research', label: 'Research', icon: <BookOpen size={14} />, onRemove: () => gear.set({ research: false }) }] : []),
     ...(mode === 'plan' ? [{ id: 'plan', label: 'Plan', icon: <ListChecks size={14} />, onRemove: () => gear.set({ mode: 'auto' }) }] : []),
+    ...(design ? [{ id: 'design', label: named?.name ?? 'Design system', icon: <Palette size={14} />, onRemove: () => gear.set({ design: '' }) }] : []),
     ...lit
       .filter((p) => p.id !== 'research')
       .map((p) => ({ id: `plugin:${p.id}`, label: p.name, icon: p.icon, onRemove: () => gear.toggle('plugins', p.id) })),
@@ -136,13 +166,13 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
   useEffect(() => {
     if (!signedIn) return setText(mode === 'plan' ? 'Plan mode: lay out the plan and stop until the person says go.' : '')
     let live = true
-    void said(t, skills, memory, mode).then((x) => live && setText(x))
+    void said(t, skills, memory, mode, design).then((x) => live && setText(x))
     return () => {
       live = false
     }
     // `skills` is read through `asked`, its contents.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, signedIn, asked, memory, mode])
+  }, [t, signedIn, asked, memory, mode, design])
 
   return {
     gear,
@@ -152,6 +182,12 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     on,
     text,
     preparing: lit.length > 0,
-    prep: (turn, signal) => prep(found.plugins, gear.gear, turn, composer, signal),
+    design: designs,
+    // A design system a plugin made is attached at once, and the maker turns off: it made one.
+    prep: (turn, signal) =>
+      prep(found.plugins, gear.gear, { ...turn, design }, composer, signal).then((p) => {
+        if (p.design) gear.set({ design: p.design, plugins: gear.gear.plugins.filter((x) => x !== 'design') })
+        return p
+      }),
   }
 }

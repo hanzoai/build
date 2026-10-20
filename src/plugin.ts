@@ -38,6 +38,8 @@ export interface Turn {
   files: File[]
   /** The conversation's id, or '' for one not begun. */
   thread: string
+  /** The design system attached to the conversation (a Studio brand id), or ''. */
+  design: string
 }
 
 /** What a plugin adds to the message. */
@@ -48,6 +50,8 @@ export interface Prep {
   files?: File[]
   /** An answer of the plugin's own, in markdown; the model is not asked. */
   reply?: string
+  /** A design system the plugin made: attached to the conversation from then on. */
+  design?: string
 }
 
 export interface Plugin {

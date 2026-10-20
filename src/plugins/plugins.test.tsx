@@ -44,14 +44,14 @@ function wire(route: (path: string, body: any) => [number, unknown]) {
 }
 
 // The kit's parts and marks are react-native drawings a node test cannot load; what is tested here is data and wire.
-vi.mock('@hanzogui/lucide-icons-2', () => Object.fromEntries(['FileText', 'Folder', 'LayoutTemplate', 'Presentation', 'Signature', 'Telescope'].map((n) => [n, () => null])))
+vi.mock('@hanzogui/lucide-icons-2', () => Object.fromEntries(['FileText', 'Folder', 'LayoutTemplate', 'Palette', 'Presentation', 'Signature', 'Telescope'].map((n) => [n, () => null])))
 vi.mock('@hanzo/gui', () => ({ SizableText: () => null, XStack: () => null, YStack: () => null }))
 vi.mock('@hanzo/ui', () => Object.fromEntries(['Button', 'Dialog', 'DialogContent', 'DialogDescription', 'DialogTitle', 'Input', 'Textarea'].map((n) => [n, () => null])))
 
 afterEach(() => vi.unstubAllGlobals())
 
 const composer = (t: Target, go = vi.fn()): Composer => ({ target: t, draft: '', setDraft: vi.fn(), attach: vi.fn(), show: vi.fn(), go })
-const turn = (text: string, files: File[] = [], thread = ''): Turn => ({ text, files, thread })
+const turn = (text: string, files: File[] = [], thread = ''): Turn => ({ text, files, thread, design: '' })
 
 function gears(g: Partial<Gear> = {}): GearState & { gear: Gear } {
   const state = { gear: { ...BARE, ...g } } as GearState
@@ -68,7 +68,7 @@ describe('what is offered', () => {
   it('an admin with projects and Studio gets every plugin, in the menu’s order', async () => {
     wire((p) => (p === '/v1/projects' ? [200, [{ slug: 'site', name: 'Site' }]] : studio(['slides', 'document', 'image'])))
     const list = await probe(target(admin))
-    expect(list.map((p) => p.id)).toEqual(['project', 'research', 'sketch', 'template', 'slides', 'pdf'])
+    expect(list.map((p) => p.id)).toEqual(['project', 'research', 'sketch', 'template', 'slides', 'design', 'pdf'])
     expect(list.find((p) => p.id === 'pdf')!.note).toBe('Read, create and verify PDFs')
   })
 

@@ -246,7 +246,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       const prepped = carry.preparing ? await carry.prep({ text: draft.trim(), files: [], thread: '' }, new AbortController().signal) : {}
       // An answer of a plugin's own (a deck) is the answer: no run is started for it.
       if (prepped.reply) {
-        setNote(prepped.reply)
+        // Its words, without the page it drew (Chat shows that in the side panel).
+        setNote(prepped.reply.split('```')[0]!.trim())
         return
       }
       const run = await start(t, {
@@ -457,6 +458,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             plus={{
               upload: () => pick(files, setFiles, setNote),
               skills: carry.skills,
+              design: carry.design,
               plugins: carry.plugins,
               devices,
               memory: { on: carry.gear.gear.memory, set: (on) => carry.gear.set({ memory: on }) },

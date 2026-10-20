@@ -28,6 +28,7 @@ import type { Shelf } from '../plus.tsx'
 import { path } from '../route.ts'
 import { pdf } from './pdf.tsx'
 import { project } from './project.tsx'
+import { designer } from './design.tsx'
 import { deep } from './research.tsx'
 import { sketch } from './sketch.tsx'
 import { slides } from './slides.tsx'
@@ -59,6 +60,7 @@ export async function probe(t: Target): Promise<Plugin[]> {
     sketch,
     administers(t.token(), t.org) ? template : null,
     runs.includes('slides') ? slides : null,
+    studio.status === 'fulfilled' ? designer : null,
     pdf(runs.includes('document')),
   ].filter((p): p is Plugin => p !== null)
 }
