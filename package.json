@@ -1,6 +1,6 @@
 {
   "name": "@hanzo/build",
-  "version": "0.2.61",
+  "version": "0.2.62",
   "type": "module",
   "license": "Apache-2.0 OR MIT",
   "description": "Hanzo Build — say what you want, watch it built, deployed and running. The builder as a component, mounted by the Hanzo app at hanzo.ai.",
@@ -85,7 +85,7 @@
   },
   "peerDependencies": {
     "@hanzo/gui": ">=8.3.5",
-    "@hanzo/ui": ">=8.27.67",
+    "@hanzo/ui": ">=8.29.0",
     "@hanzogui/lucide-icons-2": ">=8.3.5",
     "react": ">=19.2.8",
     "@hanzo/voice": ">=0.1.16",

@@ -49,6 +49,9 @@ export const ROUND = 32
 const CORNER = 12
 const CORNER_PHONE = 22
 
+/** The ink on a filled round: the accent's own foreground (gui's icons default to the theme's text). */
+const ON = 'var(--primary-foreground)'
+
 /** A round control with no ground of its own until it is pointed at. */
 const QUIET = { bg: 'transparent', color: 'var(--foreground)', hoverStyle: { bg: '$hover' } } as const
 
@@ -462,7 +465,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
 
   const foot =
     o.mind || o.mode || o.where || (!narrow && o.below) ? (
-      <YStack width="100%" gap={10} data-slot="prompt-foot">
+      <YStack {...measure} gap={10} data-slot="prompt-foot">
         <Tune mind={o.mind} mode={o.mode} where={o.where} onUpgrade={o.onUpgrade} />
         {narrow ? null : o.below}
       </YStack>
@@ -484,7 +487,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
         else o.onSend()
       }}
     >
-      {busy ? <Square size={13} fill="currentColor" /> : <ArrowUp size={16} strokeWidth={2.5} />}
+      {busy ? <Square size={13} color={ON} fill={ON} /> : <ArrowUp size={16} strokeWidth={2.5} color={ON} />}
     </Control>
   )
 
@@ -549,7 +552,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
               data-slot="composer-talk"
               says={{ idle: 'Voice mode', listening: 'In conversation — click to hang up', speaking: 'Hanzo is speaking — talk to interrupt' }}
             >
-              {() => <AudioLines size={16} />}
+              {() => <AudioLines size={16} color={narrow ? ON : 'var(--foreground)'} />}
             </Voice>
           </Control>
         ) : (

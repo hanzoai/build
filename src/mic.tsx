@@ -131,7 +131,7 @@ export function Dictation({ voice, disabled = false, language = null, onLanguage
     >
       <Control asChild size={30} {...PLAIN}>
         <Voice voice={voice} disabled={disabled} says={{ idle: 'Dictate', listening: 'Dictating — click to stop' }}>
-          {(state) => <MicIcon size={16} fill={state === 'idle' ? 'none' : 'currentColor'} />}
+          {(state) => <MicIcon size={16} color="var(--foreground)" fill={state === 'idle' ? 'none' : 'var(--foreground)'} />}
         </Voice>
       </Control>
       <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -150,7 +150,7 @@ export function Dictation({ voice, disabled = false, language = null, onLanguage
             hoverStyle={{ bg: '$hover' }}
             $max-sm={{ width: 28, height: 44 }}
           >
-            <ChevronDown size={12} color="$hint" />
+            <ChevronDown size={14} color="$aside" />
           </XStack>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" minW={200} data-slot="dictation-panel">

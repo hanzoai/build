@@ -52,7 +52,7 @@ export { href, parse, path, PLACES, route, SESSION, SLUG, type Route, type Scree
 export { catalog, EFFORTS, FIRST, FREE, grants, isFree, keep, kept, nameOf, reasons, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
 export { ASK, cut, GAP, MEASURE, measure, Prompt, prompt, ROUND, trigger, Tune, useEar, useMention, useUpload, type Chip, type PromptOptions } from './prompt.tsx'
 export { Plus, type Link, type PlusProps, type Row as ShelfRow, type Shelf, type Switch } from './plus.tsx'
-export { BARE, gearOf, MODES, useGear, type Gear, type GearState, type Mode as GearMode } from './gear.ts'
+export { BARE, gearOf, MODES, useGear, useLanguage, type Gear, type GearState, type Mode as GearMode } from './gear.ts'
 export { useCarry, type Carry } from './carry.tsx'
 export { Dictation } from './mic.tsx'
 export type { Composer as PluginComposer, Plugin, Prep, Turn } from './plugin.ts'

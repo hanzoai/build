@@ -91,8 +91,10 @@ export function shelve(gears: Record<string, Gear>, key: string, g: Gear): Recor
 interface Doc {
   gear: Gear
   gears: Record<string, Gear>
+  /** The dictation language (`language`, the key Settings › General writes), or null for Auto. */
+  language: string | null
 }
-let doc: Doc = { gear: BARE, gears: {} }
+let doc: Doc = { gear: BARE, gears: {}, language: null }
 let loaded: string | null = null
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((f) => f())
@@ -105,12 +107,13 @@ function load(t: Target): void {
   const id = `${t.api}|${t.org ?? ''}|${t.token() ? 1 : 0}`
   if (loaded === id || !t.token()) return
   loaded = id
-  void call<{ prefs?: { gear?: unknown; gears?: unknown } }>(t, 'GET', '/v1/pref')
+  void call<{ prefs?: { gear?: unknown; gears?: unknown; language?: unknown } }>(t, 'GET', '/v1/pref')
     .then((r) => {
       const raw = r?.prefs ?? {}
       const gear = gearOf(raw.gear)
       const all = raw.gears && typeof raw.gears === 'object' ? (raw.gears as Record<string, unknown>) : {}
-      doc = { gear, gears: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, gearOf(v, gear)])) }
+      const language = typeof raw.language === 'string' && raw.language ? raw.language : null
+      doc = { gear, gears: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, gearOf(v, gear)])), language }
       emit()
     })
     .catch(() => {
@@ -172,4 +175,25 @@ export function useGear(t: Target, key = ''): GearState {
     }),
     [gear, error, write, t],
   )
+}
+
+/** The dictation language the person keeps, null for Auto, and how to change it. */
+export function useLanguage(t: Target): readonly [string | null, (id: string | null) => void] {
+  useEffect(() => load(t), [t])
+  const now = useSyncExternalStore(subscribe, () => doc, () => doc)
+  const set = useCallback(
+    (id: string | null) => {
+      const was = doc.language
+      doc = { ...doc, language: id }
+      emit()
+      // A refused save takes the choice back, so what is shown is what is kept.
+      if (t.token())
+        call(t, 'PATCH', '/v1/pref', { language: id }).catch(() => {
+          doc = { ...doc, language: was }
+          emit()
+        })
+    },
+    [t],
+  )
+  return [now.language, set] as const
 }
