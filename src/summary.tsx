@@ -11,7 +11,7 @@
  */
 import { useMemo, useState, type ReactNode } from 'react'
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ListTodo } from '@hanzogui/lucide-icons-2'
+import { FilePlus2, ListTodo } from '@hanzogui/lucide-icons-2'
 import { Popover, PopoverContent, PopoverTrigger } from '@hanzo/ui'
 import type { Kind } from './panel.tsx'
 
@@ -38,6 +38,10 @@ export interface Section {
   lead?: { title: string; run: () => void }
 }
 
+/** A row's pitch and inset, px: the kit menu's, so this panel reads as every other one. */
+const ROW_H = 32
+const ROW_PX = 8
+
 /** A row of the summary: its mark and its name, one press from a tab. */
 function Line({ icon, children, detail, onPress, quiet = false }: { icon?: ReactNode; children: ReactNode; detail?: string; onPress?: () => void; quiet?: boolean }) {
   return (
@@ -46,11 +50,12 @@ function Line({ icon, children, detail, onPress, quiet = false }: { icon?: React
       role={onPress ? 'button' : undefined}
       onPress={onPress}
       items="center"
-      gap="$2.5"
-      px="$2"
-      minH={30}
+      justify="flex-start"
+      gap={ROW_PX}
+      px={ROW_PX}
+      minH={ROW_H}
       width="100%"
-      rounded="$3"
+      rounded={4}
       cursor={onPress ? 'pointer' : undefined}
       hoverStyle={onPress ? { bg: '$hover' } : undefined}
       focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
@@ -60,12 +65,12 @@ function Line({ icon, children, detail, onPress, quiet = false }: { icon?: React
           {icon}
         </XStack>
       ) : null}
-      <YStack flex={1} minW={0} py={detail ? '$1' : 0}>
-        <SizableText fontSize={13} color={quiet ? '$soft' : '$ink'} numberOfLines={1}>
+      <YStack flex={1} minW={0} items="flex-start" py={detail ? '$1' : 0}>
+        <SizableText fontSize={14} color={quiet ? '$soft' : '$ink'} numberOfLines={1} style={{ textAlign: 'left' }}>
           {children}
         </SizableText>
         {detail ? (
-          <SizableText fontSize={12} color="$soft" numberOfLines={2}>
+          <SizableText fontSize={12} color="$soft" numberOfLines={2} style={{ textAlign: 'left' }}>
             {detail}
           </SizableText>
         ) : null}
@@ -76,7 +81,7 @@ function Line({ icon, children, detail, onPress, quiet = false }: { icon?: React
 
 /** A section's heading, with what it adds at its end. */
 const Head = ({ children, action }: { children: string; action?: ReactNode }) => (
-  <XStack items="center" justify="space-between" px="$2" pt="$1.5" pb="$1" minH={28}>
+  <XStack items="center" justify="space-between" px={ROW_PX} minH={ROW_H}>
     <SizableText fontSize={13} color="$soft">
       {children}
     </SizableText>
@@ -91,7 +96,7 @@ function Rows({ section, done, details = false }: { section: Section; done?: () 
     <>
       {lead ? (
         <Line
-          quiet
+          icon={<FilePlus2 size={15} aria-hidden />}
           onPress={() => {
             done?.()
             lead.run()
@@ -155,11 +160,12 @@ export function Summary({ sections, onOpen, label = 'Summary' }: { sections: rea
           <ListTodo size={16} aria-hidden />
         </XStack>
       </PopoverTrigger>
-      <PopoverContent solid align="end" p={6} width={300}>
-        <YStack data-slot="summary" role="dialog" aria-label={label} gap={1} self="stretch" width="100%" maxH="min(70dvh, 520px)" overflowY="auto" overflowX="hidden">
+      {/* The kit's panel as the composer's popovers draw it, 8px clear of the mark and flush with its end. */}
+      <PopoverContent solid align="end" sideOffset={8} p={4} width={288} maxW="calc(100vw - 24px)">
+        <YStack data-slot="summary" role="dialog" aria-label={label} self="stretch" width="100%" maxH="min(70dvh, 520px)" overflowY="auto" overflowX="hidden">
           {sections.map((s, i) => (
-            <YStack key={s.id} gap={1}>
-              {i ? <XStack height={1} bg="$borderColor" my="$1.5" mx="$1" /> : null}
+            <YStack key={s.id}>
+              {i ? <XStack height={1} bg="$borderColor" my={4} mx={4} /> : null}
               <Head action={s.action}>{s.title}</Head>
               <Rows section={s} done={done} />
             </YStack>
