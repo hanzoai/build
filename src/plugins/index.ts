@@ -113,16 +113,19 @@ export function shelf(p: Plugins, g: GearState, c: Composer): Shelf {
 /** The plugins this message asks, in the menu's order. */
 export const active = (plugins: readonly Plugin[], g: Gear): Plugin[] => plugins.filter((p) => p.prepare && on(p, g))
 
-/** Several plugins' preparations as one: system parts and replies in order, files together. */
+/** Several plugins' preparations as one: system parts and replies in order, files together, the design system one made. */
 export function merge(preps: readonly Prep[]): Prep {
   const join = (k: 'system' | 'reply') => preps.map((p) => p[k]?.trim()).filter(Boolean).join('\n\n') || undefined
   const files = preps.flatMap((p) => p.files ?? [])
   const out: Prep = {}
   const system = join('system')
   const reply = join('reply')
+  // A design system a plugin made is attached by the host (carry.tsx); dropped here, it never was.
+  const design = preps.map((p) => p.design).filter(Boolean).at(-1)
   if (system) out.system = system
   if (reply) out.reply = reply
   if (files.length) out.files = files
+  if (design) out.design = design
   return out
 }
 

@@ -137,6 +137,7 @@ describe('the shelf', () => {
     const c = composer(target(admin))
     expect(await prep(list, g, turn('hi'), c, new AbortController().signal)).toEqual({ system: 'sources\n\npdf text', files })
     expect(merge([{ reply: 'a' }, {}, { reply: 'b' }])).toEqual({ reply: 'a\n\nb' })
+    expect(merge([{ reply: 'made' , design: 'brand_1' }, { system: 's' }])).toEqual({ reply: 'made', system: 's', design: 'brand_1' })
     const broken = [{ ...list[0]!, prepare: async () => Promise.reject(new Error('the web search did not answer: down')) }]
     await expect(prep(broken, g, turn('hi'), c, new AbortController().signal)).rejects.toThrow('Deep research: the web search did not answer: down')
   })
