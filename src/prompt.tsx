@@ -22,7 +22,7 @@ import { ArrowUp, AudioLines, Check, Square, X } from '@hanzogui/lucide-icons-2'
 import { Control } from '@hanzo/composer'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSearch, DropdownMenuTrigger, Popover, PopoverContent, PopoverTrigger } from '@hanzo/ui'
 import { Composer, type ComposerProps } from '@hanzo/ui/chat'
-import { groupModels, matchesModel, type PauseSource } from '@hanzo/ui/models'
+import { groupModels, isPaused, matchesModel, type PauseSource } from '@hanzo/ui/models'
 import { speech, Voice, type Machine, type Speech } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
@@ -231,7 +231,7 @@ function Opens({ label, word, dim, children }: { label: string; word: ReactNode;
 }
 
 /** The model's name, and the catalog behind it: Free's lane to pick from, the rest an upgrade. */
-function Model({ mind, onUpgrade }: { mind: Mind; onUpgrade?: (model: string) => void }) {
+function Model({ mind, onUpgrade, limits }: { mind: Mind; onUpgrade?: (model: string) => void; limits?: PauseSource | null }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   // The catalog is hundreds long, and drawing all of it is what made the menu slow
@@ -286,10 +286,14 @@ function Model({ mind, onUpgrade }: { mind: Mind; onUpgrade?: (model: string) =>
             </SizableText>
             {g.models.map((m) => {
               const ok = grants(mind.free, m.id, mind.models)
+              // Paused by the plan's usage: still listed and still picked; the gateway answers from Enso.
+              const paused = isPaused(m, limits)
               return (
                 <DropdownMenuItem
                   key={m.id}
                   data-slot="model-row"
+                  data-model={m.id}
+                  data-paused={paused ? 'true' : undefined}
                   onSelect={() => (ok ? mind.pick(m.id) : onUpgrade?.(m.id))}
                 >
                   <XStack flex={1} items="center" gap={8}>
@@ -301,6 +305,11 @@ function Model({ mind, onUpgrade }: { mind: Mind; onUpgrade?: (model: string) =>
                         Upgrade
                       </SizableText>
                     )}
+                    {ok && paused ? (
+                      <SizableText fontSize={12} color="$hint">
+                        Paused
+                      </SizableText>
+                    ) : null}
                     {m.id === mind.model ? <Check size={14} color="var(--primary)" aria-hidden /> : null}
                   </XStack>
                 </DropdownMenuItem>
@@ -320,7 +329,7 @@ function Model({ mind, onUpgrade }: { mind: Mind; onUpgrade?: (model: string) =>
 }
 
 /** The row under the frame: where (Dev), then the model, the effort and the mode. */
-export function Tune({ mind, mode, where, onUpgrade }: { mind?: Mind | null; mode?: PromptOptions['mode']; where?: ReactNode; onUpgrade?: (model: string) => void }) {
+export function Tune({ mind, mode, where, onUpgrade, limits }: { mind?: Mind | null; mode?: PromptOptions['mode']; where?: ReactNode; onUpgrade?: (model: string) => void; limits?: PauseSource | null }) {
   const thinks = mind ? reasons(mind.model, mind.models) : false
   const pace = mind ? EFFORTS.find((e) => e.id === mind.effort)! : null
   return (
@@ -333,7 +342,7 @@ export function Tune({ mind, mode, where, onUpgrade }: { mind?: Mind | null; mod
       ) : null}
       <XStack flex={1} $max-sm={{ display: 'none' }} />
       <XStack items="center" gap={2} ml="auto" shrink={0}>
-      {mind ? <Model mind={mind} onUpgrade={onUpgrade} /> : null}
+      {mind ? <Model mind={mind} onUpgrade={onUpgrade} limits={limits} /> : null}
       {mind && thinks && pace ? (
         <Opens label={`Effort: ${pace.label}`} word={pace.label} dim>
           {(close) => (
@@ -491,7 +500,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
   const foot =
     o.mind || o.mode || o.where || (!narrow && o.below) ? (
       <YStack {...measure} gap={10} data-slot="prompt-foot">
-        <Tune mind={o.mind} mode={o.mode} where={o.where} onUpgrade={o.onUpgrade} />
+        <Tune mind={o.mind} mode={o.mode} where={o.where} onUpgrade={o.onUpgrade} limits={o.limits} />
         {narrow ? null : o.below}
       </YStack>
     ) : undefined
