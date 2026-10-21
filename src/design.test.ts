@@ -18,11 +18,20 @@ describe('design system', () => {
     expect(drafted({ ...raw, colors: { primary: 'teal' } })).toMatch(/primary, a background and a text/)
     expect(drafted({ ...raw, name: '' })).toMatch(/no name/)
   })
-  test('tokens are W3C groups with our components and voice beside them', () => {
-    const t = tokensOf(drafted(raw) as Draft)
-    expect((t.color as Record<string, { $value: string }>).primary.$value).toBe('#0E7C86')
-    expect((t.radius as Record<string, { $value: string }>).md.$value).toBe('8px')
-    expect(Object.keys(t)).toEqual(expect.arrayContaining(['color', 'font', 'type', 'space', 'radius', 'components', 'voice']))
+  test('tokens are the CSS custom properties Studio’s renderer takes, every key and every value', () => {
+    const t = tokensOf(drafted({ ...raw, voice: { ...raw.voice, dont: ['Hype; no {braces}, "quotes" or <tags>'] } }) as Draft)
+    expect(t['--primary']).toBe('#0E7C86')
+    expect(t['--background']).toBe('#FFFFFF')
+    expect(t['--foreground']).toBe('#0B1F2A')
+    expect(t['--font-sans']).toBe('Inter')
+    expect(t['--radius-md']).toBe('8px')
+    expect(JSON.parse(t['--component-button']!)).toBe('Solid teal, 8px corners')
+    // hanzo/render `tokens`: a key is `--name`, a value one declaration's worth.
+    for (const [k, v] of Object.entries(t)) {
+      expect(k).toMatch(/^--[A-Za-z0-9-]{1,64}$/)
+      expect(v.length).toBeLessThanOrEqual(300)
+      expect(v).not.toMatch(/[;{}<>\\]|\/\*/)
+    }
   })
   test('what the model is told names every colour and the voice; the page draws them', () => {
     const b = { id: 'brd_1', name: 'Tidepool', tokens: tokensOf(drafted(raw) as Draft) }

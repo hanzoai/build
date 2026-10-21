@@ -38,8 +38,9 @@ export interface Start {
 
 /**
  * A design system: one of Studio's brands, the one store for them. Its tokens
- * are W3C design tokens (color, font, type, space, radius) and two groups of our
- * own, `components` and `voice`, each a line a model follows.
+ * are CSS custom properties (--background, --primary, --font-sans, --radius-md,
+ * …, the form Studio's renderer reads), with `--component-*` and `--voice-*` as
+ * quoted lines a model follows (design.ts `tokensOf`).
  *
  *   GET  /v1/studio/brands        {data: [brand]}   the ones you may read
  *   GET  /v1/studio/brands/{id}   one

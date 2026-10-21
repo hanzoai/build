@@ -175,8 +175,7 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
   const named = kits.value.find((b) => b.id === design)
   const designs: Shelf = {
     rows: kits.value.map((b) => {
-      const c = (b.tokens.color ?? {}) as Record<string, { $value?: unknown }>
-      return { id: b.id, label: b.name, note: [c.primary?.$value, c.accent?.$value].filter(Boolean).join(' '), icon: <Palette size={16} />, on: b.id === design }
+      return { id: b.id, label: b.name, note: [b.tokens['--primary'], b.tokens['--accent']].filter((x) => typeof x === 'string').join(' '), icon: <Palette size={16} />, on: b.id === design }
     }),
     pick: (id) => gear.set({ design: design === id ? '' : id }),
     loading: kits.loading,
