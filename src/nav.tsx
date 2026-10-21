@@ -8,11 +8,14 @@
  * Every row moves the builder through `go` with the address `path` writes, so
  * where a place lives is said here and in route.ts and nowhere else.
  */
-import { Bell, BookOpen, Bot, Brain, CircleDot, Clock, Code, Container, Cpu, CreditCard, FolderGit2, Gauge, Key, LayoutTemplate, Library, Plug, Puzzle, Settings, Shield, SlidersHorizontal, Sparkles, SquarePen, User, Users } from '@hanzogui/lucide-icons-2'
+import { AudioLines, Bell, BookOpen, Bot, Box, Brain, CircleDot, Clock, Code, Container, Cpu, CreditCard, File, FileText, FolderGit2, Gauge, Image, Key, LayoutTemplate, Library, Plug, Plus, Presentation, Puzzle, Settings, Shield, SlidersHorizontal, Sparkles, SquarePen, Upload, User, Users, Video } from '@hanzogui/lucide-icons-2'
 import type { RailLink } from '@hanzo/ui/chat'
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 
+import { automations } from './api/auto.ts'
+import { KINDS, upload } from './api/library.ts'
 import { pinBoard } from './choice.ts'
+import { useRead } from './data.ts'
 import { DOCS } from './foot.tsx'
 import type { Host } from './host.tsx'
 import { path, route, TABS, type Section, type Tab } from './route.ts'
@@ -132,4 +135,78 @@ const SECTION_ICON: Record<Section, ReactNode> = {
   members: <Users size={16} />,
   integrations: <Plug size={16} />,
   notifications: <Bell size={16} />,
+}
+
+const KIND_ICON: Record<string, ReactNode> = {
+  '': <Library size={16} />,
+  image: <Image size={16} />,
+  video: <Video size={16} />,
+  audio: <AudioLines size={16} />,
+  document: <FileText size={16} />,
+  slides: <Presentation size={16} />,
+  model: <Box size={16} />,
+  code: <Code size={16} />,
+  file: <File size={16} />,
+}
+
+/** Fired on `window` once the sidebar's Upload has kept its files, for the Library to read again. */
+export const KEPT = 'hanzo:library:kept'
+
+/** Asks for files and keeps each in the Library; a refusal is said in the page's own words. */
+function keep(host: Host): void {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.multiple = true
+  input.onchange = async () => {
+    const t = { api: host.api, token: host.token, org: host.org }
+    for (const f of Array.from(input.files ?? [])) {
+      try {
+        await upload(t, { name: f.name, type: f.type, bytes: new Uint8Array(await f.arrayBuffer()) }, { source: 'chat' })
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : `${f.name} was not kept`)
+      }
+    }
+    window.dispatchEvent(new Event(KEPT))
+  }
+  input.click()
+}
+
+/** The Library's sidebar: Upload, then every kind it narrows to, the one in the address lit. */
+export function library(host: Host, go: (path: string) => void): Group[] {
+  const r = route(host.path)
+  const at = r.kind === 'screen' && r.screen === 'artifacts' ? (r.of ?? '') : null
+  return [
+    { id: 'library-do', label: '', links: [{ id: 'upload', label: 'Upload', icon: <Upload size={16} />, onPress: () => keep(host) }] },
+    {
+      id: 'library-kinds',
+      label: '',
+      links: KINDS.map((k) => ({
+        id: `kind-${k.id || 'all'}`,
+        label: k.label,
+        icon: KIND_ICON[k.id],
+        onPress: () => go(path({ kind: 'screen', screen: 'artifacts', ...(k.id ? { of: k.id } : {}) })),
+        active: at === k.id,
+      })),
+    },
+  ]
+}
+
+/** Scheduled tasks' sidebar: New task, then each of the person's tasks, the one open lit. Read only while `on`. */
+export function useScheduled(host: Host, go: (path: string) => void, on: boolean): Group[] {
+  const t = useMemo(() => ({ api: host.api, token: host.token, org: host.org }), [host.api, host.token, host.org])
+  const list = useRead(on && host.person ? () => automations(t) : null, [], [t, on, host.path])
+  const r = route(host.path)
+  const at = r.kind === 'automation' ? r.id : ''
+  return [
+    {
+      id: 'scheduled-do',
+      label: '',
+      links: [{ id: 'new-task', label: 'New task', icon: <Plus size={16} />, onPress: () => go(path({ kind: 'automation', id: 'new' })), active: at === 'new' }],
+    },
+    {
+      id: 'scheduled-tasks',
+      label: list.value.length ? 'Tasks' : '',
+      links: list.value.map((a) => ({ id: a.id, label: a.name || 'Untitled task', icon: <Clock size={16} />, onPress: () => go(path({ kind: 'automation', id: a.id })), active: at === a.id })),
+    },
+  ]
 }

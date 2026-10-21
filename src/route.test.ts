@@ -22,6 +22,7 @@ describe('route', () => {
     ['-/mcp', { kind: 'screen', screen: 'mcp' }],
     ['-/settings', { kind: 'settings', section: 'general' }],
     ['-/settings/account', { kind: 'settings', section: 'account' }],
+    ['-/artifacts/image', { kind: 'screen', screen: 'artifacts', of: 'image' }],
     ['-/customize', { kind: 'customize', tab: 'agents' }],
     ['-/customize/skills', { kind: 'customize', tab: 'skills' }],
     ['-/customize/agents/dev', { kind: 'agent', name: 'dev' }],
@@ -34,7 +35,7 @@ describe('route', () => {
     ['/acme/Shop.web_2/', { kind: 'repo', org: 'acme', name: 'Shop.web_2' }],
   ])('%s', (p, r) => expect(route(p)).toEqual(r))
 
-  it.each(['sess_nothex', 'Mega-Shop', '-/elsewhere', '-/settings/elsewhere', '-/settings/skills', '-/customize/elsewhere', '-/automations/flow_nothex', '-/automations/../x', '-leading', '-/codebases', 'a/b/c', 'a/-b', '.a/b', 'a//b', 'x'.repeat(41), `a/${'x'.repeat(65)}`, '../etc', 'javascript:alert(1)', 'https://evil.example'])(
+  it.each(['sess_nothex', 'Mega-Shop', '-/elsewhere', '-/settings/elsewhere', '-/settings/skills', '-/customize/elsewhere', '-/artifacts/elsewhere', '-/automations/flow_nothex', '-/automations/../x', '-leading', '-/codebases', 'a/b/c', 'a/-b', '.a/b', 'a//b', 'x'.repeat(41), `a/${'x'.repeat(65)}`, '../etc', 'javascript:alert(1)', 'https://evil.example'])(
     'reads %s as the empty state',
     (p) => expect(route(p)).toEqual({ kind: 'new' }),
   )

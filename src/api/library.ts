@@ -14,8 +14,21 @@
  */
 import { call, query, seg, type Target } from './call.ts'
 
-export const KINDS = ['image', 'video', 'audio', 'document', 'slides', 'type', 'model', 'code', 'file'] as const
-export type Kind = (typeof KINDS)[number]
+export const KIND_IDS = ['image', 'video', 'audio', 'document', 'slides', 'type', 'model', 'code', 'file'] as const
+export type Kind = (typeof KIND_IDS)[number]
+
+/** The kinds a reader narrows to, in the order the Library lists them, '' being all. */
+export const KINDS: readonly { id: Kind | ''; label: string }[] = [
+  { id: '', label: 'All' },
+  { id: 'image', label: 'Images' },
+  { id: 'video', label: 'Videos' },
+  { id: 'audio', label: 'Audio' },
+  { id: 'document', label: 'Documents' },
+  { id: 'slides', label: 'Slides' },
+  { id: 'model', label: '3D' },
+  { id: 'code', label: 'Code' },
+  { id: 'file', label: 'Files' },
+]
 
 export const SOURCES = ['chat', 'dev', 'studio', 'workflow'] as const
 export type Source = (typeof SOURCES)[number]
@@ -97,7 +110,7 @@ export function item(raw: unknown): Item | null {
   const o = obj(raw)
   const id = str(o.id)
   if (!id) return null
-  const kind = (KINDS as readonly string[]).includes(str(o.kind)) ? (o.kind as Kind) : 'file'
+  const kind = (KIND_IDS as readonly string[]).includes(str(o.kind)) ? (o.kind as Kind) : 'file'
   const source = (SOURCES as readonly string[]).includes(str(o.source)) ? (o.source as Source) : 'dev'
   return {
     id,

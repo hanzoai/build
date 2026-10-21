@@ -40,29 +40,18 @@ import { ChipSelect } from '@hanzo/ui/product'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { ago } from './ago.ts'
-import { change, days, get, items as list, remove, size, SOURCE, type Item, type Kind as ItemKind, type Scope, type Source } from './api/library.ts'
+import { change, days, get, items as list, KINDS, remove, size, SOURCE, type Item, type Kind as ItemKind, type Scope, type Source } from './api/library.ts'
 import { Confirm, Rename } from './ask.tsx'
 import { useKept, useProjects, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { KEPT } from './nav.tsx'
+import { path, route } from './route.ts'
 import { Panel, type Kind } from './panel.tsx'
 import { gap, pane } from './pane.ts'
 import { Sites } from './shelf.tsx'
 import { useDeck } from './tabs.ts'
 
 type MenuItems = NonNullable<DropdownMenuProps['items']>
-
-/** The kinds a reader narrows to, in the order the chips draw them. */
-const KINDS: readonly { id: ItemKind | ''; label: string }[] = [
-  { id: '', label: 'All' },
-  { id: 'image', label: 'Images' },
-  { id: 'video', label: 'Videos' },
-  { id: 'audio', label: 'Audio' },
-  { id: 'document', label: 'Documents' },
-  { id: 'slides', label: 'Slides' },
-  { id: 'model', label: '3D' },
-  { id: 'code', label: 'Code' },
-  { id: 'file', label: 'Files' },
-]
 
 const FROM: readonly { id: Source | ''; label: string }[] = [
   { id: '', label: 'Anywhere' },
@@ -610,12 +599,16 @@ function useEnd(on: () => void) {
   return (node: unknown) => setEl(node instanceof Element ? node : null)
 }
 
+
 export function Library() {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
   const wide = useMedia().md
-  const [kind, setKind] = useState<ItemKind | ''>('')
+  // The kind is the address's (-/artifacts/<kind>), so the sidebar, a link and Back all name it.
+  const at = route(host.path)
+  const kind: ItemKind | '' = at.kind === 'screen' && at.of ? (at.of as ItemKind) : ''
+  const setKind = (k: ItemKind | '') => host.go(path({ kind: 'screen', screen: 'artifacts', ...(k ? { of: k } : {}) }))
   const [source, setSource] = useState<Source | ''>('')
   const [scope, setScope] = useState<Scope>('all')
   const [typed, setTyped] = useState('')
@@ -634,6 +627,11 @@ export function Library() {
   const load = useMemo(() => (signed ? (cursor: string, signal: AbortSignal) => list(t, { kind, source, scope, q, limit: PAGE, cursor }, { signal }) : null), [signed, t, kind, source, scope, q])
   const pages = usePages(load, `${kind}|${source}|${scope}|${q}|${t.org}`)
   const end = useEnd(pages.more)
+  const reload = pages.reload
+  useEffect(() => {
+    window.addEventListener(KEPT, reload)
+    return () => window.removeEventListener(KEPT, reload)
+  }, [reload])
 
   const look = useCallback(
     (x: { id: string; name: string }) => {
@@ -677,7 +675,7 @@ export function Library() {
         <YStack width="100%" maxW={1120} mx="auto" gap="$4">
           <XStack items="center" gap="$3">
             <SizableText render="h1" size="$7" fontWeight="600" color="$ink" flex={1}>
-              Library
+              {KINDS.find((k) => k.id === kind)?.id ? KINDS.find((k) => k.id === kind)!.label : 'Library'}
             </SizableText>
             <XStack role="radiogroup" aria-label="View" gap="$1">
               <ViewMark label="Grid" on={view === 'grid'} onPress={() => setView('grid')}>
@@ -697,11 +695,14 @@ export function Library() {
           </XStack>
 
           <YStack gap="$2">
-            <XStack role="radiogroup" aria-label="Kind" gap="$2" overflowX="auto" pb="$1" $platform-web={{ scrollbarWidth: 'none' }}>
-              {KINDS.map((k) => (
-                <Chip key={k.id || 'all'} label={k.label} on={kind === k.id} onPress={() => setKind(k.id)} />
-              ))}
-            </XStack>
+            {/* A host whose sidebar lists the kinds draws them there. */}
+            {host.sections ? null : (
+              <XStack role="radiogroup" aria-label="Kind" gap="$2" overflowX="auto" pb="$1" $platform-web={{ scrollbarWidth: 'none' }}>
+                {KINDS.map((k) => (
+                  <Chip key={k.id || 'all'} label={k.label} on={kind === k.id} onPress={() => setKind(k.id)} />
+                ))}
+              </XStack>
+            )}
             <XStack gap="$2" flexWrap="wrap" rowGap="$2">
               <ChipSelect
                 name="From"

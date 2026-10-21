@@ -4,6 +4,7 @@
  *   ''              the empty state: a new run
  *   sess_<32 hex>   one run
  *   -/<screen>      a builder screen
+ *   -/artifacts/<kind>      the Library narrowed to one kind (image, video, document, …)
  *   -/automations/<id>      one automation's editor and runs; `new` writes one
  *   -/settings[/<section>]  a section of Settings
  *   -/customize[/<tab>]     agents, skills, connectors and plugins: what the agent brings to a run
@@ -55,13 +56,17 @@ export type Tab = (typeof TABS)[number]
 export type Route =
   | { kind: 'new' }
   | { kind: 'run'; id: string }
-  | { kind: 'screen'; screen: Screen }
+  | { kind: 'screen'; screen: Screen; of?: Of }
   | { kind: 'settings'; section: Section }
   | { kind: 'customize'; tab: Tab }
   | { kind: 'agent'; name: string }
   | { kind: 'project'; slug: string }
   | { kind: 'repo'; org: string; name: string }
   | { kind: 'automation'; id: string }
+
+/** The kinds the Library narrows to by address (api/library.ts KIND_IDS). */
+export const OF = ['image', 'video', 'audio', 'document', 'slides', 'type', 'model', 'code', 'file'] as const
+export type Of = (typeof OF)[number]
 
 export const SESSION = /^sess_[0-9a-f]{32}$/
 export const SLUG = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/
@@ -89,6 +94,10 @@ export function route(path: string): Route {
   if (p.startsWith('-/automations/')) {
     const id = p.slice('-/automations/'.length)
     return AUTOMATION.test(id) ? { kind: 'automation', id } : { kind: 'new' }
+  }
+  if (p.startsWith('-/artifacts/')) {
+    const of = p.slice('-/artifacts/'.length) as Of
+    return OF.includes(of) ? { kind: 'screen', screen: 'artifacts', of } : { kind: 'new' }
   }
   if (p.startsWith('-/')) {
     const s = p.slice(2) as Screen
@@ -146,7 +155,7 @@ export function path(r: Route): string {
     case 'run':
       return r.id
     case 'screen':
-      return `-/${r.screen}`
+      return r.of ? `-/${r.screen}/${r.of}` : `-/${r.screen}`
     case 'settings':
       return r.section === 'general' ? '-/settings' : `-/settings/${r.section}`
     case 'customize':
