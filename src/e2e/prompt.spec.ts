@@ -107,6 +107,29 @@ test.describe('at 1440', () => {
     await shot(p, '1440-new.png')
   })
 
+  test('at rest the composer is two rows, one line of text and the tools, and grows with the text to its ceiling', async ({ page: p }) => {
+    await platform(p, HOLDING)
+    await p.goto('/')
+    const ask = field(p, 'Describe a task or ask a question')
+    await expect(ask).toBeVisible({ timeout: 45_000 })
+    const line = async () => (await ask.boundingBox())!.height
+    const rest = await line()
+    // One line of 24px, with the field's own few px of padding.
+    expect(rest).toBeGreaterThanOrEqual(24)
+    expect(rest).toBeLessThan(36)
+    const tall = (await frame(p).boundingBox())!.height
+    // The text's row and the tools' row: no third row of air.
+    expect(tall).toBeLessThan(rest + 70)
+    await shot(p, '1440-new-rest.png')
+    await ask.fill(['one', 'two', 'three', 'four'].join('\n'))
+    await expect.poll(line).toBeGreaterThan(rest + 60)
+    await ask.fill(Array.from({ length: 40 }, (_, n) => `line ${n}`).join('\n'))
+    const capped = await line()
+    expect(capped).toBeLessThan(900 / 2)
+    await ask.fill('')
+    await expect.poll(line).toBeLessThan(36)
+  })
+
   test('the chip starts on Enso at Medium; High and a model chosen on New are kept and shown by a run’s follow-up, and Send carries them', async ({ page: p }) => {
     const { sent } = await platform(p, HOLDING)
     await p.goto('/')

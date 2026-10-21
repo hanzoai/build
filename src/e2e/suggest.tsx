@@ -1,8 +1,8 @@
 /**
  * The suggestions alone, over a stand-in for the composer, for suggest.spec.ts:
  * `useSuggestions` against the platform the spec routes, `Suggestions` under the
- * field (above it at a phone's width). A pick writes the prompt into the field
- * and into `window.went`.
+ * field (above it at a phone's width). A press records the row's act in
+ * `window.went`, as JSON: what the product would do.
  *
  * `window.suggest` before the page loads: `theme`, and whether anyone is signed in.
  */
@@ -44,10 +44,7 @@ function Page() {
   const list = (
     <Suggestions
       rows={s.rows}
-      onPick={(p) => {
-        setDraft(p)
-        window.went.push(`pick ${p}`)
-      }}
+      onAct={(act) => window.went.push(JSON.stringify(act))}
       onDismiss={s.dismiss}
     />
   )

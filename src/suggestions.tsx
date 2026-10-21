@@ -1,8 +1,9 @@
 /**
  * The suggestions under the composer (above it on a phone): up to three rows,
- * each the source's mark, what happened linked to where it happened (its
- * summary on hover or focus), then the next step. Choosing a row puts its
- * prompt in the composer; its × dismisses it, and the account remembers.
+ * each the source's mark and one short action, its summary on hover. Pressing
+ * a row DOES it (suggest.ts `Act`): it opens what it names, sends its prompt as
+ * a new chat, starts its run, or makes its scheduled task. Nothing only fills
+ * the composer. Its × dismisses it, and the account remembers.
  *
  * `useSuggestions` reads the kept rows from the account (`suggest` in /v1/pref)
  * and, when they are due (suggest.ts `due`), reads the person's activity and
@@ -18,13 +19,14 @@
  *   POST /v1/iam/preferences {}           what signup kept (`onboarding`)
  *   POST /v1/chat/completions             the rows, as `MODEL` writes them
  *   PATCH /v1/pref {suggest}              the rows kept, and each dismissal
+ *   POST /v1/auto/automations             a `schedule` row's task
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
-import { ArrowUpRight, Bot, CalendarClock, FileText, Github, MessageSquare, X } from '@hanzogui/lucide-icons-2'
+import { Bot, CalendarClock, FileText, Github, MessageSquare, X } from '@hanzogui/lucide-icons-2'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@hanzo/ui'
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
-import { automations } from './api/auto.ts'
+import { automations, create, type Automation, type Source } from './api/auto.ts'
 import { call, Refusal, unwrap, type Target } from './api/call.ts'
 import { conversations } from './api/conversations.ts'
 import { items } from './api/library.ts'
@@ -32,8 +34,7 @@ import { read, save, type Prefs } from './api/pref.ts'
 import { list } from './api/sessions.ts'
 import { everything } from './api/work.ts'
 import { claims } from './claims.ts'
-import { Out } from './out.tsx'
-import { answer, dismissed, due, fill, inputs, request, seed, sig, skip, stale, TAKE, type Icon, type Input, type Kept, type Seed, type Suggestion } from './suggest.ts'
+import { answer, dismissed, due, fill, inputs, request, seed, sig, skip, stale, TAKE, type Act, type Icon, type Input, type Kept, type Seed, type Suggestion } from './suggest.ts'
 
 /** A source that refuses this person (a 4xx other than an expired sign-in or a rate) has nothing for them; any other failure leaves it unknown. */
 function soft<T>(p: Promise<T>, none: T): Promise<T> {
@@ -151,6 +152,50 @@ export function useSuggestions(t: Target): Suggested {
   return useMemo(() => ({ rows, dismiss, error }), [rows, dismiss, error])
 }
 
+/** Where a row leaves its act for the product that does it. */
+const HAND = 'hanzo.suggest.hand'
+
+/**
+ * Leave `prompt` for the product `kind` names, which does it on arrival, once:
+ * Chat sends a `send` as a new chat, Dev starts a `task` as a run. Same-tab
+ * session storage, written by the person's own press, so an address can never
+ * carry one (a link is not consent to spend).
+ */
+export function hand(kind: 'send' | 'task', prompt: string): void {
+  try {
+    window.sessionStorage.setItem(HAND, JSON.stringify({ kind, prompt }))
+  } catch {
+    // Without storage the product opens without it.
+  }
+}
+
+/** The prompt left for `kind`, taken so it is done once, or ''. */
+export function taken(kind: 'send' | 'task'): string {
+  try {
+    const v = JSON.parse(window.sessionStorage.getItem(HAND) ?? 'null') as { kind?: unknown; prompt?: unknown } | null
+    if (v?.kind !== kind || typeof v.prompt !== 'string') return ''
+    window.sessionStorage.removeItem(HAND)
+    return v.prompt.trim()
+  } catch {
+    return ''
+  }
+}
+
+/** Make a `schedule` row's task: on, asking before it acts, and notifying its person. */
+export function book(t: Target, act: Extract<Act, { kind: 'schedule' }>, source: Source): Promise<Automation> {
+  return create(t, {
+    name: act.name || act.prompt.slice(0, 80),
+    instructions: act.prompt,
+    model: null,
+    schedule: { ...act.schedule, tz: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    permissions: 'ask',
+    notify: true,
+    postTo: [],
+    enabled: true,
+    source,
+  })
+}
+
 const MARKS: Record<Icon, typeof Github> = {
   github: Github,
   agent: Bot,
@@ -164,74 +209,81 @@ const PITCH = 44
 
 export interface SuggestionsProps {
   rows: readonly Suggestion[]
-  /** A row was chosen: its prompt, for the composer. */
-  onPick: (prompt: string) => void
+  /** A row was pressed: do what it says. */
+  onAct: (act: Act, row: Suggestion) => void
   onDismiss: (id: string) => void
 }
 
 /** The rows, or nothing when there are none. */
-export function Suggestions({ rows, onPick, onDismiss }: SuggestionsProps) {
+export function Suggestions({ rows, onAct, onDismiss }: SuggestionsProps) {
   // A phone has no hover: its × stays in sight.
   const touch = !useMedia().sm
   if (!rows.length) return null
   return (
     <YStack role="list" aria-label="Suggestions" data-slot="suggestions">
       {rows.map((r) => (
-        <Row key={r.id} row={r} touch={touch} onPick={onPick} onDismiss={onDismiss} />
+        <Row key={r.id} row={r} touch={touch} onAct={onAct} onDismiss={onDismiss} />
       ))}
     </YStack>
   )
 }
 
-/**
- * One row. The whole row is one button, laid under the row's content (which is
- * positioned after it, so it paints above, and lets presses through), and over
- * it the title's link and the × are their own: three stops for the keyboard,
- * none inside another.
- */
-function Row({ row, touch, onPick, onDismiss }: { row: Suggestion; touch: boolean; onPick: (prompt: string) => void; onDismiss: (id: string) => void }) {
+/** One row: the whole of it one button that does the act, and its × beside it. Two stops for the keyboard, neither inside the other. */
+function Row({ row, touch, onAct, onDismiss }: { row: Suggestion; touch: boolean; onAct: (act: Act, row: Suggestion) => void; onDismiss: (id: string) => void }) {
   const [near, setNear] = useState(false)
   const Mark = MARKS[row.icon]
+  const button = (
+    <XStack
+      render="button"
+      data-act={row.act.kind}
+      aria-label={row.title}
+      onPress={() => onAct(row.act, row)}
+      flex={1}
+      minW={0}
+      self="stretch"
+      items="center"
+      gap="$3"
+      pl="$3"
+      rounded="$4"
+      cursor="pointer"
+      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+    >
+      <Mark size={18} color="$soft" />
+      <SizableText fontSize={15} color="$soft" numberOfLines={1} shrink={1} minW={0}>
+        {row.title}
+      </SizableText>
+    </XStack>
+  )
   return (
     <XStack
       role="listitem"
       data-slot="suggestion"
-      position="relative"
       items="center"
-      gap="$3"
+      gap="$1"
       minH={PITCH}
-      px="$3"
+      pr="$2"
       rounded="$4"
       hoverStyle={{ bg: '$hover' }}
       onPointerEnter={() => setNear(true)}
       onPointerLeave={() => setNear(false)}
     >
-      <YStack
-        render="button"
-        aria-label={`${row.title}. ${row.action}`}
-        onPress={() => onPick(row.prompt)}
-        position="absolute"
-        t={0}
-        r={0}
-        b={0}
-        l={0}
-        rounded="$4"
-        cursor="pointer"
-        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
-      />
-      <XStack position="relative" flex={1} minW={0} items="center" gap="$3" pointerEvents="none">
-        <Mark size={18} color="$soft" />
-        <XStack flex={1} minW={0} items="center">
-          <Title row={row} />
-          <SizableText fontSize={15} color="$soft" numberOfLines={1} shrink={1} minW={0}>
-            {`. ${row.action}`}
-          </SizableText>
-        </XStack>
-      </XStack>
+      {row.summary ? (
+        <HoverCard openDelay={300} closeDelay={150}>
+          <HoverCardTrigger flex={1} minW={0} self="stretch" flexDirection="row">
+            {button}
+          </HoverCardTrigger>
+          <HoverCardContent side="top" align="start" sideOffset={8} width={470} maxW="calc(100vw - 32px)" rounded="$6" p="$4">
+            <SizableText fontSize={16} lineHeight={26} color="$ink">
+              {row.summary}
+            </SizableText>
+          </HoverCardContent>
+        </HoverCard>
+      ) : (
+        button
+      )}
       <XStack
         render="button"
         aria-label={`Dismiss ${row.title}`}
-        position="relative"
         onPress={() => onDismiss(row.id)}
         p="$1.5"
         rounded="$2"
@@ -243,41 +295,5 @@ function Row({ row, touch, onPick, onDismiss }: { row: Suggestion; touch: boolea
         <X size={16} color="$soft" />
       </XStack>
     </XStack>
-  )
-}
-
-/** What happened, linked to its source with a ↗ when it has one, its summary in a card above it. It keeps its words before the step does, up to 70% of the line. */
-function Title({ row }: { row: Suggestion }) {
-  const words = (
-    <SizableText fontSize={15} color="$soft" numberOfLines={1} textDecorationLine={row.href ? 'underline' : 'none'} textDecorationStyle="dotted">
-      {row.title}
-    </SizableText>
-  )
-  const text: ReactNode = row.href ? (
-    <Out href={row.href} label={`${row.title}, opens the source`}>
-      {words}
-      <ArrowUpRight size={12} color="$soft" />
-    </Out>
-  ) : (
-    words
-  )
-  if (!row.summary) {
-    return (
-      <XStack shrink={0} maxW="70%" minW={0} pointerEvents="auto">
-        {text}
-      </XStack>
-    )
-  }
-  return (
-    <HoverCard openDelay={300} closeDelay={150}>
-      <HoverCardTrigger shrink={0} maxW="70%" minW={0} pointerEvents="auto">
-        {text}
-      </HoverCardTrigger>
-      <HoverCardContent side="top" align="start" sideOffset={8} width={470} maxW="calc(100vw - 32px)" rounded="$6" p="$4">
-        <SizableText fontSize={16} lineHeight={26} color="$ink">
-          {row.summary}
-        </SizableText>
-      </HoverCardContent>
-    </HoverCard>
   )
 }

@@ -77,5 +77,5 @@ export { address, destination, located, name, PAGE, SEARCH, useDeck, useKey, use
  * the person's own activity: `useSuggestions` reads and makes them, `Suggestions`
  * draws them. The row is `Hint` here: `Suggestion` is the side panel's.
  */
-export { Suggestions, useSuggestions, type Suggested, type SuggestionsProps } from './suggestions.tsx'
-export type { Suggestion as Hint } from './suggest.ts'
+export { book, hand, Suggestions, taken, useSuggestions, type Suggested, type SuggestionsProps } from './suggestions.tsx'
+export type { Act, Suggestion as Hint } from './suggest.ts'

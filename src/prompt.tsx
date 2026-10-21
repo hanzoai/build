@@ -537,14 +537,16 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
     disabled,
     placeholder: o.placeholder ?? ASK,
     ...(o.label ? { label: o.label } : {}),
-    rows: 2,
+    // At rest two rows: one line of text, then the tools. It grows with the text to the kit's ceiling, then scrolls.
+    rows: 1,
     field: {
       ...o.field,
       fontSize: 16,
       lineHeight: 24,
       px: 8,
       pt: 2,
-      minH: 48,
+      pb: 0,
+      minH: 26,
       bg: 'transparent',
     },
     head,

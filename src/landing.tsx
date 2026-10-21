@@ -37,7 +37,9 @@ import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
 import { useCarry } from './carry.tsx'
 import { DEV_MODES } from './gear.ts'
-import { Suggestions, useSuggestions } from './suggestions.tsx'
+import { book, hand, Suggestions, taken, useSuggestions } from './suggestions.tsx'
+import type { Act } from './suggest.ts'
+import { want } from './library.tsx'
 import { MEASURE, Prompt, useEar } from './prompt.tsx'
 import { Monitor as Device } from '@hanzogui/lucide-icons-2'
 import { compose, Files, pick, read as readFiles, type Attached } from './tools.tsx'
@@ -216,9 +218,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   )
 
   // The composer sends only a draft with words in it, and not while a send is out.
-  const send = async () => {
+  const send = async (said: string = draft) => {
     if (!signed) {
-      hold({ draft, files, sent: true })
+      hold({ draft: said, files, sent: true })
       host.signIn?.()
       return
     }
@@ -244,7 +246,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     setNote('')
     try {
       // What the plugins that are on add: words for the run, or an answer of their own.
-      const prepped = carry.preparing ? await carry.prep({ text: draft.trim(), files: [], thread: '' }, new AbortController().signal) : {}
+      const prepped = carry.preparing ? await carry.prep({ text: said.trim(), files: [], thread: '' }, new AbortController().signal) : {}
       // An answer of a plugin's own (a deck) is the answer: no run is started for it.
       if (prepped.reply) {
         // Its words, without the page it drew (Chat shows that in the side panel).
@@ -257,7 +259,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         return
       }
       const run = await start(t, {
-        prompt: compose([draft.trim(), carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n---\n'), files),
+        prompt: compose([said.trim(), carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n---\n'), files),
         // The name alone. The org rides the request, and a slash is not a repo name.
         // An empty base or place is not sent: the default branch, and the sandbox.
         repo: repo?.name ?? hub?.full_name,
@@ -288,6 +290,45 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     // Sent once, on the sign-in that it waited for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signed])
+
+  // A run a suggestion in Chat left for Dev starts on arrival, once its person is known.
+  const [handed] = useState(() => ({ prompt: taken('task') }))
+  useEffect(() => {
+    if (!signed || !handed.prompt) return
+    const p = handed.prompt
+    handed.prompt = ''
+    setDraft(p)
+    void send(p)
+    // Started once, on the sign-in that it waited for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signed])
+
+  /** What pressing a suggestion does: open what it names, chat its prompt, start its run, or make its scheduled task. */
+  const act = (a: Act) => {
+    switch (a.kind) {
+      case 'open':
+        if (a.item) want(a.item)
+        if (/^https:\/\//.test(a.to)) window.open(a.to, '_blank', 'noopener,noreferrer')
+        else if (a.to.startsWith('/')) host.open(a.to)
+        else host.go(a.to)
+        return
+      case 'send':
+        hand('send', a.prompt)
+        host.open('/chat')
+        return
+      case 'task':
+        setDraft(a.prompt)
+        void send(a.prompt)
+        return
+      case 'schedule':
+        setNote('')
+        void book(t, a, 'dev').then(
+          (made) => host.go(path({ kind: 'automation', id: made.id })),
+          (e: unknown) => setNote(e instanceof Error && e.message ? e.message : 'The scheduled task could not be made.'),
+        )
+        return
+    }
+  }
 
   /** Start the agent that finds a codebase's environment, and open it: its run is the progress. A refusal is the dialog's to say. */
   const setup = async (repo: string) => {
@@ -474,7 +515,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             at={carry.plugins}
             mode={carry.mode}
             where={where}
-            below={<Suggestions rows={hints.rows} onPick={setDraft} onDismiss={hints.dismiss} />}
+            below={<Suggestions rows={hints.rows} onAct={act} onDismiss={hints.dismiss} />}
             mind={mind}
             limits={limits}
             onUpgrade={() => host.go(path({ kind: 'screen', screen: 'plans' }))}

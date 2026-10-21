@@ -148,6 +148,9 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
   const { inputs, allowed, using } = useInputs(open)
   const [device, setDevice] = useState<string | null>(() => (typeof window === 'undefined' ? null : kept()))
   const spoken = LANGUAGES.find((l) => l.id === language)
+  // The chevron is drawn while the mic is reached for (pointer, keyboard, menu open); at rest the row is the mic alone.
+  const [near, setNear] = useState(false)
+  const shown = open || near
   return (
     <XStack
       data-slot="dictation"
@@ -157,6 +160,10 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
       borderColor={open ? '$borderColor' : 'transparent'}
       hoverStyle={{ borderColor: '$borderColor' }}
       shrink={0}
+      onPointerEnter={() => setNear(true)}
+      onPointerLeave={() => setNear(false)}
+      onFocus={() => setNear(true)}
+      onBlur={() => setNear(false)}
     >
       <Control asChild size={narrow ? 44 : 30} {...PLAIN}>
         <Voice voice={voice} disabled={disabled} says={{ idle: 'Dictate', listening: 'Dictating — click to stop' }}>
@@ -179,7 +186,7 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
             hoverStyle={{ bg: '$hover' }}
             {...(narrow ? { width: 44, height: 44 } : null)}
           >
-            <ChevronDown size={14} color="$aside" />
+            <ChevronDown size={14} color="$soft" opacity={shown || narrow ? 1 : 0} />
           </XStack>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" minW={200} data-slot="dictation-panel">
