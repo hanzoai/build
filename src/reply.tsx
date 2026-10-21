@@ -42,12 +42,12 @@ const suffix = (s: string): string => {
   return dot > 0 ? s.slice(dot + 1).toLowerCase() : ''
 }
 
-/** An info string is a file name (a dot, no spaces) or a language. */
+/** An info string is a language, a file name (a dot, no spaces), or both (`html index.html`): the file name wins. */
 const called = (info: string, n: number): string => {
-  const word = info.trim().split(/\s+/)[0] ?? ''
-  if (!word) return `Block ${n}`
-  if (word.includes('.') && suffix(word)) return word
-  return `${word} block`
+  const words = info.trim().split(/\s+/).filter(Boolean)
+  const file = words.find((w) => w.includes('.') && suffix(w))
+  if (file) return file
+  return words[0] ? `${words[0]} block` : `Block ${n}`
 }
 
 /** Every fenced block in `text`, in order. */
