@@ -2,10 +2,12 @@
  * Agents: the org's own — a model, instructions, the tools it may call, and
  * what it may spend.
  *
- * Browse is the platform's presets whose tool calls run on the platform;
- * starting from one opens a new agent written from it. Yours lists the org's
- * agents, and Add default agents makes every member of the host's cast the org
- * has none for (an org starts with none). Opening one is its profile page
+ * Browse is every agent there is to start from: the host's default agents
+ * (`cast`) and personas (`personas`), and the platform's presets whose tool
+ * calls run on the platform, by name and category. Use makes the org's own
+ * agent from one and opens it; nothing is added any other way, so an org starts
+ * with none. An agent is also made from scratch, from the person signed in
+ * (Clone yourself) or from anyone named. Yours lists the org's agents. Opening one is its profile page
  * (`-/customize/agents/<name>`): its face, part, model, instructions, tools,
  * budget and runs, edited in place, and only what changed is sent. An
  * agent calls only the tools it names, and only those that are on for the org,
@@ -14,12 +16,12 @@
  * spend each period, and in one run.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { ArrowLeft, Bot, Users } from '@hanzogui/lucide-icons-2'
+import { ArrowLeft, Upload } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { ModelPicker } from '@hanzo/ui/models'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { agents, ALL, create, draft, EMPTY, fromPreset, hire, missing, one, PERIODS, presets, profile, remove, update, type Agent, type Cast, type Draft, type Period, type Preset, type Run } from '../api/agents.ts'
+import { agents, ALL, create, draft, EMPTY, fromPreset, one, PERIODS, person, presets, profile, remove, update, use, type Agent, type Cast, type Draft, type Period, type Preset, type Run } from '../api/agents.ts'
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useHost, useTarget } from '../host.tsx'
@@ -28,83 +30,111 @@ import { useLoad } from './load.ts'
 import { say } from './say.ts'
 import { Add, Choice, Confirm, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
 
+/** How many cards Browse draws at a time. */
+const PAGE = 60
+const ANY = 'All'
+
+/** Categories as Browse offers them: the default agents' and presets' first, as listed, then the rest by how many each holds. */
+export function kinds(first: readonly Cast[], rest: readonly Cast[]): string[] {
+  const lead = [...new Set(first.map((c) => c.category))]
+  const count = new Map<string, number>()
+  for (const c of rest) if (!lead.includes(c.category)) count.set(c.category, (count.get(c.category) ?? 0) + 1)
+  return [ANY, ...lead, ...[...count.keys()].sort((a, b) => count.get(b)! - count.get(a)! || a.localeCompare(b))]
+}
+
 const money = (m: number): string => `$${(m / 1_000_000).toFixed(m % 10_000 ? 4 : 2).replace(/\.?0+$/, '')}`
 
 export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
+  const browsing = view === 'discover'
   const mine = useLoad(signed ? () => agents(t) : null, [] as Agent[], [t, signed])
-  const offered = useLoad(view === 'discover' ? () => presets(t) : null, [] as Preset[], [t, view])
+  const offered = useLoad(browsing ? () => presets(t) : null, [] as Preset[], [t, view])
+  const figures = useLoad(browsing && host.personas ? host.personas : null, [] as readonly Cast[], [view])
   useCount(mine.value.length, onCount)
-  const [start, setStart] = useState<Draft | null>(null)
   const [note, setNote] = useState('')
-  const [hiring, setHiring] = useState(false)
-  const cast = host.cast ?? []
-  const lacking = missing(cast, mine.value)
-  // The host's cast, made in one press: each member the org has no agent for.
-  const addCast = async () => {
-    setHiring(true)
+  const [kind, setKind] = useState(ANY)
+  const [more, setMore] = useState(PAGE)
+  const [using, setUsing] = useState<Cast | null>(null)
+  const [making, setMaking] = useState<'self' | 'person' | null>(null)
+  useEffect(() => setMore(PAGE), [q, kind])
+
+  const opened = (a: Agent) => host.go(path({ kind: 'agent', name: a.name }))
+  const take = async (c: Cast) => {
+    setUsing(c)
     setNote('')
-    const { made, error } = await hire(t, cast, mine.value)
-    setHiring(false)
-    mine.reload()
-    setNote(error ? `${made.length ? `Added ${made.length}. ` : ''}${say(error)}` : `Added ${made.length} default ${made.length === 1 ? 'agent' : 'agents'}`)
+    try {
+      opened(await use(t, c, window.location.href))
+    } catch (e) {
+      setNote(say(e))
+    } finally {
+      setUsing(null)
+    }
   }
-  const castButton =
-    signed && lacking.length ? (
-      <Button size="sm" variant="outline" disabled={hiring} onPress={() => void addCast()}>
-        <Users size={14} /> {hiring ? 'Adding…' : lacking.length === cast.length ? 'Add default agents' : `Add ${lacking.length} default ${lacking.length === 1 ? 'agent' : 'agents'}`}
-      </Button>
-    ) : null
 
-  const closeNew = () => {
-    setStart(null)
-    onAdding(false)
-  }
-  const editor =
-    adding || start ? (
-      <Editor
-        start={start ?? EMPTY}
-        onClose={closeNew}
-        onSaved={(a) => {
-          closeNew()
-          onView('yours')
-          mine.reload()
-          setNote(`${a.name} is saved`)
-        }}
-      />
-    ) : null
+  const editor = adding ? (
+    <Editor
+      onClose={() => onAdding(false)}
+      onSaved={(a) => {
+        onAdding(false)
+        onView('yours')
+        mine.reload()
+        setNote(`${a.name} is saved`)
+      }}
+    />
+  ) : null
 
-  if (view === 'discover') {
-    const names = new Set(mine.value.map((a) => a.name))
-    const shown = offered.value.filter((p) => matches(q, p.id, p.title, p.prompt))
+  if (browsing) {
+    const first = [...(host.cast ?? []), ...offered.value.map(fromPreset)]
+    const all = [...first, ...figures.value]
+    const shown = all.filter((c) => (kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category))
+    const failed = figures.error ?? offered.error
     return (
       <YStack gap="$3">
+        {signed ? (
+          <XStack gap="$2" flexWrap="wrap">
+            <Button size="sm" variant="outline" onPress={() => onAdding(true)}>
+              Start from scratch
+            </Button>
+            <Button size="sm" variant="outline" onPress={() => setMaking('self')}>
+              Clone yourself
+            </Button>
+            <Button size="sm" variant="outline" onPress={() => setMaking('person')}>
+              Create from a person
+            </Button>
+          </XStack>
+        ) : null}
+        <XStack overflowX="auto" overflowY="hidden" pb="$1">
+          <Choice label="Category" value={kind} options={kinds(first, figures.value).map((id) => ({ id, label: id }))} onChange={setKind} />
+        </XStack>
         <Line>{note}</Line>
-        <Part title="Start from a preset" detail="A ready agent from Hanzo. You can change it before you save it.">
-          {offered.error && !offered.value.length ? (
-            <Failed error={offered.error} onRetry={offered.reload} />
-          ) : offered.loading && !offered.value.length ? (
-            <Soft>Loading presets…</Soft>
-          ) : !shown.length ? (
-            <Soft>{offered.value.length ? `No preset matches “${q.trim()}”.` : 'There are no presets yet. Start from a blank agent with New agent.'}</Soft>
-          ) : (
-            <Grid label="Presets">
-              {shown.map((p) => (
-                <Tile
-                  key={p.id}
-                  title={p.title || p.id}
-                  detail={p.prompt}
-                  meta={`Preset ${p.id}`}
-                  mark={<Mark name={p.title || p.id} icon={<Bot size={15} />} />}
-                  action={signed ? <Add name={p.title || p.id} label="Use" added={names.has(p.id)} onPress={() => setStart(fromPreset(p))} /> : undefined}
-                />
-              ))}
-            </Grid>
-          )}
-        </Part>
+        {shown.length ? (
+          <Grid label="Agents to start from">
+            {shown.slice(0, more).map((c) => (
+              <Tile
+                key={`${c.category}/${c.name}/${c.title}`}
+                title={c.title}
+                detail={c.description === c.title || c.description === c.category ? undefined : c.description}
+                meta={c.category}
+                mark={<Mark name={c.title} size={40} logo={c.avatar} />}
+                action={signed ? <Add name={c.title} label="Use" added={false} busy={using !== null} onPress={() => void take(c)} /> : undefined}
+              />
+            ))}
+          </Grid>
+        ) : figures.loading || offered.loading ? null : (
+          <Soft>{`No agent matches “${q.trim()}”.`}</Soft>
+        )}
+        {shown.length > more ? (
+          <XStack>
+            <Button size="sm" variant="ghost" onPress={() => setMore(more + PAGE)}>
+              More
+            </Button>
+          </XStack>
+        ) : null}
+        {failed ? <Failed error={failed} onRetry={figures.error ? figures.reload : offered.reload} /> : figures.loading || offered.loading ? <Soft>Loading…</Soft> : null}
         {editor}
+        {making ? <Person self={making === 'self'} onClose={() => setMaking(null)} onMade={opened} /> : null}
       </YStack>
     )
   }
@@ -121,10 +151,9 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
       ) : mine.loading && !mine.value.length ? (
         <Soft>Loading your agents…</Soft>
       ) : !mine.value.length ? (
-        <Empty title="No agents yet" detail={cast.length ? 'Add the default team, start from a preset, or give a new one a model, instructions and tools.' : 'Start from a preset, or give a new one a model, instructions and tools.'}>
-          {castButton}
+        <Empty title="No agents yet" detail="">
           <Button size="sm" variant="outline" onPress={() => onView('discover')}>
-            Browse presets
+            Browse agents
           </Button>
           <Button size="sm" onPress={() => onAdding(true)}>
             New agent
@@ -133,26 +162,89 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
       ) : !shown.length ? (
         <Soft>{`No agent of yours matches “${q.trim()}”.`}</Soft>
       ) : (
-        <>
-          {castButton ? <XStack>{castButton}</XStack> : null}
-          <Grid label="Your agents">
-            {shown.map((a) => (
-              <Tile
-                key={a.id || a.name}
-                title={a.name}
-                detail={a.description || 'No description.'}
-                meta={[a.model, `${a.runs} ${a.runs === 1 ? 'run' : 'runs'}`, reach(a), a.cap ? `${money(a.spent)} of ${money(a.cap)} this ${a.period || 'period'}` : ''].filter(Boolean).join(' · ')}
-                mark={<Face agent={a} cast={cast} />}
-                onOpen={() => host.go(path({ kind: 'agent', name: a.name }))}
-              />
-            ))}
-          </Grid>
-        </>
+        <Grid label="Your agents">
+          {shown.map((a) => (
+            <Tile
+              key={a.id || a.name}
+              title={a.name}
+              detail={a.description || 'No description.'}
+              meta={[a.model, `${a.runs} ${a.runs === 1 ? 'run' : 'runs'}`, reach(a), a.cap ? `${money(a.spent)} of ${money(a.cap)} this ${a.period || 'period'}` : ''].filter(Boolean).join(' · ')}
+              mark={<Face agent={a} cast={host.cast ?? []} />}
+              onOpen={() => opened(a)}
+            />
+          ))}
+        </Grid>
       )}
       {editor}
     </YStack>
   )
+}
 
+/** Clone yourself, or anyone named: a name, who they are, and writing of theirs, pasted or uploaded. */
+function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void; onMade: (a: Agent) => void }) {
+  const host = useHost()
+  const t = useTarget()
+  const me = self ? host.person : null
+  const [name, setName] = useState(me?.name ?? '')
+  const [about, setAbout] = useState('')
+  const [writing, setWriting] = useState('')
+  const [working, setWorking] = useState(false)
+  const [note, setNote] = useState('')
+  const file = useRef<HTMLInputElement | null>(null)
+  const read = async (files: FileList | null) => {
+    const texts = await Promise.all([...(files ?? [])].map((f) => f.text()))
+    setWriting((w) => [w.trim(), ...texts.map((x) => x.trim())].filter(Boolean).join('\n\n'))
+  }
+  const save = async () => {
+    setWorking(true)
+    setNote('')
+    try {
+      onMade(await use(t, person(name, about, writing, me?.avatar), window.location.href))
+    } catch (e) {
+      setNote(say(e))
+      setWorking(false)
+    }
+  }
+  return (
+    <Sheet title={self ? 'Clone yourself' : 'Create from a person'} open onOpenChange={(o) => !o && onClose()}>
+      <Field label="Name">
+        <Input value={name} onChangeText={setName} aria-label="Name" />
+      </Field>
+      <Field label="Description">
+        <Textarea value={about} onChangeText={setAbout} aria-label="Description" rows={3} />
+      </Field>
+      <Field label="Writing">
+        <Textarea value={writing} onChangeText={setWriting} aria-label="Writing" rows={6} />
+      </Field>
+      <XStack>
+        <Button size="sm" variant="ghost" onPress={() => file.current?.click()}>
+          <Upload size={14} /> Upload
+        </Button>
+        <input
+          ref={file}
+          type="file"
+          multiple
+          accept=".txt,.md,.markdown,.csv,.json,.html,text/*"
+          hidden
+          aria-label="Upload writing"
+          onChange={(e) => {
+            void read(e.currentTarget.files)
+            e.currentTarget.value = ''
+          }}
+        />
+      </XStack>
+      <Line>{note}</Line>
+      <XStack gap="$2" items="center">
+        <XStack flex={1} />
+        <Button size="sm" variant="ghost" onPress={onClose}>
+          Cancel
+        </Button>
+        <Button size="sm" disabled={working || !name.trim()} onPress={() => void save()}>
+          Create
+        </Button>
+      </XStack>
+    </Sheet>
+  )
 }
 
 function reach(a: Agent): string {
@@ -160,9 +252,9 @@ function reach(a: Agent): string {
   return a.tools.length === 1 ? '1 tool' : `${a.tools.length} tools`
 }
 
-/** An agent's face: the cast member's picture, its emoji, or its initial. */
+/** An agent's face: its picture, the default agent's of its name, its emoji, or its initial. */
 function Face({ agent: a, cast, size = 32 }: { agent: Agent; cast: readonly Cast[]; size?: number }) {
-  const avatar = cast.find((c) => c.name.toLowerCase() === a.name.toLowerCase())?.avatar
+  const avatar = a.avatar || cast.find((c) => c.name.toLowerCase() === a.name.toLowerCase())?.avatar
   return <Mark name={a.name} size={size} logo={avatar} icon={a.emoji ? <SizableText size={size > 40 ? '$8' : '$4'}>{a.emoji}</SizableText> : undefined} />
 }
 
@@ -261,13 +353,11 @@ export function Profile({ name }: { name: string }) {
 /** Write a new agent, or change one; an existing agent is read whole first, for its instructions. */
 function Editor({
   agent,
-  start,
   onClose,
   onSaved,
   onDeleted,
 }: {
   agent?: Agent
-  start?: Draft
   onClose: () => void
   onSaved: (a: Agent) => void
   onDeleted?: () => void
@@ -276,7 +366,7 @@ function Editor({
   const full = useLoad(agent ? () => one(t, agent.id || agent.name) : null, null as Agent | null, [t, agent?.id])
   const catalog = useLoad(() => models(t), [] as Model[], [t])
   const on = useLoad(() => tools(t, { activated: true }), [] as Tool[], [t])
-  const [d, setD] = useState<Draft>(start ?? EMPTY)
+  const [d, setD] = useState<Draft>(EMPTY)
   const [ready, setReady] = useState(!agent)
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')

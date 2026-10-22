@@ -106,8 +106,10 @@ export interface Host {
   browser?: Browser
   /** The host's sidebar lists Settings' sections and Customize's tabs, so the pages draw neither. */
   sections?: boolean
-  /** The default agents an org may add in one press (Customize › Agents). Absent, none are offered. */
+  /** The default agents Customize › Agents offers to start from. Absent, none. */
   cast?: readonly Cast[]
+  /** Every persona Customize › Agents offers to start from, read when Browse opens. Absent, none. */
+  personas?: () => Promise<readonly Cast[]>
 }
 
 const Context = createContext<Host | null>(null)

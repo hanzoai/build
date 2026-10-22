@@ -32,12 +32,9 @@ const LABEL: Record<Tab, { title: string; says: string; add: string; find: strin
   agents: { title: 'Agents', says: 'Agents with their own model, instructions and budget.', add: 'New agent', find: 'Search agents', icon: <Bot size={15} /> },
 }
 
-/** Where a tab opens: an org's own agents (and the cast to add) for Agents; Browse for the rest, what there is to add being the page. */
-const opens = (tab: Tab): View => (tab === 'agents' ? 'yours' : 'discover')
-
 export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
   const host = useHost()
-  const [view, setView] = useState<View>(first ?? opens(tab))
+  const [view, setView] = useState<View>(first ?? 'discover')
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
   const [count, setCount] = useState(0)
@@ -45,7 +42,7 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
   const pick = (next: Tab) => {
     setQ('')
     setAdding(false)
-    setView(opens(next))
+    setView('discover')
     setCount(0)
     host.go(path({ kind: 'customize', tab: next }))
   }

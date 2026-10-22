@@ -1,6 +1,6 @@
 /**
- * Agents: the org's own — a model, instructions, the tools it may call and a
- * budget — and the presets one can start from.
+ * Agents: the org's own — a model, instructions, the tools it may call, a
+ * budget and a face — and the templates one is made from.
  *
  *   GET    /v1/agent                 {agents: [agent]}, without instructions
  *   POST   /v1/agent                 create → 201 agent
@@ -37,6 +37,8 @@ export interface Agent {
   task: number
   spent: number
   period: Period | ''
+  /** Its picture: an https link or a data URL; '' draws its emoji or initial. */
+  avatar: string
   emoji: string
 }
 
@@ -56,6 +58,8 @@ export interface Draft {
   cap: string
   task: string
   period: Period
+  /** Sent on create only: an https link or a data URL. */
+  avatar: string
 }
 
 /** An agent's name, as the handler takes it. */
@@ -89,6 +93,7 @@ export function agent(raw: unknown): Agent {
     task: num(o.max_task_micro_usd),
     spent: num(o.consumed_micro_usd),
     period: PERIODS.includes(period) ? period : '',
+    avatar: str(o.avatar),
     emoji: str(o.emoji),
   }
 }
@@ -104,10 +109,11 @@ export function draft(a: Agent): Draft {
     cap: dollars(a.cap),
     task: dollars(a.task),
     period: a.period || 'month',
+    avatar: a.avatar,
   }
 }
 
-export const EMPTY: Draft = { name: '', description: '', model: '', instructions: '', tools: [], cap: '', task: '', period: 'month' }
+export const EMPTY: Draft = { name: '', description: '', model: '', instructions: '', tools: [], cap: '', task: '', period: 'month', avatar: '' }
 
 /** Why a draft cannot be saved as it stands, or '' when it can. */
 export function refuse(d: Draft): string {
@@ -152,38 +158,73 @@ export async function profile(t: Target, ref: string): Promise<{ agent: Agent; r
   return { agent: agent(raw), runs: rows(obj(raw).recentRuns).map(run).filter((r) => r.id) }
 }
 
-/** A default agent a host offers: a name, its line, its model and its instructions. */
+/** An agent to start from: a default agent, a persona or a preset. */
 export interface Cast {
+  /** The name it is made under. */
   name: string
+  /** What Browse calls it. */
+  title: string
   description: string
+  /** What Browse lists it under. */
+  category: string
   model: string
   instructions: string
-  /** Its face, an address of the host, when it has one. */
+  /** Reads the instructions, where they are a file the host serves. */
+  read?: () => Promise<string>
+  /** Its face, an address of the host. */
   avatar?: string
+  tools?: string[]
 }
 
-/** What a default agent may spend until its owner says otherwise, in dollars: each month, and one run. */
+/** What an agent made from a template may spend until its owner says otherwise, in dollars: each month, and one run. */
 export const CAST_CAP = '10'
 export const CAST_TASK = '1'
 
-/** The cast members the org has no agent for, by name in any case. */
-export const missing = (cast: readonly Cast[], have: readonly { name: string }[]): Cast[] => {
-  const names = new Set(have.map((a) => a.name.toLowerCase()))
-  return cast.filter((c) => !names.has(c.name.toLowerCase()))
+/**
+ * A name the API takes: accents dropped, any other run of characters a dash,
+ * from a letter or digit, up to 64. "Spärck Jones" is Sparck-Jones.
+ */
+export const handle = (name: string): string =>
+  name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^[^A-Za-z0-9]+/, '')
+    .slice(0, 64)
+    .replace(/-+$/, '')
+
+/** `name`, or `name-2`, `name-3`… : the first the org has no agent called, in any case. */
+export function free(name: string, have: readonly { name: string }[]): string {
+  const taken = new Set(have.map((a) => a.name.toLowerCase()))
+  if (!taken.has(name.toLowerCase())) return name
+  for (let i = 2; ; i++) {
+    const next = `${name.slice(0, 63 - String(i).length)}-${i}`
+    if (!taken.has(next.toLowerCase())) return next
+  }
 }
 
-/** Create every cast member the org lacks, one at a time; the names made, and the first refusal, if any. */
-export async function hire(t: Target, cast: readonly Cast[], have: readonly { name: string }[]): Promise<{ made: string[]; error: unknown }> {
-  const made: string[] = []
-  for (const c of missing(cast, have)) {
-    try {
-      await create(t, { ...EMPTY, name: c.name, description: c.description, model: c.model, instructions: c.instructions, cap: CAST_CAP, task: CAST_TASK, period: 'month' })
-      made.push(c.name)
-    } catch (error) {
-      return { made, error }
-    }
-  }
-  return { made, error: null }
+/** An address of the page as an https link the API keeps, or '' (a page served over http has none). */
+export const link = (at: string | undefined, base: string): string => {
+  if (!at) return ''
+  const url = new URL(at, base).href
+  return url.startsWith('https://') || url.startsWith('data:') ? url : ''
+}
+
+/**
+ * Make the org's own agent from a template: under the first name the org has
+ * free (read now, so it is never one that exists), with its instructions read
+ * and its face linked. The template is not touched.
+ */
+export async function use(t: Target, c: Cast, base: string): Promise<Agent> {
+  const [have, instructions] = await Promise.all([agents(t), c.read ? c.read() : c.instructions])
+  return create(t, { ...EMPTY, name: free(handle(c.name), have), description: c.description, model: c.model, instructions, tools: c.tools ?? [], cap: CAST_CAP, task: CAST_TASK, avatar: link(c.avatar, base) })
+}
+
+/** Anyone as a template: their name, who they are, and writing of theirs to take the voice from. */
+export function person(name: string, about: string, writing: string, avatar = ''): Cast {
+  const who = name.trim()
+  const lines = [`You are ${who}.`, about.trim(), writing.trim() && `Writing by ${who}:\n\n${writing.trim()}`]
+  return { name: who, title: who, description: about.trim(), category: 'Person', model: '', instructions: lines.filter(Boolean).join('\n\n'), avatar }
 }
 
 export async function create(t: Target, d: Draft): Promise<Agent> {
@@ -199,6 +240,7 @@ export async function create(t: Target, d: Draft): Promise<Agent> {
     period: d.period,
   }
   if (d.model) body.model = d.model
+  if (d.avatar) body.avatar = d.avatar
   return agent(await call<unknown>(t, 'POST', '/v1/agent', body))
 }
 
@@ -236,7 +278,7 @@ export async function presets(t: Target): Promise<Preset[]> {
     .filter((p) => p.id)
 }
 
-/** A new agent's draft from a preset. */
-export function fromPreset(p: Preset): Draft {
-  return { ...EMPTY, name: p.id, description: p.title, instructions: p.prompt }
+/** A preset as a template. */
+export function fromPreset(p: Preset): Cast {
+  return { name: p.id, title: p.title || p.id, description: p.title, category: 'Preset', model: '', instructions: p.prompt }
 }

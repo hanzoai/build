@@ -180,6 +180,7 @@ describe('agents', () => {
       task: 0,
       spent: 0,
       period: '',
+      avatar: '',
       emoji: '',
     })
     expect(agents.agent(null).name).toBe('')
@@ -187,7 +188,7 @@ describe('agents', () => {
 
   it('drafts an agent with no budget as empty fields over a month', () => {
     const d = agents.draft(agents.agent({ name: 'helper', tools: ['*'] }))
-    expect(d).toEqual({ name: 'helper', description: '', model: '', instructions: '', tools: ['*'], cap: '', task: '', period: 'month' })
+    expect(d).toEqual({ name: 'helper', description: '', model: '', instructions: '', tools: ['*'], cap: '', task: '', period: 'month', avatar: '' })
   })
 
   it('lists an answer with no agents as none, and drops a row with no name', async () => {

@@ -285,6 +285,6 @@ describe('agents', () => {
     const list = await agents.presets(T)
     expect(list).toEqual([{ id: 'create', title: 'Product & Fashion Create', prompt: 'You are Hanzo Create.' }])
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/agent/chat/presets')
-    expect(agents.fromPreset(list[0])).toMatchObject({ name: 'create', description: 'Product & Fashion Create', instructions: 'You are Hanzo Create.', period: 'month' })
+    expect(agents.fromPreset(list[0])).toMatchObject({ name: 'create', description: 'Product & Fashion Create', instructions: 'You are Hanzo Create.', category: 'Preset' })
   })
 })

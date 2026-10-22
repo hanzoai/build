@@ -226,10 +226,15 @@ are any member's.
 - Plugins: TypeScript connectors built on the platform, from source or from a
   description of an API; a failed build says why. Browse offers building one and
   lists what the deployment mounts.
-- Agents: Browse is the platform's presets whose tool calls run on the platform,
-  each a Use that opens a new agent written from it; Yours is the org's own —
-  model, instructions, tools, budget — created, edited (only what changed is
-  sent) and deleted.
+- Agents: Browse is every agent to start from — the host's default agents
+  (`cast`) and personas (`personas`), and the platform's presets whose tool
+  calls run on the platform — searched by name and filtered by category. Use
+  makes one agent of the org's own from one template (a name taken becomes
+  `-2`, `-3`), with its face, model and instructions, and opens its profile;
+  nothing is added in bulk. Start from scratch, Clone yourself (the person
+  signed in, with writing pasted or uploaded) and Create from a person make one
+  too. Yours is the org's own — model, instructions, tools, budget — created,
+  edited (only what changed is sent) and deleted.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
 (Cloud is the platform's sandbox with the codebase's environment; the org's

@@ -206,7 +206,7 @@ test('plugins: what is built in, then build one, read its source, a failed build
   expect(sentTo(sent, 'DELETE', '/v1/tool/plugins/authored/p1')).toHaveLength(1)
 })
 
-test('agents: create one with a budget, change only its instructions, and delete it', async ({ page }, info) => {
+test('agents: create one with a budget, change only its instructions, and delete it', async ({ page, baseURL }, info) => {
   const sent = await open(page, '/-/customize/agents')
   await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your agents' })
@@ -235,40 +235,33 @@ test('agents: create one with a budget, change only its instructions, and delete
     period: 'week',
   })
 
+  // An agent opens as its own page; Edit changes it, and only what changed is sent.
   await mine.getByRole('button', { name: 'helper' }).click()
+  await expect(page).toHaveURL(new URL('/-/customize/agents/helper', baseURL).href)
+  await expect(page.getByText('Be terse.', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Edit' }).click()
   dialog = page.getByRole('dialog', { name: 'helper' })
   await expect(dialog.getByLabel('Instructions')).toHaveValue('Be terse.')
   await dialog.getByLabel('Instructions').fill('Be terse, and cite the file.')
   await dialog.getByRole('button', { name: 'Save' }).click()
-  await expect(page.getByText('helper is saved')).toBeVisible()
+  await expect(page.getByText('Be terse, and cite the file.', { exact: true })).toBeVisible()
   expect(sentTo(sent, 'PATCH', '/v1/agent/agent_1').at(-1)?.body).toEqual({ instructions: 'Be terse, and cite the file.' })
 
-  await mine.getByRole('button', { name: 'helper' }).click()
+  await page.getByRole('button', { name: 'Edit' }).click()
   await page.getByRole('dialog', { name: 'helper' }).getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('dialog', { name: 'Delete helper?' }).getByRole('button', { name: 'Delete' }).click()
-  await expect(page.getByText('helper is deleted')).toBeVisible()
+  await expect(page).toHaveURL(new URL('/-/customize', baseURL).href)
   expect(sentTo(sent, 'DELETE', '/v1/agent/agent_1')).toHaveLength(1)
 })
 
-test('agents: a preset opens a new agent written from it', async ({ page }, info) => {
+test('agents: Use makes the org its own agent from a preset and opens it', async ({ page, baseURL }, info) => {
   const sent = await open(page, '/-/customize/agents')
-  await expect(page.getByRole('heading', { name: 'Start from a preset' })).toBeVisible()
   await expect(page.getByText('Product & Fashion Create', { exact: true })).toBeVisible()
   await expect(page.getByText('Studio Graph Copilot')).toHaveCount(0)
   await page.screenshot({ path: info.outputPath('agents-browse.png') })
   await page.getByRole('button', { name: 'Use Product & Fashion Create' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New agent' })
-  await expect(dialog.getByLabel('Name')).toHaveValue('create')
-  await expect(dialog.getByLabel('Instructions')).toHaveValue('You are Hanzo Create, a render assistant.')
-  await dialog.getByRole('switch', { name: 'Every tool' }).click()
-  await dialog.getByRole('button', { name: 'Model: The deployment’s default' }).click()
-  await page.getByRole('option', { name: /^zen5\.8-coder/ }).click()
-  await expect(dialog.getByRole('button', { name: 'Model: zen5.8-coder' })).toBeVisible()
-  await dialog.getByLabel('Budget each period').fill('5')
-  await dialog.getByLabel('Budget for one run').fill('0.5')
-  await dialog.getByRole('button', { name: 'Create' }).click()
-  await expect(page.getByText('create is saved')).toBeVisible()
-  expect(sentTo(sent, 'POST', '/v1/agent').at(-1)?.body).toMatchObject({ name: 'create', description: 'Product & Fashion Create', model: 'zen5.8-coder', tools: ['*'], cap_micro_usd: 5_000_000, max_task_micro_usd: 500_000, period: 'month' })
+  await expect(page).toHaveURL(new URL('/-/customize/agents/create', baseURL).href)
+  expect(sentTo(sent, 'POST', '/v1/agent').at(-1)?.body).toMatchObject({ name: 'create', description: 'Product & Fashion Create', instructions: 'You are Hanzo Create, a render assistant.', cap_micro_usd: 10_000_000, max_task_micro_usd: 1_000_000, period: 'month' })
 })
 
 for (const tab of ['skills', 'connectors', 'plugins', 'agents']) {
