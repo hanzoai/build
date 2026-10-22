@@ -22,6 +22,7 @@
  * panel is the whole window instead (`sheet`).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Maximize2, Minimize2, Minus, MoreHorizontal, PanelLeftOpen, Pin, Plus, RotateCcw, RotateCw, SquarePlus, X } from '@hanzogui/lucide-icons-2'
 import {
   ContextMenu,
@@ -98,19 +99,21 @@ const quiet = (on = false, disabled = false) =>
 /**
  * The header's control for the tabs, while they are hidden: an icon among the
  * header's icons. Open, the strip's own toggle stands at the panel's end and
- * this one is not drawn, so the page carries one toggle at a time.
+ * this one is not drawn, so the page carries one toggle at a time. Its words
+ * are the reader's language; the key chord is an argument, as this platform writes it.
  */
 export function PanelToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  const { t } = useI18n()
   if (open) return null
   return (
     <XStack
       render="button"
       role="button"
       data-slot="side-toggle"
-      aria-label="Show tabs"
+      aria-label={t('Show tabs')}
       aria-expanded={false}
       aria-keyshortcuts={SHORTCUTS}
-      {...({ title: `Show tabs (${KEYS})` } as object)}
+      {...({ title: t('Show tabs ({keys})', { keys: KEYS }) } as object)}
       onPress={onToggle}
       width={32}
       height={32}

@@ -25,6 +25,8 @@
  * This file is the pure half: inputs to a request, an answer to validated rows,
  * the fingerprint and the policy. suggestions.tsx reads the sources and draws them.
  */
+import { phrase } from '@hanzo/i18n'
+
 import type { Automation, Schedule } from './api/auto.ts'
 import type { Conversation } from './api/conversations.ts'
 import type { Item } from './api/library.ts'
@@ -504,12 +506,20 @@ export function kept(raw: unknown): Kept | undefined {
 /** The rows to draw: those not dismissed. */
 export const shown = (k: Kept | null | undefined): Suggestion[] => (k ? k.rows.filter((r) => !k.dismissed.includes(r.id)).slice(0, MOST) : [])
 
-/** What Hanzo does, three ways in, each done at once: what fills the rows a person's activity and signup do not. */
+/**
+ * What Hanzo does, three ways in, each done at once: what fills the rows a
+ * person's activity and signup do not. The one copy here that is authored, so
+ * its words are marked (`phrase`) and drawn in the reader's language, the
+ * prompt too: it is sent as their message and shown as theirs.
+ */
 export const STARTERS: readonly Suggestion[] = [
-  { id: 'start:chat', icon: 'chat', title: 'Ask what Hanzo can do for you', summary: '', act: { kind: 'send', prompt: 'What can you do for me? Give me three concrete things to try today.' } },
-  { id: 'start:dev', icon: 'agent', title: 'Build a landing page with Dev', summary: '', act: { kind: 'task', prompt: 'Build a one-page landing site for my project and give me the preview link.' } },
-  { id: 'start:research', icon: 'file', title: 'Get a cited brief on AI agents', summary: '', act: { kind: 'send', prompt: 'Research the state of AI coding agents this month and give me a short brief with sources.' } },
+  { id: 'start:chat', icon: 'chat', title: phrase('Ask what Hanzo can do for you'), summary: '', act: { kind: 'send', prompt: phrase('What can you do for me? Give me three concrete things to try today.') } },
+  { id: 'start:dev', icon: 'agent', title: phrase('Build a landing page with Dev'), summary: '', act: { kind: 'task', prompt: phrase('Build a one-page landing site for my project and give me the preview link.') } },
+  { id: 'start:research', icon: 'file', title: phrase('Get a cited brief on AI agents'), summary: '', act: { kind: 'send', prompt: phrase('Research the state of AI coding agents this month and give me a short brief with sources.') } },
 ]
+
+/** Whether a row is a starter: authored, so drawn through `t`; every other row is the person's own words. */
+export const starter = (r: Suggestion): boolean => STARTERS.some((s) => s.id === r.id)
 
 /** The kept rows, filled to `MOST` with the starters not dismissed: never one lonely row. */
 export const fill = (k: Kept | null | undefined): Suggestion[] => {

@@ -584,8 +584,8 @@ export function Run({ id }: { id: string }) {
           data-slot="desk"
           ref={split.aside}
           {...pane}
-          // A pane of its own beside the run's, the gutter between them.
-          ml={gap}
+          // A pane of its own beside the run's, the gutter between them (useSplit reads it as the inline-start margin).
+          marginInlineStart={gap}
           position="relative"
           shrink={0}
           minH={0}

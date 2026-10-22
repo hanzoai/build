@@ -16,6 +16,7 @@
  * lists as not reasoning offers none; Enso and a model the catalog does not
  * describe offer all three.
  */
+import { phrase } from '@hanzo/i18n'
 import { parseModels } from '@hanzo/ui/models/catalog'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
@@ -25,10 +26,11 @@ import { usePick } from './pick.ts'
 
 export type Effort = 'low' | 'medium' | 'high'
 
+/** The efforts, in English and marked (`phrase`): the composer draws each word through `t`. */
 export const EFFORTS: readonly { id: Effort; label: string; note: string }[] = [
-  { id: 'low', label: 'Low', note: 'A quick pass' },
-  { id: 'medium', label: 'Medium', note: 'Thinks before it answers' },
-  { id: 'high', label: 'High', note: 'Slow and careful, for hard problems' },
+  { id: 'low', label: phrase('Low'), note: phrase('A quick pass') },
+  { id: 'medium', label: phrase('Medium'), note: phrase('Thinks before it answers') },
+  { id: 'high', label: phrase('High'), note: phrase('Slow and careful, for hard problems') },
 ]
 
 /** What a person chose: the model (Enso routes) and the effort. */
