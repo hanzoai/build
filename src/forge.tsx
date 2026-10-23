@@ -8,8 +8,14 @@
  * Choosing an issue opens New on the issue's own repository — its GitHub
  * address, or the forge repository it is filed on, never a board's key — with
  * the issue as the ask; an issue no project answers to asks which one.
+ *
+ * The page's words are the reader's language (@hanzo/i18n `t`, the target is
+ * `target`); a repository's org, name, branch and description, an issue's
+ * title, labels and people, and the forge's own refusals are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import {
   ArrowRight,
   Check,
@@ -54,11 +60,11 @@ function Note({ children }: { children: string }) {
 }
 
 const STATUS: Record<string, string> = {
-  backlog: 'Backlog',
-  todo: 'To do',
-  in_progress: 'In progress',
-  done: 'Done',
-  canceled: 'Canceled',
+  backlog: phrase('Backlog'),
+  todo: phrase('To do'),
+  in_progress: phrase('In progress'),
+  done: phrase('Done'),
+  canceled: phrase('Canceled'),
 }
 
 export function Forge({ screen }: { screen: Exclude<Screen, 'artifacts' | 'templates'> }) {
@@ -80,7 +86,8 @@ const PAGE = 25
  */
 function Projects() {
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const signed = Boolean(host.person)
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<'name' | 'updated'>('updated')
@@ -89,7 +96,7 @@ function Projects() {
   useEffect(() => {
     setPage(0)
   }, [q, sort])
-  const list = useRead(signed ? () => codebases(t) : null, [] as Codebase[], [t, signed, landed])
+  const list = useRead(signed ? () => codebases(target) : null, [] as Codebase[], [target, signed, landed])
   const needle = q.trim().toLowerCase()
   const pending = readPending(host.org)
   const pendingKey = pending.map((p) => p.fullName).join('\n')
@@ -100,7 +107,7 @@ function Projects() {
     const waiting = readPending(host.org)
     if (!signed || waiting.length === 0) return
     let stop = false
-    grants(t)
+    grants(target)
       .then((g) => {
         if (stop) return
         const done = new Set(g.repos.filter((r) => r.imported).map((r) => r.fullName))
@@ -114,7 +121,7 @@ function Projects() {
     return () => {
       stop = true
     }
-  }, [signed, t, host.org, pendingKey])
+  }, [signed, target, host.org, pendingKey])
 
   const shown = [
     ...list.value,
@@ -159,20 +166,22 @@ function Projects() {
         <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap">
           <YStack gap="$1" flex={1} minW={240}>
             <SizableText render="h1" size="$6" fontWeight="500" color="$ink">
-              Projects
+              {t('Projects')}
             </SizableText>
             <SizableText size="$2" color="$soft">
-              {`${host.org ? `${host.org}’s` : 'This organization’s'} repositories on the forge. Open one to work on it.`}
+              {host.org
+                ? t('{org}’s repositories on the forge. Open one to work on it.', { org: host.org })
+                : t('This organization’s repositories on the forge. Open one to work on it.')}
             </SizableText>
           </YStack>
           <XStack gap="$2" items="center" flexWrap="wrap">
             <Button size="sm" variant="outline" onPress={template}>
               <LayoutTemplate size={14} />
-              Create from template
+              {t('Create from template')}
             </Button>
             <Button size="sm" variant="primary" onPress={link}>
               <Github size={14} />
-              Link a GitHub repo
+              {t('Link a GitHub repo')}
             </Button>
           </XStack>
         </XStack>
@@ -180,23 +189,23 @@ function Projects() {
         {list.error ? (
           <Note>{list.error.message}</Note>
         ) : !signed ? (
-          <Note>Sign in to see this organization's projects.</Note>
+          <Note>{t("Sign in to see this organization's projects.")}</Note>
         ) : list.loading && list.value.length === 0 && pending.length === 0 ? (
-          <Note>Reading the forge…</Note>
+          <Note>{t('Reading the forge…')}</Note>
         ) : none ? (
           <YStack gap="$3" py="$2">
-            <Note>No projects yet. A project is a repository: link one from GitHub, or start one from a template.</Note>
+            <Note>{t('No projects yet. A project is a repository: link one from GitHub, or start one from a template.')}</Note>
             <XStack gap="$3" flexWrap="wrap">
               <Choice
-                label="Link a GitHub repo"
+                label={t('Link a GitHub repo')}
                 icon={<Github size={20} />}
-                says="Mirror repositories you already have. They stay in step with GitHub, and their issues can come too."
+                says={t('Mirror repositories you already have. They stay in step with GitHub, and their issues can come too.')}
                 onPress={link}
               />
               <Choice
-                label="Create from template"
+                label={t('Create from template')}
                 icon={<LayoutTemplate size={20} />}
-                says="Start from a finished product — a site, an app, a store — and make it yours."
+                says={t('Start from a finished product — a site, an app, a store — and make it yours.')}
                 onPress={template}
               />
             </XStack>
@@ -206,26 +215,26 @@ function Projects() {
             <XStack gap="$2" items="center">
               <YStack flex={1} $max-md={{ display: 'none' }} />
               <YStack width={320} minW={0} shrink={1} $max-md={{ width: 'auto', flex: 1 }}>
-                <Input value={q} onChangeText={setQ} placeholder="Find a project…" aria-label="Find a project" />
+                <Input value={q} onChangeText={setQ} placeholder={t('Find a project…')} aria-label={t('Find a project')} />
               </YStack>
             </XStack>
             {shown.length === 0 ? (
-              <Note>Nothing matches.</Note>
+              <Note>{t('Nothing matches.')}</Note>
             ) : (
               <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
                 <XStack px="$3" py="$2" gap="$3" items="center" bg="$panel">
-                  <XStack flex={1} render="button" aria-label="Sort by name" items="center" gap="$1" onPress={() => setSort('name')}>
+                  <XStack flex={1} render="button" aria-label={t('Sort by name')} items="center" gap="$1" onPress={() => setSort('name')}>
                     <SizableText size="$1" color="$soft">
-                      Name
+                      {t('Name')}
                     </SizableText>
                     {sort === 'name' ? <ChevronDown size={12} /> : null}
                   </XStack>
                   <SizableText size="$1" color="$soft" width={120} $max-md={{ display: 'none' }}>
-                    Branch
+                    {t('Branch')}
                   </SizableText>
-                  <XStack render="button" aria-label="Sort by last updated" items="center" justify="flex-end" gap="$1" width={120} onPress={() => setSort('updated')}>
+                  <XStack render="button" aria-label={t('Sort by last updated')} items="center" justify="flex-end" gap="$1" width={120} onPress={() => setSort('updated')}>
                     <SizableText size="$1" color="$soft">
-                      Updated
+                      {t('Updated')}
                     </SizableText>
                     {sort === 'updated' ? <ChevronDown size={12} /> : null}
                   </XStack>
@@ -234,9 +243,9 @@ function Projects() {
                   <XStack
                     key={`${c.org}/${c.name}`}
                     render="button"
-                    aria-label={`Open ${c.org ? `${c.org}/` : ''}${c.name}`}
+                    aria-label={t('Open {repo}', { repo: `${c.org ? `${c.org}/` : ''}${c.name}` })}
                     onPress={() => open(c)}
-                    style={{ textAlign: 'left' }}
+                    style={{ textAlign: 'start' }}
                     items="center"
                     gap="$3"
                     px="$3"
@@ -248,7 +257,8 @@ function Projects() {
                   >
                     <FolderGit2 size={15} color="$soft" />
                     <YStack flex={1} minW={0}>
-                      <XStack minW={0} items="baseline">
+                      {/* `org/name` is an address: it keeps its own order in a right-to-left page. */}
+                      <XStack minW={0} items="baseline" self="flex-start" {...{ 'data-i18n-ltr': '' }}>
                         {c.org ? (
                           <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
                             {`${c.org}/`}
@@ -270,27 +280,27 @@ function Projects() {
                         {c.branch}
                       </SizableText>
                     </XStack>
-                    <SizableText size="$1" color="$soft" width={120} style={{ textAlign: 'right' }}>
-                      {syncing.has(c.name) ? 'Syncing…' : ago(c.updated)}
+                    <SizableText size="$1" color="$soft" width={120} style={{ textAlign: 'end' }}>
+                      {syncing.has(c.name) ? t('Syncing…') : ago(c.updated)}
                     </SizableText>
                   </XStack>
                 ))}
                 <XStack px="$3" py="$2" justify="space-between" items="center" borderTopWidth={1} borderColor="$borderColor">
                   <SizableText size="$1" color="$soft">
-                    {`Showing ${from}–${to} of ${shown.length}`}
+                    {t('Showing {from}–{to} of {total}', { from, to, total: shown.length })}
                   </SizableText>
                   <XStack gap="$3" items="center">
-                    <XStack render="button" aria-label="Previous page" disabled={safePage === 0} onPress={() => setPage(safePage - 1)}>
+                    <XStack render="button" aria-label={t('Previous page')} disabled={safePage === 0} onPress={() => setPage(safePage - 1)}>
                       <SizableText size="$1" color={safePage === 0 ? '$soft' : '$ink'}>
-                        Prev
+                        {t('Prev')}
                       </SizableText>
                     </XStack>
                     <SizableText size="$1" color="$soft">
                       {`${safePage + 1} / ${pages}`}
                     </SizableText>
-                    <XStack render="button" aria-label="Next page" disabled={safePage >= pages - 1} onPress={() => setPage(safePage + 1)}>
+                    <XStack render="button" aria-label={t('Next page')} disabled={safePage >= pages - 1} onPress={() => setPage(safePage + 1)}>
                       <SizableText size="$1" color={safePage >= pages - 1 ? '$soft' : '$ink'}>
-                        Next
+                        {t('Next')}
                       </SizableText>
                     </XStack>
                   </XStack>
@@ -328,9 +338,9 @@ function Choice({ label, icon, says, onPress }: { label: string; icon: ReactNode
         <SizableText size="$4" color="$ink" fontWeight="500">
           {label}
         </SizableText>
-        <ArrowRight size={14} />
+        <ArrowRight size={14} {...{ 'data-i18n-mirror': '' }} />
       </XStack>
-      <SizableText size="$2" color="$soft" style={{ textAlign: 'left' }}>
+      <SizableText size="$2" color="$soft" style={{ textAlign: 'start' }}>
         {says}
       </SizableText>
     </YStack>
@@ -344,11 +354,12 @@ function Choice({ label, icon, says, onPress }: { label: string; icon: ReactNode
  */
 function GitHubLink({ onSync }: { onSync: () => void }) {
   const host = useHost()
-  const t = useTarget()
-  const me = useRead(() => connection(t), null as Connection | null, [t])
+  const target = useTarget()
+  const { t } = useI18n()
+  const me = useRead(() => connection(target), null as Connection | null, [target])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
-  useBack(t, true, setNote, me.reload)
+  useBack(target, true, setNote, me.reload)
   const c = me.value
   // A connection that cannot be read says nothing here: Sync from GitHub above still works.
   if (me.error || !c || !c.configured) return note ? <Note>{note}</Note> : null
@@ -357,7 +368,7 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
     setBusy(true)
     setNote('')
     try {
-      host.open(await connect(t, here()))
+      host.open(await connect(target, here()))
     } catch (e) {
       setNote((e as Error).message)
       setBusy(false)
@@ -379,21 +390,21 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
       <Github size={16} />
       <YStack flex={1} minW={200}>
         <SizableText size="$2" color="$ink">
-          {c.connected ? `GitHub connected as @${c.login}` : 'Connect GitHub to bring your repositories here'}
+          {c.connected ? t('GitHub connected as {login}', { login: `@${c.login}` }) : t('Connect GitHub to bring your repositories here')}
         </SizableText>
         <SizableText size="$1" color="$soft">
-          {note || (c.connected ? 'Choose repositories to mirror; each stays in step with GitHub.' : 'One step on GitHub, then pick the repositories to sync.')}
+          {note || (c.connected ? t('Choose repositories to mirror; each stays in step with GitHub.') : t('One step on GitHub, then pick the repositories to sync.'))}
         </SizableText>
       </YStack>
       {c.connected ? (
         <Button size="sm" variant="outline" onPress={onSync}>
           <RefreshCw size={14} />
-          Sync repositories
+          {t('Sync repositories')}
         </Button>
       ) : (
         <Button size="sm" variant="primary" disabled={busy} onPress={() => void link()}>
           <Github size={14} />
-          {busy ? 'Opening GitHub…' : 'Connect GitHub'}
+          {busy ? t('Opening GitHub…') : t('Connect GitHub')}
         </Button>
       )}
     </XStack>
@@ -405,9 +416,10 @@ type Kind = 'all' | 'issue' | 'pr'
 type Origin = 'all' | 'github' | 'hanzo'
 type Order = 'newest' | 'oldest' | 'updated'
 
-const KINDS: Record<Kind, string> = { all: 'Issues and pull requests', issue: 'Issues', pr: 'Pull requests' }
-const ORIGINS: Record<Origin, string> = { all: 'Every source', github: 'GitHub', hanzo: 'Hanzo' }
-const ORDERS: Record<Order, string> = { newest: 'Newest', oldest: 'Oldest', updated: 'Recently updated' }
+/** The menus' words, marked (`phrase`) and drawn through `t`; GitHub and Hanzo are names, drawn as given. */
+const KINDS: Record<Kind, string> = { all: phrase('Issues and pull requests'), issue: phrase('Issues'), pr: phrase('Pull requests') }
+const ORIGINS: Record<Origin, string> = { all: phrase('Every source'), github: 'GitHub', hanzo: 'Hanzo' }
+const ORDERS: Record<Order, string> = { newest: phrase('Newest'), oldest: phrase('Oldest'), updated: phrase('Recently updated') }
 
 /** Mirrored from GitHub: the task index carried it from GitHub (`extRef` github:…). */
 const fromGitHub = (i: Issue): boolean => i.sources.includes('github')
@@ -522,6 +534,7 @@ function useOpen(list: Project[], work: Issue[]) {
 
 /** Asks which project an issue is for, from the org's own list: never a free string. */
 function Which({ issue, list, onPick, onClose }: { issue: Issue | null; list: Project[]; onPick: (p: Project) => void; onClose: () => void }) {
+  const { t } = useI18n()
   const [q, setQ] = useState('')
   const shown = pickProjects(
     list.filter((p) => p.forge || p.linked),
@@ -531,32 +544,37 @@ function Which({ issue, list, onPick, onClose }: { issue: Issue | null; list: Pr
   return (
     <Dialog open={issue !== null} onOpenChange={(o) => (o ? null : onClose())}>
       <DialogContent maxW={480} gap="$3">
-        <DialogTitle>Which project is this for?</DialogTitle>
+        <DialogTitle>{t('Which project is this for?')}</DialogTitle>
         <SizableText size="$2" color="$soft">
           {named
-            ? `“${named}” is not one of this organization’s projects. Choose the repository the run works on.`
-            : `This issue names no repository${issue?.board ? `: it is on the ${issue.board} board` : ''}. Choose the one the run works on.`}
+            ? t('“{name}” is not one of this organization’s projects. Choose the repository the run works on.', { name: named })
+            : issue?.board
+              ? t('This issue names no repository: it is on the {board} board. Choose the one the run works on.', { board: issue.board })
+              : t('This issue names no repository. Choose the one the run works on.')}
         </SizableText>
-        <Input value={q} onChangeText={setQ} placeholder="Find a project…" aria-label="Find a project" />
+        <Input value={q} onChangeText={setQ} placeholder={t('Find a project…')} aria-label={t('Find a project')} />
         <YStack gap="$1" maxH={320} overflow="scroll">
           {shown.length === 0 ? (
-            <Note>{list.length ? 'Nothing matches.' : 'No projects are linked yet.'}</Note>
+            <Note>{list.length ? t('Nothing matches.') : t('No projects are linked yet.')}</Note>
           ) : (
             shown.map((p) => (
-              <XStack key={p.key} render="button" aria-label={`Work on ${p.owner}/${p.name}`} onPress={() => onPick(p)} px="$2.5" py="$2" rounded="$3" items="center" justify="flex-start" hoverStyle={{ bg: '$hover' }}>
-                <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
-                  {`${p.owner}/`}
-                </SizableText>
-                <SizableText size="$2" color="$ink" numberOfLines={1} shrink={1}>
-                  {p.name}
-                </SizableText>
+              <XStack key={p.key} render="button" aria-label={t('Work on {repo}', { repo: `${p.owner}/${p.name}` })} onPress={() => onPick(p)} px="$2.5" py="$2" rounded="$3" items="center" justify="flex-start" hoverStyle={{ bg: '$hover' }}>
+                {/* `owner/name` is an address: it keeps its own order in a right-to-left page. */}
+                <XStack minW={0} shrink={1} {...{ 'data-i18n-ltr': '' }}>
+                  <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
+                    {`${p.owner}/`}
+                  </SizableText>
+                  <SizableText size="$2" color="$ink" numberOfLines={1} shrink={1}>
+                    {p.name}
+                  </SizableText>
+                </XStack>
               </XStack>
             ))
           )}
         </YStack>
         <XStack justify="flex-end">
           <Button size="sm" variant="outline" onPress={onClose}>
-            Cancel
+            {t('Cancel')}
           </Button>
         </XStack>
       </DialogContent>
@@ -573,7 +591,8 @@ function Which({ issue, list, onPick, onClose }: { issue: Issue | null; list: Pr
  */
 function Issues() {
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const signed = Boolean(host.person)
   const [board, setBoard] = useKept<string>(boardKey(host.org), '')
   const [state, setState] = useState<State>('open')
@@ -586,10 +605,10 @@ function Issues() {
   const [pulled, setPulled] = useState(0)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<{ text: string; connect?: boolean } | null>(null)
-  const list = useRead(signed ? () => everything(t) : null, [] as Issue[], [t, signed, pulled])
-  const known = useRead(signed ? () => boards(t) : null, [] as Board[], [t, signed])
+  const list = useRead(signed ? () => everything(target) : null, [] as Issue[], [target, signed, pulled])
+  const known = useRead(signed ? () => boards(target) : null, [] as Board[], [target, signed])
   // What the org's projects are made from, so an issue is placed on its own repository.
-  const made = useRead(signed ? () => sources(t) : null, NONE, [t, signed])
+  const made = useRead(signed ? () => sources(target) : null, NONE, [target, signed])
   const projects = useMemo(
     () => assemble({ granted: made.value.hub, linked: made.value.linked, held: made.value.held, sites: made.value.sites, work: list.value }),
     [made.value, list.value],
@@ -638,11 +657,15 @@ function Issues() {
     setBusy(true)
     setSaid(null)
     try {
-      const s = await syncIssues(t, board)
-      const where = board ? title : `${s.repos} ${s.repos === 1 ? 'repository' : 'repositories'}`
-      const parts = [`${s.issues} ${s.issues === 1 ? 'issue' : 'issues'} synced from ${where}`, `${s.created} new`, `${s.updated} updated`]
-      if (s.failed) parts.push(`${s.failed} failed`)
-      setSaid({ text: `${parts.join(' · ')}.${s.truncated ? ' More remain — sync again to continue.' : ''}` })
+      const s = await syncIssues(target, board)
+      const where = board ? title : s.repos === 1 ? t('1 repository') : t('{n} repositories', { n: s.repos })
+      const parts = [
+        s.issues === 1 ? t('1 issue synced from {where}', { where }) : t('{n} issues synced from {where}', { n: s.issues, where }),
+        t('{n} new', { n: s.created }),
+        t('{n} updated', { n: s.updated }),
+      ]
+      if (s.failed) parts.push(t('{n} failed', { n: s.failed }))
+      setSaid({ text: `${parts.join(' · ')}.${s.truncated ? ` ${t('More remain — sync again to continue.')}` : ''}` })
       setPulled((n) => n + 1)
     } catch (e) {
       const text = (e as Error).message
@@ -654,7 +677,7 @@ function Issues() {
 
   const link = async () => {
     try {
-      host.open(await connect(t, here()))
+      host.open(await connect(target, here()))
     } catch (e) {
       setSaid({ text: (e as Error).message })
     }
@@ -666,7 +689,7 @@ function Issues() {
       <XStack
         key={key || '*'}
         render="button"
-        aria-label={key ? `Show ${name}` : 'Show every project'}
+        aria-label={key ? t('Show {project}', { project: name }) : t('Show every project')}
         aria-pressed={on}
         onPress={() => setBoard(key)}
         items="center"
@@ -678,7 +701,7 @@ function Issues() {
         hoverStyle={{ bg: '$hover' }}
         shrink={0}
       >
-        <SizableText flex={1} size="$2" color={on ? '$ink' : '$soft'} numberOfLines={1} style={{ textAlign: 'left' }}>
+        <SizableText flex={1} size="$2" color={on ? '$ink' : '$soft'} numberOfLines={1} style={{ textAlign: 'start' }}>
           {name}
         </SizableText>
         {count ? (
@@ -696,15 +719,17 @@ function Issues() {
         <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap">
           <YStack gap="$1" flex={1} minW={240}>
             <SizableText render="h1" size="$6" fontWeight="500" color="$ink">
-              {board ? `Issues · ${title}` : 'Issues'}
+              {board ? t('Issues · {project}', { project: title }) : t('Issues')}
             </SizableText>
             <SizableText size="$2" color="$soft">
-              {board ? `Work on ${title}. Choosing an issue starts the next run on its own repository.` : 'Work across every project. Choosing an issue starts the next run on its own repository.'}
+              {board
+                ? t('Work on {project}. Choosing an issue starts the next run on its own repository.', { project: title })
+                : t('Work across every project. Choosing an issue starts the next run on its own repository.')}
             </SizableText>
           </YStack>
           <Button size="sm" variant="outline" disabled={!signed || busy} onPress={() => void pull()}>
             <Github size={14} />
-            {busy ? 'Syncing…' : board ? `Sync ${title} from GitHub` : 'Sync all from GitHub'}
+            {busy ? t('Syncing…') : board ? t('Sync {project} from GitHub', { project: title }) : t('Sync all from GitHub')}
           </Button>
         </XStack>
         {said ? (
@@ -713,7 +738,7 @@ function Issues() {
             {said.connect ? (
               <Button size="sm" variant="primary" onPress={() => void link()}>
                 <Github size={14} />
-                Connect GitHub
+                {t('Connect GitHub')}
               </Button>
             ) : null}
           </XStack>
@@ -721,62 +746,62 @@ function Issues() {
         <XStack gap="$5" items="flex-start" $max-md={{ flexDirection: 'column', gap: '$3' }}>
           <YStack
             render="nav"
-            aria-label="Projects"
+            aria-label={t('Projects')}
             width={220}
             shrink={0}
             gap="$0.5"
             $max-md={{ width: '100%', flexDirection: 'row', overflow: 'scroll', gap: '$1' }}
           >
             <SizableText size="$1" color="$soft" px="$2.5" pb="$1" $max-md={{ display: 'none' }}>
-              Projects
+              {t('Projects')}
             </SizableText>
-            {chip('', 'All projects', work.filter((i) => !closed(i)).length)}
+            {chip('', t('All projects'), work.filter((i) => !closed(i)).length)}
             {rows.map((p) => chip(p.key, p.name, p.open))}
           </YStack>
           <YStack flex={1} minW={0} gap="$3" width="100%">
-            <Input value={q} onChangeText={setQ} placeholder="Search issues" aria-label="Search issues" disabled={!signed} />
+            <Input value={q} onChangeText={setQ} placeholder={t('Search issues')} aria-label={t('Search issues')} disabled={!signed} />
             {list.error ? (
               <Note>{list.error.message}</Note>
             ) : !signed ? (
-              <Note>Sign in to see this organization's issues.</Note>
+              <Note>{t("Sign in to see this organization's issues.")}</Note>
             ) : list.loading && list.value.length === 0 ? (
-              <Note>Reading the forge…</Note>
+              <Note>{t('Reading the forge…')}</Note>
             ) : (
               <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
                 <XStack px="$3" py="$2" gap="$3" items="center" bg="$panel" flexWrap="wrap">
                   <XStack gap="$3" items="center" flex={1} minW={0}>
-                    <XStack render="button" aria-label="Open issues" aria-pressed={state === 'open'} items="center" gap="$1.5" onPress={() => setState('open')}>
+                    <XStack render="button" aria-label={t('Open issues')} aria-pressed={state === 'open'} items="center" gap="$1.5" onPress={() => setState('open')}>
                       <CircleDot size={14} color={state === 'open' ? '$ink' : '$soft'} />
                       <SizableText size="$2" color={state === 'open' ? '$ink' : '$soft'} fontWeight={state === 'open' ? '500' : '400'}>
-                        {`${opened.length} Open`}
+                        {t('{n} Open', { n: opened.length })}
                       </SizableText>
                     </XStack>
-                    <XStack render="button" aria-label="Closed issues" aria-pressed={state === 'closed'} items="center" gap="$1.5" onPress={() => setState('closed')}>
+                    <XStack render="button" aria-label={t('Closed issues')} aria-pressed={state === 'closed'} items="center" gap="$1.5" onPress={() => setState('closed')}>
                       <Check size={14} color={state === 'closed' ? '$ink' : '$soft'} />
                       <SizableText size="$2" color={state === 'closed' ? '$ink' : '$soft'} fontWeight={state === 'closed' ? '500' : '400'}>
-                        {`${shut.length} Closed`}
+                        {t('{n} Closed', { n: shut.length })}
                       </SizableText>
                     </XStack>
                   </XStack>
                   <XStack gap="$1" items="center" flexWrap="wrap" shrink={1} minW={0}>
-                    <Pick label="Label" value={label} options={menu('Any label', labels)} onPick={setLabel} />
-                    <Pick label="Assignee" value={assignee} options={menu('Anyone', assignees)} onPick={setAssignee} />
-                    <Pick label="Kind" value={kind} options={KINDS} onPick={setKind} />
-                    <Pick label="Source" value={origin} options={ORIGINS} onPick={setOrigin} />
-                    <Pick label="Sort" value={order} options={ORDERS} onPick={setOrder} />
+                    <Pick label={t('Label')} value={label} options={menu(t('Any label'), labels)} onPick={setLabel} />
+                    <Pick label={t('Assignee')} value={assignee} options={menu(t('Anyone'), assignees)} onPick={setAssignee} />
+                    <Pick label={t('Kind')} value={kind} options={{ all: t(KINDS.all), issue: t(KINDS.issue), pr: t(KINDS.pr) }} onPick={setKind} />
+                    <Pick label={t('Source')} value={origin} options={{ ...ORIGINS, all: t(ORIGINS.all) }} onPick={setOrigin} />
+                    <Pick label={t('Sort')} value={order} options={{ newest: t(ORDERS.newest), oldest: t(ORDERS.oldest), updated: t(ORDERS.updated) }} onPick={setOrder} />
                   </XStack>
                 </XStack>
                 {shown.length === 0 ? (
                   <YStack px="$3" py="$6" gap="$3" items="center" borderTopWidth={1} borderColor="$borderColor">
-                    <Note>{state === 'open' ? (narrowed ? 'No open issues match.' : 'Nothing open.') : 'Nothing closed.'}</Note>
+                    <Note>{state === 'open' ? (narrowed ? t('No open issues match.') : t('Nothing open.')) : t('Nothing closed.')}</Note>
                     {list.value.length === 0 ? (
                       <XStack gap="$2" flexWrap="wrap" justify="center">
                         <Button size="sm" variant="outline" disabled={busy} onPress={() => void pull()}>
                           <Github size={14} />
-                          Sync from GitHub
+                          {t('Sync from GitHub')}
                         </Button>
                         <Button size="sm" onPress={() => host.go('')}>
-                          Start a new run
+                          {t('Start a new run')}
                         </Button>
                       </XStack>
                     ) : null}
@@ -785,17 +810,17 @@ function Issues() {
                   shown.map((i) => {
                     const named = ref(i)
                     return (
-                      <XStack key={i.key || `${i.board}:${i.title}`} items="center" gap="$2" pr="$3" borderTopWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
+                      <XStack key={i.key || `${i.board}:${i.title}`} items="center" gap="$2" paddingInlineEnd="$3" borderTopWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
                         <XStack
                           render="button"
-                          aria-label={`Build ${named || i.title}`}
+                          aria-label={t('Build {issue}', { issue: named || i.title })}
                           onPress={() => open(i)}
                           disabled={finding === i.key && i.key !== ''}
                           flex={1}
                           minW={0}
                           items="flex-start"
                           gap="$3"
-                          pl="$3"
+                          paddingInlineStart="$3"
                           py="$2.5"
                           focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
                         >
@@ -807,7 +832,7 @@ function Issues() {
                               <SizableText size="$3" color="$ink" fontWeight="500" numberOfLines={1} shrink={1}>
                                 {i.title}
                               </SizableText>
-                              {STATUS[i.status] && !closed(i) && i.status !== 'todo' ? <Tag>{STATUS[i.status]}</Tag> : null}
+                              {STATUS[i.status] && !closed(i) && i.status !== 'todo' ? <Tag>{t(STATUS[i.status])}</Tag> : null}
                               {!STATUS[i.status] ? <Tag>{i.status}</Tag> : null}
                               {i.priority !== 'none' && i.priority ? <Tag>{i.priority}</Tag> : null}
                               {i.labels.slice(0, 4).map((l) => (
@@ -816,12 +841,12 @@ function Issues() {
                             </XStack>
                             <SizableText size="$1" color="$soft" numberOfLines={1}>
                               {[
-                                named || (i.pull ? 'pr' : i.kind),
+                                named || (i.pull ? t('pr') : i.kind),
                                 !board && projectOf(i) && !named.startsWith(projectOf(i)) ? projectOf(i) : '',
-                                i.created ? `opened ${ago(i.created)}` : '',
-                                i.assignees.length ? `assigned to ${i.assignees.join(', ')}` : '',
+                                i.created ? t('opened {when}', { when: ago(i.created) }) : '',
+                                i.assignees.length ? t('assigned to {people}', { people: i.assignees.join(', ') }) : '',
                                 fromGitHub(i) ? 'GitHub' : '',
-                                finding === i.key && i.key !== '' ? 'opening…' : '',
+                                finding === i.key && i.key !== '' ? t('opening…') : '',
                               ]
                                 .filter(Boolean)
                                 .join(' · ')}
@@ -829,7 +854,7 @@ function Issues() {
                           </YStack>
                         </XStack>
                         {i.url ? (
-                          <Out href={i.url} label={`Open ${named || i.title} on ${fromGitHub(i) ? 'GitHub' : 'the forge'}`}>
+                          <Out href={i.url} label={fromGitHub(i) ? t('Open {issue} on GitHub', { issue: named || i.title }) : t('Open {issue} on the forge', { issue: named || i.title })}>
                             <ExternalLink size={14} opacity={0.6} />
                           </Out>
                         ) : null}
