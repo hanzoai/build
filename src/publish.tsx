@@ -15,9 +15,11 @@
  * project's address again.
  *
  * Every state shown is one the platform reported; a refusal shows the
- * platform's own sentence.
+ * platform's own sentence. The dialog's own words are the reader's language
+ * (@hanzo/i18n `t`).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { ExternalLink } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Input } from '@hanzo/ui'
 import { useEffect, useRef, useState } from 'react'
@@ -41,8 +43,9 @@ export interface Source {
 type Phase = 'ask' | 'sending' | 'declared' | 'shipping' | 'shipped' | 'failed'
 
 export function Publish({ source, onClose, onLive }: { source: Source | null; onClose: () => void; onLive?: () => void }) {
-  const t = useTarget()
+  const target = useTarget()
   const host = useHost()
+  const { t } = useI18n()
   const [project, setProject] = useState('')
   const [phase, setPhase] = useState<Phase>('ask')
   const [out, setOut] = useState<Declared | null>(null)
@@ -66,7 +69,7 @@ export function Publish({ source, onClose, onLive }: { source: Source | null; on
     let live = true
     const tick = async () => {
       try {
-        const row = (await builds(t)).find((b) => b.id === id)
+        const row = (await builds(target)).find((b) => b.id === id)
         if (live && row) setStatus(row.status)
       } catch {
         /* the status stays as last read */
@@ -78,7 +81,7 @@ export function Publish({ source, onClose, onLive }: { source: Source | null; on
       live = false
       clearInterval(every)
     }
-  }, [t, out, phase])
+  }, [target, out, phase])
 
   const green = /^(succeeded|success|done|complete|completed|ok)$/i.test(status)
 
@@ -93,7 +96,7 @@ export function Publish({ source, onClose, onLive }: { source: Source | null; on
     setPhase('sending')
     setError('')
     try {
-      const d = await declare(t, { repo: source.repo, ref: source.ref, name: source.name, project: project || source.name, mode: 'branch' })
+      const d = await declare(target, { repo: source.repo, ref: source.ref, name: source.name, project: project || source.name, mode: 'branch' })
       setOut(d)
       setStatus(d.build?.status ?? '')
       setPhase('declared')
@@ -111,7 +114,7 @@ export function Publish({ source, onClose, onLive }: { source: Source | null; on
     setPhase('shipping')
     setError('')
     try {
-      await declare(t, { repo: source.repo, ref: source.ref, name: source.name, project: project || source.name, mode: 'commit', tag: built })
+      await declare(target, { repo: source.repo, ref: source.ref, name: source.name, project: project || source.name, mode: 'commit', tag: built })
       setPhase('shipped')
     } catch (e) {
       setError((e as Error).message)
@@ -122,16 +125,16 @@ export function Publish({ source, onClose, onLive }: { source: Source | null; on
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent maxW={480}>
-        <DialogTitle>Add to project</DialogTitle>
+        <DialogTitle>{t('Add to project')}</DialogTitle>
         <DialogDescription>
           {out?.live
-            ? `Build ${source.title} at ${source.ref} and publish it at its project’s address.`
-            : `Build ${source.title} at ${source.ref} and declare it in a project. ${host.admin ? 'As an admin you can take a green build to main.' : 'It opens a review; merging it is what deploys.'}`}
+            ? t('Build {repo} at {ref} and publish it at its project’s address.', { repo: source.title, ref: source.ref })
+            : `${t('Build {repo} at {ref} and declare it in a project.', { repo: source.title, ref: source.ref })} ${host.admin ? t('As an admin you can take a green build to main.') : t('It opens a review; merging it is what deploys.')}`}
         </DialogDescription>
 
         <YStack gap="$1.5">
           <SizableText render="label" size="$2" color="$soft" htmlFor="publish-project">
-            Project
+            {t('Project')}
           </SizableText>
           <Input
             id="publish-project"
@@ -139,10 +142,10 @@ export function Publish({ source, onClose, onLive }: { source: Source | null; on
             onChangeText={(v: string) => setProject(v)}
             disabled={phase !== 'ask' && phase !== 'failed'}
             placeholder={label(source.name)}
-            aria-label="Project"
+            aria-label={t('Project')}
           />
           <SizableText size="$1" color="$soft">
-            Saved as {label(project || source.name)}
+            {t('Saved as {name}', { name: label(project || source.name) })}
           </SizableText>
         </YStack>
 
@@ -155,15 +158,17 @@ export function Publish({ source, onClose, onLive }: { source: Source | null; on
             ) : null}
             <SizableText size="$2" color="$ink">
               {phase === 'shipped'
-                ? 'Declared on main — CD applies it on its next pass.'
+                ? t('Declared on main — CD applies it on its next pass.')
                 : out.live && green
-                  ? `Build ${built} succeeded — it is live at the project’s address.`
-                  : `Build ${built}: ${status || 'building'}`}
+                  ? t('Build {id} succeeded — it is live at the project’s address.', { id: built })
+                  : status
+                    ? t('Build {id}: {status}', { id: built, status })
+                    : t('Build {id}: building', { id: built })}
             </SizableText>
             {out.review ? (
               <Out href={out.review}>
                 <SizableText size="$2" color="$ink" textDecorationLine="underline">
-                  Open the review
+                  {t('Open the review')}
                 </SizableText>
                 <ExternalLink size={12} opacity={0.6} />
               </Out>
@@ -179,15 +184,15 @@ export function Publish({ source, onClose, onLive }: { source: Source | null; on
 
         <XStack gap="$2" justify="flex-end">
           <Button variant="outline" size="sm" onPress={onClose}>
-            {phase === 'shipped' || phase === 'declared' ? 'Done' : 'Cancel'}
+            {phase === 'shipped' || phase === 'declared' ? t('Done') : t('Cancel')}
           </Button>
           {phase === 'ask' || phase === 'failed' || phase === 'sending' ? (
             <Button size="sm" disabled={phase === 'sending'} onPress={() => void send()}>
-              {phase === 'sending' ? 'Adding…' : 'Add to project'}
+              {phase === 'sending' ? t('Adding…') : t('Add to project')}
             </Button>
           ) : host.admin && !out?.live && (phase === 'declared' || phase === 'shipping') ? (
             <Button size="sm" disabled={!green || phase === 'shipping'} onPress={() => void ship()}>
-              {phase === 'shipping' ? 'Shipping…' : green ? 'Ship to main' : 'Waiting for the build'}
+              {phase === 'shipping' ? t('Shipping…') : green ? t('Ship to main') : t('Waiting for the build')}
             </Button>
           ) : null}
         </XStack>

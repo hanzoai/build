@@ -6,8 +6,12 @@
  * price; the platform sells one paid plan at a time, so a move between paid
  * plans is the current one ending first. Going back to Free is ending the paid
  * plan at the close of the period already paid for.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a plan's name,
+ * description, features and price are the catalog's, drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Check, ChevronLeft } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { useState } from 'react'
@@ -29,11 +33,12 @@ function price(p: Plan, term: Term): { month: number; now: number } {
 
 export function Plans() {
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const signed = Boolean(host.person)
-  const list = useRead(() => plans(t), [] as Plan[], [t])
-  const subs = useRead(signed ? () => subscriptions(t) : null, [] as Subscription[], [t, signed])
-  const cards = useRead(signed ? () => methods(t) : null, [] as Method[], [t, signed])
+  const list = useRead(() => plans(target), [] as Plan[], [target])
+  const subs = useRead(signed ? () => subscriptions(target) : null, [] as Subscription[], [target, signed])
+  const cards = useRead(signed ? () => methods(target) : null, [] as Method[], [target, signed])
   const [term, setTerm] = useState<Term>('month')
   const [buying, setBuying] = useState<Plan | null>(null)
   const [leaving, setLeaving] = useState(false)
@@ -42,7 +47,7 @@ export function Plans() {
   const [note, setNote] = useState('')
 
   const on = current(subs.value)
-  const who = host.org ?? 'This organization'
+  const org = host.org
   const card = chosen(cards.value)
   const yearly = list.value.some((p) => p.yearly > 0)
   const free = (p: Plan) => p.monthly === 0 && !p.sales
@@ -70,35 +75,35 @@ export function Plans() {
     if (mine(p)) {
       return (
         <Button size="sm" variant="outline" disabled>
-          Current plan
+          {t('Current plan')}
         </Button>
       )
     }
-    if (p.sales) return <Line>Priced with our team for your organization.</Line>
-    if (!signed) return <Line>Sign in to choose a plan.</Line>
-    if (!host.admin) return <Line>An org admin changes the plan.</Line>
+    if (p.sales) return <Line>{t('Priced with our team for your organization.')}</Line>
+    if (!signed) return <Line>{t('Sign in to choose a plan.')}</Line>
+    if (!host.admin) return <Line>{t('An org admin changes the plan.')}</Line>
     if (!settled) return null
     if (free(p)) {
       // A free plan that is not the org's means a paid one is.
       const paid = on!
-      if (paid.ending) return <Line>{`You move to ${p.name} when ${paid.name} ends on ${day(paid.ends)}.`}</Line>
+      if (paid.ending) return <Line>{t('You move to {plan} when {current} ends on {date}.', { plan: p.name, current: paid.name, date: day(paid.ends) })}</Line>
       return (
         <Button size="sm" variant="outline" onPress={() => setLeaving(true)}>
-          {`Switch to ${p.name}`}
+          {t('Switch to {plan}', { plan: p.name })}
         </Button>
       )
     }
-    if (on && on.price > 0) return <Line>{`One paid plan at a time: ${on.name} ends before ${p.name} begins.`}</Line>
+    if (on && on.price > 0) return <Line>{t('One paid plan at a time: {current} ends before {plan} begins.', { current: on.name, plan: p.name })}</Line>
     if (!card) {
       return (
         <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
-          Add a card to upgrade
+          {t('Add a card to upgrade')}
         </Button>
       )
     }
     return (
       <Button size="sm" variant={p.popular ? 'primary' : 'outline'} onPress={() => setBuying(p)}>
-        {`Upgrade to ${p.name}`}
+        {t('Upgrade to {plan}', { plan: p.name })}
       </Button>
     )
   }
@@ -108,39 +113,43 @@ export function Plans() {
       <YStack width="100%" maxW={1100} mx="auto" px="$5" py="$5" gap="$5">
         <XStack
           render="button"
-          aria-label="Back to billing"
+          aria-label={t('Back to billing')}
           items="center"
           gap="$1"
           self="flex-start"
           onPress={() => host.go(path({ kind: 'settings', section: 'billing' }))}
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft size={16} {...{ 'data-i18n-mirror': '' }} />
           <SizableText size="$2" color="$soft">
-            Billing
+            {t('Billing')}
           </SizableText>
         </XStack>
         <XStack items="flex-end" gap="$4" flexWrap="wrap">
           <YStack flex={1} minW={240} gap="$1">
             <SizableText render="h1" size="$7" color="$ink">
-              Plans that grow with you
+              {t('Plans that grow with you')}
             </SizableText>
             <SizableText size="$2" color="$soft">
               {!signed
-                ? 'Sign in to see the plan you are on.'
+                ? t('Sign in to see the plan you are on.')
                 : on
-                  ? `${who} is on ${on.name}.`
-                  : `${who} is on the free plan.`}
+                  ? org
+                    ? t('{org} is on {plan}.', { org, plan: on.name })
+                    : t('This organization is on {plan}.', { plan: on.name })
+                  : org
+                    ? t('{org} is on the free plan.', { org })
+                    : t('This organization is on the free plan.')}
             </SizableText>
           </YStack>
           {yearly ? (
-            <XStack role="radiogroup" aria-label="Billing period" p="$1" gap="$1" rounded="$10" borderWidth={1} borderColor="$borderColor">
+            <XStack role="radiogroup" aria-label={t('Billing period')} p="$1" gap="$1" rounded="$10" borderWidth={1} borderColor="$borderColor">
               {(['month', 'year'] as const).map((k) => (
                 <XStack
                   key={k}
                   render="button"
                   role="radio"
                   aria-checked={term === k}
-                  aria-label={k === 'month' ? 'Monthly' : 'Yearly'}
+                  aria-label={k === 'month' ? t('Monthly') : t('Yearly')}
                   onPress={() => setTerm(k)}
                   px="$3"
                   py="$1.5"
@@ -148,7 +157,7 @@ export function Plans() {
                   bg={term === k ? '$hover' : 'transparent'}
                 >
                   <SizableText size="$2" color={term === k ? '$ink' : '$soft'}>
-                    {k === 'month' ? 'Monthly' : 'Yearly'}
+                    {k === 'month' ? t('Monthly') : t('Yearly')}
                   </SizableText>
                 </XStack>
               ))}
@@ -159,9 +168,9 @@ export function Plans() {
         {list.error ? (
           <Line>{list.error.message}</Line>
         ) : list.loading && !list.value.length ? (
-          <Line>Reading plans…</Line>
+          <Line>{t('Reading plans…')}</Line>
         ) : list.value.length === 0 ? (
-          <Line>This brand sells no plans.</Line>
+          <Line>{t('This brand sells no plans.')}</Line>
         ) : (
           <XStack flexWrap="wrap" gap="$4">
             {list.value.map((p) => {
@@ -169,7 +178,7 @@ export function Plans() {
               return (
                 <YStack
                   key={p.id}
-                  aria-label={`${p.name} plan`}
+                  aria-label={t('{plan} plan', { plan: p.name })}
                   flex={1}
                   minW={240}
                   maxW={360}
@@ -187,11 +196,11 @@ export function Plans() {
                     </SizableText>
                     {mine(p) ? (
                       <SizableText size="$1" color="$soft">
-                        Current
+                        {t('Current')}
                       </SizableText>
                     ) : p.popular ? (
                       <SizableText size="$1" color="$soft">
-                        Popular
+                        {t('Popular')}
                       </SizableText>
                     ) : null}
                   </XStack>
@@ -202,14 +211,20 @@ export function Plans() {
                   ) : null}
                   <YStack gap="$0.5">
                     <SizableText size="$7" color="$ink">
-                      {p.sales ? 'Custom' : cost.month === 0 ? 'Free' : money(cost.month, p.currency)}
+                      {p.sales ? t('Custom') : cost.month === 0 ? t('Free') : money(cost.month, p.currency)}
                     </SizableText>
                     <SizableText size="$1" color="$soft">
                       {p.sales
-                        ? 'Talk to us'
+                        ? t('Talk to us')
                         : cost.month === 0
-                          ? 'Forever'
-                          : `${p.perSeat ? 'per seat, ' : ''}a month${term === 'year' && p.yearly ? `, ${money(cost.now, p.currency)} billed yearly` : ''}`}
+                          ? t('Forever')
+                          : term === 'year' && p.yearly
+                            ? p.perSeat
+                              ? t('per seat, a month, {price} billed yearly', { price: money(cost.now, p.currency) })
+                              : t('a month, {price} billed yearly', { price: money(cost.now, p.currency) })
+                            : p.perSeat
+                              ? t('per seat, a month')
+                              : t('a month')}
                     </SizableText>
                   </YStack>
                   <XStack>{move(p)}</XStack>
@@ -241,27 +256,29 @@ export function Plans() {
 
       <Dialog open={Boolean(buying)} onOpenChange={(o) => !o && setBuying(null)}>
         <DialogContent maxW={420} showCloseButton={false}>
-          <DialogTitle>{buying ? `Upgrade to ${buying.name}` : 'Upgrade'}</DialogTitle>
+          <DialogTitle>{buying ? t('Upgrade to {plan}', { plan: buying.name }) : t('Upgrade')}</DialogTitle>
           {buying && card ? (
             <YStack gap="$3">
               <SizableText size="$2" color="$soft">
-                {`${label(card)} is charged ${money(price(buying, term).now, buying.currency)} now, and again every ${term} until you cancel.`}
+                {term === 'year'
+                  ? t('{card} is charged {amount} now, and again every year until you cancel.', { card: label(card), amount: money(price(buying, term).now, buying.currency) })
+                  : t('{card} is charged {amount} now, and again every month until you cancel.', { card: label(card), amount: money(price(buying, term).now, buying.currency) })}
               </SizableText>
               <XStack gap="$2" justify="flex-end">
                 <Button size="sm" variant="ghost" onPress={() => setBuying(null)}>
-                  Not now
+                  {t('Not now')}
                 </Button>
                 <Button
                   size="sm"
                   disabled={working}
                   onPress={() =>
                     void act(async () => {
-                      await subscribe(t, { plan: buying.id, interval: yearly && buying.yearly ? term : 'month', method: card.id })
-                      return `${who} is on ${buying.name}`
+                      await subscribe(target, { plan: buying.id, interval: yearly && buying.yearly ? term : 'month', method: card.id })
+                      return org ? t('{org} is on {plan}', { org, plan: buying.name }) : t('This organization is on {plan}', { plan: buying.name })
                     })
                   }
                 >
-                  Upgrade
+                  {t('Upgrade')}
                 </Button>
               </XStack>
             </YStack>
@@ -271,15 +288,17 @@ export function Plans() {
 
       <Dialog open={leaving} onOpenChange={setLeaving}>
         <DialogContent maxW={420} showCloseButton={false}>
-          <DialogTitle>Switch to the free plan?</DialogTitle>
+          <DialogTitle>{t('Switch to the free plan?')}</DialogTitle>
           {on ? (
             <YStack gap="$3">
               <SizableText size="$2" color="$soft">
-                {`${on.name} stays on until ${day(on.ends) || 'the end of this period'}, and nothing is charged after that.`}
+                {day(on.ends)
+                  ? t('{plan} stays on until {date}, and nothing is charged after that.', { plan: on.name, date: day(on.ends) })
+                  : t('{plan} stays on until the end of this period, and nothing is charged after that.', { plan: on.name })}
               </SizableText>
               <XStack gap="$2" justify="flex-end">
                 <Button size="sm" variant="ghost" onPress={() => setLeaving(false)}>
-                  {`Keep ${on.name}`}
+                  {t('Keep {plan}', { plan: on.name })}
                 </Button>
                 <Button
                   size="sm"
@@ -287,12 +306,12 @@ export function Plans() {
                   disabled={working}
                   onPress={() =>
                     void act(async () => {
-                      await cancel(t, on.id)
-                      return `${on.name} ends on ${day(on.ends)}`
+                      await cancel(target, on.id)
+                      return t('{plan} ends on {date}', { plan: on.name, date: day(on.ends) })
                     })
                   }
                 >
-                  Switch
+                  {t('Switch')}
                 </Button>
               </XStack>
             </YStack>
@@ -305,7 +324,7 @@ export function Plans() {
         onOpenChange={setAdding}
         onSaved={(m) => {
           cards.reload()
-          setNote(`${label(m)} is saved`)
+          setNote(t('{card} is saved', { card: label(m) }))
         }}
       />
     </YStack>

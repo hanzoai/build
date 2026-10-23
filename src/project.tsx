@@ -36,8 +36,13 @@
  *
  * Derived from the Hanzo App v2 editor (github.com/hanzoai/build-v2), itself
  * derived from OSW Studio and DeepSite (MIT). See NOTICE.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`, the target is
+ * `target`); a project's and a run's names, branches, paths and the
+ * platform's reasons are drawn as given.
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import {
   Clock,
   ExternalLink,
@@ -136,14 +141,15 @@ export function slugOf(name: string): string {
 
 /** One run in the conversation: what was asked, and what it came to. */
 function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onOpen: () => void; project: string }) {
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const [v, setV] = useState<Verdict>(null)
   const [note, setNote] = useState('')
   return (
     <YStack gap="$2">
       <Message role="user">
         <SizableText size="$2" color="$ink">
-          {run.title || 'Untitled run'}
+          {run.title || t('Untitled run')}
         </SizableText>
       </Message>
       <Message
@@ -156,7 +162,7 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
               verdict={v}
               onVerdict={(next) => {
                 setV(next)
-                record(t, run.id, project, next).catch((e: unknown) => {
+                record(target, run.id, project, next).catch((e: unknown) => {
                   setV(null)
                   setNote((e as Error).message)
                 })
@@ -170,7 +176,7 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
             {!open ? (
               <XStack render="button" onPress={onOpen} hitSlop={8}>
                 <SizableText size="$1" color="$soft" textDecorationLine="underline">
-                  Show steps
+                  {t('Show steps')}
                 </SizableText>
               </XStack>
             ) : null}
@@ -178,7 +184,7 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
         }
       >
         <SizableText size="$2" color="$ink">
-          {run.status === 'done' ? 'Done.' : run.status === 'error' ? 'This run hit an error.' : run.status === 'stopped' ? 'Stopped.' : 'Working…'}
+          {run.status === 'done' ? t('Done.') : run.status === 'error' ? t('This run hit an error.') : run.status === 'stopped' ? t('Stopped.') : t('Working…')}
         </SizableText>
       </Message>
     </YStack>
@@ -187,12 +193,13 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
 
 export function Project({ at }: { at: Where }) {
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const signed = Boolean(host.person)
-  const all = useProjects(t, signed)
+  const all = useProjects(target, signed)
   // The repository the address names, and the forge's record of it.
   const named = 'slug' in at ? null : at
-  const forge = useRead(named && signed ? () => one(t, named.name) : null, null as Codebase | null, [t, signed, named?.name])
+  const forge = useRead(named && signed ? () => one(target, named.name) : null, null as Codebase | null, [target, signed, named?.name])
   const project: Row | null = all.value.find((p) => (named ? siteOf(p, named) : 'slug' in at && p.slug === at.slug)) ?? null
   // The site this workspace publishes to: the project's, or the repository's name as one.
   const slug = project?.slug ?? ('slug' in at ? at.slug : slugOf(named?.name ?? ''))
@@ -213,7 +220,7 @@ export function Project({ at }: { at: Where }) {
     return () => clearInterval(every)
   }, [building, again])
   // When the build began, and why it failed, are its latest deployment's to say.
-  const failure = useRead(building || failed ? () => deployments(t, slug) : null, [], [t, slug, building, failed, project?.updated])
+  const failure = useRead(building || failed ? () => deployments(target, slug) : null, [], [target, slug, building, failed, project?.updated])
   const latest = failure.value[0]
   const began = latest?.status === 'building' ? latest.created : 0
   const ran = began ? Math.max(0, Math.floor(now / 1000) - began) : 0
@@ -227,7 +234,7 @@ export function Project({ at }: { at: Where }) {
     if (!clone || redo.busy) return
     setRedo({ busy: true, error: '' })
     try {
-      await declare(t, { repo: clone, ref: home, name: slug, project: slug, mode: 'branch' })
+      await declare(target, { repo: clone, ref: home, name: slug, project: slug, mode: 'branch' })
       setNow(Date.now())
       again()
       setRedo({ busy: false, error: '' })
@@ -239,9 +246,9 @@ export function Project({ at }: { at: Where }) {
   // The site's runs, or the org's when the repository has no site yet.
   const sited = !named || Boolean(project)
   const listed = useRead(
-    signed ? () => list(t, sited ? { kind: 'coding', project: slug, limit: 50 } : { kind: 'coding', limit: 50 }) : null,
+    signed ? () => list(target, sited ? { kind: 'coding', project: slug, limit: 50 } : { kind: 'coding', limit: 50 }) : null,
     [] as Session[],
-    [t, signed, slug, sited],
+    [target, signed, slug, sited],
   )
   // Only the runs on this project's own repository: a record can be moved into
   // any project, and a run's branch is what Files, Code and Publish read.
@@ -250,7 +257,7 @@ export function Project({ at }: { at: Where }) {
   const ordered = useMemo(() => [...runs.value].reverse(), [listed.value, project?.repo, named?.org, named?.name])
   const [chosen, setChosen] = useState<string | null>(null)
   const current = chosen ?? runs.value[0]?.id ?? null
-  const run = useRun(t, current)
+  const run = useRun(target, current)
   const end = outcome(run.events)
   const pr = pull(run.record?.pr ?? '', run.record?.repo ?? '')
   const running = LIVE.has(run.status || end.status)
@@ -281,15 +288,15 @@ export function Project({ at }: { at: Where }) {
   const [picked, setPicked] = useState<Attachment[]>([])
   const [attached, setAttached] = useState<Attached[]>([])
   // The model and effort Chat and New share, and dictation into the ask.
-  const mind = useMind(t)
-  const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
+  const mind = useMind(target)
+  const voice = useVoice({ speech: useEar(target), language: useSpoken(), ...useDictation(draft, setDraft) })
   const [bridge, setBridge] = useState(false)
   const [editing, setEditing] = useState(false)
   const [pageLines, setPageLines] = useState<Line[]>([])
   const [history, setHistory] = useState(false)
   const [publish, setPublish] = useState<Source | null>(null)
   const [switcher, setSwitcher] = useState(false)
-  const repos = useRead(switcher && signed ? () => codebases(t) : null, [] as Codebase[], [t, switcher, signed])
+  const repos = useRead(switcher && signed ? () => codebases(target) : null, [] as Codebase[], [target, switcher, signed])
   const frame = useRef<PreviewHandle | null>(null)
 
   // What was published may be new files at the same address: the project is read
@@ -319,9 +326,9 @@ export function Project({ at }: { at: Where }) {
 
   // Where the open run's pull request stands on the forge: Merge is offered while it is open.
   const proposal = useRead<{ run: string; pull: Pull | null } | null>(
-    signed && current && pr.href ? () => pushed(t, current).then((c) => ({ run: current, pull: c.pull })) : null,
+    signed && current && pr.href ? () => pushed(target, current).then((c) => ({ run: current, pull: c.pull })) : null,
     null,
-    [t, signed, current, pr.href],
+    [target, signed, current, pr.href],
   )
   const proposing = proposal.value?.run === current && proposal.value.pull?.state === 'open'
   // Files is drawn again after a merge, from what the forge holds now.
@@ -343,9 +350,9 @@ export function Project({ at }: { at: Where }) {
     if (files.some((f) => f.path === path)) return
     setFiles((was) => [...was, { path, readOnly: true }])
     try {
-      const b = await blob(t, repo, ref, path)
+      const b = await blob(target, repo, ref, path)
       const content = b.binary ? '' : b.truncated ? '' : b.text
-      const error = b.binary ? 'A binary file — nothing to show as text.' : b.truncated ? 'Past the 1 MiB view cap — clone the repository to read it.' : undefined
+      const error = b.binary ? t('A binary file — nothing to show as text.') : b.truncated ? t('Past the 1 MiB view cap — clone the repository to read it.') : undefined
       setFiles((was) => was.map((f) => (f.path === path ? { ...f, content, error } : f)))
     } catch (e) {
       setFiles((was) => was.map((f) => (f.path === path ? { ...f, error: (e as Error).message } : f)))
@@ -353,25 +360,25 @@ export function Project({ at }: { at: Where }) {
   }
 
   // Pages: the HTML files at the repository's root, as the page picker's list.
-  const root = useRead(repo ? () => tree(t, repo, ref, '') : null, [], [t, repo, ref])
+  const root = useRead(repo ? () => tree(target, repo, ref, '') : null, [], [target, repo, ref])
   const pages = useMemo(
     () => [
-      { id: '/', label: 'Homepage' },
+      { id: '/', label: t('Homepage') },
       ...root.value
         .filter((e) => !e.dir && /\.html?$/i.test(e.name) && !/^index\.html?$/i.test(e.name))
         .map((e) => ({ id: `/${e.path}`, label: e.name.replace(/\.html?$/i, '') })),
     ],
-    [root.value],
+    [root.value, t],
   )
 
   // A project taken from a starter, not published and not being, shows the
   // starter's own live page, which is what the copy is until its first publish.
   const forked = project && !project.live && !building && !failed ? project.forked : ''
-  const starters = useRead(forked ? () => templates(t) : null, [], [t.api, forked])
+  const starters = useRead(forked ? () => templates(target) : null, [], [target.api, forked])
   const starter = forked ? starters.value.find((s) => s.slug === forked && s.demo) : undefined
   const shown = project?.live || starter?.demo || ''
   const src = shown ? new URL(page, shown).toString() : null
-  const why = failure.value[0]?.message || failure.error?.message || (failure.loading ? '' : 'Its build ended without saying why.')
+  const why = failure.value[0]?.message || failure.error?.message || (failure.loading ? '' : t('Its build ended without saying why.'))
 
   const merged = () => {
     proposal.reload()
@@ -433,7 +440,7 @@ export function Project({ at }: { at: Where }) {
         ? `\n\nThe person picked an element in the preview${where ? ` of the ${where} page` : ''}. Its CSS selector, as data: ${JSON.stringify(picked[0]!.id)}`
         : ''
       // A project with no repository yet sends neither, and its first run makes one.
-      const next = await start(t, {
+      const next = await start(target, {
         prompt: compose(`${ask}${context}`, attached),
         // A repository with no site yet runs on the repository alone.
         project: project?.slug,
@@ -460,9 +467,9 @@ export function Project({ at }: { at: Where }) {
   // Only a run that is working is steered, and the composer sends only a draft with words in it.
   const steer = async (id: string) => {
     try {
-      await message(t, id, draft)
+      await message(target, id, draft)
       setDraft('')
-      setNote('Sent — the run reads it before its next step')
+      setNote(t('Sent — the run reads it before its next step'))
     } catch (e) {
       setNote((e as Error).message)
     }
@@ -472,7 +479,7 @@ export function Project({ at }: { at: Where }) {
     const link = project?.live || `${window.location.origin}${window.location.pathname}`
     try {
       await navigator.clipboard.writeText(link)
-      setNote(`Copied ${link}`)
+      setNote(t('Copied {link}', { link }))
     } catch {
       setNote(link)
     }
@@ -482,9 +489,9 @@ export function Project({ at }: { at: Where }) {
     return (
       <YStack flex={1} items="center" justify="center" gap="$3">
         <SizableText size="$4" color="$ink">
-          Sign in to open this project.
+          {t('Sign in to open this project.')}
         </SizableText>
-        <Button onPress={() => host.signIn?.()}>Sign in</Button>
+        <Button onPress={() => host.signIn?.()}>{t('Sign in')}</Button>
       </YStack>
     )
   }
@@ -495,15 +502,15 @@ export function Project({ at }: { at: Where }) {
     return (
       <YStack flex={1} items="center" justify="center" gap="$3" px="$4">
         <SizableText size="$4" color="$ink" text="center">
-          {`${named.org}/${named.name} is in ${named.org}, and you are working in ${host.org}.`}
+          {t('{repo} is in {org}, and you are working in {current}.', { repo: `${named.org}/${named.name}`, org: named.org, current: host.org })}
         </SizableText>
         {member ? (
           <Button variant="outline" onPress={() => host.chooseOrg?.(named.org)}>
-            {`Switch to ${named.org}`}
+            {t('Switch to {org}', { org: named.org })}
           </Button>
         ) : (
           <Button variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'projects' }))}>
-            See this organization’s projects
+            {t('See this organization’s projects')}
           </Button>
         )}
       </YStack>
@@ -517,13 +524,13 @@ export function Project({ at }: { at: Where }) {
           {named
             ? forge.error && !/not found|404/i.test(forge.error.message)
               ? forge.error.message
-              : `${named.org} has no repository named ${named.name}.`
+              : t('{org} has no repository named {name}.', { org: named.org, name: named.name })
             : host.org
-              ? `${host.org} has no project named ${slug}.`
-              : `There is no project named ${slug}.`}
+              ? t('{org} has no project named {name}.', { org: host.org, name: slug })
+              : t('There is no project named {name}.', { name: slug })}
         </SizableText>
         <Button variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: named ? 'projects' : 'artifacts' }))}>
-          {named ? 'See this organization’s projects' : 'See what this organization has built'}
+          {named ? t('See this organization’s projects') : t('See what this organization has built')}
         </Button>
       </YStack>
     )
@@ -536,29 +543,29 @@ export function Project({ at }: { at: Where }) {
         {ordered.length === 0 ? (
           <SizableText size="$2" color="$ink">
             {runs.loading
-              ? 'Reading this project’s runs…'
+              ? t('Reading this project’s runs…')
               : project?.live
-                ? `${project.name} is loaded — it is in the preview, and every run on it is under the clock above. Say what to change and it gets built.`
+                ? t('{name} is loaded — it is in the preview, and every run on it is under the clock above. Say what to change and it gets built.', { name: project.name })
                 : stalled
-                  ? `${project?.name} has been publishing for ${Math.floor(ran / 60)} minutes without finishing. Publish it again from the preview, or say what to change and it gets built.`
+                  ? t('{name} has been publishing for {minutes} minutes without finishing. Publish it again from the preview, or say what to change and it gets built.', { name: project?.name ?? '', minutes: Math.floor(ran / 60) })
                   : failed
-                    ? `${project?.name} could not be published. Publish it again from the preview, or say what to change and it gets built.`
+                    ? t('{name} could not be published. Publish it again from the preview, or say what to change and it gets built.', { name: project?.name ?? '' })
                     : building
-                  ? `${project?.name} is being published — it appears in the preview when its build finishes. Say what to change and it gets built.`
+                  ? t('{name} is being published — it appears in the preview when its build finishes. Say what to change and it gets built.', { name: project?.name ?? '' })
                   : starter
-                    ? `${project?.name} is loaded — the preview shows the ${starter.title} starter until your copy is published. Say what to change and it gets built.`
+                    ? t('{name} is loaded — the preview shows the {starter} starter until your copy is published. Say what to change and it gets built.', { name: project?.name ?? '', starter: starter.title })
                     : project
-                      ? `${project.name} is loaded and nothing is published yet. Say what to change and it gets built.`
+                      ? t('{name} is loaded and nothing is published yet. Say what to change and it gets built.', { name: project.name })
                       : named
-                        ? `${named.org}/${named.name} is open on ${home}. Say what to change and it gets built there.`
-                        : `${slug} is loaded. Say what to change and it gets built.`}
+                        ? t('{repo} is open on {branch}. Say what to change and it gets built there.', { repo: `${named.org}/${named.name}`, branch: home })
+                        : t('{name} is loaded. Say what to change and it gets built.', { name: slug })}
           </SizableText>
         ) : (
           ordered.map((r) => (
             <YStack key={r.id} gap="$2">
               <Turn run={r} open={r.id === current} onOpen={() => setChosen(r.id)} project={slug} />
               {r.id === current ? (
-                <YStack gap="$1" pl="$2" borderLeftWidth={1} borderColor="$borderColor">
+                <YStack gap="$1" paddingInlineStart="$2" borderInlineStartWidth={1} borderColor="$borderColor">
                   {fold(run.events.map((e) => ({ kind: e.kind, actor: who(e.actor), seq: e.seq, id: e.id, text: said(e, run.record?.mode) })).filter((b) => b.text)).map((b) => (
                     <SizableText key={b.key} size="$1" color="$soft">
                       {b.text}
@@ -566,9 +573,9 @@ export function Project({ at }: { at: Where }) {
                   ))}
                   {pr.href ? (
                     <XStack items="center" gap="$2" flexWrap="wrap">
-                      <Out href={pr.href} label={`Open pull request ${pr.label}`}>
+                      <Out href={pr.href} label={t('Open pull request {pr}', { pr: pr.label })}>
                         <SizableText size="$1" color="$ink" textDecorationLine="underline">
-                          Pull request {pr.label}
+                          {t('Pull request {pr}', { pr: pr.label })}
                         </SizableText>
                         <ExternalLink size={11} />
                       </Out>
@@ -603,15 +610,15 @@ export function Project({ at }: { at: Where }) {
           onStop={
             current
               ? () =>
-                  void stop(t, current).then(
-                    () => setNote('Stop requested — the run keeps its work on its branch'),
+                  void stop(target, current).then(
+                    () => setNote(t('Stop requested — the run keeps its work on its branch')),
                     (e: unknown) => setNote((e as Error).message),
                   )
               : undefined
           }
           busy={busy || (running && !draft.trim())}
-          placeholder={running ? 'Steer this run' : 'Ask Hanzo for edits'}
-          label="Ask Hanzo for edits"
+          placeholder={running ? t('Steer this run') : t('Ask Hanzo for edits')}
+          label={t('Ask Hanzo for edits')}
           plus={{ upload: () => pick(attached, setAttached, setNote) }}
           mode={running ? null : { value: mode === 'plan' ? 'plan' : 'auto', set: (m) => setMode(m === 'plan' ? 'plan' : 'build'), items: ['auto', 'plan'] }}
           mind={running ? null : mind}
@@ -620,7 +627,7 @@ export function Project({ at }: { at: Where }) {
       </YStack>
       {/* In the gutter between the chat and the work. */}
       {wide && !shut ? (
-        <Gutter side="left" span={across} floor={CHAT_FLOOR} ceil={most} reset={CHAT_WIDTH} onSpan={setSplit} label="Resize the chat" gap={GUTTER} />
+        <Gutter side="left" span={across} floor={CHAT_FLOOR} ceil={most} reset={CHAT_WIDTH} onSpan={setSplit} label={t('Resize the chat')} gap={GUTTER} />
       ) : null}
     </YStack>
   )
@@ -631,14 +638,14 @@ export function Project({ at }: { at: Where }) {
     <YStack data-slot="preview" flex={1} minH={0} minW={0} gap="$2" display={view === 'preview' ? 'flex' : 'none'}>
       {/* The framed page's own controls, beside it: reload, the page, the width, and the page in a tab of its own. */}
       <XStack data-slot="preview-bar" items="center" gap="$1.5" minW={0} shrink={0} $max-md={{ px: '$2' }}>
-        <XStack render="button" aria-label="Reload the preview" onPress={() => frame.current?.reload()} p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
+        <XStack render="button" aria-label={t('Reload the preview')} onPress={() => frame.current?.reload()} p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
           <RefreshCcw size={16} />
         </XStack>
         <PageSelect pages={pages} value={page} onChange={setPage} shrink={1} />
         <XStack flex={1} />
-        <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label="Device" labels="none" />
+        <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label={t('Device')} labels="none" />
         {src ? (
-          <Out href={src} label="Open in a new tab">
+          <Out href={src} label={t('Open in a new tab')}>
             <XStack p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
               <ExternalLink size={16} />
             </XStack>
@@ -648,34 +655,34 @@ export function Project({ at }: { at: Where }) {
       <PreviewFrame
         ref={frame}
         src={src}
-        title={`${title} preview`}
+        title={t('{title} preview', { title })}
         device={device}
         onBridge={onBridge}
         empty={
           <YStack items="center" gap="$2" p="$6">
             <SizableText size="$3" color="$ink">
               {stalled
-                ? 'Publishing is taking too long'
+                ? t('Publishing is taking too long')
                 : building
                   ? project?.forked
-                    ? 'Publishing your copy…'
-                    : 'Publishing…'
+                    ? t('Publishing your copy…')
+                    : t('Publishing…')
                   : failed
-                    ? 'Publishing failed'
-                    : 'Nothing deployed yet'}
+                    ? t('Publishing failed')
+                    : t('Nothing deployed yet')}
             </SizableText>
             <SizableText size="$2" color="$soft" text="center">
               {stalled
-                ? `Its build started ${Math.floor(ran / 60)} minutes ago and has not finished.`
+                ? t('Its build started {minutes} minutes ago and has not finished.', { minutes: Math.floor(ran / 60) })
                 : building
-                  ? 'Its page appears here when the build finishes.'
+                  ? t('Its page appears here when the build finishes.')
                   : failed
                     ? why
-                    : 'Publish this project and its page appears here.'}
+                    : t('Publish this project and its page appears here.')}
             </SizableText>
             {(stalled || failed) && clone ? (
               <Button variant="outline" disabled={redo.busy} onPress={() => void retry()}>
-                Publish again
+                {t('Publish again')}
               </Button>
             ) : null}
             {redo.error ? (
@@ -690,7 +697,7 @@ export function Project({ at }: { at: Where }) {
             <XStack
               render="button"
               aria-pressed={editing}
-              aria-label={editing ? 'Stop picking elements' : 'Pick an element to edit'}
+              aria-label={editing ? t('Stop picking elements') : t('Pick an element to edit')}
               onPress={() => {
                 const next = !editing
                 setEditing(next)
@@ -711,19 +718,19 @@ export function Project({ at }: { at: Where }) {
     view === 'preview' ? null : view === 'files' ? (
       repo && root.error ? (
         <SizableText size="$2" color="$soft" p="$4" role="status">
-          {`Nothing to show for ${repo} at ${ref}: the forge answered “${root.error.message}”.`}
+          {t('Nothing to show for {repo} at {ref}: the forge answered “{reason}”.', { repo, ref, reason: root.error.message })}
         </SizableText>
       ) : repo ? (
         <FileTree
           key={round}
-          load={async (dir) => (await tree(t, repo, ref, dir)).map((e) => ({ path: e.path, kind: e.dir ? ('dir' as const) : ('file' as const) }))}
+          load={async (dir) => (await tree(target, repo, ref, dir)).map((e) => ({ path: e.path, kind: e.dir ? ('dir' as const) : ('file' as const) }))}
           value={file}
           onSelect={(p) => void openFile(p)}
-          label={`${repo} at ${ref}`}
+          label={t('{repo} at {ref}', { repo, ref })}
         />
       ) : (
         <SizableText size="$2" color="$soft" p="$4">
-          This project has no repository yet. Its first run creates one.
+          {t('This project has no repository yet. Its first run creates one.')}
         </SizableText>
       )
     ) : view === 'code' ? (
@@ -737,7 +744,7 @@ export function Project({ at }: { at: Where }) {
         }}
         empty={
           <SizableText size="$2" color="$soft" p="$4">
-            Open a file from Files. Code here is read at {ref}; ask in the chat to change it.
+            {t('Open a file from Files. Code here is read at {ref}; ask in the chat to change it.', { ref })}
           </SizableText>
         }
       />
@@ -752,8 +759,8 @@ export function Project({ at }: { at: Where }) {
         ) : (
           <SizableText size="$2" color="$soft">
             {bridge
-              ? 'Pick an element in the preview to see it here and attach it to your next ask.'
-              : 'Layers are read through the preview bridge, and this page does not run it. Its elements cannot be listed from here.'}
+              ? t('Pick an element in the preview to see it here and attach it to your next ask.')
+              : t('Layers are read through the preview bridge, and this page does not run it. Its elements cannot be listed from here.')}
           </SizableText>
         )}
       </YStack>
@@ -766,17 +773,17 @@ export function Project({ at }: { at: Where }) {
           // Shrinks with the bar, so the project's name truncates rather than
           // running under Publish on a phone.
           <XStack items="center" gap="$2" minW={0} shrink={1}>
-            <XStack render="button" aria-label="All runs" onPress={() => host.go('')} p="$1" shrink={0}>
+            <XStack render="button" aria-label={t('All runs')} onPress={() => host.go('')} p="$1" shrink={0}>
               <HanzoMark size={20} />
             </XStack>
             <ProjectChip name={title} onPress={() => setSwitcher(true)} />
-            <XStack render="button" aria-label="History" onPress={() => setHistory(true)} p="$1.5" rounded="$3" shrink={0} hoverStyle={{ bg: '$hover' }}>
+            <XStack render="button" aria-label={t('History')} onPress={() => setHistory(true)} p="$1.5" rounded="$3" shrink={0} hoverStyle={{ bg: '$hover' }}>
               <Clock size={16} />
             </XStack>
             {/* The chat folds away beside the work; on a phone the views switch to it instead. */}
             <XStack
               render="button"
-              aria-label={shut ? 'Show the chat' : 'Hide the chat'}
+              aria-label={shut ? t('Show the chat') : t('Hide the chat')}
               aria-pressed={!shut}
               onPress={() => (cramped ? setAsked(!asked) : setCollapsed(!collapsed))}
               p="$1.5"
@@ -798,7 +805,7 @@ export function Project({ at }: { at: Where }) {
               setView(v as ViewId)
               setPane('view')
             }}
-            label="View"
+            label={t('View')}
           />
         }
         end={
@@ -806,19 +813,19 @@ export function Project({ at }: { at: Where }) {
             {/* Share gives way on a phone, where Publish is the one that matters. */}
             <XStack display="none" $md={{ display: 'flex' }}>
               <Button variant="outline" size="sm" onPress={() => void share()}>
-                <Share2 size={14} /> Share
+                <Share2 size={14} /> {t('Share')}
               </Button>
             </XStack>
             <Button
               size="sm"
-              aria-label="Publish"
+              aria-label={t('Publish')}
               disabled={!clone || !slug}
               onPress={() => setPublish({ repo: clone, title, ref, name: slug, project: slug })}
             >
               <Upload size={14} />
               {/* A glyph alone on a phone, where the bar's middle needs the room. */}
               <SizableText size="$2" color="inherit" $max-md={{ display: 'none' }}>
-                Publish
+                {t('Publish')}
               </SizableText>
             </Button>
           </XStack>
@@ -831,7 +838,7 @@ export function Project({ at }: { at: Where }) {
             onHeight={setDock}
             onClear={() => setPageLines([])}
             status={run.status || end.status || undefined}
-            label="Console"
+            label={t('Console')}
           />
         }
         collapsed={shut}
@@ -845,11 +852,11 @@ export function Project({ at }: { at: Where }) {
 
       <Dialog open={history} onOpenChange={setHistory}>
         <DialogContent maxW={480}>
-          <DialogTitle>Runs on {title}</DialogTitle>
+          <DialogTitle>{t('Runs on {title}', { title })}</DialogTitle>
           <YStack gap="$1">
             {runs.value.length === 0 ? (
               <SizableText size="$2" color="$soft">
-                No runs yet.
+                {t('No runs yet.')}
               </SizableText>
             ) : (
               runs.value.map((r) => (
@@ -867,7 +874,7 @@ export function Project({ at }: { at: Where }) {
                   hoverStyle={{ bg: '$hover' }}
                 >
                   <SizableText size="$2" color="$ink" numberOfLines={1} flex={1}>
-                    {r.title || 'Untitled run'}
+                    {r.title || t('Untitled run')}
                   </SizableText>
                   <SizableText size="$1" color="$soft">
                     {r.status}
@@ -881,7 +888,7 @@ export function Project({ at }: { at: Where }) {
 
       <Dialog open={switcher} onOpenChange={setSwitcher}>
         <DialogContent maxW={420}>
-          <DialogTitle>Projects</DialogTitle>
+          <DialogTitle>{t('Projects')}</DialogTitle>
           <YStack gap="$1" maxH={420} overflow="scroll">
             {repos.error ? (
               <SizableText size="$2" color="$soft">
@@ -889,7 +896,7 @@ export function Project({ at }: { at: Where }) {
               </SizableText>
             ) : repos.loading && repos.value.length === 0 ? (
               <SizableText size="$2" color="$soft">
-                Reading the forge…
+                {t('Reading the forge…')}
               </SizableText>
             ) : (
               repos.value.map((c) => {
@@ -898,7 +905,7 @@ export function Project({ at }: { at: Where }) {
                   <XStack
                     key={`${c.org}/${c.name}`}
                     render="button"
-                    aria-label={`Open ${c.org}/${c.name}`}
+                    aria-label={t('Open {repo}', { repo: `${c.org}/${c.name}` })}
                     aria-current={here ? 'page' : undefined}
                     onPress={() => {
                       setSwitcher(false)
@@ -926,7 +933,7 @@ export function Project({ at }: { at: Where }) {
               host.go(path({ kind: 'screen', screen: 'projects' }))
             }}
           >
-            All projects
+            {t('All projects')}
           </Button>
         </DialogContent>
       </Dialog>

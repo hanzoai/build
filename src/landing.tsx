@@ -11,8 +11,13 @@
  * names one, and an ask with none chosen opens the picker rather than making a
  * project up from its words. The choices a person made here are kept in this
  * browser, per org, so the next New starts where the last one did.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`, the target is
+ * `target`); a codebase's, a machine's and a branch's names are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
@@ -45,10 +50,10 @@ import { Monitor as Device } from '@hanzogui/lucide-icons-2'
 import { compose, Files, pick, read as readFiles, type Attached } from './tools.tsx'
 import { useSpoken } from './voice.ts'
 
-/** One vocabulary for the mode, on New and in a workspace. */
+/** One vocabulary for the mode, on New and in a workspace: English, marked (`phrase`), drawn through `t`. */
 export const MODES = [
-  { id: 'build', label: 'Build', hint: 'Edits, commits and pushes a branch' },
-  { id: 'plan', label: 'Plan', hint: 'Plans the change and writes nothing' },
+  { id: 'build', label: phrase('Build'), hint: phrase('Edits, commits and pushes a branch') },
+  { id: 'plan', label: phrase('Plan'), hint: phrase('Plans the change and writes nothing') },
 ] as const
 
 /** What a person chose last time, per org. */
@@ -113,7 +118,8 @@ export function hold(u: Unsent): void {
 
 export function Landing({ onStarted }: { onStarted: (session: string) => void }) {
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const signed = Boolean(host.person)
   const { prefs, save: savePrefs } = usePrefs()
   const [stored, keep] = useKept<Partial<Kept> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
@@ -145,20 +151,20 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const places = usePlaces(t, signed)
+  const places = usePlaces(target, signed)
   // The model and effort Chat shares, and dictation into the ask.
-  const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
-  const mind = useMind(t, (limits as { plan?: string } | null)?.plan)
-  const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
-  const talk = useTalk({ baseUrl: t.api, token: () => t.token(), ...(t.org ? { org: t.org } : {}) })
+  const { limits } = useLimits(signed ? (signal) => readLimits(target, signal) : null, target)
+  const mind = useMind(target, (limits as { plan?: string } | null)?.plan)
+  const voice = useVoice({ speech: useEar(target), language: useSpoken(), ...useDictation(draft, setDraft) })
+  const talk = useTalk({ baseUrl: target.api, token: () => target.token(), ...(target.org ? { org: target.org } : {}) })
   // What the run carries beside the ask: skills, memory and the mode, as Chat's turns do.
-  const carry = useCarry(t, '', (tab) => host.go(path({ kind: 'customize', tab })), {
+  const carry = useCarry(target, '', (tab) => host.go(path({ kind: 'customize', tab })), {
     draft,
     setDraft,
     // A run reads text: a file that is one rides the ask, a picture goes with a chat.
     attach: (list) => {
       const text = list.filter((f) => !f.type.startsWith('image/'))
-      if (text.length < list.length) setNote('A run reads text files; send a picture in Chat.')
+      if (text.length < list.length) setNote(t('A run reads text files; send a picture in Chat.'))
       if (text.length) {
         const dt = new DataTransfer()
         for (const f of text) dt.items.add(f)
@@ -171,17 +177,17 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     go: (href) => (href.startsWith('http') ? host.open(href) : host.go(href)),
   }, DEV_MODES)
   const mode: Mode = carry.mode.value === 'plan' ? 'plan' : 'build'
-  const hints = useSuggestions(t)
+  const hints = useSuggestions(target)
   // The chosen codebase's environment, so New can say when it has none yet.
   const codebase = isForge(kept.repo) ? kept.repo.name : ''
   // The org's repositories on the forge: what a run and an environment can name.
-  const homes = useCached<Homes>(signed ? `${host.org}:homes` : null, (signal) => readHomes(t, signal), NOHOMES)
+  const homes = useCached<Homes>(signed ? `${host.org}:homes` : null, (signal) => readHomes(target, signal), NOHOMES)
   // A kept codebase the org's whole list does not hold — a board's key once handed over as one — is not offered as one.
   const stranger =
     codebase !== '' && homes.value.whole && !homes.value.homes.some((h) => h.name.toLowerCase() === codebase.toLowerCase())
   // Read once the list has answered (or failed), so a name that is not the org's is never asked for.
   const settled = homes.value !== NOHOMES || homes.error !== null
-  const found = useRead(signed && codebase && settled && !stranger ? () => read(t, codebase) : null, null as Environment | null, [t, signed, codebase, settled, stranger])
+  const found = useRead(signed && codebase && settled && !stranger ? () => read(target, codebase) : null, null as Environment | null, [target, signed, codebase, settled, stranger])
   // A read kept from the codebase before is not this one's.
   const env = { ...found, value: found.value && found.value.repo === codebase && !stranger ? found.value : null }
   const place: Place = places.value.find((p) => p.id === kept.place) ?? SANDBOX
@@ -195,26 +201,26 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   // fails leaves the forge's list standing.
   const loadRepos = useCallback(
     async (q: string) => {
-      const [page, hub] = await Promise.all([codebases(t, q), githubRepos(t, { q }).catch(() => null)])
+      const [page, hub] = await Promise.all([codebases(target, q), githubRepos(target, { q }).catch(() => null)])
       const repos = page.map(asRepo)
       for (const r of repos) known.current.set(r.name, r)
       const github = (hub?.repos ?? []).map(asHub)
       for (const r of github) hubs.current.set(r.full_name.toLowerCase(), r)
       return { repos: [...repos, ...github], next: null }
     },
-    [t],
+    [target],
   )
 
   // Drawn only once a forge codebase is chosen; one the forge no longer lists offers its default branch.
   const home = kept.repo?.default_branch || 'main'
   const loadBranches = useCallback(
     async (q: string) => {
-      const got = await one(t, codebase)
+      const got = await one(target, codebase)
       const needle = q.trim().toLowerCase()
       const names = (got?.branches ?? [home]).filter((b) => !needle || b.toLowerCase().includes(needle))
       return { branches: names.map((name) => ({ name })), next: null }
     },
-    [t, codebase, home],
+    [target, codebase, home],
   )
 
   // The composer sends only a draft with words in it, and not while a send is out.
@@ -227,7 +233,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     const repo = isForge(kept.repo) ? kept.repo : null
     const hub = isHub(kept.repo) ? kept.repo : null
     if (!repo && !hub) {
-      setNote('Choose the project this run works on: a repository of this organization, or one on its GitHub.')
+      setNote(t('Choose the project this run works on: a repository of this organization, or one on its GitHub.'))
       setPicking(true)
       return
     }
@@ -238,7 +244,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       return
     }
     if (stranger) {
-      setNote(`${codebase} is not one of this organization’s repositories. Choose one, or leave it empty to start a new project.`)
+      setNote(t('{repo} is not one of this organization’s repositories. Choose one, or leave it empty to start a new project.', { repo: codebase }))
       setPicking(true)
       return
     }
@@ -254,11 +260,11 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         return
       }
       // Manual: the run is asked for before it starts; it edits, commits and pushes on its own once it has.
-      if (!(await carry.allow({ id: 'run', name: 'Dev to start this run', note: 'It edits, tests, commits and pushes its own branch' }))) {
-        setNote('Not started.')
+      if (!(await carry.allow({ id: 'run', name: t('Dev to start this run'), note: t('It edits, tests, commits and pushes its own branch') }))) {
+        setNote(t('Not started.'))
         return
       }
-      const run = await start(t, {
+      const run = await start(target, {
         prompt: compose([said.trim(), carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n---\n'), files),
         // The name alone. The org rides the request, and a slash is not a repo name.
         // An empty base or place is not sent: the default branch, and the sandbox.
@@ -322,9 +328,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         return
       case 'schedule':
         setNote('')
-        void book(t, a, 'dev').then(
+        void book(target, a, 'dev').then(
           (made) => host.go(path({ kind: 'automation', id: made.id })),
-          (e: unknown) => setNote(e instanceof Error && e.message ? e.message : 'The scheduled task could not be made.'),
+          (e: unknown) => setNote(e instanceof Error && e.message ? e.message : t('The scheduled task could not be made.')),
         )
         return
     }
@@ -332,7 +338,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   /** Start the agent that finds a codebase's environment, and open it: its run is the progress. A refusal is the dialog's to say. */
   const setup = async (repo: string) => {
-    const run = await start(t, { prompt: SETUP, repo, mode: 'setup', model: mind.model, effort: mind.effort })
+    const run = await start(target, { prompt: SETUP, repo, mode: 'setup', model: mind.model, effort: mind.effort })
     onStarted(run.session)
   }
 
@@ -347,23 +353,23 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const setUp =
     codebase && env.value
       ? env.value.state === 'ready'
-        ? `${codebase} environment`
+        ? t('{repo} environment', { repo: codebase })
         : env.value.state === 'proposed'
-          ? `${codebase} environment proposed`
+          ? t('{repo} environment proposed', { repo: codebase })
           : unset(env.value)
-            ? `no ${codebase} environment yet`
-            : `${codebase} environment, empty`
+            ? t('no {repo} environment yet', { repo: codebase })
+            : t('{repo} environment, empty', { repo: codebase })
       : ''
   const placeItems = useMemo(
     () =>
       (places.value.length ? places.value : [SANDBOX]).map((p) => ({
         id: p.id || 'sandbox',
-        label: p.id ? p.label : 'Cloud',
-        hint: p.id ? ['Remote control', p.status, p.capacity].filter(Boolean).join(' · ') : ['Hanzo sandbox', setUp].filter(Boolean).join(' · '),
+        label: p.id ? p.label : t('Cloud'),
+        hint: p.id ? [t('Remote control'), p.status, p.capacity].filter(Boolean).join(' · ') : [t('Hanzo sandbox'), setUp].filter(Boolean).join(' · '),
         disabled: !ready(p),
         place: p,
       })),
-    [places.value, setUp],
+    [places.value, setUp, t],
   )
 
   const branch = kept.branch || kept.repo?.default_branch || 'main'
@@ -371,26 +377,28 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const where = (
     <XStack gap={6} items="center" flexWrap="wrap">
       <ChipSelect
-        name="Where the run runs"
+        name={t('Where the run runs')}
         icon={place.id ? <Monitor size={13} /> : <Cloud size={13} />}
-        label={place.id ? place.label : 'Cloud'}
+        label={place.id ? place.label : t('Cloud')}
         chosen={placeItems.find((i) => i.place.id === place.id)}
         items={placeItems}
         onChange={(i) => set({ place: i.place.id })}
-        placeholder="Search machines…"
+        placeholder={t('Search machines…')}
         loading={places.loading}
         error={places.error?.message ?? null}
         footer={
           <YStack gap="$0.5">
             <SizableText size="$1" color="$ink">
-              Set up remote control
+              {t('Set up remote control')}
             </SizableText>
             <SizableText size="$1" color="$soft">
-              Run{' '}
-              <SizableText size="$1" color="$ink" style={{ fontFamily: 'var(--f-mono, ui-monospace, monospace)' }}>
-                hanzo link
-              </SizableText>{' '}
-              on a machine: it joins this list, and a run there uses its checkout and credentials.
+              {t('Run {command} on a machine: it joins this list, and a run there uses its checkout and credentials.', {
+                command: (
+                  <SizableText size="$1" color="$ink" style={{ fontFamily: 'var(--f-mono, ui-monospace, monospace)' }} {...{ 'data-i18n-ltr': '' }}>
+                    hanzo link
+                  </SizableText>
+                ),
+              })}
             </SizableText>
           </YStack>
         }
@@ -412,28 +420,28 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         }}
         load={loadRepos}
         troubleshoot={{
-          label: 'Missing a GitHub repository? Bring it onto the forge',
+          label: t('Missing a GitHub repository? Bring it onto the forge'),
           onPress: () => host.go(path({ kind: 'screen', screen: 'sync' })),
         }}
         connect={
           <XStack justify="flex-end">
-            <FooterLink label="Refresh list" onPress={() => setRound((n) => n + 1)} />
+            <FooterLink label={t('Refresh list')} onPress={() => setRound((n) => n + 1)} />
           </XStack>
         }
-        note="Repositories on the forge and on your organization's GitHub. Type to search."
+        note={t("Repositories on the forge and on your organization's GitHub. Type to search.")}
         action={{
-          label: 'Add to project',
+          label: t('Add to project'),
           onPress: (r) => {
             const row = known.current.get(r.name)
             setAdding({
-              repo: row?.clone || `${t.api}/v1/git/${r.owner}/${r.name}.git`,
+              repo: row?.clone || `${target.api}/v1/git/${r.owner}/${r.name}.git`,
               title: row?.full_name || `${r.owner}/${r.name}`,
               ref: r.default_branch || 'main',
               name: r.name,
             })
           },
         }}
-        placeholder="Choose a project"
+        placeholder={t('Choose a project')}
         disabled={!signed}
       />
       {isForge(kept.repo) ? <BranchSelect value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} /> : null}
@@ -459,32 +467,32 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     <YStack flex={1} minH={0} minW={0} items="center" justify="center" pb="$10" overflowY="auto" overflowX="hidden">
       <YStack width="100%" maxW={MEASURE} gap="$3">
         <SizableText render="h1" fontSize="$7" lineHeight="$7" fontWeight="700" color="$ink" style={{ textAlign: 'center' }}>
-          Build what’s next.
+          {t('Build what’s next.')}
         </SizableText>
         <YStack gap="$2">
           {stranger ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" role="alert">
               <SizableText size="$2" color="$ink" flex={1} minW={0}>
-                {`${codebase} is not one of this organization’s repositories.`}
+                {t('{repo} is not one of this organization’s repositories.', { repo: codebase })}
               </SizableText>
               <Button size="sm" variant="outline" onPress={() => setPicking(true)}>
-                Choose a repository
+                {t('Choose a repository')}
               </Button>
             </XStack>
           ) : env.value && (env.value.state === 'proposed' || unset(env.value)) && !place.id ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
               <SizableText size="$2" color="$ink" flex={1} minW={0}>
                 {env.value.state === 'proposed'
-                  ? `A proposed environment for ${codebase} is waiting for review.`
-                  : `${codebase} has no environment yet, so every run starts it bare.`}
+                  ? t('A proposed environment for {repo} is waiting for review.', { repo: codebase })
+                  : t('{repo} has no environment yet, so every run starts it bare.', { repo: codebase })}
               </SizableText>
               {env.value.state === 'proposed' && env.value.session ? (
                 <Button size="sm" variant="outline" onPress={() => host.go(env.value!.session)}>
-                  Review
+                  {t('Review')}
                 </Button>
               ) : (
                 <Button size="sm" onPress={() => setOffering(true)}>
-                  Set up environment
+                  {t('Set up environment')}
                 </Button>
               )}
             </XStack>
@@ -500,7 +508,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             onChange={setDraft}
             onSend={() => void send()}
             busy={busy}
-            label="Describe a task or ask a question"
+            label={t('Describe a task or ask a question')}
             head={head}
             plus={{
               upload: () => pick(files, setFiles, setNote),
