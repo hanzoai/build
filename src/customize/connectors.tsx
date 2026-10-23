@@ -10,8 +10,12 @@
  * all its tools on its card and one per tool inside; a tool is called only
  * while it is on. Adding a server switches its tools on. A server's secret is
  * sealed in KMS and never shown again.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a server's name,
+ * address, description and tools are the registry's or the org's, drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { ChevronDown, ExternalLink, KeyRound, Server as ServerIcon } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch } from '@hanzo/ui'
 import { useEffect, useMemo, useState } from 'react'
@@ -24,7 +28,7 @@ import { Out } from '../out.tsx'
 import { route } from '../route.ts'
 import { useLoad } from './load.ts'
 import { say } from './say.ts'
-import { Add, Confirm, Empty, Failed, Featured, Field, Grid, left, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
+import { Add, Confirm, Empty, Failed, Featured, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
 
 const PAGE = 48
 
@@ -32,14 +36,15 @@ const PAGE = 48
 const where = (url: string): string => url.replace(/^https?:\/\//, '').replace(/\/$/, '')
 
 export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
   // What every run in the org connects to is an org admin's to change; a member reads it.
   const may = signed && host.admin
-  const mine = useLoad(signed ? () => servers(t) : null, [] as Server[], [t, signed])
+  const mine = useLoad(signed ? () => servers(target) : null, [] as Server[], [target, signed])
   // Every server's tools, for the switch on each card; read once for all of them.
-  const plane = useLoad(signed && view === 'yours' && mine.value.length ? () => tools(t, { source: 'mcp' }) : null, [] as Tool[], [t, signed, view, mine.value])
+  const plane = useLoad(signed && view === 'yours' && mine.value.length ? () => tools(target, { source: 'mcp' }) : null, [] as Tool[], [target, signed, view, mine.value])
   const [opened, setOpened] = useState<Server | null>(null)
   const [listing, setListing] = useState<Listing | null>(null)
   const [connecting, setConnecting] = useState<Listing | null>(null)
@@ -54,11 +59,11 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
     setBusy(s.id)
     setNote('')
     try {
-      await toggle(t, next ? its : [], next ? [] : its)
+      await toggle(target, next ? its : [], next ? [] : its)
       plane.reload()
-      setNote(next ? `${s.name} is on` : `${s.name} is off`)
+      setNote(next ? t('{name} is on', { name: s.name }) : t('{name} is off', { name: s.name }))
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setBusy('')
     }
@@ -114,7 +119,7 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
   }
 
   if (!signed) {
-    return <Visitor>Sign in to see your connectors.</Visitor>
+    return <Visitor>{t('Sign in to see your connectors.')}</Visitor>
   }
   const shown = mine.value.filter((s) => matches(q, s.name, s.url, s.listing))
   return (
@@ -123,22 +128,22 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
       {mine.error && !mine.value.length ? (
         <Failed error={mine.error} onRetry={mine.reload} />
       ) : mine.loading && !mine.value.length ? (
-        <Soft>Loading your connectors…</Soft>
+        <Soft>{t('Loading your connectors…')}</Soft>
       ) : !mine.value.length ? (
-        <Empty title="No connectors yet" detail={may ? 'Connect an app from Browse, or add any MCP server by its URL.' : 'An org admin adds connectors. Browse what there is.'}>
+        <Empty title={t('No connectors yet')} detail={may ? t('Connect an app from Browse, or add any MCP server by its URL.') : t('An org admin adds connectors. Browse what there is.')}>
           <Button size="sm" variant="outline" onPress={() => onView('discover')}>
-            Browse connectors
+            {t('Browse connectors')}
           </Button>
           {may ? (
             <Button size="sm" onPress={() => onAdding(true)}>
-              Add by URL
+              {t('Add by URL')}
             </Button>
           ) : null}
         </Empty>
       ) : !shown.length ? (
-        <Soft>{`No connector of yours matches “${q.trim()}”.`}</Soft>
+        <Soft>{t('No connector of yours matches “{q}”.', { q: q.trim() })}</Soft>
       ) : (
-        <Grid label="Your connectors">
+        <Grid label={t('Your connectors')}>
           {shown.map((s) => {
             const its = plane.value.filter((x) => owns(s, x.name))
             const lit = its.filter((x) => x.activated).length
@@ -148,10 +153,10 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
                 title={s.name}
                 detail={where(s.url)}
                 meta={[
-                  its.length ? `${lit} of ${its.length} tools on` : plane.loading ? '' : 'No tools listed yet',
-                  s.listing ? 'From Browse' : 'Added by URL',
-                  s.secret ? 'Secret in KMS' : '',
-                  s.admitted ? '' : 'Not in runs until an admin adds it again',
+                  its.length ? t('{on} of {n} tools on', { on: lit, n: its.length }) : plane.loading ? '' : t('No tools listed yet'),
+                  s.listing ? t('From Browse') : t('Added by URL'),
+                  s.secret ? t('Secret in KMS') : '',
+                  s.admitted ? '' : t('Not in runs until an admin adds it again'),
                 ]
                   .filter(Boolean)
                   .join(' · ')}
@@ -159,10 +164,10 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
                 onOpen={() => setOpened(s)}
                 action={
                   may && its.length ? (
-                    <Switch checked={lit > 0} disabled={busy === s.id} onCheckedChange={(v: boolean) => void flip(s, v)} aria-label={`${s.name} on`} />
+                    <Switch checked={lit > 0} disabled={busy === s.id} onCheckedChange={(v: boolean) => void flip(s, v)} aria-label={t('{name} on', { name: s.name })} />
                   ) : its.length ? (
                     <SizableText size="$1" color="$soft">
-                      {lit ? 'On' : 'Off'}
+                      {lit ? t('On') : t('Off')}
                     </SizableText>
                   ) : undefined
                 }
@@ -171,7 +176,7 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
           })}
         </Grid>
       )}
-      {plane.error && mine.value.length ? <Line>{`Tools: ${say(plane.error)}`}</Line> : null}
+      {plane.error && mine.value.length ? <Line>{t('Tools: {reason}', { reason: say(plane.error, t) })}</Line> : null}
       {opened ? (
         <Detail
           server={opened}
@@ -181,7 +186,7 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
             plane.reload()
           }}
           onDeleted={() => {
-            setNote(`${opened.name} is removed`)
+            setNote(t('{name} is removed', { name: opened.name }))
             setOpened(null)
             mine.reload()
           }}
@@ -194,9 +199,10 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
 
 /** The shelf: featured first, then by name, a page at a time. The platform searches it. */
 function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: boolean; may: boolean; added: Set<string>; onOpen: (l: Listing) => void; onAdd: (l: Listing) => void }) {
-  const t = useTarget()
+  const { t } = useI18n()
+  const target = useTarget()
   const text = useSettled(q.trim(), 300)
-  const first = useLoad(signed ? () => shelf(t, { text, limit: PAGE }) : null, null as Page | null, [t, signed, text])
+  const first = useLoad(signed ? () => shelf(target, { text, limit: PAGE }) : null, null as Page | null, [target, signed, text])
   const [more, setMore] = useState<Listing[]>([])
   const [paging, setPaging] = useState(false)
   const [note, setNote] = useState('')
@@ -204,8 +210,8 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
 
   if (!signed) {
     return (
-      <Part title="Connect an app" detail="Give runs the tools you already use.">
-        <Visitor>Sign in to browse connectors.</Visitor>
+      <Part title={t('Connect an app')} detail={t('Give runs the tools you already use.')}>
+        <Visitor>{t('Sign in to browse connectors.')}</Visitor>
       </Part>
     )
   }
@@ -220,48 +226,48 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
     setPaging(true)
     setNote('')
     try {
-      const got = await shelf(t, { text, limit: PAGE, offset: list.length })
+      const got = await shelf(target, { text, limit: PAGE, offset: list.length })
       setMore((m) => [...m, ...got.listings])
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setPaging(false)
     }
   }
 
   return (
-    <Part title="Connect an app" detail="Give runs the tools you already use. Adding one turns its tools on for your organization.">
+    <Part title={t('Connect an app')} detail={t('Give runs the tools you already use. Adding one turns its tools on for your organization.')}>
       {first.error && !page ? (
         <Failed error={first.error} onRetry={first.reload} />
       ) : !page ? (
-        <Soft>Loading connectors…</Soft>
+        <Soft>{t('Loading connectors…')}</Soft>
       ) : !list.length ? (
-        <Soft>{text ? `No connector matches “${text}”.` : 'There are no connectors to add yet.'}</Soft>
+        <Soft>{text ? t('No connector matches “{q}”.', { q: text }) : t('There are no connectors to add yet.')}</Soft>
       ) : (
         <YStack gap="$3">
           {hero ? (
             <Featured
               title={titleOf(hero)}
               detail={hero.description}
-              meta={facts(hero)}
+              meta={facts(hero, t)}
               mark={<Mark name={titleOf(hero)} logo={hero.logo} size={48} />}
               onOpen={() => onOpen(hero)}
               action={action(hero)}
             />
           ) : null}
           <SizableText size="$1" color="$soft">
-            {list.length < page.total ? `${list.length} of ${page.total} connectors` : `${page.total} connectors`}
+            {list.length < page.total ? t('{shown} of {n} connectors', { shown: list.length, n: page.total }) : t('{n} connectors', { n: page.total })}
           </SizableText>
-          <Grid label="Servers on the shelf">
+          <Grid label={t('Servers on the shelf')}>
             {rest.map((l) => (
-              <Tile key={l.id} title={titleOf(l)} detail={l.description} meta={facts(l)} mark={<Mark name={titleOf(l)} logo={l.logo} />} onOpen={() => onOpen(l)} action={action(l)} />
+              <Tile key={l.id} title={titleOf(l)} detail={l.description} meta={facts(l, t)} mark={<Mark name={titleOf(l)} logo={l.logo} />} onOpen={() => onOpen(l)} action={action(l)} />
             ))}
           </Grid>
           <Line>{note}</Line>
           {list.length < page.total ? (
             <XStack justify="center">
               <Button size="sm" variant="outline" disabled={paging} onPress={() => void next()}>
-                Show more
+                {t('Show more')}
               </Button>
             </XStack>
           ) : null}
@@ -271,8 +277,8 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
   )
 }
 
-/** The facts a card carries under its description. */
-const facts = (l: Listing): string => [l.vendor, l.official ? 'Official' : '', ready(l) ? 'Hosted' : 'Package only: needs a place to run'].filter(Boolean).join(' · ')
+/** The facts a card carries under its description, said in the reader's language. */
+const facts = (l: Listing, t: Say): string => [l.vendor, l.official ? t('Official') : '', ready(l) ? t('Hosted') : t('Package only: needs a place to run')].filter(Boolean).join(' · ')
 
 /** `value` once it has held still for `ms`. */
 function useSettled<T>(value: T, ms: number): T {
@@ -290,42 +296,43 @@ function useSettled<T>(value: T, ms: number): T {
  * at once on the old MCP address, which exists to show them.
  */
 function Natives({ q }: { q: string }) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const r = route(host.path)
   const [asked, setAsked] = useState(r.kind === 'screen' && r.screen === 'mcp')
-  const list = useLoad(asked ? () => natives(t) : null, [] as Native[], [t, asked])
+  const list = useLoad(asked ? () => natives(target) : null, [] as Native[], [target, asked])
   const [open, setOpen] = useState<string | null>(null)
   const shown = list.value.filter((s) => matches(q, s.name, s.description, ...s.ops))
   const ops = shown.reduce((n, s) => n + s.ops.length, 0)
   return (
     <Part
-      title="Built in"
-      detail="Hanzo’s own servers. Always on: every run can call them, and nothing needs adding."
+      title={t('Built in')}
+      detail={t('Hanzo’s own servers. Always on: every run can call them, and nothing needs adding.')}
       action={
         asked ? undefined : (
           <Button size="sm" variant="outline" onPress={() => setAsked(true)}>
-            Show built-in servers
+            {t('Show built-in servers')}
           </Button>
         )
       }
     >
       {!asked ? null : list.loading && !list.value.length ? (
-        <Soft>Loading built-in servers…</Soft>
+        <Soft>{t('Loading built-in servers…')}</Soft>
       ) : list.error && !list.value.length ? (
         <Failed error={list.error} onRetry={list.reload} />
       ) : !shown.length ? (
-        <Soft>{list.value.length ? `No built-in server matches “${q.trim()}”.` : 'No built-in servers are listed.'}</Soft>
+        <Soft>{list.value.length ? t('No built-in server matches “{q}”.', { q: q.trim() }) : t('No built-in servers are listed.')}</Soft>
       ) : (
         <YStack gap="$1">
           <SizableText size="$1" color="$soft">
-            {shown.length} servers · {ops} operations
+            {t('{servers} servers · {ops} operations', { servers: shown.length, ops })}
           </SizableText>
           {shown.map((s) => {
             const on = open === s.name
             return (
               <YStack key={s.name} borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-                <XStack render="button" aria-expanded={on} aria-label={s.name} items="center" gap="$3" px="$3" py="$2.5" hoverStyle={{ bg: '$hover' }} style={left} onPress={() => setOpen(on ? null : s.name)}>
+                <XStack render="button" aria-expanded={on} aria-label={s.name} items="center" gap="$3" px="$3" py="$2.5" hoverStyle={{ bg: '$hover' }} $platform-web={{ textAlign: 'start' }} onPress={() => setOpen(on ? null : s.name)}>
                   <YStack flex={1} minW={0} gap="$1">
                     <SizableText size="$3" color="$ink">
                       {s.name}
@@ -351,7 +358,7 @@ function Natives({ q }: { q: string }) {
                       ))
                     ) : (
                       <SizableText size="$1" color="$soft">
-                        This server lists no operations.
+                        {t('This server lists no operations.')}
                       </SizableText>
                     )}
                   </YStack>
@@ -367,8 +374,9 @@ function Natives({ q }: { q: string }) {
 
 /** One listing in full: what it is, where it is served, and adding it. */
 function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; added: boolean; signed: boolean; onAdd: () => void; onClose: () => void }) {
-  const t = useTarget()
-  const full = useLoad(() => one(t, listing.id), listing, [t, listing.id])
+  const { t } = useI18n()
+  const target = useTarget()
+  const full = useLoad(() => one(target, listing.id), listing, [target, listing.id])
   const l = full.value
   const links = [l.site, l.repo].filter((u) => u.startsWith('https://'))
   return (
@@ -380,7 +388,7 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
             {l.name}
           </SizableText>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
-            {[l.vendor, l.version ? `v${l.version}` : '', l.official ? 'Official' : ''].filter(Boolean).join(' · ')}
+            {[l.vendor, l.version ? `v${l.version}` : '', l.official ? t('Official') : ''].filter(Boolean).join(' · ')}
           </SizableText>
         </YStack>
       </XStack>
@@ -390,7 +398,7 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
         </SizableText>
       ) : null}
       {l.remotes.length ? (
-        <Field label="Served at">
+        <Field label={t('Served at')}>
           {l.remotes.map((r) => (
             <SizableText key={r.url} size="$1" color="$ink" style={mono} numberOfLines={1}>
               {r.url} · {r.transport}
@@ -399,7 +407,7 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
         </Field>
       ) : null}
       {l.packages.length ? (
-        <Field label="Packages" hint={ready(l) ? undefined : 'It ships only as a package, so it needs a place to run before it can be added here.'}>
+        <Field label={t('Packages')} hint={ready(l) ? undefined : t('It ships only as a package, so it needs a place to run before it can be added here.')}>
           {l.packages.map((p) => (
             <SizableText key={`${p.registry}:${p.identifier}`} size="$1" color="$ink" style={mono} numberOfLines={1}>
               {[p.registry, p.identifier, p.version, p.runtime].filter(Boolean).join(' · ')}
@@ -419,11 +427,11 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
           ))}
         </XStack>
       ) : null}
-      {full.error ? <Line>{`Showing what Browse listed. ${say(full.error)}`}</Line> : null}
+      {full.error ? <Line>{t('Showing what Browse listed. {reason}', { reason: say(full.error, t) })}</Line> : null}
       {signed && ready(l) ? (
         <XStack justify="flex-end">
           <Button size="sm" disabled={added} onPress={onAdd}>
-            {added ? 'Added' : 'Add to your connectors'}
+            {added ? t('Added') : t('Add to your connectors')}
           </Button>
         </XStack>
       ) : null}
@@ -436,7 +444,8 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
  * needs one, is sealed in KMS as it is added; then its tools are switched on.
  */
 function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClose: () => void; onAdded: (said: string) => void }) {
-  const t = useTarget()
+  const { t } = useI18n()
+  const target = useTarget()
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [header, setHeader] = useState('Authorization')
@@ -449,57 +458,57 @@ function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClo
     setNote('')
     const a: Adding = listing ? { listing: listing.id, name, header, secret } : { name, url, header, secret }
     try {
-      const s = await add(t, a)
-      let said = `${s.name} is added.`
+      const s = await add(target, a)
+      let said = t('{name} is added.', { name: s.name })
       try {
-        const its = (await tools(t, { source: 'mcp' })).filter((x) => owns(s, x.name)).map((x) => x.name)
-        if (its.length) await toggle(t, its)
-        said = its.length ? `${s.name} is added, and its ${its.length} tools are on.` : `${s.name} is added. It listed no tools yet.`
+        const its = (await tools(target, { source: 'mcp' })).filter((x) => owns(s, x.name)).map((x) => x.name)
+        if (its.length) await toggle(target, its)
+        said = its.length ? t('{name} is added, and its {n} tools are on.', { name: s.name, n: its.length }) : t('{name} is added. It listed no tools yet.', { name: s.name })
       } catch (e) {
-        said = `${s.name} is added, but its tools could not be switched on. ${say(e)}`
+        said = t('{name} is added, but its tools could not be switched on. {reason}', { name: s.name, reason: say(e, t) })
       }
       onAdded(said)
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setWorking(false)
     }
   }
 
   return (
-    <Sheet title={listing ? `Add ${titleOf(listing)}` : 'Add by URL'} open onOpenChange={(o) => !o && onClose()} width={500}>
+    <Sheet title={listing ? t('Add {name}', { name: titleOf(listing) }) : t('Add by URL')} open onOpenChange={(o) => !o && onClose()} width={500}>
       {listing ? (
         <SizableText size="$2" color="$soft">
           {listing.description || listing.name}
         </SizableText>
       ) : (
         <SizableText size="$2" color="$soft">
-          Any MCP server that speaks HTTP. Its tools are on once it is added.
+          {t('Any MCP server that speaks HTTP. Its tools are on once it is added.')}
         </SizableText>
       )}
-      <Field label="Name" hint={listing ? 'Leave it empty to use the listing’s own.' : undefined}>
-        <Input value={name} onChangeText={setName} placeholder={listing ? titleOf(listing) : 'Docs'} aria-label="Name" />
+      <Field label={t('Name')} hint={listing ? t('Leave it empty to use the listing’s own.') : undefined}>
+        <Input value={name} onChangeText={setName} placeholder={listing ? titleOf(listing) : t('Docs')} aria-label={t('Name')} />
       </Field>
       {listing ? null : (
-        <Field label="URL" hint="A public http(s) address. Private and loopback addresses are refused.">
+        <Field label="URL" hint={t('A public http(s) address. Private and loopback addresses are refused.')}>
           <Input value={url} onChangeText={setUrl} placeholder="https://mcp.example.com/mcp" aria-label="URL" autoCapitalize="none" />
         </Field>
       )}
-      <Field label="Secret" hint="Optional. Kept sealed in KMS, sent on every call, and never shown again.">
-        <Input value={secret} onChangeText={setSecret} placeholder="Bearer …" aria-label="Secret" secureTextEntry />
+      <Field label={t('Secret')} hint={t('Optional. Kept sealed in KMS, sent on every call, and never shown again.')}>
+        <Input value={secret} onChangeText={setSecret} placeholder="Bearer …" aria-label={t('Secret')} secureTextEntry />
       </Field>
       {secret ? (
-        <Field label="Header">
-          <Input value={header} onChangeText={setHeader} aria-label="Header" autoCapitalize="none" />
+        <Field label={t('Header')}>
+          <Input value={header} onChangeText={setHeader} aria-label={t('Header')} autoCapitalize="none" />
         </Field>
       ) : null}
       <Line>{note}</Line>
       <XStack gap="$2" justify="flex-end">
         <Button size="sm" variant="ghost" onPress={onClose}>
-          Cancel
+          {t('Cancel')}
         </Button>
         <Button size="sm" disabled={working} onPress={() => void save()}>
-          Add
+          {t('Add')}
         </Button>
       </XStack>
     </Sheet>
@@ -508,8 +517,9 @@ function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClo
 
 /** One of the org's servers: where it is, its secret, its tools and their switches, and removing it. */
 function Detail({ server, may, onClose, onDeleted }: { server: Server; may: boolean; onClose: () => void; onDeleted: () => void }) {
-  const t = useTarget()
-  const list = useLoad(() => tools(t, { source: 'mcp' }), [] as Tool[], [t, server.id])
+  const { t } = useI18n()
+  const target = useTarget()
+  const list = useLoad(() => tools(target, { source: 'mcp' }), [] as Tool[], [target, server.id])
   const its = useMemo(() => list.value.filter((x) => owns(server, x.name)), [list.value, server])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
@@ -520,10 +530,10 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
     setBusy(true)
     setNote('')
     try {
-      await toggle(t, on, offNames)
+      await toggle(target, on, offNames)
       list.reload()
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setBusy(false)
     }
@@ -538,26 +548,30 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
         <XStack items="center" gap="$1.5">
           {server.secret ? <KeyRound size={12} opacity={0.7} /> : <ServerIcon size={12} opacity={0.7} />}
           <SizableText size="$1" color="$soft">
-            {server.secret ? `A secret is sealed in KMS and sent in ${server.header || 'its header'}.` : 'No secret: it is called as it is.'}
+            {server.secret
+              ? server.header
+                ? t('A secret is sealed in KMS and sent in {header}.', { header: server.header })
+                : t('A secret is sealed in KMS and sent in its header.')
+              : t('No secret: it is called as it is.')}
           </SizableText>
         </XStack>
       </YStack>
       <XStack items="center" gap="$2">
         <SizableText size="$3" color="$ink" flex={1}>
-          Tools
+          {t('Tools')}
         </SizableText>
         {its.length && may ? (
           <Button size="sm" variant="outline" disabled={busy} onPress={() => void (off.length ? flip(off, []) : flip([], its.map((x) => x.name)))}>
-            {off.length ? 'Turn all on' : 'Turn all off'}
+            {off.length ? t('Turn all on') : t('Turn all off')}
           </Button>
         ) : null}
       </XStack>
       {list.loading && !list.value.length ? (
-        <Soft>Loading its tools…</Soft>
+        <Soft>{t('Loading its tools…')}</Soft>
       ) : list.error && !list.value.length ? (
         <Failed error={list.error} onRetry={list.reload} />
       ) : !its.length ? (
-        <Soft>No tools listed yet. A server that does not answer shows its tools once it does.</Soft>
+        <Soft>{t('No tools listed yet. A server that does not answer shows its tools once it does.')}</Soft>
       ) : (
         <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
           {its.map((x, i) => {
@@ -575,10 +589,10 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
                   ) : null}
                 </YStack>
                 {may ? (
-                  <Switch checked={x.activated} disabled={busy} onCheckedChange={(v: boolean) => void flip(v ? [x.name] : [], v ? [] : [x.name])} aria-label={`${short} on`} />
+                  <Switch checked={x.activated} disabled={busy} onCheckedChange={(v: boolean) => void flip(v ? [x.name] : [], v ? [] : [x.name])} aria-label={t('{name} on', { name: short })} />
                 ) : (
                   <SizableText size="$1" color="$soft">
-                    {x.activated ? 'On' : 'Off'}
+                    {x.activated ? t('On') : t('Off')}
                   </SizableText>
                 )}
               </XStack>
@@ -586,21 +600,21 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
           })}
         </YStack>
       )}
-      <Line>{note || (may ? '' : 'Only an org admin can switch or remove connectors.')}</Line>
+      <Line>{note || (may ? '' : t('Only an org admin can switch or remove connectors.'))}</Line>
       {may ? (
         <XStack justify="flex-start">
           <Button size="sm" variant="ghost" onPress={() => setAsking(true)}>
-            Remove connector
+            {t('Remove connector')}
           </Button>
         </XStack>
       ) : null}
       <Confirm
         what={server.name}
-        says="Its tools leave your organization and every agent, and its sealed secret is destroyed."
+        says={t('Its tools leave your organization and every agent, and its sealed secret is destroyed.')}
         open={asking}
         onOpenChange={setAsking}
         onYes={async () => {
-          await remove(t, server.id)
+          await remove(target, server.id)
           onDeleted()
         }}
       />

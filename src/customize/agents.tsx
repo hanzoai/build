@@ -14,8 +14,14 @@
  * so the choices are the tools that are on; "every tool" is whatever the
  * fleet's MCP server serves when it runs. A budget is required: what it may
  * spend each period, and in one run.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); an agent's name,
+ * description, instructions, model and runs, and the categories the host and
+ * the platform give their templates, are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { ArrowLeft, Upload } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { ModelPicker } from '@hanzo/ui/models'
@@ -32,7 +38,7 @@ import { Add, Choice, Confirm, Empty, Failed, Field, Grid, Line, Mark, matches, 
 
 /** How many cards Browse draws at a time. */
 const PAGE = 60
-const ANY = 'All'
+const ANY = phrase('All')
 
 /** Categories as Browse offers them: the default agents' and presets' first, as listed, then the rest by how many each holds. */
 export function kinds(first: readonly Cast[], rest: readonly Cast[]): string[] {
@@ -44,13 +50,42 @@ export function kinds(first: readonly Cast[], rest: readonly Cast[]): string[] {
 
 const money = (m: number): string => `$${(m / 1_000_000).toFixed(m % 10_000 ? 4 : 2).replace(/\.?0+$/, '')}`
 
+/** A category as Browse names it: All, and the platform's presets and people, in the reader's words; the rest are the host's, as given. */
+const category = (c: string, t: Say): string => (c === ANY || c === 'Preset' || c === 'Person' ? t(c) : c)
+
+/**
+ * A budget's sentences by its period ('' where the agent names none): whole
+ * sentences, so a language says the period its own way.
+ */
+const SPENT: Record<Period | '', string> = {
+  day: phrase('{spent} of {cap} this day'),
+  week: phrase('{spent} of {cap} this week'),
+  month: phrase('{spent} of {cap} this month'),
+  '': phrase('{spent} of {cap} this period'),
+}
+const BUDGET: Record<Period | '', string> = {
+  day: phrase('{spent} of {cap} spent this day; at most {task} a run.'),
+  week: phrase('{spent} of {cap} spent this week; at most {task} a run.'),
+  month: phrase('{spent} of {cap} spent this month; at most {task} a run.'),
+  '': phrase('{spent} of {cap} spent this period; at most {task} a run.'),
+}
+const SO_FAR: Record<Period | '', string> = {
+  day: phrase('Spent {spent} this day.'),
+  week: phrase('Spent {spent} this week.'),
+  month: phrase('Spent {spent} this month.'),
+  '': phrase('Spent {spent} this period.'),
+}
+const EACH: Record<Period, string> = { day: phrase('Each day, USD'), week: phrase('Each week, USD'), month: phrase('Each month, USD') }
+const PERIOD: Record<Period, string> = { day: phrase('Day'), week: phrase('Week'), month: phrase('Month') }
+
 export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
   const browsing = view === 'discover'
-  const mine = useLoad(signed ? () => agents(t) : null, [] as Agent[], [t, signed])
-  const offered = useLoad(browsing ? () => presets(t) : null, [] as Preset[], [t, view])
+  const mine = useLoad(signed ? () => agents(target) : null, [] as Agent[], [target, signed])
+  const offered = useLoad(browsing ? () => presets(target) : null, [] as Preset[], [target, view])
   const figures = useLoad(browsing && host.personas ? host.personas : null, [] as readonly Cast[], [view])
   useCount(mine.value.length, onCount)
   const [note, setNote] = useState('')
@@ -65,9 +100,9 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
     setUsing(c)
     setNote('')
     try {
-      opened(await use(t, c, window.location.href))
+      opened(await use(target, c, window.location.href))
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setUsing(null)
     }
@@ -80,7 +115,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
         onAdding(false)
         onView('yours')
         mine.reload()
-        setNote(`${a.name} is saved`)
+        setNote(t('{name} is saved', { name: a.name }))
       }}
     />
   ) : null
@@ -95,44 +130,44 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
         {signed ? (
           <XStack gap="$2" flexWrap="wrap">
             <Button size="sm" variant="outline" onPress={() => onAdding(true)}>
-              Start from scratch
+              {t('Start from scratch')}
             </Button>
             <Button size="sm" variant="outline" onPress={() => setMaking('self')}>
-              Clone yourself
+              {t('Clone yourself')}
             </Button>
             <Button size="sm" variant="outline" onPress={() => setMaking('person')}>
-              Create from a person
+              {t('Create from a person')}
             </Button>
           </XStack>
         ) : null}
         <XStack overflowX="auto" overflowY="hidden" pb="$1">
-          <Choice label="Category" value={kind} options={kinds(first, figures.value).map((id) => ({ id, label: id }))} onChange={setKind} />
+          <Choice label={t('Category')} value={kind} options={kinds(first, figures.value).map((id) => ({ id, label: category(id, t) }))} onChange={setKind} />
         </XStack>
         <Line>{note}</Line>
         {shown.length ? (
-          <Grid label="Agents to start from">
+          <Grid label={t('Agents to start from')}>
             {shown.slice(0, more).map((c) => (
               <Tile
                 key={`${c.category}/${c.name}/${c.title}`}
                 title={c.title}
                 detail={c.description === c.title || c.description === c.category ? undefined : c.description}
-                meta={c.category}
+                meta={category(c.category, t)}
                 mark={<Mark name={c.title} size={40} logo={c.avatar} />}
-                action={signed ? <Add name={c.title} label="Use" added={false} busy={using !== null} onPress={() => void take(c)} /> : undefined}
+                action={signed ? <Add name={c.title} use added={false} busy={using !== null} onPress={() => void take(c)} /> : undefined}
               />
             ))}
           </Grid>
         ) : figures.loading || offered.loading ? null : (
-          <Soft>{`No agent matches “${q.trim()}”.`}</Soft>
+          <Soft>{t('No agent matches “{q}”.', { q: q.trim() })}</Soft>
         )}
         {shown.length > more ? (
           <XStack>
             <Button size="sm" variant="ghost" onPress={() => setMore(more + PAGE)}>
-              More
+              {t('More')}
             </Button>
           </XStack>
         ) : null}
-        {failed ? <Failed error={failed} onRetry={figures.error ? figures.reload : offered.reload} /> : figures.loading || offered.loading ? <Soft>Loading…</Soft> : null}
+        {failed ? <Failed error={failed} onRetry={figures.error ? figures.reload : offered.reload} /> : figures.loading || offered.loading ? <Soft>{t('Loading…')}</Soft> : null}
         {editor}
         {making ? <Person self={making === 'self'} onClose={() => setMaking(null)} onMade={opened} /> : null}
       </YStack>
@@ -140,7 +175,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
   }
 
   if (!signed) {
-    return <Visitor>Sign in to see your agents.</Visitor>
+    return <Visitor>{t('Sign in to see your agents.')}</Visitor>
   }
   const shown = mine.value.filter((a) => matches(q, a.name, a.description, a.model))
   return (
@@ -149,26 +184,33 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
       {mine.error && !mine.value.length ? (
         <Failed error={mine.error} onRetry={mine.reload} />
       ) : mine.loading && !mine.value.length ? (
-        <Soft>Loading your agents…</Soft>
+        <Soft>{t('Loading your agents…')}</Soft>
       ) : !mine.value.length ? (
-        <Empty title="No agents yet" detail="">
+        <Empty title={t('No agents yet')} detail="">
           <Button size="sm" variant="outline" onPress={() => onView('discover')}>
-            Browse agents
+            {t('Browse agents')}
           </Button>
           <Button size="sm" onPress={() => onAdding(true)}>
-            New agent
+            {t('New agent')}
           </Button>
         </Empty>
       ) : !shown.length ? (
-        <Soft>{`No agent of yours matches “${q.trim()}”.`}</Soft>
+        <Soft>{t('No agent of yours matches “{q}”.', { q: q.trim() })}</Soft>
       ) : (
-        <Grid label="Your agents">
+        <Grid label={t('Your agents')}>
           {shown.map((a) => (
             <Tile
               key={a.id || a.name}
               title={a.name}
-              detail={a.description || 'No description.'}
-              meta={[a.model, `${a.runs} ${a.runs === 1 ? 'run' : 'runs'}`, reach(a), a.cap ? `${money(a.spent)} of ${money(a.cap)} this ${a.period || 'period'}` : ''].filter(Boolean).join(' · ')}
+              detail={a.description || t('No description.')}
+              meta={[
+                a.model,
+                a.runs === 1 ? t('1 run') : t('{n} runs', { n: a.runs }),
+                reach(a, t),
+                a.cap ? t(SPENT[a.period], { spent: money(a.spent), cap: money(a.cap) }) : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
               mark={<Face agent={a} cast={host.cast ?? []} />}
               onOpen={() => opened(a)}
             />
@@ -182,8 +224,9 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
 
 /** Clone yourself, or anyone named: a name, who they are, and writing of theirs, pasted or uploaded. */
 function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void; onMade: (a: Agent) => void }) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const me = self ? host.person : null
   const [name, setName] = useState(me?.name ?? '')
   const [about, setAbout] = useState('')
@@ -199,26 +242,26 @@ function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void;
     setWorking(true)
     setNote('')
     try {
-      onMade(await use(t, person(name, about, writing, me?.avatar), window.location.href))
+      onMade(await use(target, person(name, about, writing, me?.avatar), window.location.href))
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
       setWorking(false)
     }
   }
   return (
-    <Sheet title={self ? 'Clone yourself' : 'Create from a person'} open onOpenChange={(o) => !o && onClose()}>
-      <Field label="Name">
-        <Input value={name} onChangeText={setName} aria-label="Name" />
+    <Sheet title={self ? t('Clone yourself') : t('Create from a person')} open onOpenChange={(o) => !o && onClose()}>
+      <Field label={t('Name')}>
+        <Input value={name} onChangeText={setName} aria-label={t('Name')} />
       </Field>
-      <Field label="Description">
-        <Textarea value={about} onChangeText={setAbout} aria-label="Description" rows={3} />
+      <Field label={t('Description')}>
+        <Textarea value={about} onChangeText={setAbout} aria-label={t('Description')} rows={3} />
       </Field>
-      <Field label="Writing">
-        <Textarea value={writing} onChangeText={setWriting} aria-label="Writing" rows={6} />
+      <Field label={t('Writing')}>
+        <Textarea value={writing} onChangeText={setWriting} aria-label={t('Writing')} rows={6} />
       </Field>
       <XStack>
         <Button size="sm" variant="ghost" onPress={() => file.current?.click()}>
-          <Upload size={14} /> Upload
+          <Upload size={14} /> {t('Upload')}
         </Button>
         <input
           ref={file}
@@ -226,7 +269,7 @@ function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void;
           multiple
           accept=".txt,.md,.markdown,.csv,.json,.html,text/*"
           hidden
-          aria-label="Upload writing"
+          aria-label={t('Upload writing')}
           onChange={(e) => {
             void read(e.currentTarget.files)
             e.currentTarget.value = ''
@@ -237,19 +280,19 @@ function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void;
       <XStack gap="$2" items="center">
         <XStack flex={1} />
         <Button size="sm" variant="ghost" onPress={onClose}>
-          Cancel
+          {t('Cancel')}
         </Button>
         <Button size="sm" disabled={working || !name.trim()} onPress={() => void save()}>
-          Create
+          {t('Create')}
         </Button>
       </XStack>
     </Sheet>
   )
 }
 
-function reach(a: Agent): string {
-  if (a.tools.includes(ALL)) return 'every tool'
-  return a.tools.length === 1 ? '1 tool' : `${a.tools.length} tools`
+function reach(a: Agent, t: Say): string {
+  if (a.tools.includes(ALL)) return t('every tool')
+  return a.tools.length === 1 ? t('1 tool') : t('{n} tools', { n: a.tools.length })
 }
 
 /** An agent's face: its picture, the default agent's of its name, its emoji, or its initial. */
@@ -260,27 +303,28 @@ function Face({ agent: a, cast, size = 32 }: { agent: Agent; cast: readonly Cast
 
 /** One agent's page: who it is, what it runs on and reads, what it may call and spend, and what it has done. */
 export function Profile({ name }: { name: string }) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
-  const got = useLoad(host.person ? () => profile(t, name) : null, null as { agent: Agent; runs: Run[] } | null, [t, name])
+  const target = useTarget()
+  const got = useLoad(host.person ? () => profile(target, name) : null, null as { agent: Agent; runs: Run[] } | null, [target, name])
   const [editing, setEditing] = useState(false)
   const back = () => host.go(path({ kind: 'customize', tab: 'agents' }))
   const a = got.value?.agent
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
       <YStack width="100%" maxW={880} mx="auto" gap="$5">
-        <XStack render="button" onPress={back} items="center" gap="$1.5" self="flex-start" cursor="pointer" aria-label="Back to agents">
-          <ArrowLeft size={14} color="$soft" />
+        <XStack render="button" onPress={back} items="center" gap="$1.5" self="flex-start" cursor="pointer" aria-label={t('Back to agents')}>
+          <ArrowLeft size={14} color="$soft" {...{ 'data-i18n-mirror': '' }} />
           <SizableText size="$2" color="$soft">
-            Agents
+            {t('Agents')}
           </SizableText>
         </XStack>
         {!host.person ? (
-          <Visitor>Sign in to see this agent.</Visitor>
+          <Visitor>{t('Sign in to see this agent.')}</Visitor>
         ) : got.error && !a ? (
           <Failed error={got.error} onRetry={got.reload} />
         ) : !a ? (
-          <Soft>Loading the agent…</Soft>
+          <Soft>{t('Loading the agent…')}</Soft>
         ) : (
           <>
             <XStack items="center" gap="$4">
@@ -290,15 +334,15 @@ export function Profile({ name }: { name: string }) {
                   {a.name}
                 </SizableText>
                 <SizableText size="$3" color="$soft">
-                  {a.description || 'No role written yet.'}
+                  {a.description || t('No role written yet.')}
                 </SizableText>
               </YStack>
               <Button size="sm" variant="outline" onPress={() => setEditing(true)}>
-                Edit
+                {t('Edit')}
               </Button>
             </XStack>
-            <Part title="Model" detail={a.model || 'The deployment’s default'} />
-            <Part title="Instructions" detail={a.instructions ? '' : 'None written: it runs on its model alone.'}>
+            <Part title={t('Model')} detail={a.model || t('The deployment’s default')} />
+            <Part title={t('Instructions')} detail={a.instructions ? '' : t('None written: it runs on its model alone.')}>
               {a.instructions ? (
                 <YStack p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" maxH={320} overflow="scroll">
                   <SizableText size="$2" color="$ink" style={{ whiteSpace: 'pre-wrap' }}>
@@ -307,20 +351,20 @@ export function Profile({ name }: { name: string }) {
                 </YStack>
               ) : null}
             </Part>
-            <Part title="Tools" detail={a.tools.includes(ALL) ? 'Every tool the fleet’s MCP server serves.' : a.tools.length ? a.tools.join(', ') : 'None: it calls no tool.'} />
+            <Part title={t('Tools')} detail={a.tools.includes(ALL) ? t('Every tool the fleet’s MCP server serves.') : a.tools.length ? a.tools.join(', ') : t('None: it calls no tool.')} />
+            <Part title={t('Budget')} detail={a.cap ? t(BUDGET[a.period], { spent: money(a.spent), cap: money(a.cap), task: money(a.task) }) : t('No budget set.')} />
             <Part
-              title="Budget"
-              detail={a.cap ? `${money(a.spent)} of ${money(a.cap)} spent this ${a.period || 'period'}; at most ${money(a.task)} a run.` : 'No budget set.'}
-            />
-            <Part title="Runs" detail={a.runs ? `${a.runs} in all; the latest ${Math.min(a.runs, got.value!.runs.length)} below.` : 'It has not run yet.'}>
+              title={t('Runs')}
+              detail={a.runs ? t('{runs} in all; the latest {n} below.', { runs: a.runs, n: Math.min(a.runs, got.value!.runs.length) }) : t('It has not run yet.')}
+            >
               {got.value!.runs.map((r) => (
                 <XStack key={r.id} gap="$3" py="$2" borderTopWidth={1} borderColor="$borderColor" items="flex-start">
                   <SizableText size="$1" color={r.status === 'ok' ? '$soft' : '$bad'} width={44} shrink={0}>
-                    {r.status === 'ok' ? 'ok' : 'failed'}
+                    {r.status === 'ok' ? t('ok') : t('failed')}
                   </SizableText>
                   <YStack flex={1} minW={0}>
                     <SizableText size="$2" color="$ink" numberOfLines={1}>
-                      {r.input || '(no input)'}
+                      {r.input || t('(no input)')}
                     </SizableText>
                     <SizableText size="$1" color="$soft" numberOfLines={2}>
                       {r.status === 'ok' ? r.output : r.error}
@@ -362,10 +406,11 @@ function Editor({
   onSaved: (a: Agent) => void
   onDeleted?: () => void
 }) {
-  const t = useTarget()
-  const full = useLoad(agent ? () => one(t, agent.id || agent.name) : null, null as Agent | null, [t, agent?.id])
-  const catalog = useLoad(() => models(t), [] as Model[], [t])
-  const on = useLoad(() => tools(t, { activated: true }), [] as Tool[], [t])
+  const { t } = useI18n()
+  const target = useTarget()
+  const full = useLoad(agent ? () => one(target, agent.id || agent.name) : null, null as Agent | null, [target, agent?.id])
+  const catalog = useLoad(() => models(target), [] as Model[], [target])
+  const on = useLoad(() => tools(target, { activated: true }), [] as Tool[], [target])
   const [d, setD] = useState<Draft>(EMPTY)
   const [ready, setReady] = useState(!agent)
   const [working, setWorking] = useState(false)
@@ -386,19 +431,19 @@ function Editor({
   const choices = useMemo(() => {
     const listed = on.value.map((x) => ({ name: x.name, source: x.source, description: x.description }))
     const seen = new Set(listed.map((x) => x.name))
-    const kept = d.tools.filter((n) => n !== ALL && !seen.has(n)).map((name) => ({ name, source: 'not on', description: '' }))
+    const kept = d.tools.filter((n) => n !== ALL && !seen.has(n)).map((name) => ({ name, source: t('not on'), description: '' }))
     return [...kept, ...listed]
-  }, [on.value, d.tools])
+  }, [on.value, d.tools, t])
   const shownTools = choices.filter((x) => matches(find, x.name, x.source, x.description))
   const save = async () => {
     setWorking(true)
     setNote('')
     try {
       const was = full.value
-      const saved = agent && was ? await update(t, was, d) : await create(t, d)
+      const saved = agent && was ? await update(target, was, d) : await create(target, d)
       onSaved(saved)
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setWorking(false)
     }
@@ -407,67 +452,71 @@ function Editor({
   const pick = (name: string, yes: boolean) => set({ tools: yes ? [...d.tools, name] : d.tools.filter((n) => n !== name) })
 
   return (
-    <Sheet title={agent ? agent.name : 'New agent'} open onOpenChange={(o) => !o && onClose()} width={680}>
+    <Sheet title={agent ? agent.name : t('New agent')} open onOpenChange={(o) => !o && onClose()} width={680}>
       {agent && full.error && !full.value ? (
         <Failed error={full.error} onRetry={full.reload} />
       ) : !ready ? (
-        <Soft>Loading the agent…</Soft>
+        <Soft>{t('Loading the agent…')}</Soft>
       ) : (
         <>
-          <Field label="Name" hint={agent ? 'An agent keeps its name.' : 'Letters, digits, . _ or -. Other agents call it as agent_<name>.'}>
-            <Input value={d.name} onChangeText={(v: string) => set({ name: v })} aria-label="Name" disabled={Boolean(agent)} autoCapitalize="none" />
+          <Field label={t('Name')} hint={agent ? t('An agent keeps its name.') : t('Letters, digits, . _ or -. Other agents call it as agent_<name>.')}>
+            <Input value={d.name} onChangeText={(v: string) => set({ name: v })} aria-label={t('Name')} disabled={Boolean(agent)} autoCapitalize="none" />
           </Field>
-          <Field label="Description" hint="The line another agent reads to decide whether to call this one.">
-            <Input value={d.description} onChangeText={(v: string) => set({ description: v })} placeholder="Answers questions about our codebase" aria-label="Description" />
+          <Field label={t('Description')} hint={t('The line another agent reads to decide whether to call this one.')}>
+            <Input value={d.description} onChangeText={(v: string) => set({ description: v })} placeholder={t('Answers questions about our codebase')} aria-label={t('Description')} />
           </Field>
-          <Field label="Model">
+          <Field label={t('Model')}>
             <XStack items="center" gap="$2" flexWrap="wrap">
               <ModelPicker
                 size="sm"
-                name="Model"
-                placeholder="The deployment’s default"
+                name={t('Model')}
+                placeholder={t('The deployment’s default')}
                 models={catalog.value}
                 scope="chat"
                 value={d.model || undefined}
                 onChange={(id) => set({ model: id })}
                 loading={catalog.loading}
-                error={catalog.error ? say(catalog.error) : null}
+                error={catalog.error ? say(catalog.error, t) : null}
               />
               {d.model && !agent ? (
                 <Button size="sm" variant="ghost" onPress={() => set({ model: '' })}>
-                  Use the default
+                  {t('Use the default')}
                 </Button>
               ) : null}
             </XStack>
           </Field>
-          <Field label="Instructions" hint="The system prompt: what the model reads before every run.">
-            <Textarea value={d.instructions} onChangeText={(v: string) => set({ instructions: v })} placeholder="Be terse, and cite the file you read." aria-label="Instructions" rows={8} />
+          <Field label={t('Instructions')} hint={t('The system prompt: what the model reads before every run.')}>
+            <Textarea value={d.instructions} onChangeText={(v: string) => set({ instructions: v })} placeholder={t('Be terse, and cite the file you read.')} aria-label={t('Instructions')} rows={8} />
           </Field>
           <YStack gap="$2">
             <XStack items="center" gap="$3">
               <YStack flex={1} minW={0}>
                 <SizableText size="$2" color="$ink">
-                  Tools
+                  {t('Tools')}
                 </SizableText>
                 <SizableText size="$1" color="$soft">
-                  {every ? 'Every tool the fleet’s MCP server serves when it runs.' : d.tools.length ? `${d.tools.length} chosen. It can call only these.` : 'None chosen: it can call no tool.'}
+                  {every
+                    ? t('Every tool the fleet’s MCP server serves when it runs.')
+                    : d.tools.length
+                      ? t('{n} chosen. It can call only these.', { n: d.tools.length })
+                      : t('None chosen: it can call no tool.')}
                 </SizableText>
               </YStack>
               <SizableText size="$1" color="$soft">
-                Every tool
+                {t('Every tool')}
               </SizableText>
-              <Switch checked={every} onCheckedChange={(v: boolean) => set({ tools: v ? [ALL] : [] })} aria-label="Every tool" />
+              <Switch checked={every} onCheckedChange={(v: boolean) => set({ tools: v ? [ALL] : [] })} aria-label={t('Every tool')} />
             </XStack>
             {every ? null : (
               <>
-                <Input value={find} onChangeText={setFind} placeholder="Find a tool…" aria-label="Find a tool" />
+                <Input value={find} onChangeText={setFind} placeholder={t('Find a tool…')} aria-label={t('Find a tool')} />
                 <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" maxH={240} overflow="scroll">
                   {on.loading && !on.value.length ? (
-                    <Soft>Loading the tools that are on…</Soft>
+                    <Soft>{t('Loading the tools that are on…')}</Soft>
                   ) : on.error && !on.value.length ? (
                     <Failed error={on.error} onRetry={on.reload} />
                   ) : !shownTools.length ? (
-                    <Soft>{choices.length ? 'No tool matches.' : 'No tool is on for your organization yet. Add skills or connectors first.'}</Soft>
+                    <Soft>{choices.length ? t('No tool matches.') : t('No tool is on for your organization yet. Add skills or connectors first.')}</Soft>
                   ) : (
                     shownTools.map((x, i) => (
                       <XStack key={x.name} items="center" gap="$3" px="$3" py="$2" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
@@ -479,7 +528,7 @@ function Editor({
                             {[x.source, x.description].filter(Boolean).join(' · ')}
                           </SizableText>
                         </YStack>
-                        <Switch checked={d.tools.includes(x.name)} onCheckedChange={(v: boolean) => pick(x.name, v)} aria-label={`Use ${x.name}`} />
+                        <Switch checked={d.tools.includes(x.name)} onCheckedChange={(v: boolean) => pick(x.name, v)} aria-label={t('Use {name}', { name: x.name })} />
                       </XStack>
                     ))
                   )}
@@ -489,50 +538,50 @@ function Editor({
           </YStack>
           <YStack gap="$2">
             <SizableText size="$2" color="$ink">
-              Budget
+              {t('Budget')}
             </SizableText>
             <XStack gap="$3" flexWrap="wrap" rowGap="$2" items="flex-end">
               <YStack gap="$1" width={140}>
                 <SizableText size="$1" color="$soft">
-                  Each {d.period}, USD
+                  {t(EACH[d.period])}
                 </SizableText>
-                <Input value={d.cap} onChangeText={(v: string) => set({ cap: v })} placeholder="10" aria-label="Budget each period" inputMode="decimal" />
+                <Input value={d.cap} onChangeText={(v: string) => set({ cap: v })} placeholder="10" aria-label={t('Budget each period')} inputMode="decimal" />
               </YStack>
               <YStack gap="$1" width={140}>
                 <SizableText size="$1" color="$soft">
-                  One run, USD
+                  {t('One run, USD')}
                 </SizableText>
-                <Input value={d.task} onChangeText={(v: string) => set({ task: v })} placeholder="1" aria-label="Budget for one run" inputMode="decimal" />
+                <Input value={d.task} onChangeText={(v: string) => set({ task: v })} placeholder="1" aria-label={t('Budget for one run')} inputMode="decimal" />
               </YStack>
-              <Choice label="Period" value={d.period} options={PERIODS.map((p) => ({ id: p, label: p[0]!.toUpperCase() + p.slice(1) }))} onChange={(p: Period) => set({ period: p })} />
+              <Choice label={t('Period')} value={d.period} options={PERIODS.map((p) => ({ id: p, label: t(PERIOD[p]) }))} onChange={(p: Period) => set({ period: p })} />
             </XStack>
             <SizableText size="$1" color="$soft">
-              {full.value && full.value.cap ? `Spent ${money(full.value.spent)} this ${full.value.period}. ` : ''}A run stops at either limit.
+              {[full.value && full.value.cap ? t(SO_FAR[full.value.period], { spent: money(full.value.spent) }) : '', t('A run stops at either limit.')].filter(Boolean).join(' ')}
             </SizableText>
           </YStack>
           <Line>{note}</Line>
           <XStack gap="$2" items="center">
             {agent && onDeleted ? (
               <Button size="sm" variant="ghost" onPress={() => setAsking(true)}>
-                Delete
+                {t('Delete')}
               </Button>
             ) : null}
             <XStack flex={1} />
             <Button size="sm" variant="ghost" onPress={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button size="sm" disabled={working} onPress={() => void save()}>
-              {agent ? 'Save' : 'Create'}
+              {agent ? t('Save') : t('Create')}
             </Button>
           </XStack>
           {agent && onDeleted ? (
             <Confirm
               what={agent.name}
-              says="The agent and every run recorded against it are removed."
+              says={t('The agent and every run recorded against it are removed.')}
               open={asking}
               onOpenChange={setAsking}
               onYes={async () => {
-                await remove(t, agent.id || agent.name)
+                await remove(target, agent.id || agent.name)
                 onDeleted()
               }}
             />
