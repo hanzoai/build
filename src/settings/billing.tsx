@@ -3,8 +3,13 @@
  * credits (`Credits`: the balance, grants, top-ups, auto-reload, this month's
  * spend and its limit), the cards it pays with, its invoices, and ending the
  * plan. Changing plan is the Plans screen; this page says what is true now.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a plan's name, a
+ * card's, an invoice's lines and its status are billing's, drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { CreditCard, Download, Plus, X } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, Input, toast } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
@@ -30,6 +35,7 @@ import {
   type Method,
   type Subscription,
 } from '../api/billing.ts'
+import { told } from '../api/call.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Title } from '../meter.tsx'
@@ -40,13 +46,14 @@ import { Credits } from './credits.tsx'
 import { Card, day, Field, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
 export function Billing() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
-  const subs = useRead(signed ? () => subscriptions(t) : null, [] as Subscription[], [t, signed])
-  const cards = useRead(signed ? () => methods(t) : null, [] as Method[], [t, signed])
-  const bills = useRead(signed ? () => invoices(t) : null, [] as Invoice[], [t, signed])
-  const billed = useRead(signed ? () => tier(t) : null, null, [t, signed])
+  const subs = useRead(signed ? () => subscriptions(target) : null, [] as Subscription[], [target, signed])
+  const cards = useRead(signed ? () => methods(target) : null, [] as Method[], [target, signed])
+  const bills = useRead(signed ? () => invoices(target) : null, [] as Invoice[], [target, signed])
+  const billed = useRead(signed ? () => tier(target) : null, null, [target, signed])
   const [adding, setAdding] = useState(false)
   const [ending, setEnding] = useState(false)
   const [editingBilling, setEditingBilling] = useState<Method | null>(null)
@@ -57,8 +64,8 @@ export function Billing() {
   if (!signed) {
     return (
       <YStack gap="$5">
-        <Heading title="Billing" />
-        <Soft>Sign in to see this organization’s billing.</Soft>
+        <Heading title={t('Billing')} />
+        <Soft>{t('Sign in to see this organization’s billing.')}</Soft>
       </YStack>
     )
   }
@@ -82,7 +89,7 @@ export function Billing() {
       after()
       toast.success(done)
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     } finally {
       setWorking(false)
     }
@@ -90,57 +97,60 @@ export function Billing() {
 
   return (
     <YStack gap="$6">
-      <Heading title="Billing" detail={`The plan ${host.org ?? 'this organization'} is on, the cards it pays with, and its invoices.`} />
+      <Heading
+        title={t('Billing')}
+        detail={host.org ? t('The plan {org} is on, the cards it pays with, and its invoices.', { org: host.org }) : t('The plan this organization is on, the cards it pays with, and its invoices.')}
+      />
 
       <XStack items="center" gap="$3" px="$4" py="$4" borderWidth={1} borderColor="$borderColor" rounded="$3" flexWrap="wrap">
         <YStack flex={1} minW={200} gap="$1" data-slot="billing-plan">
           {reading ? (
             <SizableText size="$5" color="$ink">
-              Reading your plan…
+              {t('Reading your plan…')}
             </SizableText>
           ) : (
-            <Title label={title ?? { name: 'Free', tag: '' }} size="$5" />
+            <Title label={title ?? { name: phrase('Free'), tag: '' }} size="$5" />
           )}
           <SizableText size="$2" color="$soft">
-            {subs.error ? subs.error.message : plan ? terms(plan) : title ? 'Your plan.' : 'No paid plan. Usage is paid from credits.'}
+            {subs.error ? told(subs.error, t) : plan ? terms(plan, t) : title ? t('Your plan.') : t('No paid plan. Usage is paid from credits.')}
           </SizableText>
         </YStack>
         <Button size="sm" variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'plans' }))}>
-          Adjust plan
+          {t('Adjust plan')}
         </Button>
       </XStack>
 
-      <Credits target={t} admin={host.admin} onCard={() => setAdding(true)} />
+      <Credits target={target} admin={host.admin} onCard={() => setAdding(true)} />
 
       <Group
-        title="Payment"
-        detail="The card a plan renews on and a top-up charges."
+        title={t('Payment')}
+        detail={t('The card a plan renews on and a top-up charges.')}
         action={
           host.admin && (cards.error || cards.value.length > 0) ? (
             <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
-              <Plus size={14} /> Add card
+              <Plus size={14} /> {t('Add card')}
             </Button>
           ) : undefined
         }
       >
         {cards.error ? (
-          <Soft>{cards.error.message}</Soft>
+          <Soft>{told(cards.error, t)}</Soft>
         ) : cards.loading && !cards.value.length ? (
-          <Soft>Reading cards…</Soft>
+          <Soft>{t('Reading cards…')}</Soft>
         ) : empty ? (
           <XStack items="center" gap="$3" px="$4" py="$4" borderWidth={1} borderColor="$borderColor" rounded="$3" flexWrap="wrap">
             <CreditCard size={20} />
             <YStack flex={1} minW={180} gap="$1">
               <SizableText size="$3" color="$ink">
-                No card on file.
+                {t('No card on file.')}
               </SizableText>
               <SizableText size="$2" color="$soft">
-                {host.admin ? 'Add one to pay for a plan or a top-up. Adding it charges nothing.' : 'An org admin adds cards.'}
+                {host.admin ? t('Add one to pay for a plan or a top-up. Adding it charges nothing.') : t('An org admin adds cards.')}
               </SizableText>
             </YStack>
             {host.admin ? (
               <Button variant="primary" onPress={() => setAdding(true)}>
-                <Plus size={16} /> Add card
+                <Plus size={16} /> {t('Add card')}
               </Button>
             ) : null}
           </XStack>
@@ -151,11 +161,11 @@ export function Billing() {
                 key={m.id}
                 first={i === 0}
                 leading={<CreditCard size={16} />}
-                title={label(m)}
+                title={method(m, t)}
                 detail={
                   [
-                    m.expires ? `Expires ${m.expires}` : '',
-                    m.default ? 'Default' : '',
+                    m.expires ? t('Expires {date}', { date: m.expires }) : '',
+                    m.default ? t('Default') : '',
                     m.billingAddress ? formatAddress(m.billingAddress) : '',
                   ]
                     .filter(Boolean)
@@ -168,30 +178,30 @@ export function Billing() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          aria-label={`Make ${label(m)} default`}
+                          aria-label={t('Make {card} default', { card: method(m, t) })}
                           disabled={working}
-                          onPress={() => void act(() => makeDefault(t, m.id), `${label(m)} is now the default`, cards.reload)}
+                          onPress={() => void act(() => makeDefault(target, m.id), t('{card} is now the default', { card: method(m, t) }), cards.reload)}
                         >
-                          Make default
+                          {t('Make default')}
                         </Button>
                       ) : null}
                       <Button
                         size="sm"
                         variant="ghost"
-                        aria-label={`Edit billing info for ${label(m)}`}
+                        aria-label={t('Edit billing info for {card}', { card: method(m, t) })}
                         disabled={working}
                         onPress={() => setEditingBilling(m)}
                       >
-                        Edit info
+                        {t('Edit info')}
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
-                        aria-label={`Remove ${label(m)}`}
+                        aria-label={t('Remove {card}', { card: method(m, t) })}
                         disabled={working}
-                        onPress={() => void act(() => detach(t, m.id), `${label(m)} is removed`, cards.reload)}
+                        onPress={() => void act(() => detach(target, m.id), t('{card} is removed', { card: method(m, t) }), cards.reload)}
                       >
-                        Remove
+                        {t('Remove')}
                       </Button>
                     </XStack>
                   ) : undefined
@@ -202,18 +212,18 @@ export function Billing() {
         )}
         {!host.admin && cards.value.length ? (
           <SizableText size="$1" color="$soft">
-            An org admin adds and removes cards.
+            {t('An org admin adds and removes cards.')}
           </SizableText>
         ) : null}
       </Group>
 
       <Group
-        title="Billing details"
-        detail="Information printed on invoices and payment receipts."
+        title={t('Billing details')}
+        detail={t('Information printed on invoices and payment receipts.')}
         action={
           host.admin && defaultCard ? (
             <Button size="sm" variant="outline" onPress={() => setEditingBilling(defaultCard)}>
-              {defaultCard.billingAddress ? 'Edit details' : 'Add billing info'}
+              {defaultCard.billingAddress ? t('Edit details') : t('Add billing info')}
             </Button>
           ) : undefined
         }
@@ -250,10 +260,10 @@ export function Billing() {
           <XStack items="center" justify="space-between" gap="$3" px="$4" py="$3" borderWidth={1} borderColor="$borderColor" rounded="$3" flexWrap="wrap">
             <YStack flex={1} minW={180} gap="$1">
               <SizableText size="$2" color="$ink">
-                No billing address on file.
+                {t('No billing address on file.')}
               </SizableText>
               <SizableText size="$1" color="$soft">
-                Add your company name and address so they appear on monthly invoices and receipts.
+                {t('Add your company name and address so they appear on monthly invoices and receipts.')}
               </SizableText>
             </YStack>
             {host.admin ? (
@@ -262,33 +272,33 @@ export function Billing() {
                 variant="outline"
                 onPress={() => (defaultCard ? setEditingBilling(defaultCard) : setAdding(true))}
               >
-                <Plus size={14} /> {defaultCard ? 'Add billing info' : 'Set billing info'}
+                <Plus size={14} /> {defaultCard ? t('Add billing info') : t('Set billing info')}
               </Button>
             ) : null}
           </XStack>
         )}
       </Group>
 
-      <Group title="Invoices">
+      <Group title={t('Invoices')}>
         {bills.error ? (
-          <Soft>{bills.error.message}</Soft>
+          <Soft>{told(bills.error, t)}</Soft>
         ) : bills.loading && !bills.value.length ? (
-          <Soft>Reading invoices…</Soft>
+          <Soft>{t('Reading invoices…')}</Soft>
         ) : bills.value.length === 0 ? (
           <Card>
-            <Soft>No invoices yet.</Soft>
+            <Soft>{t('No invoices yet.')}</Soft>
           </Card>
         ) : (
           <Card>
             <XStack px="$3" py="$2" gap="$3">
               <SizableText flex={1} size="$1" color="$soft">
-                Date
+                {t('Date')}
               </SizableText>
-              <SizableText width={90} size="$1" color="$soft" style={{ textAlign: 'right' }}>
-                Total
+              <SizableText width={90} size="$1" color="$soft" text="end">
+                {t('Total')}
               </SizableText>
               <SizableText width={70} size="$1" color="$soft" $max-sm={{ display: 'none' }}>
-                Status
+                {t('Status')}
               </SizableText>
               <YStack width={64} />
             </XStack>
@@ -297,15 +307,15 @@ export function Billing() {
                 <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
                   {day(b.date) || b.number || b.id}
                 </SizableText>
-                <SizableText width={90} size="$2" color="$ink" style={{ textAlign: 'right' }}>
+                <SizableText width={90} size="$2" color="$ink" text="end">
                   {money(b.total, b.currency)}
                 </SizableText>
                 <SizableText width={70} size="$1" color="$soft" $max-sm={{ display: 'none' }}>
                   {word(b.status)}
                 </SizableText>
                 <XStack width={64} justify="flex-end">
-                  <Button size="sm" variant="ghost" aria-label={`View invoice ${b.number || day(b.date)}`} onPress={() => setOpen(b)}>
-                    View
+                  <Button size="sm" variant="ghost" aria-label={t('View invoice {invoice}', { invoice: b.number || day(b.date) })} onPress={() => setOpen(b)}>
+                    {t('View')}
                   </Button>
                 </XStack>
               </XStack>
@@ -315,20 +325,20 @@ export function Billing() {
       </Group>
 
       {plan ? (
-        <Group title="Cancellation">
+        <Group title={t('Cancellation')}>
           <Card>
             <Row
               first
-              title={plan.ending ? `Your plan ends on ${day(plan.ends)}` : 'Cancel plan'}
-              detail={plan.ending ? 'Keep it, and it renews as before.' : 'It runs to the end of the period you paid for, then ends.'}
+              title={plan.ending ? t('Your plan ends on {date}', { date: day(plan.ends) }) : t('Cancel plan')}
+              detail={plan.ending ? t('Keep it, and it renews as before.') : t('It runs to the end of the period you paid for, then ends.')}
               trailing={
                 !host.admin ? undefined : plan.ending ? (
-                  <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => reactivate(t, plan.id), 'Your plan renews as before', subs.reload)}>
-                    Keep plan
+                  <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => reactivate(target, plan.id), t('Your plan renews as before'), subs.reload)}>
+                    {t('Keep plan')}
                   </Button>
                 ) : (
                   <Button size="sm" variant="destructive" disabled={working} onPress={() => setEnding(true)}>
-                    Cancel
+                    {t('Cancel')}
                   </Button>
                 )
               }
@@ -344,7 +354,7 @@ export function Billing() {
         onOpenChange={setAdding}
         onSaved={(m) => {
           cards.reload()
-          toast.success(`${label(m)} is saved`)
+          toast.success(t('{card} is saved', { card: method(m, t) }))
         }}
       />
       <EditBilling
@@ -362,7 +372,7 @@ export function Billing() {
           working={working}
           onOpenChange={setEnding}
           onConfirm={() =>
-            void act(() => cancel(t, plan.id), `Your plan ends on ${day(plan.ends)}`, () => {
+            void act(() => cancel(target, plan.id), t('Your plan ends on {date}', { date: day(plan.ends) }), () => {
               setEnding(false)
               subs.reload()
             })
@@ -385,7 +395,8 @@ function EditBilling({
   card: Method | null
   onSaved: () => void
 }) {
-  const t = useTarget()
+  const { t } = useI18n()
+  const target = useTarget()
   const [name, setName] = useState('')
   const [line1, setLine1] = useState('')
   const [line2, setLine2] = useState('')
@@ -431,12 +442,12 @@ function EditBilling({
         postalCode: postalCode.trim() || undefined,
         country: country.trim() || undefined,
       }
-      await updateMethod(t, card.id, { billingAddress: address })
+      await updateMethod(target, card.id, { billingAddress: address })
       onSaved()
       onOpenChange(false)
-      toast.success('Billing details updated')
+      toast.success(t('Billing details updated'))
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     } finally {
       setWorking(false)
     }
@@ -446,45 +457,45 @@ function EditBilling({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxW={460} showCloseButton={false}>
         <XStack items="center" justify="space-between" gap="$2">
-          <DialogTitle>Billing details</DialogTitle>
-          <XStack render="button" aria-label="Close" p="$1" onPress={() => onOpenChange(false)}>
+          <DialogTitle>{t('Billing details')}</DialogTitle>
+          <XStack render="button" aria-label={t('Close')} p="$1" onPress={() => onOpenChange(false)}>
             <X size={16} />
           </XStack>
         </XStack>
         <YStack gap="$3">
           <SizableText size="$2" color="$soft">
-            These details appear on your invoices and receipts.
+            {t('These details appear on your invoices and receipts.')}
           </SizableText>
-          <Field label="Business or personal name">
-            <Input value={name} onChangeText={setName} placeholder="e.g. Webby AI, Inc. or Joshua Lynch" />
+          <Field label={t('Business or personal name')}>
+            <Input value={name} onChangeText={setName} placeholder={t('e.g. Webby AI, Inc. or Joshua Lynch')} />
           </Field>
-          <Field label="Address line 1">
-            <Input value={line1} onChangeText={setLine1} placeholder="Street address or P.O. Box" />
+          <Field label={t('Address line 1')}>
+            <Input value={line1} onChangeText={setLine1} placeholder={t('Street address or P.O. Box')} />
           </Field>
-          <Field label="Address line 2" hint="Optional">
-            <Input value={line2} onChangeText={setLine2} placeholder="Suite, unit, building, floor" />
+          <Field label={t('Address line 2')} hint={t('Optional')}>
+            <Input value={line2} onChangeText={setLine2} placeholder={t('Suite, unit, building, floor')} />
           </Field>
           <XStack gap="$2">
             <YStack flex={1}>
-              <Field label="City">
-                <Input value={city} onChangeText={setCity} placeholder="City" />
+              <Field label={t('City')}>
+                <Input value={city} onChangeText={setCity} placeholder={t('City')} />
               </Field>
             </YStack>
             <YStack width={100}>
-              <Field label="State">
-                <Input value={stateVal} onChangeText={setStateVal} placeholder="State / Prov" />
+              <Field label={t('State')}>
+                <Input value={stateVal} onChangeText={setStateVal} placeholder={t('State / Prov')} />
               </Field>
             </YStack>
           </XStack>
           <XStack gap="$2">
             <YStack flex={1}>
-              <Field label="Postal / ZIP code">
-                <Input value={postalCode} onChangeText={setPostalCode} placeholder="ZIP or Postal Code" />
+              <Field label={t('Postal / ZIP code')}>
+                <Input value={postalCode} onChangeText={setPostalCode} placeholder={t('ZIP or Postal Code')} />
               </Field>
             </YStack>
             <YStack width={110}>
-              <Field label="Country">
-                <Input value={country} onChangeText={setCountry} placeholder="Country (US)" />
+              <Field label={t('Country')}>
+                <Input value={country} onChangeText={setCountry} placeholder={t('Country (US)')} />
               </Field>
             </YStack>
           </XStack>
@@ -495,10 +506,10 @@ function EditBilling({
           ) : null}
           <XStack gap="$2" justify="flex-end" pt="$2">
             <Button size="sm" variant="ghost" disabled={working} onPress={() => onOpenChange(false)}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button size="sm" disabled={working} onPress={() => void save()}>
-              Save details
+              {t('Save details')}
             </Button>
           </XStack>
         </YStack>
@@ -507,11 +518,27 @@ function EditBilling({
   )
 }
 
-/** What the plan costs, and when it renews or ends. */
-function terms(p: Subscription): string {
-  const cost = `${money(p.price * p.seats, p.currency)} a ${p.interval}${p.seats > 1 ? ` for ${p.seats} seats` : ''}.`
-  return p.ends ? `${cost} ${p.ending ? 'Ends' : 'Renews'} on ${day(p.ends)}.` : cost
+/** What a plan costs by its interval, alone and for its seats: one sentence each, so a language says the interval its own way. */
+const COST: Record<string, { one: string; seats: string }> = {
+  month: { one: phrase('{amount} a month.'), seats: phrase('{amount} a month for {seats} seats.') },
+  year: { one: phrase('{amount} a year.'), seats: phrase('{amount} a year for {seats} seats.') },
 }
+
+/** What the plan costs, and when it renews or ends, in the words of `t`. */
+function terms(p: Subscription, t: Say): string {
+  const amount = money(p.price * p.seats, p.currency)
+  const by = COST[p.interval]
+  const cost = by
+    ? t(p.seats > 1 ? by.seats : by.one, { amount, seats: p.seats })
+    : p.seats > 1
+      ? t('{amount} a {interval} for {seats} seats.', { amount, interval: p.interval, seats: p.seats })
+      : t('{amount} a {interval}.', { amount, interval: p.interval })
+  if (!p.ends) return cost
+  return `${cost} ${p.ending ? t('Ends on {date}.', { date: day(p.ends) }) : t('Renews on {date}.', { date: day(p.ends) })}`
+}
+
+/** A saved method as a row names it (api/billing.ts `label`); a card with no brand is said in the words of `t`. */
+const method = (m: Method, t: Say): string => (m.last4 && !m.brand ? t('Card •••• {last4}', { last4: m.last4 }) : label(m))
 
 const word = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : '')
 
@@ -528,20 +555,23 @@ function Ending({
   onOpenChange: (o: boolean) => void
   onConfirm: () => void
 }) {
+  const { t } = useI18n()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxW={420} showCloseButton={false}>
-        <DialogTitle>Cancel your plan?</DialogTitle>
+        <DialogTitle>{t('Cancel your plan?')}</DialogTitle>
         <YStack gap="$3">
           <SizableText size="$2" color="$soft">
-            {`${plan.name} stays on until ${day(plan.ends) || 'the end of this period'}, and nothing is charged after that. You can keep it any time before then.`}
+            {day(plan.ends)
+              ? t('{plan} stays on until {date}, and nothing is charged after that. You can keep it any time before then.', { plan: plan.name, date: day(plan.ends) })
+              : t('{plan} stays on until the end of this period, and nothing is charged after that. You can keep it any time before then.', { plan: plan.name })}
           </SizableText>
           <XStack gap="$2" justify="flex-end">
             <Button size="sm" variant="ghost" onPress={() => onOpenChange(false)}>
-              Keep plan
+              {t('Keep plan')}
             </Button>
             <Button size="sm" variant="destructive" disabled={working} onPress={onConfirm}>
-              Cancel plan
+              {t('Cancel plan')}
             </Button>
           </XStack>
         </YStack>
@@ -552,7 +582,8 @@ function Ending({
 
 /** One invoice, read in the page, with its PDF to keep. Drawn while it is open, so each opens anew. */
 function Bill({ invoice: b, onClose }: { invoice: Invoice; onClose: () => void }) {
-  const t = useTarget()
+  const { t } = useI18n()
+  const target = useTarget()
   const [note, setNote] = useState('')
   const [working, setWorking] = useState(false)
 
@@ -560,7 +591,7 @@ function Bill({ invoice: b, onClose }: { invoice: Invoice; onClose: () => void }
     setWorking(true)
     setNote('')
     try {
-      const blob = await pdf(t, b.id)
+      const blob = await pdf(target, b.id)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -568,7 +599,7 @@ function Bill({ invoice: b, onClose }: { invoice: Invoice; onClose: () => void }
       a.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     } finally {
       setWorking(false)
     }
@@ -589,30 +620,30 @@ function Bill({ invoice: b, onClose }: { invoice: Invoice; onClose: () => void }
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent maxW={480} showCloseButton={false}>
         <XStack items="center" justify="space-between" gap="$2">
-          <DialogTitle>{b.number ? `Invoice ${b.number}` : 'Invoice'}</DialogTitle>
-          <XStack render="button" aria-label="Close" p="$1" onPress={onClose}>
+          <DialogTitle>{b.number ? t('Invoice {number}', { number: b.number }) : t('Invoice')}</DialogTitle>
+          <XStack render="button" aria-label={t('Close')} p="$1" onPress={onClose}>
             <X size={16} />
           </XStack>
         </XStack>
         <YStack gap="$3">
           <SizableText size="$2" color="$soft">
-            {[day(b.date), word(b.status), b.start && b.end ? `for ${day(b.start)} – ${day(b.end)}` : ''].filter(Boolean).join(' · ')}
+            {[day(b.date), word(b.status), b.start && b.end ? t('for {start} – {end}', { start: day(b.start), end: day(b.end) }) : ''].filter(Boolean).join(' · ')}
           </SizableText>
           <YStack gap="$1.5" borderTopWidth={1} borderColor="$borderColor" pt="$3">
-            {b.lines.length ? b.lines.map((l, i) => line(l.description || `Line ${i + 1}`, l.amount)) : line('Subtotal', b.subtotal)}
+            {b.lines.length ? b.lines.map((l, i) => line(l.description || t('Line {n}', { n: i + 1 }), l.amount)) : line(t('Subtotal'), b.subtotal)}
           </YStack>
           <YStack gap="$1.5" borderTopWidth={1} borderColor="$borderColor" pt="$3">
-            {b.discount ? line('Discount', -b.discount) : null}
-            {b.tax ? line('Tax', b.tax) : null}
-            {line('Total', b.total, true)}
-            {b.credit ? line('Credit applied', -b.credit) : null}
-            {line('Paid', b.paid)}
-            {b.due ? line('Due', b.due, true) : null}
+            {b.discount ? line(t('Discount'), -b.discount) : null}
+            {b.tax ? line(t('Tax'), b.tax) : null}
+            {line(t('Total'), b.total, true)}
+            {b.credit ? line(t('Credit applied'), -b.credit) : null}
+            {line(t('Paid'), b.paid)}
+            {b.due ? line(t('Due'), b.due, true) : null}
           </YStack>
           <Note>{note}</Note>
           <XStack justify="flex-end">
             <Button size="sm" variant="outline" disabled={working} onPress={() => void keep()}>
-              <Download size={14} /> Download PDF
+              <Download size={14} /> {t('Download PDF')}
             </Button>
           </XStack>
         </YStack>

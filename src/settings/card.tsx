@@ -5,13 +5,19 @@
  * the card from that. Which processor, and its sandbox or live account, is the
  * platform's answer at /v1/billing/settings, so the card is saved to the account
  * it will be charged on.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); what the processor's
+ * field says of a card is the processor's, drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { ChevronDown, ChevronUp, X } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
 import { useEffect, useRef, useState } from 'react'
 
 import { processor, save, type Address, type Method, type Processor } from '../api/billing.ts'
+import { told } from '../api/call.ts'
 import { useRead } from '../data.ts'
 import { useTarget } from '../host.tsx'
 import { Field as FormField } from './ui.tsx'
@@ -47,10 +53,10 @@ function load(environment: string): Promise<Sdk> {
     const s = document.createElement('script')
     s.src = src
     s.async = true
-    s.onload = () => (window.Square ? resolve(window.Square) : reject(new Error('The card form did not load')))
+    s.onload = () => (window.Square ? resolve(window.Square) : reject(new Error(phrase('The card form did not load'))))
     s.onerror = () => {
       loads.delete(src)
-      reject(new Error('The card form did not load'))
+      reject(new Error(phrase('The card form did not load')))
     }
     document.head.appendChild(s)
   })
@@ -61,8 +67,9 @@ function load(environment: string): Promise<Sdk> {
 const ready = (p: Processor | null): p is Processor => Boolean(p && p.provider === 'square' && p.application && p.location)
 
 export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (o: boolean) => void; onSaved: (m: Method) => void }) {
-  const t = useTarget()
-  const cfg = useRead(open ? () => processor(t) : null, null as Processor | null, [t, open])
+  const { t } = useI18n()
+  const target = useTarget()
+  const cfg = useRead(open ? () => processor(target) : null, null as Processor | null, [target, open])
   const [box, setBox] = useState<HTMLDivElement | null>(null)
   const field = useRef<Field | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -94,7 +101,7 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
         setMounted(true)
       })
       .catch((e: unknown) => {
-        if (!gone) setNote(e instanceof Error ? e.message : 'The card form did not load')
+        if (!gone) setNote(e instanceof Error ? told(e, t) : t('The card form did not load'))
       })
     return () => {
       gone = true
@@ -112,7 +119,7 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
     setNote('')
     try {
       const r = await f.tokenize()
-      if (r.status !== 'OK' || !r.token) throw new Error(r.errors?.map((e) => e.message).filter(Boolean).join('; ') || 'The card details are incomplete')
+      if (r.status !== 'OK' || !r.token) throw new Error(r.errors?.map((e) => e.message).filter(Boolean).join('; ') || phrase('The card details are incomplete'))
       const billingAddress: Address | undefined =
         name.trim() || postalCode.trim() || line1.trim() || city.trim() || stateVal.trim()
           ? {
@@ -124,24 +131,24 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
               country: country.trim() || 'US',
             }
           : undefined
-      const m = await save(t, r.token, billingAddress)
+      const m = await save(target, r.token, billingAddress)
       onSaved(m)
       onOpenChange(false)
     } catch (e) {
-      setNote(e instanceof Error ? e.message : 'The card was not saved')
+      setNote(e instanceof Error ? told(e, t) : t('The card was not saved'))
     } finally {
       setWorking(false)
     }
   }
 
-  const why = cfg.error ? cfg.error.message : !cfg.loading && !ready(p) ? 'This deployment takes no cards yet.' : ''
+  const why = cfg.error ? told(cfg.error, t) : !cfg.loading && !ready(p) ? t('This deployment takes no cards yet.') : ''
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxW={460} showCloseButton={false}>
         <XStack items="center" justify="space-between" gap="$2">
-          <DialogTitle>Add a card</DialogTitle>
-          <XStack render="button" aria-label="Close" p="$1" onPress={() => onOpenChange(false)}>
+          <DialogTitle>{t('Add a card')}</DialogTitle>
+          <XStack render="button" aria-label={t('Close')} p="$1" onPress={() => onOpenChange(false)}>
             <X size={16} />
           </XStack>
         </XStack>
@@ -152,24 +159,24 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
             </SizableText>
           ) : (
             <>
-              <YStack minH={96} aria-label="Card details">
+              <YStack minH={96} aria-label={t('Card details')}>
                 <div ref={setBox} style={{ minHeight: 96 }} />
                 {!mounted && !note ? (
                   <SizableText size="$1" color="$soft">
-                    Loading the card form…
+                    {t('Loading the card form…')}
                   </SizableText>
                 ) : null}
               </YStack>
 
               <XStack gap="$2">
                 <YStack flex={1}>
-                  <FormField label="Name on card" hint="Optional">
-                    <Input value={name} onChangeText={setName} placeholder="Name or business" />
+                  <FormField label={t('Name on card')} hint={t('Optional')}>
+                    <Input value={name} onChangeText={setName} placeholder={t('Name or business')} />
                   </FormField>
                 </YStack>
                 <YStack width={120}>
-                  <FormField label="Postal code" hint="Optional">
-                    <Input value={postalCode} onChangeText={setPostalCode} placeholder="ZIP / Postal" />
+                  <FormField label={t('Postal code')} hint={t('Optional')}>
+                    <Input value={postalCode} onChangeText={setPostalCode} placeholder={t('ZIP / Postal')} />
                   </FormField>
                 </YStack>
               </XStack>
@@ -177,29 +184,29 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
               <XStack>
                 <Button size="sm" variant="ghost" onPress={() => setMoreAddress(!moreAddress)}>
                   {moreAddress ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  {moreAddress ? 'Hide address' : 'Add billing address'}
+                  {moreAddress ? t('Hide address') : t('Add billing address')}
                 </Button>
               </XStack>
 
               {moreAddress ? (
                 <YStack gap="$2" pt="$1">
-                  <FormField label="Street address">
-                    <Input value={line1} onChangeText={setLine1} placeholder="Address line 1" />
+                  <FormField label={t('Street address')}>
+                    <Input value={line1} onChangeText={setLine1} placeholder={t('Address line 1')} />
                   </FormField>
                   <XStack gap="$2">
                     <YStack flex={1}>
-                      <FormField label="City">
-                        <Input value={city} onChangeText={setCity} placeholder="City" />
+                      <FormField label={t('City')}>
+                        <Input value={city} onChangeText={setCity} placeholder={t('City')} />
                       </FormField>
                     </YStack>
                     <YStack width={90}>
-                      <FormField label="State">
-                        <Input value={stateVal} onChangeText={setStateVal} placeholder="State" />
+                      <FormField label={t('State')}>
+                        <Input value={stateVal} onChangeText={setStateVal} placeholder={t('State')} />
                       </FormField>
                     </YStack>
                     <YStack width={90}>
-                      <FormField label="Country">
-                        <Input value={country} onChangeText={setCountry} placeholder="Country (US)" />
+                      <FormField label={t('Country')}>
+                        <Input value={country} onChangeText={setCountry} placeholder={t('Country (US)')} />
                       </FormField>
                     </YStack>
                   </XStack>
@@ -208,8 +215,8 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
 
               <SizableText size="$1" color="$soft">
                 {p && p.environment !== 'production'
-                  ? 'Sandbox: use a test card. Nothing is charged.'
-                  : 'The card number goes to the payment processor, never to Hanzo. Saving it charges nothing.'}
+                  ? t('Sandbox: use a test card. Nothing is charged.')
+                  : t('The card number goes to the payment processor, never to Hanzo. Saving it charges nothing.')}
               </SizableText>
             </>
           )}
@@ -220,10 +227,10 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
           ) : null}
           <XStack gap="$2" justify="flex-end">
             <Button size="sm" variant="ghost" onPress={() => onOpenChange(false)}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button size="sm" disabled={!mounted || working} onPress={() => void add()}>
-              Save card
+              {t('Save card')}
             </Button>
           </XStack>
         </YStack>

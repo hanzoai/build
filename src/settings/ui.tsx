@@ -2,8 +2,13 @@
  * What every Settings section is drawn from, so they read as one page: a
  * heading with its action, bordered lists of rows, labelled fields, and the
  * quiet lines for empty, loading and refused.
+ *
+ * What a section hands them comes already said in the reader's language
+ * (@hanzo/i18n `t`), since a row's title may be a name drawn as given; their
+ * own few words they say themselves.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { CopyButton } from '@hanzo/ui/product'
 import type { ReactNode } from 'react'
 
@@ -130,8 +135,9 @@ export function day(iso: string): string {
   return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
 }
 
-/** A credential the platform answers once: the value to copy, and what it is for. */
-export function Once({ value, label, children }: { value: string; label: string; children?: ReactNode }) {
+/** A credential the platform answers once: the value to copy, what it is, and what its copy control says. */
+export function Once({ value, label, copy, children }: { value: string; label: string; copy: string; children?: ReactNode }) {
+  const { t } = useI18n()
   return (
     <YStack gap="$2" px="$3" py="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$raised">
       <XStack items="center" gap="$2">
@@ -145,10 +151,10 @@ export function Once({ value, label, children }: { value: string; label: string;
         >
           {value}
         </SizableText>
-        <CopyButton value={value} label={`Copy ${label.toLowerCase()}`} />
+        <CopyButton value={value} label={copy} />
       </XStack>
       <SizableText size="$1" color="$soft">
-        Copy it now. It is not shown again.
+        {t('Copy it now. It is not shown again.')}
       </SizableText>
       {children}
     </YStack>

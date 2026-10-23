@@ -15,20 +15,25 @@
  *
  * It reads as `target`, so it needs no host: a host says where the plans and
  * Billing are (`onPlans`, `onBilling`).
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a plan's name, a
+ * model's and the ways on the server offers are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { Button, Switch } from '@hanzo/ui'
 import { useState, type ReactNode } from 'react'
 
 import { money } from '../api/billing.ts'
-import type { Target } from '../api/call.ts'
+import { told, type Target } from '../api/call.ts'
 import { allow, CLASSES, type Action, type Class, type Limits } from '../api/limits.ts'
 import { INK, Title } from '../meter.tsx'
 import { spent, ways, when, type Share, type State } from '../plan.ts'
 import { left, useStanding, type Standing } from '../standing.ts'
 import { Card, day, Group, Note, Row, Soft } from './ui.tsx'
 
-const NAME: Record<Class, string> = { premium: 'Premium models', ours: 'Hanzo models' }
+const NAME: Record<Class, string> = { premium: phrase('Premium models'), ours: phrase('Hanzo models') }
 const FILL = { ok: '$ink', near: '$yellow10', limited: '$red10' } as const satisfies Record<State, string>
 
 /** A thin bar of a share used. */
@@ -42,6 +47,7 @@ function Bar({ percent, state }: { percent: number; state: State }) {
 
 /** One measured row: what, how much of it is used, when it starts over, its bar, and what hangs under it. */
 function Gauge({ title, w, first, says, now, children }: { title: string; w: Share; first?: boolean; says?: string; now?: number; children?: ReactNode }) {
+  const { t } = useI18n()
   const at = when(w.resets, now)
   return (
     <YStack gap="$2" px="$3" py="$3" borderTopWidth={first ? 0 : 1} borderColor="$borderColor" data-slot="plan-window" data-state={w.state}>
@@ -50,7 +56,7 @@ function Gauge({ title, w, first, says, now, children }: { title: string; w: Sha
           {title}
         </SizableText>
         <SizableText size="$1" color={INK[w.state]} style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {[says ?? `${w.percent}% used`, at ? `Resets ${at}` : ''].filter(Boolean).join(' · ')}
+          {[says ?? t('{n}% used', { n: w.percent }), at ? t('Resets {time}', { time: at }) : ''].filter(Boolean).join(' · ')}
         </SizableText>
       </XStack>
       <Bar percent={w.percent} state={w.state} />
@@ -76,6 +82,7 @@ export function Reading({
   onBilling: () => void
   now?: number
 }) {
+  const { t } = useI18n()
   const [after, setAfter] = useState<Limits | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
@@ -88,7 +95,7 @@ export function Reading({
     try {
       setAfter(await allow(target, on))
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     } finally {
       setBusy(false)
     }
@@ -105,10 +112,18 @@ export function Reading({
   const used = s.kind === 'plan' && l ? CLASSES.filter((c) => l.classes[c]?.state === 'limited') : []
   const capped = s.kind === 'plan' ? (l?.paused[0] ?? null) : null
   const resets = used.map((c) => l!.classes[c]!.resets).sort()[0] ?? ''
+  const until = capped ? when(capped.resets, now) : ''
+  const model = capped ? capped.model.replace(/\*$/, '') : ''
   const notice = used.length
-    ? spent(s.label, used, resets, now)
+    ? spent(s.label, used, resets, now, t)
     : capped
-      ? `${capped.model.replace(/\*$/, '')} is paused${when(capped.resets, now) ? ` until ${when(capped.resets, now)}` : ''}${capped.fallback ? `; chat continues on ${capped.fallback}` : ''}.`
+      ? capped.fallback
+        ? until
+          ? t('{model} is paused until {time}; chat continues on {fallback}.', { model, time: until, fallback: capped.fallback })
+          : t('{model} is paused; chat continues on {fallback}.', { model, fallback: capped.fallback })
+        : until
+          ? t('{model} is paused until {time}.', { model, time: until })
+          : t('{model} is paused.', { model })
       : ''
   const head = (
     <XStack items="center" gap="$3" flexWrap="wrap" data-slot="plan-head">
@@ -117,16 +132,16 @@ export function Reading({
         <SizableText size="$2" color="$soft">
           {s.kind === 'plan'
             ? l?.start && l.end
-              ? `Current period ${day(l.start)} – ${day(l.end)}`
-              : 'Your plan'
+              ? t('Current period {start} – {end}', { start: day(l.start), end: day(l.end) })
+              : t('Your plan')
             : s.kind === 'free'
-              ? 'Limited usage of free models, from a pool every free account shares.'
-              : 'No plan. Usage is paid from your credits.'}
+              ? t('Limited usage of free models, from a pool every free account shares.')
+              : t('No plan. Usage is paid from your credits.')}
         </SizableText>
       </YStack>
       {(upgrade && !notice) || (s.kind !== 'plan' && onPlans) ? (
         <Button size="sm" variant={s.kind === 'plan' ? 'outline' : 'primary'} onPress={() => (upgrade ? go(upgrade) : onPlans?.())}>
-          {upgrade?.label || 'Upgrade'}
+          {upgrade?.label || t('Upgrade')}
         </Button>
       ) : null}
     </XStack>
@@ -142,27 +157,35 @@ export function Reading({
           <Card>
             <Gauge
               first
-              title={a.window === 'hour' ? 'This hour' : 'Today'}
+              title={a.window === 'hour' ? t('This hour') : t('Today')}
               w={{ percent: 100 - share, state: share === 0 ? 'limited' : share <= 20 ? 'near' : 'ok', resets: a.resets }}
-              says={`${share}% left`}
+              says={t('{n}% left', { n: share })}
               now={now}
             />
             {a.pool ? (
               <Row
-                title="Shared pool"
-                detail={a.pool.state === 'exhausted' ? `Used up${when(a.pool.resets, now) ? ` until ${when(a.pool.resets, now)}` : ''}` : a.pool.state === 'busy' ? 'Busy. Try again in a minute.' : 'Every free request is being served.'}
+                title={t('Shared pool')}
+                detail={
+                  a.pool.state === 'exhausted'
+                    ? when(a.pool.resets, now)
+                      ? t('Used up until {time}', { time: when(a.pool.resets, now) })
+                      : t('Used up')
+                    : a.pool.state === 'busy'
+                      ? t('Busy. Try again in a minute.')
+                      : t('Every free request is being served.')
+                }
               />
             ) : null}
           </Card>
         ) : (
-          <Soft>The free allowance could not be read.</Soft>
+          <Soft>{t('The free allowance could not be read.')}</Soft>
         )}
         <XStack items="center" gap="$3" flexWrap="wrap">
           <SizableText size="$2" color="$soft" flex={1} minW={200}>
-            Credits pay as you go for any model, with or without a plan.
+            {t('Credits pay as you go for any model, with or without a plan.')}
           </SizableText>
           <Button size="sm" variant="outline" onPress={onBilling}>
-            Add credits
+            {t('Add credits')}
           </Button>
         </XStack>
       </YStack>
@@ -176,18 +199,18 @@ export function Reading({
         <Card>
           <Row
             first
-            title="Credits"
-            detail="What your usage is paid from, at each model’s list price."
+            title={t('Credits')}
+            detail={t('What your usage is paid from, at each model’s list price.')}
             trailing={
               <SizableText size="$2" color="$ink" data-slot="plan-balance">
-                {s.balance === null ? 'Unavailable' : money(s.balance)}
+                {s.balance === null ? t('Unavailable') : money(s.balance)}
               </SizableText>
             }
           />
         </Card>
         <XStack>
           <Button size="sm" variant="outline" onPress={onBilling}>
-            Add funds
+            {t('Add funds')}
           </Button>
         </XStack>
       </YStack>
@@ -206,7 +229,7 @@ export function Reading({
             {notice}
           </SizableText>
           <XStack gap="$2" flexWrap="wrap">
-            {ways(l?.actions ?? []).map((a, i) => (
+            {ways(l?.actions ?? [], t).map((a, i) => (
               <Button key={a.kind} size="sm" variant={i === 0 ? 'primary' : 'outline'} disabled={busy} data-kind={a.kind} onPress={() => go(a)}>
                 {a.label}
               </Button>
@@ -216,37 +239,45 @@ export function Reading({
       ) : null}
 
       {!l ? (
-        <Soft>The plan’s usage could not be read.</Soft>
+        <Soft>{t('The plan’s usage could not be read.')}</Soft>
       ) : !l.session && !l.day && !Object.keys(l.classes).length ? (
-        <Soft>This plan sets no usage limits.</Soft>
+        <Soft>{t('This plan sets no usage limits.')}</Soft>
       ) : (
         <>
           {l.session || l.day ? (
-            <Group title="Requests" detail="Every request the plan covers counts in both.">
+            <Group title={t('Requests')} detail={t('Every request the plan covers counts in both.')}>
               <Card>
-                {l.session ? <Gauge first title="Session" w={l.session} says={l.session.resets ? undefined : `${l.session.percent}% used · Starts with your next request`} now={now} /> : null}
-                {l.day ? <Gauge first={!l.session} title="Today" w={l.day} now={now} /> : null}
+                {l.session ? (
+                  <Gauge
+                    first
+                    title={t('Session')}
+                    w={l.session}
+                    says={l.session.resets ? undefined : [t('{n}% used', { n: l.session.percent }), t('Starts with your next request')].join(' · ')}
+                    now={now}
+                  />
+                ) : null}
+                {l.day ? <Gauge first={!l.session} title={t('Today')} w={l.day} now={now} /> : null}
               </Card>
             </Group>
           ) : null}
           {Object.keys(l.classes).length ? (
-            <Group title="By model class" detail="Each class’s share of the billing period, and of its shorter window where the plan sets one.">
+            <Group title={t('By model class')} detail={t('Each class’s share of the billing period, and of its shorter window where the plan sets one.')}>
               <Card>
                 {CLASSES.filter((c) => l.classes[c]).map((c, i) => {
                   const k = l.classes[c]!
                   return (
                     <YStack key={c} data-class={c}>
-                      <Gauge first={i === 0} title={NAME[c]} w={k} says={k.paying === 'credits' ? `${k.percent}% used · Paying from credits` : undefined} now={now}>
+                      <Gauge first={i === 0} title={t(NAME[c])} w={k} says={k.paying === 'credits' ? [t('{n}% used', { n: k.percent }), t('Paying from credits')].join(' · ') : undefined} now={now}>
                         {k.window ? (
                           <XStack gap="$2" items="center" data-slot="plan-short">
                             <SizableText size="$1" color="$soft" shrink={0}>
-                              Shorter window
+                              {t('Shorter window')}
                             </SizableText>
                             <YStack flex={1}>
                               <Bar percent={k.window.percent} state={k.window.state} />
                             </YStack>
                             <SizableText size="$1" color="$soft" shrink={0}>
-                              {[`${k.window.percent}%`, when(k.window.resets, now) ? `Resets ${when(k.window.resets, now)}` : ''].filter(Boolean).join(' · ')}
+                              {[`${k.window.percent}%`, when(k.window.resets, now) ? t('Resets {time}', { time: when(k.window.resets, now) }) : ''].filter(Boolean).join(' · ')}
                             </SizableText>
                           </XStack>
                         ) : null}
@@ -257,26 +288,26 @@ export function Reading({
               </Card>
             </Group>
           ) : null}
-          <Group title="When the allowance runs out" detail="Credits are separate from your plan’s usage allowance. They live in Billing.">
+          <Group title={t('When the allowance runs out')} detail={t('Credits are separate from your plan’s usage allowance. They live in Billing.')}>
             <Card>
               <Row
                 first
-                title="Use credits when my plan’s allowance runs out"
+                title={t('Use credits when my plan’s allowance runs out')}
                 detail={
                   on
-                    ? 'On. A model whose included usage is used keeps working, paid from credits — prepaid first, then granted credit where the model takes it — at its list price.'
-                    : 'Off. Chat continues on a free model, and other requests wait for the plan to reset.'
+                    ? t('On. A model whose included usage is used keeps working, paid from credits — prepaid first, then granted credit where the model takes it — at its list price.')
+                    : t('Off. Chat continues on a free model, and other requests wait for the plan to reset.')
                 }
                 trailing={
-                  <Switch aria-label="Use credits when my plan’s allowance runs out" checked={on} disabled={busy} onCheckedChange={(next: boolean) => void choose(next)} />
+                  <Switch aria-label={t('Use credits when my plan’s allowance runs out')} checked={on} disabled={busy} onCheckedChange={(next: boolean) => void choose(next)} />
                 }
               />
               <Row
-                title="Credits"
-                detail={s.balance === 0 ? 'There are no credits to spend yet.' : 'The balance, top-ups and auto-reload.'}
+                title={t('Credits')}
+                detail={s.balance === 0 ? t('There are no credits to spend yet.') : t('The balance, top-ups and auto-reload.')}
                 trailing={
                   <Button size="sm" variant="ghost" onPress={onBilling}>
-                    {s.balance === 0 ? 'Add credits' : 'Billing'}
+                    {s.balance === 0 ? t('Add credits') : t('Billing')}
                   </Button>
                 }
               />
@@ -291,7 +322,8 @@ export function Reading({
 
 /** The plan's usage, read as `target`. */
 export function Plan({ target, onPlans, onBilling, now }: { target: Target; onPlans?: () => void; onBilling: () => void; now?: number }) {
+  const { t } = useI18n()
   const read = useStanding(target)
   if (read.value) return <Reading s={read.value} target={target} onPlans={onPlans} onBilling={onBilling} now={now} />
-  return <Soft>{read.error ? read.error.message : 'Reading the plan…'}</Soft>
+  return <Soft>{read.error ? told(read.error, t) : t('Reading the plan…')}</Soft>
 }

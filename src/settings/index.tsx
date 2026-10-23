@@ -3,8 +3,10 @@
  * workspace's environments, machines and keys, what the agent brings to a run,
  * and the organization's integrations, members, usage and notifications. A
  * section is its own address, so it can be linked to and comes back on reload.
+ * Its words are the reader's language (@hanzo/i18n `t`).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 
 import { useHost } from '../host.tsx'
 import { path, type Section } from '../route.ts'
@@ -12,6 +14,7 @@ import { heading } from './list.ts'
 import { ENTRIES, GROUPS } from './sections.tsx'
 
 export function Settings({ section }: { section: Section }) {
+  const { t } = useI18n()
   const host = useHost()
   // Every section the route grammar names has an entry.
   const entry = ENTRIES.find((e) => e.id === section)!
@@ -23,10 +26,10 @@ export function Settings({ section }: { section: Section }) {
       {host.sections ? null : (
       <YStack
         role="navigation"
-        aria-label="Settings"
+        aria-label={t('Settings')}
         width={220}
         shrink={0}
-        borderRightWidth={1}
+        borderInlineEndWidth={1}
         borderColor="$borderColor"
         px="$2"
         py="$4"
@@ -35,7 +38,7 @@ export function Settings({ section }: { section: Section }) {
         $max-md={{ display: 'none' }}
       >
         <SizableText size="$4" color="$ink" px="$2">
-          Settings
+          {t('Settings')}
         </SizableText>
         {GROUPS.map((g) => {
           const list = ENTRIES.filter((e) => e.group === g)
@@ -44,14 +47,14 @@ export function Settings({ section }: { section: Section }) {
               {/* The first group sits under the page's own "Settings" heading, and Code leads its own part: neither is labelled twice. */}
               {heading(g) ? (
                 <SizableText size="$1" color="$soft" px="$2" pb="$1">
-                  {g}
+                  {t(heading(g))}
                 </SizableText>
               ) : null}
               {list.map((e) => (
                 <XStack
                   key={e.id}
                   render="button"
-                  aria-label={e.label}
+                  aria-label={t(e.label)}
                   aria-current={e.id === entry.id ? 'page' : undefined}
                   onPress={() => go(e.id)}
                   px="$2"
@@ -61,7 +64,7 @@ export function Settings({ section }: { section: Section }) {
                   hoverStyle={{ bg: '$hover' }}
                 >
                   <SizableText size="$2" color={e.id === entry.id ? '$ink' : '$soft'}>
-                    {e.label}
+                    {t(e.label)}
                   </SizableText>
                 </XStack>
               ))}
@@ -76,7 +79,7 @@ export function Settings({ section }: { section: Section }) {
             <XStack
               key={e.id}
               render="button"
-              aria-label={e.label}
+              aria-label={t(e.label)}
               onPress={() => go(e.id)}
               px="$2.5"
               py="$1"
@@ -85,7 +88,7 @@ export function Settings({ section }: { section: Section }) {
               borderColor={e.id === entry.id ? '$ink' : '$borderColor'}
             >
               <SizableText size="$1" color={e.id === entry.id ? '$ink' : '$soft'}>
-                {e.label}
+                {t(e.label)}
               </SizableText>
             </XStack>
           ))}
