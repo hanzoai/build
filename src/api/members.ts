@@ -13,7 +13,9 @@
  * An invitation is a code IAM redeems when someone signs up with it; IAM sends
  * no email of its own.
  */
-import { call, query, seg, type Target } from './call.ts'
+import { phrase } from '@hanzo/i18n'
+
+import { call, query, seg, Sentence, type Target } from './call.ts'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
@@ -47,7 +49,7 @@ export function member(raw: unknown): Member {
 /** The org's people, owners first. Grants to a team or narrowed to one project are not the org's roster. */
 export async function roster(t: Target, org: string): Promise<Member[]> {
   const raw = obj(await call<unknown>(t, 'GET', `/v1/iam/memberships${query({ org })}`))
-  if (raw.status === 'error') throw new Error(str(raw.msg) || 'IAM refused the roster')
+  if (raw.status === 'error') throw new Error(str(raw.msg) || phrase('IAM refused the roster'))
   const rank = (r: Role) => ROLES.indexOf(r)
   return arr(raw.data)
     .map(obj)
@@ -102,7 +104,7 @@ function hex(bytes: number): string {
 /** Invite one address into the org: one seat, redeemable now, pinned to that address. */
 export async function invite(t: Target, org: string, email: string): Promise<Invitation> {
   const address = email.trim().toLowerCase()
-  if (!EMAIL.test(address)) throw new Error(`${email.trim() || 'That'} is not an email address`)
+  if (!EMAIL.test(address)) throw email.trim() ? new Sentence(phrase('{email} is not an email address'), { email: email.trim() }) : new Error(phrase('That is not an email address'))
   const local = address.slice(0, address.indexOf('@')).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24)
   return invitation(
     await call<unknown>(t, 'POST', '/v1/iam/invitations', {

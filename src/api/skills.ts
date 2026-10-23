@@ -12,6 +12,8 @@
  * that is how a catalogue skill is added to an org and how an org's own skill is
  * switched off. The brand's skill wins a name an org's own skill also takes.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, reason, Refusal, seg, type Target } from './call.ts'
 import { toolsOf, type Tool } from './tools.ts'
 
@@ -100,11 +102,11 @@ export async function authored(t: Target): Promise<Skill[]> {
   return rows(obj(await call<unknown>(t, 'GET', '/v1/tool/skills/authored')).skills).map(skill).filter((s) => s.name)
 }
 
-/** Why a skill cannot be written as it stands, or '' when it can. */
+/** Why a skill cannot be written as it stands, or '' when it can. English, marked (`phrase`): a screen says it through `t`. */
 export function refuse(s: { name: string; content: string }): string {
-  if (!NAME.test(s.name)) return 'A name is one lowercase word: letters, digits, _ or -'
-  if (!s.content.trim()) return 'A skill needs its SKILL.md'
-  if (new TextEncoder().encode(s.content).length > MAX) return 'A SKILL.md is at most 256 KB'
+  if (!NAME.test(s.name)) return phrase('A name is one lowercase word: letters, digits, _ or -')
+  if (!s.content.trim()) return phrase('A skill needs its SKILL.md')
+  if (new TextEncoder().encode(s.content).length > MAX) return phrase('A SKILL.md is at most 256 KB')
   return ''
 }
 

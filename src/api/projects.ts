@@ -12,6 +12,8 @@
  * deletes it. Private is paid, and an unfunded org is refused rather than left
  * public without being told.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, seg, type Target } from './call.ts'
 
 export interface Project {
@@ -93,7 +95,7 @@ export async function change(t: Target, slug: string, what: { name?: string; vis
   const body: { name?: string; visibility?: Visibility } = {}
   if (what.name !== undefined) {
     const n = what.name.trim()
-    if (!n) throw new Error('A project needs a name')
+    if (!n) throw new Error(phrase('A project needs a name'))
     body.name = n
   }
   if (what.visibility !== undefined) body.visibility = what.visibility

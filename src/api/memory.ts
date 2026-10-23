@@ -9,6 +9,8 @@
  * request, so these read and change the caller's own and nobody else's. A
  * refusal arrives in the envelope, usually under a 200.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, query, unwrap, type Target } from './call.ts'
 
 export interface Memory {
@@ -38,7 +40,7 @@ export async function memories(t: Target, limit = 100): Promise<Memory[]> {
 
 export async function remember(t: Target, content: string): Promise<Memory | null> {
   const said = content.trim()
-  if (!said) throw new Error('Say what Hanzo should remember')
+  if (!said) throw new Error(phrase('Say what Hanzo should remember'))
   return memoryOf(unwrap(await call<unknown>(t, 'POST', '/v1/ai/memory/remember', { content: said })))
 }
 

@@ -17,6 +17,8 @@
  * (`serverExecuted`) makes a working agent; the others hand their calls back to
  * the client that asked, so they are not offered here.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, seg, type Target } from './call.ts'
 
 export type Period = 'day' | 'week' | 'month'
@@ -115,15 +117,23 @@ export function draft(a: Agent): Draft {
 
 export const EMPTY: Draft = { name: '', description: '', model: '', instructions: '', tools: [], cap: '', task: '', period: 'month', avatar: '' }
 
-/** Why a draft cannot be saved as it stands, or '' when it can. */
+/** What a budget left unset says, and one run that outspends its period, by the period: whole sentences, so a language says the period its own way. */
+const UNSET: Record<Period, string> = { day: phrase('Set what it may spend each day'), week: phrase('Set what it may spend each week'), month: phrase('Set what it may spend each month') }
+const OVER: Record<Period, string> = {
+  day: phrase('One run cannot spend more than the whole day'),
+  week: phrase('One run cannot spend more than the whole week'),
+  month: phrase('One run cannot spend more than the whole month'),
+}
+
+/** Why a draft cannot be saved as it stands, or '' when it can: English, marked (`phrase`), so a screen says it through `t`. */
 export function refuse(d: Draft): string {
-  if (!NAME.test(d.name)) return 'A name is letters, digits, . _ or -, starting with a letter or digit'
-  if (new TextEncoder().encode(d.instructions).length > MAX) return 'Instructions are at most 32 KB'
+  if (!NAME.test(d.name)) return phrase('A name is letters, digits, . _ or -, starting with a letter or digit')
+  if (new TextEncoder().encode(d.instructions).length > MAX) return phrase('Instructions are at most 32 KB')
   const cap = micros(d.cap)
   const task = micros(d.task)
-  if (!(cap > 0)) return 'Set what it may spend each ' + d.period
-  if (!(task > 0)) return 'Set what one run may spend'
-  if (task > cap) return 'One run cannot spend more than the whole ' + d.period
+  if (!(cap > 0)) return UNSET[d.period]
+  if (!(task > 0)) return phrase('Set what one run may spend')
+  if (task > cap) return OVER[d.period]
   return ''
 }
 
@@ -224,7 +234,7 @@ export async function use(t: Target, c: Cast, base: string): Promise<Agent> {
 export function person(name: string, about: string, writing: string, avatar = ''): Cast {
   const who = name.trim()
   const lines = [`You are ${who}.`, about.trim(), writing.trim() && `Writing by ${who}:\n\n${writing.trim()}`]
-  return { name: who, title: who, description: about.trim(), category: 'Person', model: '', instructions: lines.filter(Boolean).join('\n\n'), avatar }
+  return { name: who, title: who, description: about.trim(), category: phrase('Person'), model: '', instructions: lines.filter(Boolean).join('\n\n'), avatar }
 }
 
 export async function create(t: Target, d: Draft): Promise<Agent> {
@@ -280,5 +290,5 @@ export async function presets(t: Target): Promise<Preset[]> {
 
 /** A preset as a template. */
 export function fromPreset(p: Preset): Cast {
-  return { name: p.id, title: p.title || p.id, description: p.title, category: 'Preset', model: '', instructions: p.prompt }
+  return { name: p.id, title: p.title || p.id, description: p.title, category: phrase('Preset'), model: '', instructions: p.prompt }
 }

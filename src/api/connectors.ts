@@ -14,6 +14,8 @@
  * ships only a package needs somewhere to run first. The fleet's own servers,
  * on for every run, are mcp.ts.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, query, seg, type Target } from './call.ts'
 
 export interface Server {
@@ -136,13 +138,13 @@ export interface Adding {
   secret?: string
 }
 
-/** Why a server cannot be added as it stands, or '' when it can. */
+/** Why a server cannot be added as it stands, or '' when it can. English, marked (`phrase`): a screen says it through `t`. */
 export function refuse(a: Adding): string {
   if (!a.listing) {
-    if (!a.name?.trim()) return 'A connector needs a name'
-    if (!/^https?:\/\/[^\s/]+/.test(a.url?.trim() ?? '')) return 'The URL is an http(s) address'
+    if (!a.name?.trim()) return phrase('A connector needs a name')
+    if (!/^https?:\/\/[^\s/]+/.test(a.url?.trim() ?? '')) return phrase('The URL is an http(s) address')
   }
-  if (a.secret && !a.header?.trim()) return 'Name the header the secret is sent in'
+  if (a.secret && !a.header?.trim()) return phrase('Name the header the secret is sent in')
   return ''
 }
 

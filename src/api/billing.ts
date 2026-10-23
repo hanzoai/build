@@ -33,6 +33,8 @@
  * an org or a subject. No card number passes through this file: a card is saved
  * from the token the processor's own form returns.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, headers, reason, Refusal, seg, type Target } from './call.ts'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -172,7 +174,7 @@ export interface Purchase {
 
 /** Buy a plan. No amount is sent: the catalog prices it, and the platform charges that. */
 export async function subscribe(t: Target, p: Purchase): Promise<{ subscription: string; charged: number }> {
-  if (!p.method) throw new Error('Add a card before choosing a paid plan')
+  if (!p.method) throw new Error(phrase('Add a card before choosing a paid plan'))
   const raw = obj(
     await call<unknown>(t, 'POST', '/v1/billing/subscribe/card', { planId: p.plan, paymentMethodId: p.method, interval: p.interval }),
   )
@@ -273,7 +275,7 @@ export function chosen(list: Method[]): Method | null {
 
 /** Save a card from the single-use token the processor's form returned, optionally with billing info. */
 export async function save(t: Target, token: string, billingAddress?: Address): Promise<Method> {
-  if (!token) throw new Error('The card form returned no token')
+  if (!token) throw new Error(phrase('The card form returned no token'))
   const body: Record<string, unknown> = { type: 'card', providerRef: token }
   if (billingAddress && Object.values(billingAddress).some(Boolean)) {
     body.billingAddress = billingAddress
@@ -470,8 +472,8 @@ export async function arm(t: Target, rule: { enabled: boolean; threshold: number
 
 /** Charge a saved card and add the amount to the balance; answers the balance after. */
 export async function topup(t: Target, amount: number, card: string): Promise<number> {
-  if (!Number.isInteger(amount) || amount <= 0) throw new Error('Enter an amount to add')
-  if (!card) throw new Error('Add a card before buying more')
+  if (!Number.isInteger(amount) || amount <= 0) throw new Error(phrase('Enter an amount to add'))
+  if (!card) throw new Error(phrase('Add a card before buying more'))
   const r = obj(await call<unknown>(t, 'POST', '/v1/billing/topup', { amountCents: amount, paymentMethodId: card }))
   return num(r.balanceCents)
 }
@@ -622,7 +624,7 @@ export function monthly(list: Cap[]): Cap | null {
 
 /** Set the org's monthly cap: change the one there is, or open one that refuses spend past it. */
 export async function limit(t: Target, list: Cap[], threshold: number): Promise<Cap> {
-  if (!Number.isInteger(threshold) || threshold <= 0) throw new Error('Enter a monthly limit')
+  if (!Number.isInteger(threshold) || threshold <= 0) throw new Error(phrase('Enter a monthly limit'))
   const was = monthly(list)
   if (was) return cap(await call<unknown>(t, 'PATCH', `/v1/billing/alerts/${seg(was.id)}`, { threshold }))
   return cap(

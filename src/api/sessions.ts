@@ -15,6 +15,8 @@
  * falls 256 frames behind is dropped. So `watch` reconnects, and every
  * reconnect is reported, which is the caller's cue to re-read the detail.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, headers, query, Refusal, seg, type Target } from './call.ts'
 import { read } from './sse.ts'
 
@@ -165,7 +167,7 @@ export async function get(t: Target, id: string): Promise<Detail> {
 
 export async function message(t: Target, id: string, text: string): Promise<void> {
   const m = text.trim()
-  if (!m) throw new Refusal(400, 'Say something to the run')
+  if (!m) throw new Refusal(400, phrase('Say something to the run'))
   await call<unknown>(t, 'POST', `/v1/agent/sessions/${seg(id)}/message`, { message: m })
 }
 
@@ -184,8 +186,8 @@ export async function resume(t: Target, id: string): Promise<void> {
 /** A new title, up to the platform's 512 characters. */
 export async function rename(t: Target, id: string, title: string): Promise<Session> {
   const name = title.trim()
-  if (!name) throw new Refusal(400, 'Give the run a name')
-  if (name.length > 512) throw new Refusal(400, 'A run’s name is at most 512 characters')
+  if (!name) throw new Refusal(400, phrase('Give the run a name'))
+  if (name.length > 512) throw new Refusal(400, phrase('A run’s name is at most 512 characters'))
   return session(await call<unknown>(t, 'PATCH', `/v1/agent/sessions/${seg(id)}`, { title: name }))
 }
 
@@ -223,7 +225,7 @@ export async function watch(t: Target, root: string, on: Watch, signal: AbortSig
         cache: 'no-store',
         signal,
       })
-      if (res.status === 401 || res.status === 403) throw new Refusal(res.status, 'This account cannot follow this run')
+      if (res.status === 401 || res.status === 403) throw new Refusal(res.status, phrase('This account cannot follow this run'))
       if (!res.ok || !res.body) throw new Error(`stream answered ${res.status}`)
       on.open?.(opened++)
       fails = 0

@@ -8,6 +8,8 @@
  * the request, so the name is the whole address — `owner/name` is a path the
  * engine refuses.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, seg, type Target } from './call.ts'
 
 export interface Codebase {
@@ -100,10 +102,10 @@ const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 /** Provision an empty repository. The name is the handle and the last path segment. */
 export async function create(t: Target, name: string, description = ''): Promise<Codebase> {
   const handle = name.trim().replace(/\.git$/, '')
-  if (!NAME.test(handle)) throw new Error('A repository name starts with a letter or number, and may contain letters, numbers, dots, underscores and hyphens.')
+  if (!NAME.test(handle)) throw new Error(phrase('A repository name starts with a letter or number, and may contain letters, numbers, dots, underscores and hyphens.'))
   const raw = await call<unknown>(t, 'POST', '/v1/git/repos', { name: handle, description: description.trim() })
   const row = codebase(raw, t.org ?? '')
-  if (!row) throw new Error('The forge created a repository and did not name it')
+  if (!row) throw new Error(phrase('The forge created a repository and did not name it'))
   return row
 }
 

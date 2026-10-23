@@ -7,6 +7,8 @@
  * names no target — so it is the first place here and carries no id. A machine
  * can take a run only while it is online.
  */
+import { phrase } from '@hanzo/i18n'
+
 import type { Target } from './call.ts'
 import { machines, state } from './machines.ts'
 
@@ -22,7 +24,8 @@ export interface Place {
   capacity: string
 }
 
-export const SANDBOX: Place = { id: '', label: 'Hanzo sandbox', kind: 'sandbox', status: 'online', capacity: '' }
+/** The sandbox, named in English and marked (`phrase`): a screen draws its label through `t`. */
+export const SANDBOX: Place = { id: '', label: phrase('Hanzo sandbox'), kind: 'sandbox', status: 'online', capacity: '' }
 
 export async function places(t: Target): Promise<Place[]> {
   const list = await machines(t)

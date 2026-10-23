@@ -9,6 +9,8 @@
  * refused when an agent calls it. At most 256 names go in one request, so a
  * larger change is sent in turns.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, type Target } from './call.ts'
 
 /** Where a tool comes from, in the order the platform ranks them. */
@@ -40,7 +42,7 @@ export async function tools(t: Target): Promise<Tool[]> {
 
 /** Switch every tool in `names` on (or off), and answer the org's activated set. */
 export async function activate(t: Target, names: string[], on: boolean): Promise<string[]> {
-  if (!names.length) throw new Error('There is nothing to switch')
+  if (!names.length) throw new Error(phrase('There is nothing to switch'))
   let enabled: string[] = []
   for (let i = 0; i < names.length; i += BATCH) {
     const part = names.slice(i, i + BATCH)

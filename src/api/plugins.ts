@@ -13,6 +13,8 @@
  * credential: it names the connectors provider whose credential it reads when it
  * runs. The mounted list is the deployment's own subsystems, read-only.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, seg, type Target } from './call.ts'
 
 export interface Plugin {
@@ -75,10 +77,10 @@ export interface Build {
   spec: string
 }
 
-/** Why a plugin cannot be built as it stands, or '' when it can. */
+/** Why a plugin cannot be built as it stands, or '' when it can. English, marked (`phrase`): a screen says it through `t`. */
 export function refuse(b: Build): string {
-  if (!NAME.test(b.name)) return 'A name is one lowercase word: letters, digits, _ or -'
-  if (!b.source.trim() === !b.spec.trim()) return 'Give the TypeScript or the API it calls, one of the two'
+  if (!NAME.test(b.name)) return phrase('A name is one lowercase word: letters, digits, _ or -')
+  if (!b.source.trim() === !b.spec.trim()) return phrase('Give the TypeScript or the API it calls, one of the two')
   return ''
 }
 

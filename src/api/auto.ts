@@ -19,6 +19,10 @@
  * saved what it does. A draft is a flow named and not yet told what to do: it
  * runs once its instructions are saved.
  */
+import { phrase } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
+
+import { english } from '../say.ts'
 import { call, headers, query, reason, Refusal, seg, type Target } from './call.ts'
 import { inApp, type Source } from './library.ts'
 import { read as stream } from './sse.ts'
@@ -157,13 +161,13 @@ export async function automations(t: Target): Promise<Automation[]> {
 
 export async function automation(t: Target, id: string): Promise<Automation> {
   const a = read(await call<unknown>(t, 'GET', `/v1/auto/automations/${seg(id)}`))
-  if (!a) throw new Error('The automation came back without an id')
+  if (!a) throw new Error(phrase('The automation came back without an id'))
   return a
 }
 
 export async function create(t: Target, d: Draft): Promise<Automation> {
   const a = read(await call<unknown>(t, 'POST', '/v1/auto/automations', d))
-  if (!a) throw new Error('The automation was created and came back without an id')
+  if (!a) throw new Error(phrase('The automation was created and came back without an id'))
   return a
 }
 
@@ -179,7 +183,7 @@ export function changes(was: Draft, now: Draft): Partial<Draft> {
 /** Change an automation. A change to anything but `enabled` makes the caller the person it runs as. */
 export async function save(t: Target, id: string, change: Partial<Draft>): Promise<Automation> {
   const a = read(await call<unknown>(t, 'PATCH', `/v1/auto/automations/${seg(id)}`, change))
-  if (!a) throw new Error('The automation was saved and came back without an id')
+  if (!a) throw new Error(phrase('The automation was saved and came back without an id'))
   return a
 }
 
@@ -215,39 +219,53 @@ export async function review(t: Target, id: string, runId: string, post: boolean
   return run(obj(await call<unknown>(t, 'POST', `/v1/auto/automations/${seg(id)}/runs/${seg(runId)}/review`, { post })))
 }
 
-const DAYS: Record<string, string> = { mon: 'Mondays', tue: 'Tuesdays', wed: 'Wednesdays', thu: 'Thursdays', fri: 'Fridays', sat: 'Saturdays', sun: 'Sundays' }
-
-/** A once schedule's local date and time, as a person reads it. */
-function once(at: string): string {
-  const m = at.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
-  if (!m) return at
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]))
-  return `${d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} at ${m[4]}:${m[5]}`
+/** A weekly schedule's sentence by its day: one sentence each, so a language says the day its own way. */
+const DAYS: Record<string, string> = {
+  mon: phrase('Mondays at {time} · {zone}'),
+  tue: phrase('Tuesdays at {time} · {zone}'),
+  wed: phrase('Wednesdays at {time} · {zone}'),
+  thu: phrase('Thursdays at {time} · {zone}'),
+  fri: phrase('Fridays at {time} · {zone}'),
+  sat: phrase('Saturdays at {time} · {zone}'),
+  sun: phrase('Sundays at {time} · {zone}'),
 }
 
-/** A schedule the way a person says it. */
-export function words(s: Schedule): string {
-  const zone = ` · ${s.tz || 'UTC'}`
+/** A once schedule's local date, as a person reads it, and its time. */
+function once(at: string): { date: string; time: string } | null {
+  const m = at.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+  if (!m) return null
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]))
+  return { date: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }), time: `${m[4]}:${m[5]}` }
+}
+
+/** A schedule the way a person says it, in the words of the `t` handed (English without one). */
+export function words(s: Schedule, t: Say = english): string {
+  const zone = s.tz || 'UTC'
   switch (s.kind) {
     case 'manual':
-      return 'When you run it'
-    case 'once':
-      return s.at ? `Once, ${once(s.at)}${zone}` : 'Once, now'
+      return t('When you run it')
+    case 'once': {
+      if (!s.at) return t('Once, now')
+      const when = once(s.at)
+      return when ? t('Once, {date} at {time} · {zone}', { ...when, zone }) : t('Once, {at} · {zone}', { at: s.at, zone })
+    }
     case 'hourly':
-      return `Every hour at :${(s.at ?? '00:00').slice(3) || '00'}`
+      return t('Every hour at :{minute}', { minute: (s.at ?? '00:00').slice(3) || '00' })
     case 'daily':
-      return `Every day at ${s.at}${zone}`
+      return t('Every day at {time} · {zone}', { time: s.at ?? '', zone })
     case 'weekdays':
-      return `Weekdays at ${s.at}${zone}`
-    case 'weekly':
-      return `${DAYS[s.day ?? ''] ?? s.day} at ${s.at}${zone}`
+      return t('Weekdays at {time} · {zone}', { time: s.at ?? '', zone })
+    case 'weekly': {
+      const day = DAYS[s.day ?? '']
+      return day ? t(day, { time: s.at ?? '', zone }) : t('{day} at {time} · {zone}', { day: s.day ?? '', time: s.at ?? '', zone })
+    }
     case 'cron': {
       // The two a person says most, in their words; any other expression as written.
       const minutes = (s.cron ?? '').match(/^\*\/(\d+) \* \* \* \*$/)
-      if (minutes) return `Every ${minutes[1]} minutes${zone}`
+      if (minutes) return t('Every {n} minutes · {zone}', { n: minutes[1]!, zone })
       const hours = (s.cron ?? '').match(/^0 \*\/(\d+) \* \* \*$/)
-      if (hours) return `Every ${hours[1]} hours${zone}`
-      return `Cron ${s.cron}${zone}`
+      if (hours) return t('Every {n} hours · {zone}', { n: hours[1]!, zone })
+      return t('Cron {cron} · {zone}', { cron: s.cron ?? '', zone })
     }
   }
 }
@@ -381,7 +399,7 @@ export async function jobs(t: Target, f: JobFilter = {}): Promise<Job[]> {
 
 export async function one(t: Target, id: string): Promise<Job> {
   const j = job(await call<unknown>(t, 'GET', `/v1/auto/jobs/${seg(id)}`))
-  if (!j) throw new Error('The job came back without an id')
+  if (!j) throw new Error(phrase('The job came back without an id'))
   return j
 }
 
