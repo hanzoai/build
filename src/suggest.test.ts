@@ -23,6 +23,7 @@ import {
   shown,
   fill,
   STARTERS,
+  starter,
   sig,
   skip,
   stale,
@@ -308,6 +309,12 @@ describe('what the account keeps', () => {
     expect(STARTERS).toHaveLength(3)
     for (const r of STARTERS) expect(['send', 'task']).toContain(r.act.kind)
     for (const r of STARTERS) expect(r.title.split(' ').length).toBeLessThanOrEqual(7)
+  })
+
+  it('knows a starter, whose words are authored and translated, from a row of the person’s own', () => {
+    expect(STARTERS.every(starter)).toBe(true)
+    expect(STARTERS.map((r) => r.title)).toEqual(['Ask what Hanzo can do for you', 'Build a landing page with Dev', 'Get a cited brief on AI agents'])
+    expect(starter({ ...STARTERS[0]!, id: idOf('', STARTERS[0]!.title) })).toBe(false)
   })
 
   it('fills to three with what Hanzo does, never past a dismissal, and none before the rows are read', () => {

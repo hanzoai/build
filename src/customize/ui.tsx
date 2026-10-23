@@ -4,8 +4,13 @@
  * featured card, a dialog with a title and a scrolling body, a delete that asks
  * first, the empty state that names the next step, a failure with its retry,
  * and the quiet line for loading and signed-out.
+ *
+ * Their own words are the reader's language (@hanzo/i18n `t`); a title, a
+ * line or a label a tab hands them comes already said, since it may be a
+ * name or a description that is drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Check, Plus, X } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -14,9 +19,6 @@ import { useHost } from '../host.tsx'
 import { say } from './say.ts'
 
 export const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
-/** A button that holds a card's text reads from the left, not from the middle a button centres it in. */
-export const left = { textAlign: 'left' } as const
-
 /** Which half of a tab: what there is to browse and add (first), or what the org already has. */
 export type View = 'discover' | 'yours'
 
@@ -121,7 +123,8 @@ export function Tile({
           gap="$3"
           items="flex-start"
           cursor="pointer"
-          style={left}
+          // A button centres its words unless told: a card reads from the line's start.
+          $platform-web={{ textAlign: 'start' }}
           focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
         >
           {body}
@@ -138,13 +141,14 @@ export function Tile({
 
 /** The one card the shelf puts first, drawn larger. */
 export function Featured({ title, detail, meta, mark, action, onOpen }: { title: string; detail: string; meta: string; mark: ReactNode; action?: ReactNode; onOpen: () => void }) {
+  const { t } = useI18n()
   return (
     <XStack items="flex-start" gap="$4" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" flexWrap="wrap" rowGap="$3">
-      <XStack render="button" aria-label={title} onPress={onOpen} flex={1} minW={220} gap="$4" items="flex-start" cursor="pointer" style={left}>
+      <XStack render="button" aria-label={title} onPress={onOpen} flex={1} minW={220} gap="$4" items="flex-start" cursor="pointer" $platform-web={{ textAlign: 'start' }}>
         {mark}
         <YStack flex={1} minW={0} gap="$1.5">
           <SizableText size="$1" color="$soft" textTransform="uppercase" letterSpacing={1}>
-            Featured
+            {t('Featured')}
           </SizableText>
           <SizableText size="$6" color="$ink" numberOfLines={1}>
             {title}
@@ -162,27 +166,29 @@ export function Featured({ title, detail, meta, mark, action, onOpen }: { title:
   )
 }
 
-/** A card's add control: Add while it is not yours, Added once it is. */
-export function Add({ name, added, busy, onPress, label = 'Add' }: { name: string; added: boolean; busy?: boolean; onPress: () => void; label?: string }) {
+/** A card's add control: Add (Use, for a template one is made from) while it is not yours, Added once it is. */
+export function Add({ name, added, busy, onPress, use = false }: { name: string; added: boolean; busy?: boolean; onPress: () => void; use?: boolean }) {
+  const { t } = useI18n()
   if (added) {
     return (
-      <XStack aria-label={`${name} is added`} gap="$1" height={32} items="center" shrink={0}>
+      <XStack aria-label={t('{name} is added', { name })} gap="$1" height={32} items="center" shrink={0}>
         <Check size={14} />
         <SizableText size="$1" color="$soft">
-          Added
+          {t('Added')}
         </SizableText>
       </XStack>
     )
   }
   return (
-    <Button size="sm" variant="outline" aria-label={`${label} ${name}`} disabled={busy} onPress={onPress}>
-      <Plus size={14} /> {label}
+    <Button size="sm" variant="outline" aria-label={use ? t('Use {name}', { name }) : t('Add {name}', { name })} disabled={busy} onPress={onPress}>
+      <Plus size={14} /> {use ? t('Use') : t('Add')}
     </Button>
   )
 }
 
 /** A dialog with a title, a close control and a body that scrolls inside the window. */
 export function Sheet({ title, open, onOpenChange, width = 560, children }: { title: string; open: boolean; onOpenChange: (o: boolean) => void; width?: number; children: ReactNode }) {
+  const { t } = useI18n()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxW={width} showCloseButton={false} maxH="88vh" gap="$3">
@@ -190,7 +196,7 @@ export function Sheet({ title, open, onOpenChange, width = 560, children }: { ti
           <DialogTitle numberOfLines={1} flex={1}>
             {title}
           </DialogTitle>
-          <XStack render="button" aria-label="Close" p="$1" onPress={() => onOpenChange(false)}>
+          <XStack render="button" aria-label={t('Close')} p="$1" onPress={() => onOpenChange(false)}>
             <X size={16} />
           </XStack>
         </XStack>
@@ -202,8 +208,9 @@ export function Sheet({ title, open, onOpenChange, width = 560, children }: { ti
   )
 }
 
-/** Asks before a delete; says what goes with it. */
+/** Asks before a delete; says what goes with it. `what` is the thing's name, `says` comes already said. */
 export function Confirm({ what, says, open, onOpenChange, onYes }: { what: string; says: string; open: boolean; onOpenChange: (o: boolean) => void; onYes: () => Promise<void> }) {
+  const { t } = useI18n()
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const yes = async () => {
@@ -213,23 +220,23 @@ export function Confirm({ what, says, open, onOpenChange, onYes }: { what: strin
       await onYes()
       onOpenChange(false)
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setBusy(false)
     }
   }
   return (
-    <Sheet title={`Delete ${what}?`} open={open} onOpenChange={onOpenChange} width={420}>
+    <Sheet title={t('Delete {name}?', { name: what })} open={open} onOpenChange={onOpenChange} width={420}>
       <SizableText size="$2" color="$soft">
         {says}
       </SizableText>
       <Line>{note}</Line>
       <XStack gap="$2" justify="flex-end">
         <Button size="sm" variant="ghost" onPress={() => onOpenChange(false)}>
-          Cancel
+          {t('Cancel')}
         </Button>
         <Button size="sm" variant="destructive" disabled={busy} onPress={() => void yes()}>
-          Delete
+          {t('Delete')}
         </Button>
       </XStack>
     </Sheet>
@@ -250,13 +257,14 @@ export function Soft({ children, action }: { children: string; action?: ReactNod
 
 /** A read that failed: what went wrong in plain words, and the one control that asks again. */
 export function Failed({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const { t } = useI18n()
   return (
     <YStack py="$6" items="center" gap="$3" role="alert">
       <SizableText size="$2" color="$soft" text="center">
-        {say(error)}
+        {say(error, t)}
       </SizableText>
       <Button size="sm" variant="outline" onPress={onRetry}>
-        Try again
+        {t('Try again')}
       </Button>
     </YStack>
   )
@@ -285,12 +293,13 @@ export function Empty({ title, detail, children }: { title: string; detail: stri
 
 /** What a signed-out visitor is told, with the one control that signs them in. */
 export function Visitor({ children }: { children: string }) {
+  const { t } = useI18n()
   const host = useHost()
   return (
     <Soft
       action={
         <Button size="sm" onPress={() => host.signIn?.()}>
-          Sign in
+          {t('Sign in')}
         </Button>
       }
     >
@@ -346,7 +355,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   )
 }
 
-/** Two or three choices side by side; the chosen one is filled. A count, when one is given, follows its label. */
+/** Two or three choices side by side; the chosen one is filled. A count, when one is given, follows its label. Labels come already said. */
 export function Choice<T extends string>({
   value,
   options,
@@ -358,6 +367,7 @@ export function Choice<T extends string>({
   onChange: (v: T) => void
   label: string
 }) {
+  const { t } = useI18n()
   return (
     <XStack role="group" aria-label={label} p={2} gap={2} rounded="$3" borderWidth={1} borderColor="$borderColor" self="flex-start" shrink={0}>
       {options.map((o) => (
@@ -365,7 +375,7 @@ export function Choice<T extends string>({
           key={o.id}
           render="button"
           aria-pressed={o.id === value}
-          aria-label={o.count ? `${o.label}, ${o.count}` : o.label}
+          aria-label={o.count ? t('{label}, {count}', { label: o.label, count: o.count }) : o.label}
           onPress={() => onChange(o.id)}
           items="center"
           gap="$1.5"

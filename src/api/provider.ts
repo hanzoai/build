@@ -11,7 +11,9 @@
  * Connecting leaves this page once, for the provider's consent screen, and only
  * for that provider's own host.
  */
-import { call, query, seg, type Target } from './call.ts'
+import { phrase } from '@hanzo/i18n'
+
+import { call, query, seg, Sentence, type Target } from './call.ts'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
@@ -63,25 +65,26 @@ const CONSENT: Record<string, RegExp> = {
  * The social accounts an organization connects. An automation posts text to
  * the ones that take it; Instagram and TikTok take only images and video, and
  * say so. `needs` is what connecting waits on while Hanzo's app with the
- * platform is not set up.
+ * platform is not set up. Its sentences are English and marked (`phrase`):
+ * a screen draws them through `t`.
  */
 export const SOCIAL: readonly { id: string; name: string; posts: boolean; needs: string; takes?: string }[] = [
-  { id: 'x', name: 'X', posts: true, needs: 'X posting needs Hanzo’s X developer app with paid API access; it is not set up yet.' },
-  { id: 'linkedin', name: 'LinkedIn', posts: true, needs: 'LinkedIn posting needs Hanzo’s LinkedIn app with Share on LinkedIn; it is not set up yet.' },
-  { id: 'facebook', name: 'Facebook', posts: true, needs: 'Facebook Page posting needs Hanzo’s Meta app, approved by Meta App Review to publish to Pages; it is not set up yet.' },
+  { id: 'x', name: 'X', posts: true, needs: phrase('X posting needs Hanzo’s X developer app with paid API access; it is not set up yet.') },
+  { id: 'linkedin', name: 'LinkedIn', posts: true, needs: phrase('LinkedIn posting needs Hanzo’s LinkedIn app with Share on LinkedIn; it is not set up yet.') },
+  { id: 'facebook', name: 'Facebook', posts: true, needs: phrase('Facebook Page posting needs Hanzo’s Meta app, approved by Meta App Review to publish to Pages; it is not set up yet.') },
   {
     id: 'instagram',
     name: 'Instagram',
     posts: false,
-    needs: 'Instagram posting needs Hanzo’s Meta app, approved by Meta App Review; it is not set up yet.',
-    takes: 'Instagram takes photos and reels, not text, so automations do not post to it.',
+    needs: phrase('Instagram posting needs Hanzo’s Meta app, approved by Meta App Review; it is not set up yet.'),
+    takes: phrase('Instagram takes photos and reels, not text, so automations do not post to it.'),
   },
   {
     id: 'tiktok',
     name: 'TikTok',
     posts: false,
-    needs: 'TikTok posting needs TikTok’s audit of Hanzo’s app; it is not set up yet.',
-    takes: 'TikTok takes videos and photos, not text, so automations do not post to it.',
+    needs: phrase('TikTok posting needs TikTok’s audit of Hanzo’s app; it is not set up yet.'),
+    takes: phrase('TikTok takes videos and photos, not text, so automations do not post to it.'),
   },
 ]
 
@@ -89,7 +92,7 @@ export const SOCIAL: readonly { id: string; name: string; posts: boolean; needs:
 export async function authorize(t: Target, id: string, back?: string): Promise<string> {
   const url = str(obj(await call<unknown>(t, 'POST', `/v1/provider/${seg(id)}/connect`, back ? { return: back } : {})).authorizeUrl)
   const host = CONSENT[id]
-  if (!host || !host.test(url)) throw new Error(`The platform did not name a ${id} address to connect at`)
+  if (!host || !host.test(url)) throw new Sentence(phrase('The platform did not name a {provider} address to connect at'), { provider: id })
   return url
 }
 

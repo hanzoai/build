@@ -3,6 +3,8 @@
  * paperclip attaches a file. Nothing leaves the page until the message goes.
  */
 import { XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { Signature } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '@hanzo/ui'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
@@ -37,6 +39,7 @@ export function paint(g: CanvasRenderingContext2D, strokes: readonly Stroke[]): 
 }
 
 function Pad({ c }: { c: Composer }) {
+  const { t } = useI18n()
   const canvas = useRef<HTMLCanvasElement>(null)
   const strokes = useRef<Stroke[]>([])
   const drawing = useRef(false)
@@ -93,14 +96,14 @@ function Pad({ c }: { c: Composer }) {
   return (
     <Dialog open onOpenChange={(o) => !o && c.show(null)}>
       <DialogContent maxW={720} width="100%">
-        <DialogTitle>Sketch</DialogTitle>
-        <DialogDescription>Draw, then attach it to your message.</DialogDescription>
+        <DialogTitle>{t('Sketch')}</DialogTitle>
+        <DialogDescription>{t('Draw, then attach it to your message.')}</DialogDescription>
         <YStack borderWidth={1} borderColor="$borderColor" rounded={8} overflow="hidden">
           <canvas
             ref={canvas}
             width={W}
             height={H}
-            aria-label="Sketch pad"
+            aria-label={t('Sketch pad')}
             data-slot="sketch-pad"
             onPointerDown={down}
             onPointerMove={move}
@@ -111,17 +114,17 @@ function Pad({ c }: { c: Composer }) {
         </YStack>
         <XStack gap="$2" items="center">
           <Button size="sm" variant="ghost" disabled={!count} onPress={undo}>
-            Undo
+            {t('Undo')}
           </Button>
           <Button size="sm" variant="ghost" disabled={!count} onPress={clear}>
-            Clear
+            {t('Clear')}
           </Button>
           <XStack flex={1} />
           <Button size="sm" variant="ghost" onPress={() => c.show(null)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button size="sm" disabled={!count || busy} onPress={attach}>
-            Attach
+            {t('Attach')}
           </Button>
         </XStack>
       </DialogContent>
@@ -131,8 +134,8 @@ function Pad({ c }: { c: Composer }) {
 
 export const sketch: Plugin = {
   id: 'sketch',
-  name: 'Sketch',
-  note: 'Draw and attach an image',
+  name: phrase('Sketch'),
+  note: phrase('Draw and attach an image'),
   icon: <Signature size={16} />,
   open: (c) => c.show(<Pad c={c} />),
 }

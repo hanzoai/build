@@ -7,8 +7,12 @@
  * The sandbox outlives the run: kept when the run ends, parked while nobody
  * watches, retired a day after it parks. The bar under the tabs says which and
  * suspends or resumes it; a tab that needs it running resumes it (sandbox.ts).
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a repository, branch,
+ * port, address, command and the sandbox's own error are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { ExternalLink, Info, MoreHorizontal, RefreshCcw } from '@hanzogui/lucide-icons-2'
 import { Button, DropdownMenu, type DropdownMenuProps } from '@hanzo/ui'
 import { PreviewFrame, type PreviewHandle } from '@hanzo/ui/agents'
@@ -92,46 +96,47 @@ export function Desk({
   sheet: boolean
   onHide: () => void
 }) {
+  const { t: say } = useI18n()
   const name = repo.split('/').filter(Boolean).pop() || repo
   const lines = shell(events)
-  const failed = failure(events)
+  const failed = failure(events, say)
   const box = useBox(sandbox)
   // Nothing is said of the sandbox until it has been read.
   const held = box.value?.state ?? ''
-  const environ = () => side.open({ kind: 'environment', title: 'Environment' })
+  const environ = () => side.open({ kind: 'environment', title: say('Environment') })
 
   const kinds: Kind[] = [
-    { id: 'preview', label: 'Preview', bleed: true, render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} /> },
+    { id: 'preview', label: say('Preview'), bleed: true, render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} /> },
     {
       id: 'artifacts',
-      label: 'Artifacts',
+      label: say('Artifacts'),
       render: () => <Artifacts session={id} sandbox={sandbox} repo={repo} branch={branch} mode={mode} project={project} site={site} pr={pr} onEnvironment={environ} />,
     },
-    { id: 'files', label: 'Files', render: () => <Files session={id} repo={repo} branch={branch} sandbox={sandbox} live={held === 'running'} /> },
-    { id: 'diff', label: 'Diff', render: () => <Git session={id} title={title} live={live} /> },
+    { id: 'files', label: say('Files'), render: () => <Files session={id} repo={repo} branch={branch} sandbox={sandbox} live={held === 'running'} /> },
+    { id: 'diff', label: say('Diff'), render: () => <Git session={id} title={title} live={live} /> },
     {
       id: 'terminal',
-      label: 'Terminal',
+      label: say('Terminal'),
       bleed: true,
       render: () => <Terminal id={id} sandbox={sandbox} held={held} lines={lines} live={live} failed={failed} refused={refused} retry={retry} onRetry={onRetry} />,
     },
-    { id: 'desktop', label: 'Desktop', bleed: true, render: () => <Door which="screen" sandbox={sandbox} held={held} session={id} /> },
+    { id: 'desktop', label: say('Desktop'), bleed: true, render: () => <Door which="screen" sandbox={sandbox} held={held} session={id} /> },
     {
       id: 'environment',
-      label: 'Environment',
+      label: say('Environment'),
       render: () => (
         <YStack gap="$2">
           <Environment repo={name} busy={live && mode === 'setup'} />
           <SizableText size="$2" color="$ink" pt="$4">
-            This run
+            {say('This run')}
           </SizableText>
-          <Fact label="Run" value={id} />
-          <Fact label="Repository" value={name || '—'} />
-          <Fact label="Branch" value={branch || '—'} />
-          <Fact label="Base" value={base || '—'} />
-          <Fact label="Runs on" value={environment || 'sandbox'} />
-          <Fact label="Sandbox" value={sandbox || '—'} />
-          <Fact label="Mode" value={mode || 'build'} />
+          <Fact label={say('Run')} value={id} />
+          <Fact label={say('Repository')} value={name || '—'} />
+          <Fact label={say('Branch')} value={branch || '—'} />
+          <Fact label={say('Base')} value={base || '—'} />
+          <Fact label={say('Runs on')} value={environment || 'sandbox'} />
+          <Fact label={say('Sandbox')} value={sandbox || '—'} />
+          <Fact label={say('Mode')} value={mode || 'build'} />
         </YStack>
       ),
     },
@@ -143,18 +148,18 @@ export function Desk({
       kinds={kinds}
       sheet={sheet}
       onHide={onHide}
-      label="Run details"
+      label={say('Run details')}
       // An empty tab offers what this run made: its site and its pull request.
-      suggested={[...(site ? [{ title: name || site, url: site }] : []), ...(pr.href ? [{ title: `Pull request ${pr.label}`, url: pr.href }] : [])]}
+      suggested={[...(site ? [{ title: name || site, url: site }] : []), ...(pr.href ? [{ title: say('Pull request {pr}', { pr: pr.label }), url: pr.href }] : [])]}
       bar={sandbox ? <Held box={box} live={live} /> : null}
       menu={
         <DropdownMenu
           trigger={
-            <XStack render="button" aria-label="Run actions" p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+            <XStack render="button" aria-label={say('Run actions')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
               <MoreHorizontal size={16} />
             </XStack>
           }
-          items={[...menu, { key: 'details', label: 'Details', icon: <Info size={16} />, onSelect: environ }]}
+          items={[...menu, { key: 'details', label: say('Details'), icon: <Info size={16} />, onSelect: environ }]}
         />
       }
     />
@@ -219,33 +224,36 @@ const until = (ms: number): string => new Date(ms).toLocaleString(undefined, { w
  * A sandbox a run is working in is not suspended from here.
  */
 function Held({ box, live }: { box: Watch; live: boolean }) {
+  const { t } = useI18n()
   const b = box.value
   const state = b?.state ?? 'pending'
   const says =
     state === 'running'
-      ? 'Sandbox running'
+      ? t('Sandbox running')
       : state === 'parked'
         ? b?.ends
-          ? `Sandbox suspended · its files are kept until ${until(b.ends)}`
-          : 'Sandbox suspended · its files are kept'
+          ? t('Sandbox suspended · its files are kept until {time}', { time: until(b.ends) })
+          : t('Sandbox suspended · its files are kept')
         : state === 'pending'
-          ? 'Sandbox starting…'
+          ? t('Sandbox starting…')
           : state === 'gone'
-            ? 'Sandbox ended'
-            : `Sandbox unavailable${b?.error ? ` · ${b.error}` : ''}`
+            ? t('Sandbox ended')
+            : b?.error
+              ? t('Sandbox unavailable · {error}', { error: b.error })
+              : t('Sandbox unavailable')
   return (
-    <XStack px="$3" py="$1.5" gap="$2" items="center" borderBottomWidth={1} borderColor="$borderColor" aria-label="Sandbox">
+    <XStack px="$3" py="$1.5" gap="$2" items="center" borderBottomWidth={1} borderColor="$borderColor" aria-label={t('Sandbox')}>
       <YStack width={7} height={7} rounded={99} bg={state === 'running' ? '$green10' : state === 'parked' ? '$soft' : '$borderColor'} />
       <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1}>
         {box.note || says}
       </SizableText>
       {state === 'running' && !live ? (
         <Button size="sm" variant="ghost" disabled={box.busy} onPress={() => box.act('park')}>
-          Suspend
+          {t('Suspend')}
         </Button>
       ) : state === 'parked' ? (
         <Button size="sm" variant="outline" disabled={box.busy} onPress={() => box.act('wake')}>
-          {box.busy ? 'Resuming…' : 'Resume'}
+          {box.busy ? t('Resuming…') : t('Resume')}
         </Button>
       ) : null}
     </XStack>
@@ -259,10 +267,10 @@ const PREVIEW = 'hanzo-preview'
 const REMINTS = 2
 const REMINT = 30_000
 
-/** What a preview page's status means to the person looking at it, when it is not reopened. */
-const SAYS: Record<number, (port: number) => string> = {
-  401: () => 'This browser keeps the preview’s cookie out of a frame. Open it in a new tab.',
-  502: (port) => `Nothing answered on port ${port}. Start the server, then Retry.`,
+/** What a preview page's status means to the person looking at it, when it is not reopened, in the language of `say`. */
+const SAYS: Record<number, (port: number, say: Say) => string> = {
+  401: (_, say) => `${say('This browser keeps the preview’s cookie out of a frame.')} ${say('Open it in a new tab.')}`,
+  502: (port, say) => `${say('Nothing answered on port {port}.', { port })} ${say('Start the server, then Retry.')}`,
 }
 
 /**
@@ -273,6 +281,7 @@ const SAYS: Record<number, (port: number) => string> = {
  * in a while; any other status is said, and Retry is the person's.
  */
 function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['state'] | ''; site: string; live: boolean }) {
+  const { t: say } = useI18n()
   const t = useTarget()
   const [open, setOpen] = useState<Port[]>([])
   const [port, setPort] = useState(0)
@@ -338,12 +347,12 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
         setAttempt((a) => a + 1)
         return
       }
-      const say = SAYS[m.status]
-      if (say || m.status === 409) setWhy(say ? say(port) : 'The sandbox stopped serving. Retry to open it again.')
+      const words = SAYS[m.status]
+      if (words || m.status === 409) setWhy(words ? words(port, say) : `${say('The sandbox stopped serving.')} ${say('Retry to open it again.')}`)
     }
     window.addEventListener('message', hear)
     return () => window.removeEventListener('message', hear)
-  }, [src, port])
+  }, [src, port, say])
 
   const tab = () => away(preview(t, sandbox, port)).catch((e: Error) => setWhy(e.message))
 
@@ -353,13 +362,13 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
   return (
     <YStack flex={1} minH={0}>
       <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
-        <XStack render="button" aria-label="Reload the page" onPress={() => setAttempt((a) => a + 1)} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+        <XStack render="button" aria-label={say('Reload the page')} onPress={() => setAttempt((a) => a + 1)} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
           <RefreshCcw size={14} />
         </XStack>
         {open.length > 1 ? (
           <XStack gap="$1">
             {open.map((p) => (
-              <XStack key={p.port} render="button" aria-label={`Port ${p.port}`} onPress={() => setPort(p.port)} px="$2" py="$1" rounded="$2" bg={p.port === port ? '$hover' : 'transparent'}>
+              <XStack key={p.port} render="button" aria-label={say('Port {port}', { port: p.port })} onPress={() => setPort(p.port)} px="$2" py="$1" rounded="$2" bg={p.port === port ? '$hover' : 'transparent'}>
                 <SizableText size="$1" color={p.port === port ? '$ink' : '$soft'}>
                   {String(p.port)}
                 </SizableText>
@@ -368,9 +377,9 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
           </XStack>
         ) : null}
         <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
-          {host || `port ${port}`}
+          {host || say('port {port}', { port })}
         </SizableText>
-        <XStack render="button" aria-label="Open in a new tab" onPress={() => void tab()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+        <XStack render="button" aria-label={say('Open in a new tab')} onPress={() => void tab()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
           <ExternalLink size={14} />
         </XStack>
       </XStack>
@@ -381,10 +390,10 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
           </SizableText>
           <XStack gap="$2">
             <Button size="sm" variant="outline" onPress={() => setAttempt((a) => a + 1)}>
-              Retry
+              {say('Retry')}
             </Button>
             <Button size="sm" variant="outline" onPress={() => void tab()}>
-              Open in a new tab
+              {say('Open in a new tab')}
             </Button>
           </XStack>
         </YStack>
@@ -392,14 +401,14 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
         <iframe
           ref={frame}
           src={src}
-          title={`What the run serves on port ${port}`}
+          title={say('What the run serves on port {port}', { port })}
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           style={{ border: 0, width: '100%', height: '100%', display: 'block', background: '#fff' }}
         />
       ) : (
         <YStack flex={1} items="center" justify="center">
           <SizableText size="$2" color="$soft">
-            {`Opening port ${port}…`}
+            {say('Opening port {port}…', { port })}
           </SizableText>
         </YStack>
       )}
@@ -412,18 +421,19 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
  * page in a tab of its own; or what keeps its sandbox from serving.
  */
 function Site({ site, live, held }: { site: string; live: boolean; held: Box['state'] | '' }) {
+  const { t } = useI18n()
   const frame = useRef<PreviewHandle | null>(null)
   return (
     <YStack flex={1} minH={0}>
       <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
-        <XStack render="button" aria-label="Reload the page" onPress={() => frame.current?.reload()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+        <XStack render="button" aria-label={t('Reload the page')} onPress={() => frame.current?.reload()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
           <RefreshCcw size={14} />
         </XStack>
         <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
-          {site || 'Nothing is serving yet'}
+          {site || t('Nothing is serving yet')}
         </SizableText>
         {site ? (
-          <Out href={site} label="Open in a new tab">
+          <Out href={site} label={t('Open in a new tab')}>
             <XStack p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
               <ExternalLink size={14} />
             </XStack>
@@ -433,19 +443,19 @@ function Site({ site, live, held }: { site: string; live: boolean; held: Box['st
       <PreviewFrame
         ref={frame}
         src={site}
-        title="Where this run is published"
+        title={t('Where this run is published')}
         device="desktop"
         empty={
           <YStack items="center" gap="$2" p="$6">
             <SizableText size="$3" color="$ink">
-              Nothing is serving yet
+              {t('Nothing is serving yet')}
             </SizableText>
             <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
               {held === 'parked'
-                ? 'The run’s sandbox is suspended. Resume it to see what it serves.'
+                ? `${t('The run’s sandbox is suspended.')} ${t('Resume it to see what it serves.')}`
                 : live
-                  ? 'When the run starts a server in its sandbox, the page opens here.'
-                  : 'Nothing listens in this run’s sandbox, and it published no site. Its work is on its branch.'}
+                  ? t('When the run starts a server in its sandbox, the page opens here.')
+                  : `${t('Nothing listens in this run’s sandbox, and it published no site.')} ${t('Its work is on its branch.')}`}
             </SizableText>
           </YStack>
         }
@@ -497,6 +507,7 @@ function Terminal({
   retry: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
   const reachable = Boolean(sandbox) && held === 'running'
   // The shell while there is one, unless the log was asked for.
   const [log, setLog] = useState(false)
@@ -505,15 +516,15 @@ function Terminal({
     <YStack flex={1} minH={0} bg="$background">
       <XStack px="$2" py="$1.5" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
         {reachable ? (
-          <XStack render="button" aria-label="Shell" onPress={() => setLog(false)} px="$2" py="$1" rounded="$2" bg={showShell ? '$hover' : 'transparent'}>
+          <XStack render="button" aria-label={t('Shell')} onPress={() => setLog(false)} px="$2" py="$1" rounded="$2" bg={showShell ? '$hover' : 'transparent'}>
             <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
-              Shell
+              {t('Shell')}
             </SizableText>
           </XStack>
         ) : null}
-        <XStack render="button" aria-label="Agent log" onPress={() => setLog(true)} px="$2" py="$1" rounded="$2" bg={showShell ? 'transparent' : '$hover'}>
+        <XStack render="button" aria-label={t('Agent log')} onPress={() => setLog(true)} px="$2" py="$1" rounded="$2" bg={showShell ? 'transparent' : '$hover'}>
           <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
-            Agent log
+            {t('Agent log')}
           </SizableText>
         </XStack>
       </XStack>
@@ -537,6 +548,7 @@ function Log({
   retry: string
   onRetry: () => void
 }) {
+  const { t } = useI18n()
   const prompt = 'workspace'
   const idle = lines.length === 0 && !live
   return (
@@ -545,7 +557,7 @@ function Log({
         {idle ? (
           <YStack flex={1} items="center" justify="center" gap="$3" py="$8">
             <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
-              {refused || (failed ? `This run stopped before its first command: ${failed}` : 'This run finished without writing a command.')}
+              {refused || (failed ? t('This run stopped before its first command: {reason}', { reason: failed }) : t('This run finished without writing a command.'))}
             </SizableText>
             {refused ? (
               <Button size="sm" variant="outline" onPress={onRetry}>
@@ -582,7 +594,7 @@ function Log({
       </YStack>
       <XStack px="$3" py="$2" borderTopWidth={1} borderColor="$borderColor">
         <SizableText size="$1" color="$soft">
-          Commands appear here as the run writes them.
+          {t('Commands appear here as the run writes them.')}
         </SizableText>
       </XStack>
     </YStack>

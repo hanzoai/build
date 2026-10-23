@@ -7,11 +7,15 @@
  * Each read stands alone: one that fails leaves its part empty and the rest
  * drawn. Only when none answers is the whole read an error.
  */
+import { phrase } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
+
 import { allowance, balance, tier, type Allowance } from './api/billing.ts'
 import type { Target } from './api/call.ts'
 import { limits, type Limits } from './api/limits.ts'
 import { useRead, type Read } from './data.ts'
 import { kind, label, when, type Kind, type Label, type Share, type State } from './plan.ts'
+import { english } from './say.ts'
 
 export interface Standing {
   kind: Kind
@@ -37,7 +41,7 @@ export async function stand(t: Target): Promise<Standing> {
   const k = kind(slug, money, billed?.tier)
   return {
     kind: k,
-    label: k === 'plan' ? label(slug, billed?.tier) : k === 'free' ? { name: 'Free', tag: '' } : { name: 'Pay as you go', tag: '' },
+    label: k === 'plan' ? label(slug, billed?.tier) : k === 'free' ? { name: phrase('Free'), tag: '' } : { name: phrase('Pay as you go'), tag: '' },
     limits: used,
     allowance: free,
     balance: money,
@@ -65,7 +69,7 @@ const RANK: Record<State, number> = { ok: 0, near: 1, limited: 2 }
  * the billing period of whichever class of model has used the most of it,
  * because that is the one that stops a request first.
  */
-export function rows(l: Limits | null, now: number = Date.now()): Row[] {
+export function rows(l: Limits | null, now: number = Date.now(), t: Say = english): Row[] {
   if (!l) return []
   const month = Object.values(l.classes).reduce<Share | null>(
     (a, c) => (!c ? a : !a || c.percent > a.percent || (c.percent === a.percent && RANK[c.state] > RANK[a.state]) ? c : a),
@@ -75,7 +79,7 @@ export function rows(l: Limits | null, now: number = Date.now()): Row[] {
   const add = (name: Row['name'], w: Share | null) => {
     if (!w) return
     const at = when(w.resets, now)
-    out.push({ name, percent: w.percent, state: w.state, resets: at ? `Resets ${at}` : '' })
+    out.push({ name, percent: w.percent, state: w.state, resets: at ? t('Resets {time}', { time: at }) : '' })
   }
   add('Session', l.session)
   add('Today', l.day)

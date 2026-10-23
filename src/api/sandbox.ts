@@ -15,6 +15,8 @@
  * A door or a preview asked of a sandbox that stopped as it was asked is 409: it
  * is resumed, and asked again once.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, Refusal, seg, type Target } from './call.ts'
 
 export type Door = 'screen' | 'terminal'
@@ -72,7 +74,7 @@ async function up(t: Target, id: string): Promise<void> {
     await new Promise((r) => setTimeout(r, 1500))
     b = await sandbox(t, id)
   }
-  if (b.state !== 'running') throw new Refusal(503, b.error || 'The sandbox did not start again. Try again.')
+  if (b.state !== 'running') throw new Refusal(503, b.error || phrase('The sandbox did not start again. Try again.'))
 }
 
 /** Asks what needs a running sandbox; a parked one is resumed first. */
@@ -93,7 +95,7 @@ export const NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 export async function door(t: Target, id: string, which: Door, session = ''): Promise<string> {
   const r = await running(t, id, () => call<{ url?: unknown }>(t, 'POST', `/v1/sandbox/${seg(id)}/${which}/ticket`))
   const path = typeof r?.url === 'string' ? r.url : ''
-  if (!path.startsWith('/v1/')) throw new Refusal(502, 'The sandbox answered with no address to open')
+  if (!path.startsWith('/v1/')) throw new Refusal(502, phrase('The sandbox answered with no address to open'))
   const arg = which === 'terminal' && NAME.test(session) ? `&arg=${session}` : ''
   return `${t.api}${path}${arg}`
 }
@@ -130,9 +132,9 @@ export async function preview(t: Target, id: string, port: number): Promise<stri
   try {
     url = new URL(typeof r?.url === 'string' ? r.url : '')
   } catch {
-    throw new Refusal(502, 'The sandbox answered with no address to open')
+    throw new Refusal(502, phrase('The sandbox answered with no address to open'))
   }
-  if (url.protocol !== 'https:') throw new Refusal(502, 'The sandbox answered with no address to open')
+  if (url.protocol !== 'https:') throw new Refusal(502, phrase('The sandbox answered with no address to open'))
   return url.href
 }
 

@@ -11,9 +11,14 @@
  * a read every half minute keeps them right when the stream is down. A new task
  * is said in plain words — "every Monday at 9am" — and the platform says back
  * what it understood before anything is created.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a task's name and
+ * prompt, a run's title, summary and error, and what the platform says back
+ * are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Clock, ExternalLink, MoreHorizontal, Pencil, Play, Plus, ScrollText, Trash2 } from '@hanzogui/lucide-icons-2'
+import { useI18n } from '@hanzo/i18n/react'
 import { Button, DropdownMenu, Input, Switch, Textarea } from '@hanzo/ui'
 import { StatusDot } from '@hanzo/ui/chat'
 import { ModelPicker } from '@hanzo/ui/models'
@@ -21,7 +26,7 @@ import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { automations, create, cron, events, jobs, remove, save, start, words, type Automation, type Draft, type Job, type Parsed, type Schedule } from './api/auto.ts'
-import { Refusal } from './api/call.ts'
+import { Refusal, told } from './api/call.ts'
 import { ENSO, limits as readLimits, models } from './api/models.ts'
 import { Confirm, Field, Line, Sheet } from './customize/ui.tsx'
 import { local, PLAN, shaped, tidy, unplanned, unready, When, zone } from './automations.tsx'
@@ -95,12 +100,13 @@ function useLive(on: (h: { job?: Job; automation?: Automation }) => void) {
 }
 
 export function Scheduled() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
   const [tick, setTick] = useState(0)
-  const tasks = useRead(signed ? () => automations(t) : null, [] as Automation[], [t, signed, tick])
-  const runs = useRead(signed ? () => jobs(t, { limit: 50 }) : null, [] as Job[], [t, signed, tick])
+  const tasks = useRead(signed ? () => automations(target) : null, [] as Automation[], [target, signed, tick])
+  const runs = useRead(signed ? () => jobs(target, { limit: 50 }) : null, [] as Job[], [target, signed, tick])
   const [shownTasks, setTasks] = useState<Automation[]>([])
   const [shownRuns, setRuns] = useState<Job[]>([])
   useEffect(() => setTasks(tasks.value), [tasks.value])
@@ -136,18 +142,18 @@ export function Scheduled() {
     try {
       await work()
     } catch (e) {
-      setProblem(unplanned(e) ? PLAN : `${what}: ${(e as Error).message}`)
+      setProblem(unplanned(e) ? t(PLAN) : t('{name}: {error}', { name: what, error: told(e, t) }))
     }
   }
   const flip = (a: Automation, on: boolean) =>
     act(a.name, async () => {
-      const next = await save(t, a.id, { enabled: on })
+      const next = await save(target, a.id, { enabled: on })
       setTasks((was) => was.map((x) => (x.id === next.id ? next : x)))
     })
   const run = (a: Automation) =>
     act(a.name, async () => {
-      const r = await start(t, a.id)
-      if (r.status === 'skipped') setProblem(`${a.name}: not started, the previous run is still going.`)
+      const r = await start(target, a.id)
+      if (r.status === 'skipped') setProblem(t('{name}: not started, the previous run is still going.', { name: a.name }))
       setTick((n) => n + 1)
     })
   const edit = (id: string) => host.go(path({ kind: 'automation', id }))
@@ -158,41 +164,41 @@ export function Scheduled() {
         <XStack justify="space-between" items="flex-start" gap="$4">
           <YStack gap="$1" flex={1} minW={0}>
             <SizableText render="h1" size="$7" fontWeight="600" color="$ink">
-              Scheduled tasks
+              {t('Scheduled tasks')}
             </SizableText>
             <SizableText size="$2" color="$soft">
-              What runs without you watching: prompts on a schedule, background runs, Studio renders and workflows.
+              {t('What runs without you watching: prompts on a schedule, background runs, Studio renders and workflows.')}
             </SizableText>
           </YStack>
           <Button size="sm" shrink={0} disabled={!signed} onPress={() => setMaking('')}>
             <Plus size={14} />
-            New task
+            {t('New task')}
           </Button>
         </XStack>
         <Line>{problem}</Line>
 
         <YStack gap="$2">
           <SizableText render="h2" size="$3" color="$ink" fontWeight="500">
-            Tasks
+            {t('Tasks')}
           </SizableText>
           {!signed ? (
-            <Said says="Sign in to see your scheduled tasks.">
+            <Said says={t('Sign in to see your scheduled tasks.')}>
               <Button size="sm" onPress={() => host.signIn?.()}>
-                Sign in
+                {t('Sign in')}
               </Button>
             </Said>
           ) : tasks.error && !shownTasks.length ? (
-            <Said says={tasks.error.message} />
+            <Said says={told(tasks.error, t)} />
           ) : tasks.loading && !shownTasks.length ? (
-            <Said says="Reading your tasks…" />
+            <Said says={t('Reading your tasks…')} />
           ) : !shownTasks.length ? (
-            <Said says="No scheduled tasks yet. Ask Chat or Dev to do something on a schedule, or start one here.">
+            <Said says={t('No scheduled tasks yet. Ask Chat or Dev to do something on a schedule, or start one here.')}>
               <Button size="sm" onPress={() => setMaking('')}>
-                New task
+                {t('New task')}
               </Button>
             </Said>
           ) : (
-            <YStack role="list" aria-label="Your tasks" borderWidth={1} borderColor="$borderColor" rounded="$4" overflow="hidden">
+            <YStack role="list" aria-label={t('Your tasks')} borderWidth={1} borderColor="$borderColor" rounded="$4" overflow="hidden">
               {shownTasks.map((a, i) => (
                 <Task key={a.id} a={a} first={i === 0} onOpen={() => edit(a.id)} onSwitch={(on) => void flip(a, on)} onRun={() => void run(a)} onDelete={() => setDeleting(a)} />
               ))}
@@ -204,20 +210,20 @@ export function Scheduled() {
           <YStack gap="$2">
             <XStack items="center" gap="$2">
               <SizableText render="h2" size="$3" color="$ink" fontWeight="500" flex={1}>
-                Activity
+                {t('Activity')}
               </SizableText>
               <SizableText size="$1" color="$soft">
-                {live ? 'Live' : ''}
+                {live ? t('Live') : ''}
               </SizableText>
             </XStack>
             {runs.error && !shownRuns.length ? (
-              <Said says={runs.error.message} />
+              <Said says={told(runs.error, t)} />
             ) : runs.loading && !shownRuns.length ? (
-              <Said says="Reading what ran…" />
+              <Said says={t('Reading what ran…')} />
             ) : !shownRuns.length ? (
-              <Said says="Nothing has run yet. A task's runs, Dev's background runs and Studio's renders show here as they go." />
+              <Said says={t("Nothing has run yet. A task's runs, Dev's background runs and Studio's renders show here as they go.")} />
             ) : (
-              <YStack role="list" aria-label="Activity" borderWidth={1} borderColor="$borderColor" rounded="$4" overflow="hidden">
+              <YStack role="list" aria-label={t('Activity')} borderWidth={1} borderColor="$borderColor" rounded="$4" overflow="hidden">
                 {shownRuns.map((j, i) => (
                   <Ran key={j.id} j={j} first={i === 0} now={now} onOpen={() => setLooking(j)} />
                 ))}
@@ -232,18 +238,18 @@ export function Scheduled() {
         onClose={() => setMaking(null)}
         onMade={(a) => {
           setTasks((was) => [a, ...was.filter((x) => x.id !== a.id)])
-          setProblem(`Scheduled: ${a.name}.`)
+          setProblem(t('Scheduled: {name}.', { name: a.name }))
         }}
       />
       <Detail j={looking} onClose={() => setLooking(null)} now={now} />
       {deleting ? (
         <Confirm
           what={deleting.name}
-          says="It stops running, and its schedule and its runs go with it. A run going now is stopped."
+          says={t('It stops running, and its schedule and its runs go with it. A run going now is stopped.')}
           open
           onOpenChange={(o) => !o && setDeleting(null)}
           onYes={async () => {
-            await remove(t, deleting.id)
+            await remove(target, deleting.id)
             setTasks((was) => was.filter((x) => x.id !== deleting.id))
             setDeleting(null)
           }}
@@ -255,12 +261,13 @@ export function Scheduled() {
 
 /** One task: what it is and when it runs next, its switch, and its menu. */
 function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; first: boolean; onOpen: () => void; onSwitch: (on: boolean) => void; onRun: () => void; onDelete: () => void }) {
+  const { t } = useI18n()
   const when = a.draft
-    ? 'Needs instructions'
-    : [words(a.schedule), a.enabled && a.next ? `next ${local(a.next)}` : a.schedule.kind !== 'manual' && !a.enabled ? 'paused' : ''].filter(Boolean).join(' · ')
+    ? t('Needs instructions')
+    : [words(a.schedule, t), a.enabled && a.next ? t('next {when}', { when: local(a.next) }) : a.schedule.kind !== 'manual' && !a.enabled ? t('paused') : ''].filter(Boolean).join(' · ')
   return (
     <XStack role="listitem" items="center" gap="$3" px="$3" py="$3" borderTopWidth={first ? 0 : 1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
-      <XStack render="button" aria-label={`Open ${a.name}`} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" cursor="pointer" style={{ textAlign: 'left' }}>
+      <XStack render="button" aria-label={t('Open {name}', { name: a.name })} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" cursor="pointer" $platform-web={{ textAlign: 'start' }}>
         <YStack width={32} height={32} rounded="$3" bg="$raised" items="center" justify="center" shrink={0} aria-hidden>
           <Clock size={16} />
         </YStack>
@@ -269,25 +276,25 @@ function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; 
             <SizableText size="$2" color="$ink" numberOfLines={1} shrink={1}>
               {a.name}
             </SizableText>
-            <Badge>{SOURCE[a.source]}</Badge>
-            {a.draft ? <Badge>Draft</Badge> : null}
+            <Badge>{t(SOURCE[a.source])}</Badge>
+            {a.draft ? <Badge>{t('Draft')}</Badge> : null}
           </XStack>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
             {when}
           </SizableText>
         </YStack>
       </XStack>
-      <Switch checked={a.enabled} disabled={a.draft} onCheckedChange={onSwitch} aria-label={`${a.name} on`} />
+      <Switch checked={a.enabled} disabled={a.draft} onCheckedChange={onSwitch} aria-label={t('{name} on', { name: a.name })} />
       <DropdownMenu
         trigger={
-          <XStack render="button" aria-label={`Actions for ${a.name}`} width={30} height={30} items="center" justify="center" rounded="$2" hoverStyle={{ bg: '$hover' }} cursor="pointer">
+          <XStack render="button" aria-label={t('Actions for {name}', { name: a.name })} width={30} height={30} items="center" justify="center" rounded="$2" hoverStyle={{ bg: '$hover' }} cursor="pointer">
             <MoreHorizontal size={16} />
           </XStack>
         }
         items={[
-          ...(a.draft ? [] : [{ key: 'run', label: 'Run now', icon: <Play size={16} />, onSelect: onRun }]),
-          { key: 'edit', label: 'Edit', icon: <Pencil size={16} />, onSelect: onOpen },
-          { key: 'delete', label: 'Delete', icon: <Trash2 size={16} />, onSelect: onDelete },
+          ...(a.draft ? [] : [{ key: 'run', label: t('Run now'), icon: <Play size={16} />, onSelect: onRun }]),
+          { key: 'edit', label: t('Edit'), icon: <Pencil size={16} />, onSelect: onOpen },
+          { key: 'delete', label: t('Delete'), icon: <Trash2 size={16} />, onSelect: onDelete },
         ]}
       />
     </XStack>
@@ -296,20 +303,21 @@ function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; 
 
 /** One run in Activity. */
 function Ran({ j, first, now, onOpen }: { j: Job; first: boolean; now: number; onOpen: () => void }) {
+  const { t } = useI18n()
   return (
     <XStack role="listitem" borderTopWidth={first ? 0 : 1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
-      <XStack render="button" aria-label={`${j.title}: ${SAID[j.state]}`} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" px="$3" py="$2.5" cursor="pointer" style={{ textAlign: 'left' }}>
+      <XStack render="button" aria-label={t('{title}: {state}', { title: j.title, state: t(SAID[j.state]) })} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" px="$3" py="$2.5" cursor="pointer" $platform-web={{ textAlign: 'start' }}>
         <StatusDot status={DOTS[j.state]} />
         <YStack flex={1} minW={0} gap="$0.5">
           <SizableText size="$2" color="$ink" numberOfLines={1}>
             {j.title}
           </SizableText>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
-            {about(j, now)}
+            {about(j, now, t)}
           </SizableText>
         </YStack>
         <SizableText size="$1" color="$soft" shrink={0}>
-          {j.state === 'running' && j.progress !== null ? `${Math.round(j.progress * 100)}%` : SAID[j.state]}
+          {j.state === 'running' && j.progress !== null ? `${Math.round(j.progress * 100)}%` : t(SAID[j.state])}
         </SizableText>
       </XStack>
     </XStack>
@@ -318,24 +326,24 @@ function Ran({ j, first, now, onOpen }: { j: Job; first: boolean; now: number; o
 
 /** One run, opened: how it went, its log, what it made and what it cost. */
 function Detail({ j, onClose, now }: { j: Job | null; onClose: () => void; now: number }) {
+  const { t } = useI18n()
   const host = useHost()
   return (
-    <Sheet title={j?.title ?? 'Run'} open={Boolean(j)} onOpenChange={(o) => !o && onClose()} width={520}>
+    <Sheet title={j?.title ?? t('Run')} open={Boolean(j)} onOpenChange={(o) => !o && onClose()} width={520}>
       {j ? (
         <YStack gap="$3">
           <XStack items="center" gap="$2">
             <StatusDot status={DOTS[j.state]} />
             <SizableText size="$2" color="$ink">
-              {SAID[j.state]}
-              {j.status && j.status !== j.state ? ` (${j.status})` : ''}
+              {j.status && j.status !== j.state ? t('{state} ({status})', { state: t(SAID[j.state]), status: j.status }) : t(SAID[j.state])}
             </SizableText>
           </XStack>
           <Facts
             rows={[
-              ['From', SOURCE[j.product]],
-              ['Started', j.started ? local(j.started) : '—'],
-              ['Took', lasted(j.started, j.finished, now) || '—'],
-              ['Cost', j.cost !== null ? dollars(j.cost) : 'Not known yet'],
+              [t('From'), t(SOURCE[j.product])],
+              [t('Started'), j.started ? local(j.started) : '—'],
+              [t('Took'), lasted(j.started, j.finished, now) || '—'],
+              [t('Cost'), j.cost !== null ? dollars(j.cost) : t('Not known yet')],
             ]}
           />
           {j.error ? (
@@ -351,7 +359,7 @@ function Detail({ j, onClose, now }: { j: Job | null; onClose: () => void; now: 
           {j.outputs.length ? (
             <YStack gap="$1">
               <SizableText size="$2" color="$soft">
-                What it made
+                {t('What it made')}
               </SizableText>
               <Outputs ids={j.outputs} />
             </YStack>
@@ -360,19 +368,19 @@ function Detail({ j, onClose, now }: { j: Job | null; onClose: () => void; now: 
             {j.session ? (
               <Button size="sm" variant="outline" onPress={() => host.go(j.session!)}>
                 <ScrollText size={14} />
-                Open its log
+                {t('Open its log')}
               </Button>
             ) : null}
             {j.origin ? (
               <Button size="sm" variant="outline" onPress={() => host.open(j.origin)}>
                 <ExternalLink size={14} />
-                Open where it runs
+                {t('Open where it runs')}
               </Button>
             ) : null}
             {j.automation ? (
               <Button size="sm" variant="ghost" onPress={() => host.go(path({ kind: 'automation', id: j.automation! }))}>
                 <Pencil size={14} />
-                Edit the task
+                {t('Edit the task')}
               </Button>
             ) : null}
           </XStack>
@@ -384,8 +392,9 @@ function Detail({ j, onClose, now }: { j: Job | null; onClose: () => void; now: 
 
 /** A new task: what it does, when in plain words, and the model it thinks with. */
 function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () => void; onMade: (a: Automation) => void }) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
   const open = prompt !== null
   const [name, setName] = useState('')
@@ -393,14 +402,15 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
   const [said, setSaid] = useState('')
   const [read, setRead] = useState<Parsed | null>(null)
   const [reading, setReading] = useState(false)
-  const [unread, setUnread] = useState('')
+  // Why the platform could not read the words: its refusal, said when drawn.
+  const [unread, setUnread] = useState<unknown>(null)
   const [picking, setPicking] = useState(false)
   const [picked, setPicked] = useState<Schedule>(() => shaped('daily', { kind: 'manual' }))
   const [model, setModel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
-  const catalog = useRead(signed && open ? () => models(t) : null, [], [t, signed, open])
-  const { limits } = useLimits(signed && open ? (signal) => readLimits(t, signal) : null, t)
+  const catalog = useRead(signed && open ? () => models(target) : null, [], [target, signed, open])
+  const { limits } = useLimits(signed && open ? (signal) => readLimits(target, signal) : null, target)
 
   // Each opening starts from what it was handed.
   useEffect(() => {
@@ -409,7 +419,7 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
     setName(titled(prompt))
     setSaid('')
     setRead(null)
-    setUnread('')
+    setUnread(null)
     setPicking(false)
     setNote('')
   }, [prompt])
@@ -419,21 +429,21 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
     const text = said.trim()
     if (!open || !text || picking) {
       setRead(null)
-      setUnread('')
+      setUnread(null)
       return
     }
     const ctl = new AbortController()
     const id = setTimeout(() => {
       setReading(true)
-      cron(t, text, zone(), { signal: ctl.signal })
+      cron(target, text, zone(), { signal: ctl.signal })
         .then((p) => {
           setRead(p)
-          setUnread('')
+          setUnread(null)
         })
         .catch((e: unknown) => {
           if (ctl.signal.aborted) return
           setRead(null)
-          setUnread((e as Error).message)
+          setUnread(e)
         })
         .finally(() => !ctl.signal.aborted && setReading(false))
     }, 450)
@@ -441,86 +451,86 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
       clearTimeout(id)
       ctl.abort()
     }
-  }, [said, open, picking, t])
+  }, [said, open, picking, target])
 
   const when: Schedule | null = picking ? picked : (read?.schedule ?? null)
-  const wrong = when ? unready(when) : ''
+  const wrong = when ? t(unready(when)) : ''
 
   const make = async () => {
-    if (!name.trim()) return setNote('Name it first.')
-    if (!asks.trim()) return setNote('Say what it should do.')
-    if (!when) return setNote(said.trim() ? 'Say when in other words, or choose instead.' : 'Say when it runs.')
+    if (!name.trim()) return setNote(t('Name it first.'))
+    if (!asks.trim()) return setNote(t('Say what it should do.'))
+    if (!when) return setNote(said.trim() ? t('Say when in other words, or choose instead.') : t('Say when it runs.'))
     if (wrong) return setNote(wrong)
     setBusy(true)
     setNote('')
     try {
       const d: Draft = { name: name.trim(), instructions: asks.trim(), model, schedule: when, permissions: 'ask', notify: true, postTo: [], enabled: true, source: 'dev' }
-      onMade(await create(t, tidy(d)))
+      onMade(await create(target, tidy(d)))
       onClose()
     } catch (e) {
-      setNote(unplanned(e) ? PLAN : (e as Error).message)
+      setNote(unplanned(e) ? t(PLAN) : told(e, t))
     } finally {
       setBusy(false)
     }
   }
 
-  const heard = useMemo(() => (read ? [read.says || words(read.schedule), read.next ? `next ${local(read.next)}` : ''].filter(Boolean).join(' · ') : ''), [read])
+  const heard = useMemo(() => (read ? [read.says || words(read.schedule, t), read.next ? t('next {when}', { when: local(read.next) }) : ''].filter(Boolean).join(' · ') : ''), [read, t])
 
   return (
-    <Sheet title="New task" open={open} onOpenChange={(o) => !o && !busy && onClose()} width={560}>
+    <Sheet title={t('New task')} open={open} onOpenChange={(o) => !o && !busy && onClose()} width={560}>
       <YStack gap="$4">
-        <Field label="Name">
-          <Input value={name} onChangeText={setName} placeholder="Monday summary" aria-label="Task name" />
+        <Field label={t('Name')}>
+          <Input value={name} onChangeText={setName} placeholder={t('Monday summary')} aria-label={t('Task name')} />
         </Field>
-        <Field label="What it does" hint="Each run is one Dev run in this organization, as you. It reads and proposes; it changes nothing on its own.">
-          <Textarea value={asks} onChangeText={setAsks} placeholder="Summarize what changed in my repositories this week, and what needs me." aria-label="What it does" rows={5} />
+        <Field label={t('What it does')} hint={t('Each run is one Dev run in this organization, as you. It reads and proposes; it changes nothing on its own.')}>
+          <Textarea value={asks} onChangeText={setAsks} placeholder={t('Summarize what changed in my repositories this week, and what needs me.')} aria-label={t('What it does')} rows={5} />
         </Field>
-        <Field label="When" hint={picking ? undefined : 'In your own words: every weekday at 8am, every 5 minutes, first of the month.'}>
+        <Field label={t('When')} hint={picking ? undefined : t('In your own words: every weekday at 8am, every 5 minutes, first of the month.')}>
           {picking ? (
             <YStack gap="$2">
               <When s={picked} onChange={setPicked} />
               <XStack>
                 <Button size="sm" variant="ghost" onPress={() => setPicking(false)}>
-                  Say it instead
+                  {t('Say it instead')}
                 </Button>
               </XStack>
             </YStack>
           ) : (
             <YStack gap="$2">
-              <Input value={said} onChangeText={setSaid} placeholder="Every Monday at 9am" aria-label="When it runs" />
+              <Input value={said} onChangeText={setSaid} placeholder={t('Every Monday at 9am')} aria-label={t('When it runs')} />
               <SizableText size="$1" color={unread ? '$soft' : '$ink'} role="status" minH={18}>
-                {reading ? 'Reading…' : unread ? `${unread} Choose instead, or say it another way.` : heard}
+                {reading ? t('Reading…') : unread ? `${told(unread, t)} ${t('Choose instead, or say it another way.')}` : heard}
               </SizableText>
               <XStack>
                 <Button size="sm" variant="ghost" onPress={() => setPicking(true)}>
-                  Choose instead
+                  {t('Choose instead')}
                 </Button>
               </XStack>
             </YStack>
           )}
         </Field>
-        <Field label="Model">
+        <Field label={t('Model')}>
           <XStack>
             <ModelPicker
               size="sm"
-              name="Model"
+              name={t('Model')}
               models={catalog.value}
               scope="chat"
               limits={limits}
               value={model ?? ENSO}
               onChange={(id) => setModel(id === ENSO ? null : id)}
               loading={catalog.loading}
-              error={catalog.error?.message ?? null}
+              error={catalog.error ? told(catalog.error, t) : null}
             />
           </XStack>
         </Field>
         <Line>{note}</Line>
         <XStack gap="$2" justify="flex-end">
           <Button size="sm" variant="ghost" disabled={busy} onPress={onClose}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button size="sm" disabled={busy || !signed} onPress={() => void make()}>
-            {busy ? 'Creating…' : 'Create'}
+            {busy ? t('Creating…') : t('Create')}
           </Button>
         </XStack>
       </YStack>

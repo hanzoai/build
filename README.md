@@ -100,6 +100,19 @@ nothing behind a More; `useSessions(host)` is the runs — the org's coding runs
 kept live by the org's feed — for a host that draws the rows itself. `administers(token, org)` reads the org-admin bit off a
 hanzo.id token for `Host.admin`. One left column, never two.
 
+## Words
+
+Every word the builder authors is said through @hanzo/i18n, a required peer
+(`>=0.4.0`): the host's `I18nProvider` is the one asked, and without one the
+builder reads in English, unchanged. A component asks `useI18n()`; copy held as
+data is `phrase()` where it is written and drawn through `t`; a helper outside a
+render (`nav()`, `own()`, `tabs()`, `library()`, turn.ts, the plan sentences)
+takes the caller's `t` last and falls back to `say.ts`'s `english`. Names, model
+ids, what a person typed, what the platform said and figures are drawn as given;
+prompts sent to a model stay in English. `src/e2e/language*.spec.ts` and
+`translated.spec.ts` hold the composer, Projects, Skills and the Library in
+French and right to left in Arabic.
+
 ## The model, the composer, the panel
 
 One of each, shared with Chat (@hanzo/rooms imports them):

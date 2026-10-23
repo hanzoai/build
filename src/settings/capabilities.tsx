@@ -4,38 +4,45 @@
  * servers. A tool that is off is still listed to the agent's discovery but is
  * refused when called. Switching a kind on turns on every tool of that kind;
  * off turns them all off. It is the organization's setting, not only yours.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`).
  */
 import { SizableText, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { Switch } from '@hanzo/ui'
 import { useState } from 'react'
 
+import { told } from '../api/call.ts'
 import { activate, SOURCES, tools, type Source, type Tool } from '../api/capabilities.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Card, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
+/** Each kind's name and the sentence that says what it is, English and marked (`phrase`), drawn through `t`. */
 const KINDS: Record<Source, { label: string; about: string }> = {
-  connector: { label: 'Connector actions', about: 'Actions in the apps your organization connected' },
-  function: { label: 'Functions', about: 'Functions your organization wrote' },
-  'zap-service': { label: 'Services', about: 'Routes of the services your organization runs' },
-  agent: { label: 'Agents', about: 'Your organization’s agents, called as tools' },
-  skill: { label: 'Skills', about: 'Skills attached to agents' },
-  mcp: { label: 'MCP servers', about: 'Tools on the MCP servers your organization added' },
+  connector: { label: phrase('Connector actions'), about: phrase('Actions in the apps your organization connected.') },
+  function: { label: phrase('Functions'), about: phrase('Functions your organization wrote.') },
+  'zap-service': { label: phrase('Services'), about: phrase('Routes of the services your organization runs.') },
+  agent: { label: phrase('Agents'), about: phrase('Your organization’s agents, called as tools.') },
+  skill: { label: phrase('Skills'), about: phrase('Skills attached to agents.') },
+  mcp: { label: phrase('MCP servers'), about: phrase('Tools on the MCP servers your organization added.') },
 }
 
 export function Capabilities() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
-  const list = useRead(signed ? () => tools(t) : null, [] as Tool[], [t, signed])
+  const list = useRead(signed ? () => tools(target) : null, [] as Tool[], [target, signed])
   const [busy, setBusy] = useState<Source | ''>('')
   const [note, setNote] = useState('')
 
   if (!signed) {
     return (
       <YStack gap="$5">
-        <Heading title="Capabilities" />
-        <Soft>Sign in to see what the agent may use.</Soft>
+        <Heading title={t('Capabilities')} />
+        <Soft>{t('Sign in to see what the agent may use.')}</Soft>
       </YStack>
     )
   }
@@ -46,10 +53,10 @@ export function Capabilities() {
     setBusy(source)
     setNote('')
     try {
-      await activate(t, all.map((x) => x.name), on)
+      await activate(target, all.map((x) => x.name), on)
       list.reload()
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     } finally {
       setBusy('')
     }
@@ -58,44 +65,50 @@ export function Capabilities() {
   return (
     <YStack gap="$6">
       <Heading
-        title="Capabilities"
-        detail={`What the agent may use in ${host.org ?? 'this organization'}. A tool that is off is refused when the agent calls it.`}
+        title={t('Capabilities')}
+        detail={
+          host.org
+            ? t('What the agent may use in {org}. A tool that is off is refused when the agent calls it.', { org: host.org })
+            : t('What the agent may use in this organization. A tool that is off is refused when the agent calls it.')
+        }
       />
       <Group
-        title="Tools"
+        title={t('Tools')}
         detail={
           host.admin
-            ? 'Switching a kind on or off applies to every tool of that kind, for everyone in the organization.'
-            : 'An org admin switches these, for everyone in the organization.'
+            ? t('Switching a kind on or off applies to every tool of that kind, for everyone in the organization.')
+            : t('An org admin switches these, for everyone in the organization.')
         }
       >
         {list.error ? (
-          <Soft>{list.error.message}</Soft>
+          <Soft>{told(list.error, t)}</Soft>
         ) : list.loading && !list.value.length ? (
-          <Soft>Reading tools…</Soft>
+          <Soft>{t('Reading tools…')}</Soft>
         ) : !kinds.length ? (
-          <Soft>No tools are available to this organization yet.</Soft>
+          <Soft>{t('No tools are available to this organization yet.')}</Soft>
         ) : (
           <Card>
             {kinds.map(({ source, all }, i) => {
               const on = all.filter((x) => x.activated).length
+              // What the kind is, then how much of it is on: two sentences.
+              const count = on === all.length ? t('All {n} on.', { n: all.length }) : on ? t('{on} of {n} on.', { on, n: all.length }) : t('{n} available, all off.', { n: all.length })
               return (
                 <Row
                   key={source}
                   first={i === 0}
-                  title={KINDS[source].label}
-                  detail={`${KINDS[source].about}. ${on === all.length ? `All ${all.length} on` : on ? `${on} of ${all.length} on` : `${all.length} available, all off`}.`}
+                  title={t(KINDS[source].label)}
+                  detail={`${t(KINDS[source].about)} ${count}`}
                   trailing={
                     host.admin ? (
                       <Switch
-                        aria-label={KINDS[source].label}
+                        aria-label={t(KINDS[source].label)}
                         checked={on === all.length}
                         disabled={busy !== ''}
                         onCheckedChange={(v: boolean) => void flip(source, all, v)}
                       />
                     ) : (
                       <SizableText size="$1" color="$soft">
-                        {on === all.length ? 'On' : on ? 'Partly on' : 'Off'}
+                        {on === all.length ? t('On') : on ? t('Partly on') : t('Off')}
                       </SizableText>
                     )
                   }

@@ -13,6 +13,8 @@
  * said as that rule. `hanzo link`, run on the machine, registers it under its
  * hostname and keeps it online while it runs.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, Refusal, seg, type Target } from './call.ts'
 
 export const KINDS = ['laptop', 'gpu', 'cloud', 'cluster', 'machine'] as const
@@ -212,7 +214,7 @@ async function owned<T>(p: Promise<T>): Promise<T> {
   try {
     return await p
   } catch (e) {
-    if (e instanceof Refusal && e.status === 404) throw new Refusal(404, 'This machine is gone, or not yours to change: only the member who linked it, or an org admin, can.')
+    if (e instanceof Refusal && e.status === 404) throw new Refusal(404, phrase('This machine is gone, or not yours to change: only the member who linked it, or an org admin, can.'))
     throw e
   }
 }
@@ -224,7 +226,7 @@ async function owned<T>(p: Promise<T>): Promise<T> {
 export async function add(t: Target, what: { label: string; kind: Kind; host?: string; capacity?: string }): Promise<Machine> {
   const host = (what.host ?? '').trim()
   const label = what.label.trim() || host
-  if (!label) throw new Error('A machine needs a name or a hostname')
+  if (!label) throw new Error(phrase('A machine needs a name or a hostname'))
   const body: Record<string, unknown> = { label, kind: what.kind }
   if (host) body.host = host
   if (what.capacity?.trim()) body.capacity = what.capacity.trim()
@@ -237,7 +239,7 @@ export async function add(t: Target, what: { label: string; kind: Kind; host?: s
  * once one has; before that it is `not seen yet`, and nothing is there to take a run.
  */
 export function state(m: Machine): string {
-  return m.status === 'online' && !m.seen ? 'not seen yet' : m.status
+  return m.status === 'online' && !m.seen ? phrase('not seen yet') : m.status
 }
 
 /** Rename a machine, or drain it (`draining`) and bring it back (`online`). */
@@ -249,7 +251,7 @@ export async function change(
   const body: Record<string, unknown> = {}
   if (what.label !== undefined) {
     const label = what.label.trim()
-    if (!label) throw new Error('A machine needs a name')
+    if (!label) throw new Error(phrase('A machine needs a name'))
     body.label = label
   }
   if (what.status !== undefined) body.status = what.status
@@ -271,6 +273,6 @@ export async function remove(t: Target, id: string): Promise<void> {
 export async function key(t: Target, id: string): Promise<string> {
   const r = await owned(call<{ claimKey?: unknown }>(t, 'POST', `/v1/agent/targets/${seg(id)}/key`))
   const k = str(r?.claimKey)
-  if (!k) throw new Error('The platform answered no key')
+  if (!k) throw new Error(phrase('The platform answered no key'))
   return k
 }

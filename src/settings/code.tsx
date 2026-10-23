@@ -4,13 +4,18 @@
  * — and the model and effort, which are the one choice Chat and Dev share
  * (mind.tsx): changed here, changed in both composers. Beside them, the
  * codebases' environments and the organization's machines, each on its own page.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a model's and a
+ * machine's names are drawn as given.
  */
 import { YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { ChevronRight } from '@hanzogui/lucide-icons-2'
 import { ChipSelect } from '@hanzo/ui/product'
 import { ModelPicker } from '@hanzo/ui/models'
 import { useState } from 'react'
 
+import { told } from '../api/call.ts'
 import { unhonoured } from '../api/coding.ts'
 import { ENSO } from '../api/models.ts'
 import { SANDBOX } from '../api/places.ts'
@@ -21,23 +26,25 @@ import { MODES } from '../landing.tsx'
 import { EFFORTS, useCatalog, useChoice } from '../mind.ts'
 import { usePrefs } from '../prefs.tsx'
 import { path } from '../route.ts'
+import { said } from './machines.tsx'
 import { Card, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
 export function Code() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
   const { prefs, save } = usePrefs()
-  const catalog = useCatalog(t)
+  const catalog = useCatalog(target)
   const [choice, choose] = useChoice()
-  const places = usePlaces(t, signed)
+  const places = usePlaces(target, signed)
   const [note, setNote] = useState('')
 
   if (!signed) {
     return (
       <YStack gap="$5">
-        <Heading title="Code" />
-        <Soft>Sign in to set how your runs start.</Soft>
+        <Heading title={t('Code')} />
+        <Soft>{t('Sign in to set how your runs start.')}</Soft>
       </YStack>
     )
   }
@@ -45,14 +52,14 @@ export function Code() {
   const now = { mode: 'build' as const, place: '', ...prefs.code }
   const keep = (change: Defaults) => {
     setNote('')
-    save({ code: { ...prefs.code, ...change } }).catch((e: unknown) => setNote((e as Error).message))
+    save({ code: { ...prefs.code, ...change } }).catch((e: unknown) => setNote(told(e, t)))
   }
 
   const where = (places.value.length ? places.value : [SANDBOX]).map((p) => ({
     id: p.id || 'sandbox',
-    label: p.id ? p.label : 'Default',
+    label: p.id ? p.label : t('Default'),
     // A machine offline now can still be the default; its status shows beside it.
-    hint: p.id ? [p.status, p.capacity].filter(Boolean).join(' · ') : 'The platform’s own sandbox',
+    hint: p.id ? [said(p.status, t), p.capacity].filter(Boolean).join(' · ') : t('The platform’s own sandbox'),
     place: p.id,
   }))
   // The sandbox is always listed, so a place not found is a machine that is not: it reads as its id.
@@ -60,22 +67,25 @@ export function Code() {
   // A default is never premium: a premium model is picked for one run, in New.
   const offered = catalog.models.filter((m) => m.class !== 'premium')
   const go = (section: 'environments' | 'machines') => host.go(path({ kind: 'settings', section }))
-  const effort = EFFORTS.find((e) => e.id === choice.effort)!
-  const mode = MODES.find((m) => m.id === now.mode)!
+  // The choices in the reader's words, kept by id.
+  const efforts = EFFORTS.map((e) => ({ ...e, label: t(e.label) }))
+  const modes = MODES.map((m) => ({ ...m, label: t(m.label), hint: t(m.hint) }))
+  const effort = efforts.find((e) => e.id === choice.effort)!
+  const mode = modes.find((m) => m.id === now.mode)!
 
   return (
     <YStack gap="$6">
-      <Heading title="Code" detail="How a new run starts. The model and effort are the ones Chat uses too." />
-      <Group title="Defaults">
+      <Heading title={t('Code')} detail={t('How a new run starts. The model and effort are the ones Chat uses too.')} />
+      <Group title={t('Defaults')}>
         <Card>
           <Row
             first
-            title="Model"
-            detail="Enso picks one for each step; any other model runs them all."
+            title={t('Model')}
+            detail={t('Enso picks one for each step; any other model runs them all.')}
             trailing={
               <ModelPicker
                 size="sm"
-                name="Default model"
+                name={t('Default model')}
                 models={offered}
                 scope="chat"
                 value={choice.model || ENSO}
@@ -86,14 +96,14 @@ export function Code() {
             }
           />
           <Row
-            title="Effort"
-            detail="How long the agent thinks before it acts."
+            title={t('Effort')}
+            detail={t('How long the agent thinks before it acts.')}
             trailing={
               <ChipSelect
-                name="Default effort"
+                name={t('Default effort')}
                 label={effort.label}
                 chosen={effort}
-                items={EFFORTS}
+                items={efforts}
                 onChange={(e) => choose({ effort: e.id })}
                 placement="bottom-end"
                 width={180}
@@ -101,14 +111,14 @@ export function Code() {
             }
           />
           <Row
-            title="Mode"
+            title={t('Mode')}
             detail={mode.hint}
             trailing={
               <ChipSelect
-                name="Default mode"
+                name={t('Default mode')}
                 label={mode.label}
                 chosen={mode}
-                items={MODES}
+                items={modes}
                 onChange={(m) => keep({ mode: m.id })}
                 placement="bottom-end"
                 width={260}
@@ -116,37 +126,37 @@ export function Code() {
             }
           />
           <Row
-            title="Where it runs"
-            detail="The Hanzo sandbox, or one of your organization’s machines."
+            title={t('Where it runs')}
+            detail={t('The Hanzo sandbox, or one of your organization’s machines.')}
             trailing={
               <ChipSelect
-                name="Default place"
+                name={t('Default place')}
                 label={place.label}
                 chosen={place}
                 items={where}
                 onChange={(w) => keep({ place: w.place })}
-                placeholder="Search machines…"
+                placeholder={t('Search machines…')}
                 placement="bottom-end"
                 loading={places.loading}
-                error={places.error?.message ?? null}
+                error={places.error ? told(places.error, t) : null}
               />
             }
           />
         </Card>
-        <Note>{unhonoured(now.mode, now.place)}</Note>
+        <Note>{unhonoured(now.mode, now.place, t)}</Note>
       </Group>
-      <Group title="Workspace">
+      <Group title={t('Workspace')}>
         <Card>
           <Row
             first
-            title="Environments"
-            detail="What a run installs and starts in each codebase, and the secrets it exports."
-            trailing={<Link label="Environments" onPress={() => go('environments')} />}
+            title={t('Environments')}
+            detail={t('What a run installs and starts in each codebase, and the secrets it exports.')}
+            trailing={<Link label={t('Open Environments')} onPress={() => go('environments')} />}
           />
           <Row
-            title="Machines"
-            detail="Your organization’s own computers that take runs."
-            trailing={<Link label="Machines" onPress={() => go('machines')} />}
+            title={t('Machines')}
+            detail={t('Your organization’s own computers that take runs.')}
+            trailing={<Link label={t('Open Machines')} onPress={() => go('machines')} />}
           />
         </Card>
       </Group>
@@ -155,10 +165,11 @@ export function Code() {
   )
 }
 
+/** A row's way to its own page; `label` is what it opens, already said. */
 function Link({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <YStack render="button" aria-label={`Open ${label}`} p="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={onPress}>
-      <ChevronRight size={16} />
+    <YStack render="button" aria-label={label} p="$1" rounded="$2" hoverStyle={{ bg: '$hover' }} onPress={onPress}>
+      <ChevronRight size={16} {...{ 'data-i18n-mirror': '' }} />
     </YStack>
   )
 }

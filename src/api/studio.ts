@@ -12,7 +12,9 @@
  * signed and expires, their `origin` is the app path that opens the run in
  * Studio and does not.
  */
-import { call, Refusal, seg, type Target } from './call.ts'
+import { phrase } from '@hanzo/i18n'
+
+import { call, Refusal, seg, Sentence, type Target } from './call.ts'
 import { item, type Item } from './library.ts'
 
 export interface Run {
@@ -119,23 +121,23 @@ const pause = (ms: number, signal?: AbortSignal) =>
 export async function make(t: Target, s: Start, signal?: AbortSignal): Promise<Run> {
   let r = run(
     await call<unknown>(t, 'POST', '/v1/studio/runs', s, { signal }).catch((e: unknown) => {
-      throw e instanceof Refusal && e.status === 402 ? new Error('Your balance does not cover it. Add credit in Settings › Billing.') : e
+      throw e instanceof Refusal && e.status === 402 ? new Error(phrase('Your balance does not cover it. Add credit in Settings › Billing.')) : e
     }),
   )
-  if (!r.id) throw new Error('Studio started the run and named no id')
+  if (!r.id) throw new Error(phrase('Studio started the run and named no id'))
   const id = r.id
   const stop = () => void call(t, 'POST', `/v1/studio/runs/${seg(id)}/cancel`, {}).catch(() => undefined)
   signal?.addEventListener('abort', stop, { once: true })
   try {
     const until = Date.now() + LONGEST
     while (!ended(r)) {
-      if (Date.now() > until) throw new Error('Studio is still making it. It will be in your Library when it is done.')
+      if (Date.now() > until) throw new Error(phrase('Studio is still making it. It will be in your Library when it is done.'))
       await pause(EVERY, signal)
       r = run(await call<unknown>(t, 'GET', `/v1/studio/runs/${seg(id)}`, undefined, { signal }))
     }
   } finally {
     signal?.removeEventListener('abort', stop)
   }
-  if (r.status !== 'succeeded') throw new Error(r.error || `Studio could not make it (${r.status})`)
+  if (r.status !== 'succeeded') throw r.error ? new Error(r.error) : new Sentence(phrase('Studio could not make it ({status})'), { status: r.status })
   return r
 }

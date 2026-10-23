@@ -4,6 +4,7 @@
  * the file, and the run in Studio, where it is edited. A later message in the
  * same conversation revises the last deck rather than starting over.
  */
+import { phrase } from '@hanzo/i18n'
 import { Presentation } from '@hanzogui/lucide-icons-2'
 
 import { json } from '../api/chat.ts'
@@ -53,8 +54,8 @@ export async function deck(turn: Turn, t: Target, signal: AbortSignal): Promise<
 
 export const slides: Plugin = {
   id: 'slides',
-  name: 'Presentations',
-  note: 'Create and edit decks',
+  name: phrase('Presentations'),
+  note: phrase('Create and edit decks'),
   icon: <Presentation size={16} />,
   prepare: (turn, c, signal) => deck(turn, c.target, signal),
 }

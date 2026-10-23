@@ -23,6 +23,8 @@
  * the run. Share opens its story to the public build route.
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { ChevronDown, ChevronRight, Clock, Copy, ExternalLink, GitPullRequest, Globe, Pencil, Share } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type DropdownMenuProps } from '@hanzo/ui'
 import { Steer, type Command } from '@hanzo/ui/agents'
@@ -55,9 +57,19 @@ import { Transcript } from './transcript.tsx'
 
 const LIVE = new Set(['running', 'paused', ''])
 
+/** A run's status as the line under its title says it; one the service adds later is drawn as it comes. */
+const STATUS: Record<string, string> = {
+  running: phrase('running'),
+  paused: phrase('paused'),
+  done: phrase('done'),
+  error: phrase('error'),
+  stopped: phrase('stopped'),
+}
+
 type MenuItems = NonNullable<DropdownMenuProps['items']>
 
 export function Run({ id }: { id: string }) {
+  const { t: say } = useI18n()
   const host = useHost()
   const t = useTarget()
   // Signed out, there is nothing to read: the gateway answers a bare run with a refusal.
@@ -90,11 +102,11 @@ export function Run({ id }: { id: string }) {
   const mode = record?.mode ?? ''
   // A run that narrated no ask of its own opens with the one its title records, once it has said anything.
   const shown = useMemo(() => {
-    const drawn = cards(events, mode)
+    const drawn = cards(events, mode, say)
     const ask = record ? headline(record.title, record.repo) : ''
     const opens = drawn[0]?.kind === 'said' && drawn[0].who === 'person'
     return ask && drawn.length && !opens ? [{ kind: 'said' as const, key: 'ask', who: 'person' as const, text: ask }, ...drawn] : drawn
-  }, [events, mode, record])
+  }, [events, mode, record, say])
   const end = outcome(events)
   const plan = useMemo(() => steps(events), [events])
   const kept = useMemo(() => settled(events), [events])
@@ -109,7 +121,7 @@ export function Run({ id }: { id: string }) {
   // What a run publishes opens in the panel: the Preview, chosen and shown.
   useEffect(() => {
     if (!end.published) return
-    side.open({ kind: 'preview', title: 'Preview' })
+    side.open({ kind: 'preview', title: say('Preview') })
     setDesk(true)
     // On each publish, not on each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,7 +139,7 @@ export function Run({ id }: { id: string }) {
   const steering = running && !(paused && held)
   // A follow-up clones what the run kept, so it waits until the run has said where that is.
   const waiting = (paused && held && !kept.settled) || (finished && stopping && !kept.settled)
-  const title = record?.title || (detail.loading ? '' : 'Untitled run')
+  const title = record?.title || (detail.loading ? '' : say('Untitled run'))
   // A setup run explores and installs before it answers, which takes minutes.
   const setup = mode === 'setup'
   const [seen, setSeen] = useKept('hanzo.build.setup.seen', false)
@@ -160,18 +172,18 @@ export function Run({ id }: { id: string }) {
   // where Notification exists; the permission can be taken back since.
   useEffect(() => {
     if (!notify || running) return
-    if (Notification.permission === 'granted') new Notification(record?.title || 'Run finished', { body: 'This run has finished.' })
+    if (Notification.permission === 'granted') new Notification(record?.title || say('Run finished'), { body: say('This run has finished.') })
     setNotify(false)
   }, [notify, running, record?.title])
 
   const ask = async () => {
     if (typeof Notification === 'undefined') {
-      setNote('This browser cannot send a notification.')
+      setNote(say('This browser cannot send a notification.'))
       return
     }
     const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
     if (perm !== 'granted') {
-      setNote('Notifications stay off until this browser allows them.')
+      setNote(say('Notifications stay off until this browser allows them.'))
       return
     }
     setNotify(true)
@@ -201,7 +213,7 @@ export function Run({ id }: { id: string }) {
 
   // A setup run's work IS its environment: the panel opens on it.
   useEffect(() => {
-    if (mode === 'setup') side.open({ kind: 'environment', title: 'Environment' })
+    if (mode === 'setup') side.open({ kind: 'environment', title: say('Environment') })
     // Once the run says what it is.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
@@ -217,7 +229,7 @@ export function Run({ id }: { id: string }) {
    * first: the new run works in the same sandbox, where nothing else may be at work.
    */
   const carry = async (said: string, how: 'follow' | 'approve' | 'retry' = 'follow'): Promise<string> => {
-    if (!earlier) throw new Error('This run is still being read')
+    if (!earlier) throw new Error(say('This run is still being read'))
     if (paused) await stop(t, id, 'Continued in a follow-up run').catch(() => undefined)
     const ask = how === 'approve' ? approve(earlier, said) : how === 'retry' ? retry(earlier, said) : followUp(earlier, said)
     const run = await start(t, tuned(ask))
@@ -235,7 +247,7 @@ export function Run({ id }: { id: string }) {
         await message(t, id, words)
         setDraft('')
         setFiles([])
-        return 'Sent — recorded on this run'
+        return say('Sent — recorded on this run')
       })
       return
     }
@@ -248,13 +260,13 @@ export function Run({ id }: { id: string }) {
         void act(async () => {
           await stop(t, id)
           setStopping(true)
-          return 'Stop requested — the run keeps its work on its branch'
+          return say('Stop requested — the run keeps its work on its branch')
         })
         return
       case 'pause':
         void act(async () => {
           await pause(t, id)
-          return held ? 'Pause requested — the run keeps its work on its branch and waits' : 'Pause asked — the machine pauses when it reads it'
+          return held ? say('Pause requested — the run keeps its work on its branch and waits') : say('Pause asked — the machine pauses when it reads it')
         })
         return
       case 'resume':
@@ -262,7 +274,7 @@ export function Run({ id }: { id: string }) {
         else
           void act(async () => {
             await resume(t, id)
-            return 'Resume asked — the machine goes on when it reads it'
+            return say('Resume asked — the machine goes on when it reads it')
           })
         return
     }
@@ -273,7 +285,7 @@ export function Run({ id }: { id: string }) {
       await navigator.clipboard.writeText(value)
       setCopied(what)
     } catch {
-      setNote('This browser would not copy.')
+      setNote(say('This browser would not copy.'))
     }
   }
 
@@ -281,7 +293,7 @@ export function Run({ id }: { id: string }) {
     act(async () => {
       await publish(t, id, on)
       detail.reload()
-      return on ? 'Shared — anyone with the link can read this run’s story' : 'No longer shared'
+      return on ? say('Shared — anyone with the link can read this run’s story') : say('No longer shared')
     })
 
   // What the title's menu does to the run.
@@ -290,7 +302,7 @@ export function Run({ id }: { id: string }) {
       ? [
           {
             key: 'rename',
-            label: 'Rename',
+            label: say('Rename'),
             icon: <Pencil size={16} />,
             onSelect: () => {
               setName(title)
@@ -299,15 +311,15 @@ export function Run({ id }: { id: string }) {
           },
         ]
       : []),
-    { key: 'copy', label: copied === 'id' ? 'Copied' : 'Copy run id', icon: <Copy size={16} />, description: id, onSelect: () => void copy('id', id) },
+    { key: 'copy', label: copied === 'id' ? say('Copied') : say('Copy run id'), icon: <Copy size={16} />, description: id, onSelect: () => void copy('id', id) },
     // What this run was asked, as a task that runs again on a schedule: the ask it opened with.
     ...(signed && record
       ? [
           {
             key: 'schedule',
-            label: 'Schedule this',
+            label: say('Schedule this'),
             icon: <Clock size={16} />,
-            description: 'Run it again on a schedule',
+            description: say('Run it again on a schedule'),
             onSelect: () => {
               const first = shown.find((c) => c.kind === 'said' && c.who === 'person')
               schedule(first && 'text' in first ? first.text : headline(record.title, record.repo), host.go)
@@ -322,9 +334,9 @@ export function Run({ id }: { id: string }) {
     signed && record?.project
       ? [
           record.published
-            ? { key: 'unshare', label: 'Stop sharing', icon: <Globe size={16} />, onSelect: () => void share(false) }
-            : { key: 'share', label: 'Share publicly', icon: <Globe size={16} />, description: 'Anyone with the link can read it', onSelect: () => void share(true) },
-          ...(link ? [{ key: 'link', label: copied === 'link' ? 'Copied' : 'Copy public link', icon: <Copy size={16} />, description: link, onSelect: () => void copy('link', link) }] : []),
+            ? { key: 'unshare', label: say('Stop sharing'), icon: <Globe size={16} />, onSelect: () => void share(false) }
+            : { key: 'share', label: say('Share publicly'), icon: <Globe size={16} />, description: say('Anyone with the link can read it'), onSelect: () => void share(true) },
+          ...(link ? [{ key: 'link', label: copied === 'link' ? say('Copied') : say('Copy public link'), icon: <Copy size={16} />, description: link, onSelect: () => void copy('link', link) }] : []),
         ]
       : []
 
@@ -333,24 +345,24 @@ export function Run({ id }: { id: string }) {
       await rename(t, id, name)
       setNaming(false)
       detail.reload()
-      return 'Renamed'
+      return say('Renamed')
     })
 
   const placeholder = !signed
-    ? 'Sign in to follow up'
+    ? say('Sign in to follow up')
     : waiting
       ? paused
-        ? 'Pausing — the run is keeping its work…'
-        : 'Stopping — the run is keeping its work…'
+        ? say('Pausing — the run is keeping its work…')
+        : say('Stopping — the run is keeping its work…')
       : paused && held
-        ? 'Continue this run with a follow up'
+        ? say('Continue this run with a follow up')
         : running
           ? setup
-            ? 'Add a follow up for the setup agent'
-            : 'Add a follow up'
+            ? say('Add a follow up for the setup agent')
+            : say('Add a follow up')
           : finished
-            ? 'Follow up — continues in a new run'
-            : 'Reading this run…'
+            ? say('Follow up — continues in a new run')
+            : say('Reading this run…')
 
   const desk_ = (sheet: boolean) => (
     <Desk
@@ -369,8 +381,8 @@ export function Run({ id }: { id: string }) {
       events={events}
       live={running}
       menu={[...manage, ...sharing]}
-      refused={signed ? refused || (detail.error ? detail.error.message : '') : 'Sign in to follow this run.'}
-      retry={signed ? 'Retry' : 'Sign in'}
+      refused={signed ? refused || (detail.error ? say(detail.error.message) : '') : say('Sign in to follow this run.')}
+      retry={signed ? say('Retry') : say('Sign in')}
       onRetry={signed ? detail.reload : () => host.signIn?.()}
       side={side}
       sheet={sheet}
@@ -385,7 +397,7 @@ export function Run({ id }: { id: string }) {
           <YStack flex={1} minW={0} items="flex-start">
             <DropdownMenu
               trigger={
-                <XStack render="button" aria-label="Manage this run" items="center" gap="$1.5" maxW="100%" px="$1.5" mx="$-1.5" py="$0.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+                <XStack render="button" aria-label={say('Manage this run')} items="center" gap="$1.5" maxW="100%" px="$1.5" mx="$-1.5" py="$0.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
                   <SizableText render="h1" size="$5" color="$ink" numberOfLines={1} minW={0}>
                     {title}
                   </SizableText>
@@ -395,12 +407,12 @@ export function Run({ id }: { id: string }) {
               items={manage}
             />
             <SizableText size="$1" color="$soft" numberOfLines={1} maxW="100%">
-              {[state || (detail.loading ? 'reading' : ''), record?.repo, record?.branch, record?.published ? 'shared' : ''].filter(Boolean).join(' · ')}
+              {[state ? say(STATUS[state] ?? state) : detail.loading ? say('reading') : '', record?.repo, record?.branch, record?.published ? say('shared') : ''].filter(Boolean).join(' · ')}
             </SizableText>
           </YStack>
           {pr.href ? (
             // From the run's record, which the coding service writes; `pull` draws only a pull request address.
-            <Out href={pr.href} label={`Open pull request ${pr.label}`}>
+            <Out href={pr.href} label={say('Open pull request {pr}', { pr: pr.label })}>
               <XStack items="center" gap="$1.5" px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
                 <GitPullRequest size={14} />
                 <SizableText size="$2" color="$ink">
@@ -413,10 +425,10 @@ export function Run({ id }: { id: string }) {
           {sharing.length ? (
             <DropdownMenu
               trigger={
-                <XStack render="button" aria-label="Share" items="center" gap="$1.5" px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
+                <XStack render="button" aria-label={say('Share')} items="center" gap="$1.5" px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
                   <Share size={14} />
                   <SizableText size="$2" color="$ink">
-                    Share
+                    {say('Share')}
                   </SizableText>
                 </XStack>
               }
@@ -430,14 +442,16 @@ export function Run({ id }: { id: string }) {
           cards={shown}
           onOpen={look}
           onDiff={() => {
-            side.open({ kind: 'diff', title: 'Diff' })
+            side.open({ kind: 'diff', title: say('Diff') })
             setDesk(true)
           }}
           listen={signed ? listen : undefined}
           end={
             failed ? (
               <Failure onRetry={busy ? undefined : () => void act(() => carry(again, 'retry'))}>
-                {end.problem ? 'This run stopped before it finished.' : 'This run stopped with an error. Its work so far is on its branch.'}
+                {end.problem
+                  ? say('This run stopped before it finished.')
+                  : `${say('This run stopped with an error.')} ${say('Its work so far is on its branch.')}`}
               </Failure>
             ) : null
           }
@@ -446,7 +460,7 @@ export function Run({ id }: { id: string }) {
           header={
             hidden ? (
               <SizableText size="$1" color="$soft">
-                {`${hidden} earlier ${hidden === 1 ? 'turn is' : 'turns are'} not shown. The run’s Git tab has everything it pushed.`}
+                {`${hidden === 1 ? say('{n} earlier turn is not shown.', { n: hidden }) : say('{n} earlier turns are not shown.', { n: hidden })} ${say('The run’s Git tab has everything it pushed.')}`}
               </SizableText>
             ) : null
           }
@@ -457,22 +471,22 @@ export function Run({ id }: { id: string }) {
             signed ? (
               <SizableText size="$2" color="$soft">
                 {detail.error
-                  ? detail.error.message
+                  ? say(detail.error.message)
                   : detail.loading
-                    ? 'Reading this run…'
+                    ? say('Reading this run…')
                     : running
                       ? setup
-                        ? 'Setting up environment'
-                        : 'Starting…'
-                      : 'Waiting for the run’s first step…'}
+                        ? say('Setting up environment')
+                        : say('Starting…')
+                      : say('Waiting for the run’s first step…')}
               </SizableText>
             ) : (
               <YStack gap="$3" items="flex-start">
                 <SizableText size="$2" color="$soft">
-                  Sign in to follow this run.
+                  {say('Sign in to follow this run.')}
                 </SizableText>
                 <Button size="sm" onPress={() => host.signIn?.()}>
-                  Sign in
+                  {say('Sign in')}
                 </Button>
               </YStack>
             )
@@ -484,7 +498,7 @@ export function Run({ id }: { id: string }) {
           <YStack {...measure} gap="$2">
             {end.problem ? (
               <SizableText size="$1" color="$soft">
-                The branch is pushed, and the pull request could not be opened.
+                {say('The branch is pushed, and the pull request could not be opened.')}
               </SizableText>
             ) : null}
             {note || (signed && refused) ? (
@@ -497,7 +511,7 @@ export function Run({ id }: { id: string }) {
               <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
                 <XStack
                   render="button"
-                  aria-label={`Steps · ${plan.length}`}
+                  aria-label={say('Steps · {n}', { n: plan.length })}
                   aria-expanded={unfolded}
                   onPress={() => setUnfolded(!unfolded)}
                   px="$3"
@@ -508,10 +522,10 @@ export function Run({ id }: { id: string }) {
                 >
                   {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   <SizableText size="$2" color="$ink">
-                    {`Steps · ${plan.length}`}
+                    {say('Steps · {n}', { n: plan.length })}
                   </SizableText>
                   {current && !unfolded ? (
-                    <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={{ textAlign: 'right' }}>
+                    <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} text="end">
                       {current.name}
                     </SizableText>
                   ) : null}
@@ -539,13 +553,13 @@ export function Run({ id }: { id: string }) {
                 <SizableText size="$2" color="$ink" flex={1} minW={160}>
                   {paused
                     ? kept.pushed
-                      ? 'Paused — its work so far is on its branch.'
-                      : 'Paused.'
+                      ? say('Paused — its work so far is on its branch.')
+                      : say('Paused.')
                     : setup
                       ? span
-                        ? `Environment setup takes ~${span[0] === span[1] ? span[0] : `${span[0]}–${span[1]}`} minutes.`
-                        : 'Environment setup takes several minutes.'
-                      : 'This run is still working.'}
+                        ? say('Environment setup takes ~{minutes} minutes.', { minutes: span[0] === span[1] ? span[0] : `${span[0]}–${span[1]}` })
+                        : say('Environment setup takes several minutes.')
+                      : say('This run is still working.')}
                 </SizableText>
                 <Steer
                   onCommand={command}
@@ -555,7 +569,7 @@ export function Run({ id }: { id: string }) {
                   ]}
                 />
                 <Button size="sm" disabled={notify} onPress={() => void ask()}>
-                  {notify ? 'You will be notified' : 'Notify me'}
+                  {notify ? say('You will be notified') : say('Notify me')}
                 </Button>
               </XStack>
             ) : null}
@@ -568,9 +582,9 @@ export function Run({ id }: { id: string }) {
             ready={Boolean(draft.trim())}
             disabled={!signed || busy || waiting || !(running || finished)}
             placeholder={placeholder}
-            label={steering ? 'Steer this run' : 'Follow up on this run'}
+            label={steering ? say('Steer this run') : say('Follow up on this run')}
             head={files.length ? <XStack gap="$1.5" flexWrap="wrap"><Files files={files} onFiles={setFiles} /></XStack> : undefined}
-            plus={{ upload: () => pick(files, setFiles, setNote) }}
+            plus={{ upload: () => pick(files, setFiles, setNote, say) }}
             // What a new run from here is made with; words that steer this run use neither.
             mind={signed && !steering ? mind : null}
             limits={limits}
@@ -584,8 +598,8 @@ export function Run({ id }: { id: string }) {
           data-slot="desk"
           ref={split.aside}
           {...pane}
-          // A pane of its own beside the run's, the gutter between them.
-          ml={gap}
+          // A pane of its own beside the run's, the gutter between them (useSplit reads it as the inline-start margin).
+          marginInlineStart={gap}
           position="relative"
           shrink={0}
           minH={0}
@@ -593,19 +607,19 @@ export function Run({ id }: { id: string }) {
         >
           {split.grip ? (
             // In the gutter between the two panes, measured inside the pane's edge.
-            <Gutter {...split.grip} label="Resize the side panel" inset={pane.borderWidth} />
+            <Gutter {...split.grip} label={say('Resize the side panel')} inset={pane.borderWidth} />
           ) : null}
           <SideProvider value={split.side}>{desk_(false)}</SideProvider>
         </YStack>
       ) : null}
       <Dialog open={naming} onOpenChange={setNaming}>
         <DialogContent maxW={480}>
-          <DialogTitle>Rename this run</DialogTitle>
+          <DialogTitle>{say('Rename this run')}</DialogTitle>
           <Input
             autoFocus
             value={name}
             onChangeText={setName}
-            aria-label="The run’s name"
+            aria-label={say('The run’s name')}
             maxLength={512}
             onKeyDown={(e: { key?: string }) => {
               if (e.key === 'Enter') save()
@@ -613,10 +627,10 @@ export function Run({ id }: { id: string }) {
           />
           <XStack gap="$2" justify="flex-end">
             <Button size="sm" variant="outline" onPress={() => setNaming(false)}>
-              Cancel
+              {say('Cancel')}
             </Button>
             <Button size="sm" disabled={busy || !name.trim()} onPress={save}>
-              Save
+              {say('Save')}
             </Button>
           </XStack>
         </DialogContent>
@@ -627,19 +641,23 @@ export function Run({ id }: { id: string }) {
 
 /** What a setup run does, said once per browser the first time one is watched. */
 function Onboarding({ onDone }: { onDone: () => void }) {
+  const { t } = useI18n()
   const steps = [
-    'Explore, install and check the codebase',
-    'Name the secrets it needs — you set their values',
-    'Propose the environment for you to review and save',
+    t('Explore, install and check the codebase'),
+    t('Name the secrets it needs — you set their values'),
+    t('Propose the environment for you to review and save'),
   ]
   return (
     <YStack gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel">
       <SizableText size="$4" color="$ink">
-        Set up a cloud environment
+        {t('Set up a cloud environment')}
       </SizableText>
       <SizableText size="$2" color="$soft">
-        An environment lets every later run install, start, test and check its changes the way an engineer does. Setup
-        is agent-led and takes several minutes. The agent will:
+        {[
+          t('An environment lets every later run install, start, test and check its changes the way an engineer does.'),
+          t('Setup is agent-led and takes several minutes.'),
+          t('The agent will:'),
+        ].join(' ')}
       </SizableText>
       <YStack gap="$1.5">
         {steps.map((s, i) => (
@@ -654,10 +672,10 @@ function Onboarding({ onDone }: { onDone: () => void }) {
         ))}
       </YStack>
       <SizableText size="$2" color="$soft">
-        Interrupt anytime to steer the agent or ask it questions.
+        {t('Interrupt anytime to steer the agent or ask it questions.')}
       </SizableText>
       <Button size="sm" onPress={onDone}>
-        Got it
+        {t('Got it')}
       </Button>
     </YStack>
   )

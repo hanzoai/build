@@ -7,8 +7,13 @@
  * past the deadline, is a failed connection, and Retry mints a new ticket: a
  * ticket is spent the moment its socket opens, so reloading the old address can
  * only fail again.
+ *
+ * What a door says is the reader's language (@hanzo/i18n `t`), one sentence
+ * per door; the page's own reason for a failed connection is drawn as given.
  */
 import { SizableText, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { Button } from '@hanzo/ui'
 import { useEffect, useRef, useState } from 'react'
 
@@ -17,8 +22,27 @@ import { useTarget } from './host.tsx'
 
 /** What each page signs its messages to the window that frames it with. */
 const SOURCE = { screen: 'hanzo-screen', terminal: 'hanzo-term' } as const
-const WHAT = { screen: 'desktop', terminal: 'terminal' } as const
 const DEADLINE = 20_000
+
+/** What each door says of itself, one sentence per door, marked (`phrase`) and drawn through `t`. */
+const SAYS = {
+  screen: {
+    starting: phrase('The desktop opens once the run’s sandbox is up.'),
+    parked: phrase('This run’s sandbox is suspended with its files kept. Resume it from the bar above to open its desktop.'),
+    error: phrase('This run’s sandbox could not start, so it has no desktop.'),
+    unreachable: phrase('Unable to reach the desktop. The run may have stopped.'),
+    title: phrase('The run’s desktop'),
+    connecting: phrase('Connecting to the desktop…'),
+  },
+  terminal: {
+    starting: phrase('The terminal opens once the run’s sandbox is up.'),
+    parked: phrase('This run’s sandbox is suspended with its files kept. Resume it from the bar above to open its terminal.'),
+    error: phrase('This run’s sandbox could not start, so it has no terminal.'),
+    unreachable: phrase('Unable to reach the terminal. The run may have stopped.'),
+    title: phrase('The run’s terminal'),
+    connecting: phrase('Connecting to the terminal…'),
+  },
+} as const
 
 type State = 'opening' | 'open' | 'failed'
 
@@ -27,7 +51,9 @@ type State = 'opening' | 'open' | 'failed'
  * a running sandbox has an open door.
  */
 export function Door({ which, sandbox, held, session }: { which: Which; sandbox: string; held: Held | ''; session: string }) {
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
+  const says = SAYS[which]
   const frame = useRef<HTMLIFrameElement>(null)
   const [src, setSrc] = useState('')
   const [state, setState] = useState<State>('opening')
@@ -41,7 +67,7 @@ export function Door({ which, sandbox, held, session }: { which: Which; sandbox:
     setSrc('')
     setState('opening')
     setWhy('')
-    door(t, sandbox, which, session).then(
+    door(target, sandbox, which, session).then(
       (u) => {
         if (!gone) setSrc(u)
       },
@@ -54,7 +80,7 @@ export function Door({ which, sandbox, held, session }: { which: Which; sandbox:
     return () => {
       gone = true
     }
-  }, [t, sandbox, which, session, up, attempt])
+  }, [target, sandbox, which, session, up, attempt])
 
   useEffect(() => {
     if (!src) return
@@ -81,22 +107,22 @@ export function Door({ which, sandbox, held, session }: { which: Which; sandbox:
   }, [src, which])
 
   if (!sandbox || held === '' || held === 'pending') {
-    return <Shut title="Starting" body={`The ${WHAT[which]} opens once the run’s sandbox is up.`} />
+    return <Shut title={t('Starting')} body={t(says.starting)} />
   }
   if (held === 'parked') {
-    return <Shut title="Suspended" body={`This run’s sandbox is suspended with its files kept. Resume it from the bar above to open its ${WHAT[which]}.`} />
+    return <Shut title={t('Suspended')} body={t(says.parked)} />
   }
   if (held === 'gone') {
-    return <Shut title="Ended" body="This run’s sandbox has ended. Its work is on its branch and in its artifacts." />
+    return <Shut title={t('Ended')} body={t('This run’s sandbox has ended. Its work is on its branch and in its artifacts.')} />
   }
   if (held === 'error') {
-    return <Shut title="Unavailable" body={`This run’s sandbox could not start, so it has no ${WHAT[which]}.`} />
+    return <Shut title={t('Unavailable')} body={t(says.error)} />
   }
   if (state === 'failed') {
     return (
-      <Shut title="Failed to connect" body={why || `Unable to reach the ${WHAT[which]}. The run may have stopped.`}>
+      <Shut title={t('Failed to connect')} body={why || t(says.unreachable)}>
         <Button size="sm" variant="outline" onPress={() => setAttempt((a) => a + 1)}>
-          Retry
+          {t('Retry')}
         </Button>
       </Shut>
     )
@@ -107,7 +133,7 @@ export function Door({ which, sandbox, held, session }: { which: Which; sandbox:
         <iframe
           ref={frame}
           src={src}
-          title={which === 'screen' ? 'The run’s desktop' : 'The run’s terminal'}
+          title={t(says.title)}
           allow="clipboard-read; clipboard-write"
           style={{ border: 0, width: '100%', height: '100%', display: 'block', background: '#000' }}
         />
@@ -115,7 +141,7 @@ export function Door({ which, sandbox, held, session }: { which: Which; sandbox:
       {state === 'opening' ? (
         <YStack position="absolute" t={0} l={0} r={0} b={0} items="center" justify="center" pointerEvents="none">
           <SizableText size="$2" color="$soft">
-            {`Connecting to the ${WHAT[which]}…`}
+            {t(says.connecting)}
           </SizableText>
         </YStack>
       ) : null}

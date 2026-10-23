@@ -12,6 +12,7 @@
  * panel), and the builder's own then reads through that one: one document, one
  * read. The look (`Look`) is the builder's alone: a host has its own.
  */
+import { phrase } from '@hanzo/i18n'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react'
 
 import { merge, read, save, type Patch, type Prefs } from './api/pref.ts'
@@ -49,7 +50,7 @@ function Keep({ children }: { children: ReactNode }) {
 
   const write = useCallback(
     async (patch: Patch) => {
-      if (!signed) throw new Error('Sign in to save your settings.')
+      if (!signed) throw new Error(phrase('Sign in to save your settings.'))
       const before = now.current
       now.current = merge(before, patch)
       keep(now.current)

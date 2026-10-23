@@ -10,6 +10,9 @@
  * with the org, copy its link, rename, move to a project, use in Studio or in
  * Chat, and delete. What a colleague shared is drawn with their name and offers
  * only what a reader may do with it.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); an item's name, a
+ * colleague's, a project's and what an item holds are drawn as given.
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import {
@@ -35,11 +38,14 @@ import {
   Type,
   Video,
 } from '@hanzogui/lucide-icons-2'
+import { phrase } from '@hanzo/i18n'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type DropdownMenuProps } from '@hanzo/ui'
 import { ChipSelect } from '@hanzo/ui/product'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { ago } from './ago.ts'
+import { told } from './api/call.ts'
 import { change, days, get, items as list, KINDS, remove, size, SOURCE, type Item, type Kind as ItemKind, type Scope, type Source } from './api/library.ts'
 import { Confirm, Rename } from './ask.tsx'
 import { useKept, useProjects, useRead } from './data.ts'
@@ -53,19 +59,24 @@ import { useDeck } from './tabs.ts'
 
 type MenuItems = NonNullable<DropdownMenuProps['items']>
 
+/** Where an item was made: Chat, Dev and Studio by their names, the rest in words, marked (`phrase`) and drawn through `t`. */
 const FROM: readonly { id: Source | ''; label: string }[] = [
-  { id: '', label: 'Anywhere' },
+  { id: '', label: phrase('Anywhere') },
   { id: 'chat', label: 'Chat' },
   { id: 'dev', label: 'Dev' },
   { id: 'studio', label: 'Studio' },
-  { id: 'workflow', label: 'Workflows' },
+  { id: 'workflow', label: phrase('Workflows') },
 ]
 
 const WHOSE: readonly { id: Scope; label: string }[] = [
-  { id: 'all', label: 'Mine and shared' },
-  { id: 'mine', label: 'Mine' },
-  { id: 'shared', label: 'Shared with me' },
+  { id: 'all', label: phrase('Mine and shared') },
+  { id: 'mine', label: phrase('Mine') },
+  { id: 'shared', label: phrase('Shared with me') },
 ]
+
+/** A day's list, named: the days the Library says in words each a sentence, a month as given. */
+const MADE: Record<string, string> = { Today: phrase('Made today'), Yesterday: phrase('Made yesterday'), Earlier: phrase('Made earlier') }
+const made = (label: string, t: Say): string => (MADE[label] ? t(MADE[label]) : t('Made {month}', { month: label.toLowerCase() }))
 
 /** How many items a page reads. */
 const PAGE = 60
@@ -117,8 +128,8 @@ export function Thumb({ x, size: n }: { x: Item; size?: number }) {
 }
 
 /** What a tile says under its name: where it came from, whose, and when. */
-function meta(x: Item): string {
-  return [SOURCE[x.source], x.mine ? '' : `shared by ${x.owner}`, ago(x.created)].filter(Boolean).join(' · ')
+function meta(x: Item, t: Say): string {
+  return [t(SOURCE[x.source]), x.mine ? '' : t('shared by {owner}', { owner: x.owner }), ago(x.created)].filter(Boolean).join(' · ')
 }
 
 /** An item's link, to paste: this page with the item named. */
@@ -159,8 +170,9 @@ function named(): string {
 
 /** What can be done with one item, as menu rows. */
 function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const [renaming, setRenaming] = useState<Item | null>(null)
   const [deleting, setDeleting] = useState<Item | null>(null)
   const [moving, setMoving] = useState<Item | null>(null)
@@ -171,7 +183,7 @@ function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
     try {
       await work()
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     }
   }
   const copy = (text: string, said: string) =>
@@ -181,34 +193,34 @@ function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
     })
 
   const rows = (x: Item): MenuItems => [
-    ...(x.origin ? [{ key: 'open', label: 'Open where it was made', icon: <ExternalLink size={16} />, onSelect: () => host.open(x.origin) }] : []),
-    ...(x.download ? [{ key: 'download', label: 'Download', icon: <Download size={16} />, onSelect: () => window.open(x.download, '_blank', 'noopener,noreferrer') }] : []),
+    ...(x.origin ? [{ key: 'open', label: t('Open where it was made'), icon: <ExternalLink size={16} />, onSelect: () => host.open(x.origin) }] : []),
+    ...(x.download ? [{ key: 'download', label: t('Download'), icon: <Download size={16} />, onSelect: () => window.open(x.download, '_blank', 'noopener,noreferrer') }] : []),
     ...(x.mine
       ? [
           {
             key: 'share',
-            label: x.shared ? 'Stop sharing' : 'Share with organization',
+            label: x.shared ? t('Stop sharing') : t('Share with organization'),
             icon: <Share2 size={16} />,
-            description: x.shared ? 'Only you see it' : 'Everyone in it can open it',
+            description: x.shared ? t('Only you see it') : t('Everyone in it can open it'),
             onSelect: () =>
               void act(async () => {
-                const next = await change(t, x.id, { shared: !x.shared })
+                const next = await change(target, x.id, { shared: !x.shared })
                 onChanged(next)
-                setNote(next.shared ? `${next.name} is shared with the organization` : `${next.name} is yours alone`)
+                setNote(next.shared ? t('{name} is shared with the organization', { name: next.name }) : t('{name} is yours alone', { name: next.name }))
               }),
           },
         ]
       : []),
-    { key: 'link', label: 'Copy link', icon: <Copy size={16} />, onSelect: () => void copy(linkTo(x), 'Link copied') },
+    { key: 'link', label: t('Copy link'), icon: <Copy size={16} />, onSelect: () => void copy(linkTo(x), t('Link copied')) },
     ...(x.mine
       ? [
-          { key: 'rename', label: 'Rename', icon: <Pencil size={16} />, onSelect: () => setRenaming(x) },
-          { key: 'move', label: 'Move to project', icon: <FolderInput size={16} />, onSelect: () => setMoving(x) },
+          { key: 'rename', label: t('Rename'), icon: <Pencil size={16} />, onSelect: () => setRenaming(x) },
+          { key: 'move', label: t('Move to project'), icon: <FolderInput size={16} />, onSelect: () => setMoving(x) },
         ]
       : []),
-    { key: 'studio', label: 'Use in Studio', icon: <Sparkles size={16} />, onSelect: () => host.open(`/studio?asset=${encodeURIComponent(x.id)}`) },
-    { key: 'chat', label: 'Use in Chat', icon: <MessageSquare size={16} />, onSelect: () => host.open(`/chat?attach=${encodeURIComponent(x.id)}`) },
-    ...(x.mine ? [{ key: 'delete', label: 'Delete', icon: <Trash2 size={16} />, onSelect: () => setDeleting(x) }] : []),
+    { key: 'studio', label: t('Use in Studio'), icon: <Sparkles size={16} />, onSelect: () => host.open(`/studio?asset=${encodeURIComponent(x.id)}`) },
+    { key: 'chat', label: t('Use in Chat'), icon: <MessageSquare size={16} />, onSelect: () => host.open(`/chat?attach=${encodeURIComponent(x.id)}`) },
+    ...(x.mine ? [{ key: 'delete', label: t('Delete'), icon: <Trash2 size={16} />, onSelect: () => setDeleting(x) }] : []),
   ]
 
   const dialogs = (
@@ -216,21 +228,21 @@ function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
       <Rename
         open={Boolean(renaming)}
         onOpenChange={(o) => !o && setRenaming(null)}
-        title="Rename"
+        title={t('Rename')}
         name={renaming?.name ?? ''}
         run={async (name) => {
-          const next = await change(t, renaming!.id, { name })
+          const next = await change(target, renaming!.id, { name })
           onChanged(next)
         }}
       />
       <Confirm
         open={Boolean(deleting)}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title={`Delete ${deleting?.name ?? ''}?`}
-        says="It leaves the Library and its file is deleted. Anyone it was shared with loses it too."
-        act="Delete"
+        title={t('Delete {name}?', { name: deleting?.name ?? '' })}
+        says={t('It leaves the Library and its file is deleted. Anyone it was shared with loses it too.')}
+        act={t('Delete')}
         run={async () => {
-          await remove(t, deleting!.id)
+          await remove(target, deleting!.id)
           onGone(deleting!.id)
         }}
       />
@@ -239,7 +251,7 @@ function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
         onClose={() => setMoving(null)}
         onMoved={(next) => {
           onChanged(next)
-          setNote(next.project ? `${next.name} is in ${next.project}` : `${next.name} is in no project`)
+          setNote(next.project ? t('{name} is in {project}', { name: next.name, project: next.project }) : t('{name} is in no project', { name: next.name }))
         }}
       />
     </>
@@ -249,9 +261,10 @@ function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
 
 /** Choosing the project an item belongs to, or none. */
 function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () => void; onMoved: (x: Item) => void }) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
-  const projects = useProjects(t, Boolean(host.person) && Boolean(x))
+  const target = useTarget()
+  const projects = useProjects(target, Boolean(host.person) && Boolean(x))
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const pick = async (project: string) => {
@@ -259,10 +272,10 @@ function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () =>
     setBusy(true)
     setNote('')
     try {
-      onMoved(await change(t, x.id, { project }))
+      onMoved(await change(target, x.id, { project }))
       onClose()
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     } finally {
       setBusy(false)
     }
@@ -270,22 +283,22 @@ function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () =>
   return (
     <Dialog open={Boolean(x)} onOpenChange={(o) => !o && !busy && onClose()}>
       <DialogContent maxW={420}>
-        <DialogTitle>Move to project</DialogTitle>
+        <DialogTitle>{t('Move to project')}</DialogTitle>
         <YStack gap="$1" maxH={320} overflow="scroll">
           {projects.loading && !projects.value.length ? (
             <SizableText size="$2" color="$soft">
-              Reading projects…
+              {t('Reading projects…')}
             </SizableText>
           ) : projects.error ? (
             <SizableText size="$2" color="$soft">
-              {projects.error.message}
+              {told(projects.error, t)}
             </SizableText>
           ) : (
-            [{ slug: '', name: 'No project' }, ...projects.value].map((p) => (
+            [{ slug: '', name: t('No project') }, ...projects.value].map((p) => (
               <XStack
                 key={p.slug || 'none'}
                 render="button"
-                aria-label={p.slug ? `Move to ${p.name || p.slug}` : 'Move to no project'}
+                aria-label={p.slug ? t('Move to {project}', { project: p.name || p.slug }) : t('Move to no project')}
                 aria-current={x?.project === p.slug ? 'true' : undefined}
                 disabled={busy}
                 onPress={() => void pick(p.slug)}
@@ -315,10 +328,11 @@ function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () =>
 
 /** One item's menu, as a quiet control. */
 function Acts({ x, rows }: { x: Item; rows: MenuItems }) {
+  const { t } = useI18n()
   return (
     <DropdownMenu
       trigger={
-        <XStack render="button" aria-label={`Actions for ${x.name}`} width={30} height={30} items="center" justify="center" rounded="$2" hoverStyle={{ bg: '$hover' }} cursor="pointer" shrink={0}>
+        <XStack render="button" aria-label={t('Actions for {name}', { name: x.name })} width={30} height={30} items="center" justify="center" rounded="$2" hoverStyle={{ bg: '$hover' }} cursor="pointer" shrink={0}>
           <MoreHorizontal size={16} />
         </XStack>
       }
@@ -329,11 +343,12 @@ function Acts({ x, rows }: { x: Item; rows: MenuItems }) {
 
 /** One tile of the grid: the still, then its name and where it came from; its menu beside the name. */
 function Tile({ x, onOpen, rows }: { x: Item; onOpen: () => void; rows: MenuItems }) {
+  const { t } = useI18n()
   return (
     <YStack role="listitem" gap="$2" minW={0}>
       <YStack
         render="button"
-        aria-label={`Open ${x.name}`}
+        aria-label={t('Open {name}', { name: x.name })}
         onPress={onOpen}
         rounded="$4"
         overflow="hidden"
@@ -349,7 +364,7 @@ function Tile({ x, onOpen, rows }: { x: Item; onOpen: () => void; rows: MenuItem
             {x.name}
           </SizableText>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
-            {meta(x)}
+            {meta(x, t)}
           </SizableText>
         </YStack>
         <Acts x={x} rows={rows} />
@@ -360,19 +375,20 @@ function Tile({ x, onOpen, rows }: { x: Item; onOpen: () => void; rows: MenuItem
 
 /** One row of the list: a small still, its name, where it came from, how large, and its menu. */
 function Row({ x, onOpen, rows }: { x: Item; onOpen: () => void; rows: MenuItems }) {
+  const { t } = useI18n()
   return (
     <XStack role="listitem" items="center" gap="$3" px="$2" py="$2" rounded="$3" hoverStyle={{ bg: '$hover' }} minW={0}>
-      <XStack render="button" aria-label={`Open ${x.name}`} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" cursor="pointer" style={{ textAlign: 'left' }}>
+      <XStack render="button" aria-label={t('Open {name}', { name: x.name })} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" cursor="pointer" $platform-web={{ textAlign: 'start' }}>
         <Thumb x={x} size={40} />
         <YStack flex={1} minW={0} gap="$0.5">
           <SizableText size="$2" color="$ink" numberOfLines={1}>
             {x.name}
           </SizableText>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
-            {meta(x)}
+            {meta(x, t)}
           </SizableText>
         </YStack>
-        <SizableText size="$1" color="$soft" width={72} style={{ textAlign: 'right' }} $max-md={{ display: 'none' }}>
+        <SizableText size="$1" color="$soft" width={72} text="end" $max-md={{ display: 'none' }}>
           {size(x.bytes)}
         </SizableText>
       </XStack>
@@ -411,14 +427,15 @@ function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () 
 
 /** One item, read fresh so its signed URLs are live: the thing itself, then what it is. */
 export function Preview({ id, rows }: { id: string; rows?: (x: Item) => MenuItems }) {
-  const t = useTarget()
+  const { t } = useI18n()
+  const target = useTarget()
   const host = useHost()
-  const one = useRead(host.person ? () => get(t, id) : null, null as Item | null, [t, id, host.person])
+  const one = useRead(host.person ? () => get(target, id) : null, null as Item | null, [target, id, host.person])
   const x = one.value
   if (!x) {
     return (
       <SizableText size="$2" color="$soft">
-        {!host.person ? 'Sign in to open it.' : one.error ? one.error.message : 'Reading…'}
+        {!host.person ? t('Sign in to open it.') : one.error ? told(one.error, t) : t('Reading…')}
       </SizableText>
     )
   }
@@ -431,7 +448,7 @@ export function Preview({ id, rows }: { id: string; rows?: (x: Item) => MenuItem
             {x.name}
           </SizableText>
           <SizableText size="$1" color="$soft">
-            {[meta(x), size(x.bytes), x.width && x.height ? `${x.width}×${x.height}` : '', x.project ? `in ${x.project}` : '', x.shared ? 'shared with the organization' : '']
+            {[meta(x, t), size(x.bytes), x.width && x.height ? `${x.width}×${x.height}` : '', x.project ? t('in {project}', { project: x.project }) : '', x.shared ? t('shared with the organization') : '']
               .filter(Boolean)
               .join(' · ')}
           </SizableText>
@@ -442,13 +459,13 @@ export function Preview({ id, rows }: { id: string; rows?: (x: Item) => MenuItem
         {x.origin ? (
           <Button size="sm" variant="outline" onPress={() => host.open(x.origin)}>
             <ExternalLink size={14} />
-            Open where it was made
+            {t('Open where it was made')}
           </Button>
         ) : null}
         {x.download ? (
           <Button size="sm" variant="outline" onPress={() => window.open(x.download, '_blank', 'noopener,noreferrer')}>
             <Download size={14} />
-            Download
+            {t('Download')}
           </Button>
         ) : null}
       </XStack>
@@ -470,6 +487,7 @@ function Shown({ x }: { x: Item }) {
 
 /** A text item's first 200 KB, as written; in a frame where the store does not answer this page's read. */
 function Text({ x }: { x: Item }) {
+  const { t } = useI18n()
   const read = useRead(
     async () => {
       const res = await fetch(x.url, { cache: 'no-store' })
@@ -483,7 +501,7 @@ function Text({ x }: { x: Item }) {
   return (
     <YStack rounded="$3" bg="$raised" p="$3" maxH="60vh" overflow="scroll">
       <SizableText size="$1" color="$ink" style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono, ui-monospace, monospace)' }}>
-        {read.loading && !read.value ? 'Reading…' : read.value}
+        {read.loading && !read.value ? t('Reading…') : read.value}
       </SizableText>
     </YStack>
   )
@@ -491,26 +509,27 @@ function Text({ x }: { x: Item }) {
 
 /** A run's outputs as small tiles: each opens in the Library. */
 export function Outputs({ ids }: { ids: string[] }) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const key = ids.join(',')
-  const got = useRead(host.person && ids.length ? () => Promise.all(ids.slice(0, 12).map((id) => get(t, id).catch(() => null))) : null, [] as (Item | null)[], [t, key, host.person])
+  const got = useRead(host.person && ids.length ? () => Promise.all(ids.slice(0, 12).map((id) => get(target, id).catch(() => null))) : null, [] as (Item | null)[], [target, key, host.person])
   const shown = got.value.filter((x): x is Item => x !== null)
   if (!ids.length) return null
   return (
-    <XStack gap="$2" flexWrap="wrap" rowGap="$2" pt="$1.5" role="list" aria-label="What it made">
+    <XStack gap="$2" flexWrap="wrap" rowGap="$2" pt="$1.5" role="list" aria-label={t('What it made')}>
       {shown.map((x) => (
         <XStack key={x.id} role="listitem">
           <XStack
             render="button"
-            aria-label={`Open ${x.name} in the Library`}
+            aria-label={t('Open {name} in the Library', { name: x.name })}
             onPress={() => {
               want(x.id)
               host.go('-/artifacts')
             }}
             items="center"
             gap="$2"
-            pr="$2.5"
+            paddingInlineEnd="$2.5"
             rounded="$3"
             borderWidth={1}
             borderColor="$borderColor"
@@ -528,7 +547,7 @@ export function Outputs({ ids }: { ids: string[] }) {
       ))}
       {got.loading && !shown.length ? (
         <SizableText size="$1" color="$soft">
-          {`Reading ${ids.length === 1 ? 'what it made' : `the ${ids.length} things it made`}…`}
+          {ids.length === 1 ? t('Reading what it made…') : t('Reading the {n} things it made…', { n: ids.length })}
         </SizableText>
       ) : null}
     </XStack>
@@ -601,8 +620,9 @@ function useEnd(on: () => void) {
 
 
 export function Library() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
   const wide = useMedia().md
   // The kind is the address's (-/artifacts/<kind>), so the sidebar, a link and Back all name it.
@@ -624,8 +644,8 @@ export function Library() {
     return () => clearTimeout(id)
   }, [typed])
 
-  const load = useMemo(() => (signed ? (cursor: string, signal: AbortSignal) => list(t, { kind, source, scope, q, limit: PAGE, cursor }, { signal }) : null), [signed, t, kind, source, scope, q])
-  const pages = usePages(load, `${kind}|${source}|${scope}|${q}|${t.org}`)
+  const load = useMemo(() => (signed ? (cursor: string, signal: AbortSignal) => list(target, { kind, source, scope, q, limit: PAGE, cursor }, { signal }) : null), [signed, target, kind, source, scope, q])
+  const pages = usePages(load, `${kind}|${source}|${scope}|${q}|${target.org}`)
   const end = useEnd(pages.more)
   const reload = pages.reload
   useEffect(() => {
@@ -646,8 +666,8 @@ export function Library() {
     if (arrived.current || !signed) return
     arrived.current = true
     const id = named()
-    if (id) get(t, id).then(look, () => look({ id, name: 'Item' }))
-  }, [signed, t, look])
+    if (id) get(target, id).then(look, () => look({ id, name: t('Item') }))
+  }, [signed, target, look, t])
 
   const acts = useActs(
     (x) => {
@@ -663,11 +683,14 @@ export function Library() {
   const kinds: Kind[] = side.tabs
     .filter((tab) => tab.kind.startsWith(TAB))
     .map((tab) => ({ id: tab.kind, label: tab.title, render: () => <Preview key={tab.kind} id={tab.kind.slice(TAB.length)} rows={acts.rows} /> }))
-  const panel = (sheet: boolean) => <Panel side={side} kinds={kinds} sheet={sheet} onHide={() => setShown(false)} label="Item preview" />
+  const panel = (sheet: boolean) => <Panel side={side} kinds={kinds} sheet={sheet} onHide={() => setShown(false)} label={t('Item preview')} />
   const open = shown && side.tabs.length > 0
 
   const groups = days(pages.rows)
   const narrowed = Boolean(kind || source || q || scope !== 'all')
+  // The choices in the reader's words; Chat, Dev and Studio stay their names.
+  const from = FROM.map((f) => ({ ...f, label: t(f.label) }))
+  const whose = WHOSE.map((w) => ({ ...w, label: t(w.label) }))
 
   return (
     <XStack flex={1} minH={0} minW={0} width="100%">
@@ -675,13 +698,13 @@ export function Library() {
         <YStack width="100%" maxW={1120} mx="auto" gap="$4">
           <XStack items="center" gap="$3">
             <SizableText render="h1" size="$7" fontWeight="600" color="$ink" flex={1}>
-              {KINDS.find((k) => k.id === kind)?.id ? KINDS.find((k) => k.id === kind)!.label : 'Library'}
+              {KINDS.find((k) => k.id === kind)?.id ? t(KINDS.find((k) => k.id === kind)!.label) : t('Library')}
             </SizableText>
-            <XStack role="radiogroup" aria-label="View" gap="$1">
-              <ViewMark label="Grid" on={view === 'grid'} onPress={() => setView('grid')}>
+            <XStack role="radiogroup" aria-label={t('View')} gap="$1">
+              <ViewMark label={t('Grid')} on={view === 'grid'} onPress={() => setView('grid')}>
                 <LayoutGrid size={16} />
               </ViewMark>
-              <ViewMark label="List" on={view === 'list'} onPress={() => setView('list')}>
+              <ViewMark label={t('List')} on={view === 'list'} onPress={() => setView('list')}>
                 <List size={16} />
               </ViewMark>
             </XStack>
@@ -690,34 +713,34 @@ export function Library() {
           <XStack items="center" gap="$2" maxW={480}>
             <Search size={16} opacity={0.6} />
             <YStack flex={1} minW={0}>
-              <Input value={typed} onChangeText={setTyped} placeholder="Search your library" aria-label="Search your library" disabled={!signed} />
+              <Input value={typed} onChangeText={setTyped} placeholder={t('Search your library')} aria-label={t('Search your library')} disabled={!signed} />
             </YStack>
           </XStack>
 
           <YStack gap="$2">
             {/* A host whose sidebar lists the kinds draws them there. */}
             {host.sections ? null : (
-              <XStack role="radiogroup" aria-label="Kind" gap="$2" overflowX="auto" pb="$1" $platform-web={{ scrollbarWidth: 'none' }}>
+              <XStack role="radiogroup" aria-label={t('Kind')} gap="$2" overflowX="auto" pb="$1" $platform-web={{ scrollbarWidth: 'none' }}>
                 {KINDS.map((k) => (
-                  <Chip key={k.id || 'all'} label={k.label} on={kind === k.id} onPress={() => setKind(k.id)} />
+                  <Chip key={k.id || 'all'} label={t(k.label)} on={kind === k.id} onPress={() => setKind(k.id)} />
                 ))}
               </XStack>
             )}
             <XStack gap="$2" flexWrap="wrap" rowGap="$2">
               <ChipSelect
-                name="From"
-                label={FROM.find((f) => f.id === source)!.label}
-                chosen={FROM.find((f) => f.id === source)}
-                items={FROM}
+                name={t('From')}
+                label={from.find((f) => f.id === source)!.label}
+                chosen={from.find((f) => f.id === source)}
+                items={from}
                 onChange={(f) => setSource(f.id)}
                 placement="bottom-start"
                 width={200}
               />
               <ChipSelect
-                name="Whose"
-                label={WHOSE.find((w) => w.id === scope)!.label}
-                chosen={WHOSE.find((w) => w.id === scope)}
-                items={WHOSE}
+                name={t('Whose')}
+                label={whose.find((w) => w.id === scope)!.label}
+                chosen={whose.find((w) => w.id === scope)}
+                items={whose}
                 onChange={(w) => setScope(w.id)}
                 placement="bottom-start"
                 width={220}
@@ -732,36 +755,36 @@ export function Library() {
           ) : null}
 
           {!signed ? (
-            <Said says="Sign in to see your library.">
+            <Said says={t('Sign in to see your library.')}>
               <Button size="sm" onPress={() => host.signIn?.()}>
-                Sign in
+                {t('Sign in')}
               </Button>
             </Said>
           ) : pages.error && !pages.rows.length ? (
-            <Said says={pages.error.message}>
+            <Said says={told(pages.error, t)}>
               <Button size="sm" variant="outline" onPress={pages.reload}>
-                Try again
+                {t('Try again')}
               </Button>
             </Said>
           ) : pages.loading && !pages.rows.length ? (
-            <Said says="Reading…" />
+            <Said says={t('Reading…')} />
           ) : !pages.rows.length ? (
-            <Said says={narrowed ? 'Nothing matches.' : 'Nothing here yet. What you make in Chat, Dev and Studio lands here.'} />
+            <Said says={narrowed ? t('Nothing matches.') : t('Nothing here yet. What you make in Chat, Dev and Studio lands here.')} />
           ) : (
             <YStack gap="$5">
               {groups.map((g) => (
-                <YStack key={g.label} gap="$3" role="group" aria-label={g.label}>
+                <YStack key={g.label} gap="$3" role="group" aria-label={t(g.label)}>
                   <SizableText size="$2" color="$soft" fontWeight="500">
-                    {g.label}
+                    {t(g.label)}
                   </SizableText>
                   {view === 'grid' ? (
-                    <div role="list" aria-label={`Made ${g.label.toLowerCase()}`} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(46%, 168px), 1fr))', gap: 16 }}>
+                    <YStack role="list" aria-label={made(g.label, t)} gap={16} $platform-web={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(46%, 168px), 1fr))' }}>
                       {g.rows.map((x) => (
                         <Tile key={x.id} x={x} onOpen={() => look(x)} rows={acts.rows(x)} />
                       ))}
-                    </div>
+                    </YStack>
                   ) : (
-                    <YStack role="list" aria-label={`Made ${g.label.toLowerCase()}`} gap="$0.5">
+                    <YStack role="list" aria-label={made(g.label, t)} gap="$0.5">
                       {g.rows.map((x) => (
                         <Row key={x.id} x={x} onOpen={() => look(x)} rows={acts.rows(x)} />
                       ))}
@@ -772,11 +795,11 @@ export function Library() {
               <YStack ref={end} height={1} />
               {pages.loading ? (
                 <SizableText size="$1" color="$soft">
-                  Reading more…
+                  {t('Reading more…')}
                 </SizableText>
               ) : pages.error ? (
                 <SizableText size="$1" color="$soft" role="status">
-                  {pages.error.message}
+                  {told(pages.error, t)}
                 </SizableText>
               ) : null}
             </YStack>

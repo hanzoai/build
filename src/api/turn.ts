@@ -20,7 +20,17 @@
  *
  * `cards` is the transcript as it is drawn: the run's steps and the agent's
  * items, never its log.
+ *
+ * The sentences are this client's, said in the language of the `t` a caller
+ * hands (@hanzo/i18n; English without one); what the run and the agent said
+ * is drawn as given. A step's name is a name the transcript keys on (`Error`
+ * opens itself), so it stays English, marked (`phrase`), and the transcript
+ * draws it through `t`.
  */
+import { phrase } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
+
+import { english } from '../say.ts'
 import type { Event } from './sessions.ts'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -49,37 +59,63 @@ const base = (path: string): string => {
   return cut.slice(cut.lastIndexOf('/') + 1)
 }
 
-function status(b: Record<string, unknown>, mode: string): string {
+/**
+ * A finished run's line, by whether it pushed a branch (Done when it did not),
+ * its pull request (none, one that could not be opened, its address) and its
+ * site (none, not published and why, published): each a whole line, so a
+ * language puts the parts in its own order.
+ */
+const FINISHED: Record<'pushed' | 'done', Record<'none' | 'broke' | 'pr', Record<'none' | 'out' | 'live', string>>> = {
+  pushed: {
+    none: { none: phrase('Pushed {branch}'), out: phrase('Pushed {branch} — not published: {why}'), live: phrase('Pushed {branch} — published') },
+    broke: {
+      none: phrase('Pushed {branch} — the pull request could not be opened'),
+      out: phrase('Pushed {branch} — the pull request could not be opened — not published: {why}'),
+      live: phrase('Pushed {branch} — the pull request could not be opened — published'),
+    },
+    pr: { none: phrase('Pushed {branch} — {pr}'), out: phrase('Pushed {branch} — {pr} — not published: {why}'), live: phrase('Pushed {branch} — {pr} — published') },
+  },
+  done: {
+    none: { none: phrase('Done'), out: phrase('Done — not published: {why}'), live: phrase('Done — published') },
+    broke: {
+      none: phrase('Done — the pull request could not be opened'),
+      out: phrase('Done — the pull request could not be opened — not published: {why}'),
+      live: phrase('Done — the pull request could not be opened — published'),
+    },
+    pr: { none: phrase('Done — {pr}'), out: phrase('Done — {pr} — not published: {why}'), live: phrase('Done — {pr} — published') },
+  },
+}
+
+function status(b: Record<string, unknown>, mode: string, t: Say): string {
   const branch = str(b.branch)
   switch (str(b.status)) {
     case 'started':
-      return branch ? `Started on ${branch}` : 'Started'
+      return branch ? t('Started on {branch}', { branch }) : t('Started')
     case 'routed':
-      return 'Sent to a machine'
+      return t('Sent to a machine')
     case 'done': {
       // A plan's answer IS its final status: the run read and wrote nothing.
       // Whether the run planned is the RECORD's word — any member of the org
       // can append an event saying `mode: plan`, and its text is not an answer.
       // A setup is a plan put to one question, and answers the same way.
-      if (mode === 'plan') return str(b.plan) || 'Planned — the run answered with no plan'
-      if (mode === 'setup') return str(b.plan) || 'Set up — the run answered with no environment'
-      if (b.changed === false) return 'Done — nothing to change'
+      if (mode === 'plan') return str(b.plan) || t('Planned — the run answered with no plan')
+      if (mode === 'setup') return str(b.plan) || t('Set up — the run answered with no environment')
+      if (b.changed === false) return t('Done — nothing to change')
       const pr = str(b.pr)
-      const tail = str(b.prError) ? ' — the pull request could not be opened' : pr ? ` — ${pr}` : ''
       // A run on a project with a site publishes what it pushed, or says why not.
       const why = str(b.unpublished)
-      const site = why ? ` — not published: ${why}` : str(b.live) ? ' — published' : ''
-      return branch ? `Pushed ${branch}${tail}${site}` : `Done${tail}${site}`
+      const line = FINISHED[branch ? 'pushed' : 'done'][str(b.prError) ? 'broke' : pr ? 'pr' : 'none'][why ? 'out' : str(b.live) ? 'live' : 'none']
+      return t(line, { branch, pr, why })
     }
     case 'error':
-      return plain(str(b.error))
+      return plain(str(b.error), t)
     case 'stopped':
-      return branch && b.changed ? `Stopped — work kept on ${branch}` : 'Stopped'
+      return branch && b.changed ? t('Stopped — work kept on {branch}', { branch }) : t('Stopped')
     case 'paused':
-      return branch && b.changed ? `Paused — work kept on ${branch}` : 'Paused'
+      return branch && b.changed ? t('Paused — work kept on {branch}', { branch }) : t('Paused')
     case 'followed':
       // A run redirected from a chat thread is carried on by a follow-up (apps/coding steer.go).
-      return str(b.next) ? 'Continued in a follow-up run' : 'The follow-up run could not start'
+      return str(b.next) ? t('Continued in a follow-up run') : t('The follow-up run could not start')
   }
   return str(b.status)
 }
@@ -95,31 +131,31 @@ export function vendor(error: string): boolean {
 }
 
 /** An error as the run page may show it: its own words, or the plain line when they are a vendor's. */
-export const scrub = (error: string): string => (vendor(error) ? plain(error) : error)
+export const scrub = (error: string, t: Say = english): string => (vendor(error) ? plain(error, t) : error)
 
 /**
  * A run's error as one plain line with what to do, never the log it came from:
  * that goes in the Error step beside it (cards), unless it is a vendor's.
  */
-export function plain(error: string): string {
-  if (!error) return 'The run hit an error'
+export function plain(error: string, t: Say = english): string {
+  if (!error) return t('The run hit an error')
   const ours = /providers_exhausted|every provider refused|temporarily unavailable/i.test(error)
-  if (/free sandboxes .*are used/i.test(error)) return 'This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.'
-  if (!ours && /\b402 Payment Required|insufficient (credit|balance)|top up/i.test(error)) return 'Your balance is out of credit. Add credit, then try again.'
+  if (/free sandboxes .*are used/i.test(error)) return t('This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.')
+  if (!ours && /\b402 Payment Required|insufficient (credit|balance)|top up/i.test(error)) return t('Your balance is out of credit. Add credit, then try again.')
   if (ours || /\b(429 Too Many Requests|503 Service Unavailable)|stream disconnected|retries exhausted|rate limit/i.test(error))
-    return 'The model did not answer. Try again in a moment, or pick another model.'
-  return 'The run stopped with an error. Try again, or follow up with what to change.'
+    return t('The model did not answer. Try again in a moment, or pick another model.')
+  return t('The run stopped with an error. Try again, or follow up with what to change.')
 }
 
 /**
  * One event's sentence, or '' when it says nothing a person needs. `mode` is
  * the run's, from its record: a plan run's final status says the plan.
  */
-export function said(e: Pick<Event, 'kind' | 'payload'>, mode = ''): string {
+export function said(e: Pick<Event, 'kind' | 'payload'>, mode = '', t: Say = english): string {
   const body = decode(e.payload)
   if (typeof body === 'string') return body
   if (!body) return ''
-  if (e.kind === 'status') return status(body, mode)
+  if (e.kind === 'status') return status(body, mode, t)
   for (const key of ['message', 'text', 'content', 'result', 'command']) {
     const v = body[key]
     if (typeof v === 'string' && v) return v
@@ -127,12 +163,12 @@ export function said(e: Pick<Event, 'kind' | 'payload'>, mode = ''): string {
   if (str(body.type) === 'done' && Array.isArray(body.changed)) {
     const names = body.changed.map((f) => base(str(f))).filter(Boolean)
     return names.length === 0
-      ? 'Done — no files changed'
+      ? t('Done — no files changed')
       : names.length <= 3
-        ? `Done — changed ${names.join(', ')}`
-        : `Done — changed ${names.length} files`
+        ? t('Done — changed {files}', { files: names.join(', ') })
+        : t('Done — changed {n} files', { n: names.length })
   }
-  if (str(body.type) === 'error') return scrub(str(body.error)) || 'The run hit an error'
+  if (str(body.type) === 'error') return scrub(str(body.error), t) || t('The run hit an error')
   return str(body.step) || str(body.name)
 }
 
@@ -239,13 +275,13 @@ export function outcome(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): Outc
 }
 
 /** Why the run failed, as its last status says it, or '' when that status is not a failure. */
-export function failure(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): string {
+export function failure(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], t: Say = english): string {
   let out = ''
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     if (e.kind !== 'status') continue
     const b = decode(e.payload)
     if (!b || typeof b === 'string' || !str(b.status)) continue
-    out = str(b.status) === 'error' ? scrub(str(b.error)) || 'The run hit an error' : ''
+    out = str(b.status) === 'error' ? scrub(str(b.error), t) || t('The run hit an error') : ''
   }
   return out
 }
@@ -304,19 +340,19 @@ export type Card =
   | { kind: 'note'; key: string; text: string }
   | { kind: 'plan'; key: string; text: string }
 
-/** What the run's own steps are called on a card. */
+/** What the run's own steps are called on a card: English, marked (`phrase`); the transcript draws them through `t`. */
 const NAMES: Record<string, string> = {
-  lease: 'Sandbox',
-  workspace: 'Workspace',
-  clone: 'Clone',
-  branch: 'Branch',
-  secrets: 'Secrets',
-  install: 'Install',
-  start: 'Start',
-  skills: 'Skills',
-  artifacts: 'Save artifacts',
-  push: 'Push',
-  kept: 'Keep the sandbox',
+  lease: phrase('Sandbox'),
+  workspace: phrase('Workspace'),
+  clone: phrase('Clone'),
+  branch: phrase('Branch'),
+  secrets: phrase('Secrets'),
+  install: phrase('Install'),
+  start: phrase('Start'),
+  skills: phrase('Skills'),
+  artifacts: phrase('Save artifacts'),
+  push: phrase('Push'),
+  kept: phrase('Keep the sandbox'),
 }
 
 /** Steps another card already says: `leased` finishes the lease, `done` is the final status, `ended` and `exit` are housekeeping. */
@@ -357,9 +393,9 @@ function item(it: Record<string, unknown>, key: string): Card | null {
       return { kind: 'edit', key, files: changes.map((c) => rel(str(obj(c).path))).filter(Boolean), ran: itemRan(it) }
     }
     case 'mcp_tool_call':
-      return { kind: 'step', key, name: str(it.tool) || 'Tool', detail: str(it.server), output: '', ran: itemRan(it) }
+      return { kind: 'step', key, name: str(it.tool) || phrase('Tool'), detail: str(it.server), output: '', ran: itemRan(it) }
     case 'web_search':
-      return { kind: 'step', key, name: 'Search', detail: str(it.query), output: '', ran: 'done' }
+      return { kind: 'step', key, name: phrase('Search'), detail: str(it.query), output: '', ran: 'done' }
     case 'todo_list': {
       const items = Array.isArray(it.items) ? it.items : []
       return { kind: 'todo', key, items: items.map((x) => ({ text: str(obj(x).text), done: obj(x).completed === true })).filter((x) => x.text) }
@@ -381,7 +417,7 @@ function item(it: Record<string, unknown>, key: string): Card | null {
  * is drawn only if the turn then fails. The final status carries the agent's
  * answer, drawn once. `log` is never drawn here.
  */
-export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = ''): Card[] {
+export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = '', t: Say = english): Card[] {
   const out: Card[] = []
   let seq = 0
   let n = 0
@@ -401,9 +437,9 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
   const failed = (message: string) => {
     if (failures.has(message)) return
     failures.add(message)
-    out.push({ kind: 'note', key: mint(), text: plain(message) })
+    out.push({ kind: 'note', key: mint(), text: plain(message, t) })
     // The reason, read whole, when it is the run's own; a vendor's words stay off the page.
-    if (message && !vendor(message)) out.push({ kind: 'step', key: mint(), name: 'Error', detail: '', output: message, ran: 'error' })
+    if (message && !vendor(message)) out.push({ kind: 'step', key: mint(), name: phrase('Error'), detail: '', output: message, ran: 'error' })
   }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     seq = e.seq
@@ -472,7 +508,7 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
           failed(str(b.error))
           break
         }
-        const line = status(b, mode)
+        const line = status(b, mode, t)
         if (line) out.push({ kind: 'note', key: mint(), text: line })
         break
       }
@@ -481,9 +517,9 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
         const command = str(b.command)
         const said = str(b.message)
         if (command === 'message' && said) steered.add(person(said))
-        else if (command === 'pause') out.push({ kind: 'note', key: mint(), text: 'Pause asked' })
-        else if (command === 'resume') out.push({ kind: 'note', key: mint(), text: 'Resume asked' })
-        else if (command === 'stop') out.push({ kind: 'note', key: mint(), text: 'Stop asked' })
+        else if (command === 'pause') out.push({ kind: 'note', key: mint(), text: t('Pause asked') })
+        else if (command === 'resume') out.push({ kind: 'note', key: mint(), text: t('Resume asked') })
+        else if (command === 'stop') out.push({ kind: 'note', key: mint(), text: t('Stop asked') })
         break
       }
       case 'message': {

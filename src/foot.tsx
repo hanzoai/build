@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Popover, SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { CreditCard, Gauge, LifeBuoy, LogOut, Settings, Slack as Mark, Sparkles, X } from '@hanzogui/lucide-icons-2'
 import { MenuLabel, MenuRow, MenuRule } from '@hanzo/ui/product'
 
@@ -20,21 +21,22 @@ export const DOCS = 'https://docs.hanzo.ai/docs/dev'
 
 /** Hanzo in Slack is set up under Settings; the card goes there, and once dismissed stays gone. */
 export function Slack({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: () => void }) {
+  const { t } = useI18n()
   return (
     // A card on the rail's card: glass, a corner a step inside the rail's.
     <XStack items="center" gap="$2.5" px="$3" py="$2.5" rounded="var(--radius-lg)" borderWidth={1} borderColor="$borderColor" bg="var(--glass)">
       <Mark size={16} />
       <YStack flex={1} minW={0} gap="$0.5">
         <SizableText size="$2" color="$ink" numberOfLines={1}>
-          Try Hanzo in Slack
+          {t('Try Hanzo in Slack')}
         </SizableText>
-        <XStack render="button" aria-label="Set up Hanzo in Slack" onPress={onOpen} cursor="pointer">
+        <XStack render="button" aria-label={t('Set up Hanzo in Slack')} onPress={onOpen} cursor="pointer">
           <SizableText size="$1" color="$soft" textDecorationLine="underline">
-            Set up
+            {t('Set up')}
           </SizableText>
         </XStack>
       </YStack>
-      <XStack render="button" aria-label="Dismiss" onPress={onDismiss} p="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+      <XStack render="button" aria-label={t('Dismiss')} onPress={onDismiss} p="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
         <X size={14} />
       </XStack>
     </XStack>
@@ -76,6 +78,7 @@ export function useWho(): { open: boolean; onOpenChange: (o: boolean) => void; t
  * open rail, beside it on the collapsed one.
  */
 export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChange: (o: boolean) => void; narrow: boolean }) {
+  const { t } = useI18n()
   const host = useHost()
   const standing = useStanding(useTarget(), open)
   // The organizations this person acts in; choosing one reloads the page scoped to it.
@@ -89,7 +92,7 @@ export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChang
       <Popover.Anchor position="absolute" l={8} b={8} width={narrow ? 48 : 256} height={36} pointerEvents="none" />
       <Popover.Content
         role="menu"
-        aria-label="Account"
+        aria-label={t('Account')}
         items="stretch"
         borderWidth={1}
         elevation="$2"
@@ -112,8 +115,8 @@ export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChang
           {orgs.length ? (
             <>
               <MenuRule />
-              <MenuLabel>Organization</MenuLabel>
-              <YStack role="radiogroup" aria-label="Organizations" gap="$1">
+              <MenuLabel>{t('Organization')}</MenuLabel>
+              <YStack role="radiogroup" aria-label={t('Organizations')} gap="$1">
                 {orgs.map((o) => (
                   <MenuRow
                     key={o}
@@ -129,12 +132,12 @@ export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChang
             </>
           ) : null}
           <MenuRule />
-          <MenuRow label="Settings" icon={<Settings size={16} />} onPress={() => go(path({ kind: 'settings', section: 'general' }))} />
-          <MenuRow label="Usage" icon={<Gauge size={16} />} onPress={() => go(path({ kind: 'settings', section: 'usage' }))} />
-          <MenuRow label="Billing" icon={<CreditCard size={16} />} onPress={() => go(path({ kind: 'settings', section: 'billing' }))} />
-          <MenuRow label="View all plans" icon={<Sparkles size={16} />} onPress={() => go(path({ kind: 'screen', screen: 'plans' }))} />
+          <MenuRow label={t('Settings')} icon={<Settings size={16} />} onPress={() => go(path({ kind: 'settings', section: 'general' }))} />
+          <MenuRow label={t('Usage')} icon={<Gauge size={16} />} onPress={() => go(path({ kind: 'settings', section: 'usage' }))} />
+          <MenuRow label={t('Billing')} icon={<CreditCard size={16} />} onPress={() => go(path({ kind: 'settings', section: 'billing' }))} />
+          <MenuRow label={t('View all plans')} icon={<Sparkles size={16} />} onPress={() => go(path({ kind: 'screen', screen: 'plans' }))} />
           <MenuRow
-            label="Get help"
+            label={t('Get help')}
             icon={<LifeBuoy size={16} />}
             onPress={() => {
               onOpenChange(false)
@@ -145,7 +148,7 @@ export function Who({ open, onOpenChange, narrow }: { open: boolean; onOpenChang
             <>
               <MenuRule />
               <MenuRow
-                label="Log out"
+                label={t('Log out')}
                 icon={<LogOut size={16} />}
                 onPress={() => {
                   onOpenChange(false)

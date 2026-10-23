@@ -22,7 +22,12 @@
  * measured by a ResizeObserver, after layout, so a frame never reads layout
  * it has just dirtied. A window narrowed under the panel is painted the same
  * way: the panel gives way, and the person's width comes back with the room.
+ *
+ * The panel stands at the line's end and the gutter is its inline-start margin,
+ * so a right-to-left page puts it on the left and its edge on its right
+ * (@hanzo/i18n `dir`), and the grip grows it rightwards.
  */
+import { useI18n } from '@hanzo/i18n/react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 
 import { usePrefs } from './prefs.tsx'
@@ -58,8 +63,8 @@ export const useSide = (): Side | null => useContext(Context)
 /** The panel's own properties, at a width or with the room. Every key every time, so React and a drag write one set. */
 function look(width: number, hidden: boolean): Record<string, string> {
   return hidden
-    ? { width: 'auto', flexGrow: '1', flexShrink: '1', minWidth: '0px', maxWidth: 'none', marginLeft: '0px', gridColumnStart: 'pane' }
-    : { width: `${width}px`, flexGrow: '', flexShrink: '0', minWidth: `${FLOOR}px`, maxWidth: `calc(100vw - ${MAIN}px)`, marginLeft: '', gridColumnStart: '' }
+    ? { width: 'auto', flexGrow: '1', flexShrink: '1', minWidth: '0px', maxWidth: 'none', marginInlineStart: '0px', gridColumnStart: 'pane' }
+    : { width: `${width}px`, flexGrow: '', flexShrink: '0', minWidth: `${FLOOR}px`, maxWidth: `calc(100vw - ${MAIN}px)`, marginInlineStart: '', gridColumnStart: '' }
 }
 
 /** Over the whole window, opaque, above the frame and under the kit's menus. */
@@ -70,7 +75,7 @@ const FULL = {
   width: 'auto',
   maxWidth: 'none',
   minWidth: '0px',
-  marginLeft: '0px',
+  marginInlineStart: '0px',
   borderRadius: '0px',
   backgroundColor: 'var(--background)',
   backdropFilter: 'none',
@@ -90,7 +95,7 @@ export interface Split {
   aside: (el: unknown) => void
   asideStyle: CSSProperties
   /** The kit `Grip`'s props, but its label and its place; none while the panel is full screen. */
-  grip: { side: 'right'; span: number; floor: number; ceil: number; reset: number; onSpan: (n: number) => void; onKeep: (n: number) => void; onShut: () => void } | null
+  grip: { side: 'left' | 'right'; span: number; floor: number; ceil: number; reset: number; onSpan: (n: number) => void; onKeep: (n: number) => void; onShut: () => void } | null
 }
 
 /**
@@ -99,6 +104,7 @@ export interface Split {
  * the panel away (its edge pulled past its floor).
  */
 export function useSplit(open: boolean, main: string, onShut: () => void): Split {
+  const { dir } = useI18n()
   const prefs = usePrefs(false)
   const kept = prefs?.prefs.side?.width
   const [width, setWidth] = useState(() => Math.max(FLOOR, kept ?? WIDTH))
@@ -140,7 +146,7 @@ export function useSplit(open: boolean, main: string, onShut: () => void): Split
       // Full screen is the window's, not the room's.
       if (aside.style.position === 'fixed') return
       const shown = main.style.display !== 'none'
-      if (shown) now.current.gap = parseFloat(getComputedStyle(aside).marginLeft) || 0
+      if (shown) now.current.gap = parseFloat(getComputedStyle(aside).marginInlineStart) || 0
       const total = Math.round((shown ? main.getBoundingClientRect().width + now.current.gap : 0) + aside.getBoundingClientRect().width)
       // A drag moves width between the two and leaves their sum; only a new window is news.
       if (Math.abs(total - now.current.room) < 2) return
@@ -227,6 +233,6 @@ export function useSplit(open: boolean, main: string, onShut: () => void): Split
     asideStyle: (side.full ? { ...look(across, side.hidden), ...FULL } : look(across, side.hidden)) as CSSProperties,
     grip: side.full
       ? null
-      : { side: 'right', span: side.hidden ? room : across, floor: FLOOR, ceil: Math.max(FLOOR, room), reset: WIDTH, onSpan: (n) => void paint(n), onKeep: keep, onShut },
+      : { side: dir === 'rtl' ? 'left' : 'right', span: side.hidden ? room : across, floor: FLOOR, ceil: Math.max(FLOOR, room), reset: WIDTH, onSpan: (n) => void paint(n), onKeep: keep, onShut },
   }
 }

@@ -4,12 +4,18 @@
  * One opens in the same editor a run shows beside it. A member reads; an org
  * admin saves, sets secrets and forgets an environment, which is the platform's
  * rule and not a choice made here.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a codebase's name is
+ * its own, drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { ChevronLeft, ChevronRight } from '@hanzogui/lucide-icons-2'
+import { phrase } from '@hanzo/i18n'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { Button } from '@hanzo/ui'
 import { useState } from 'react'
 
+import { told } from '../api/call.ts'
 import { environments, forget, type Environment as Env } from '../api/environment.ts'
 import { Confirm } from '../ask.tsx'
 import { useRead } from '../data.ts'
@@ -17,22 +23,23 @@ import { Environment } from '../environment.tsx'
 import { useHost, useTarget } from '../host.tsx'
 import { Card, Heading, Note, Row, Soft } from './ui.tsx'
 
-const STATE: Record<Env['state'], string> = { none: 'Not set up', proposed: 'Proposed, waiting for review', ready: 'Ready' }
+const STATE: Record<Env['state'], string> = { none: phrase('Not set up'), proposed: phrase('Proposed, waiting for review'), ready: phrase('Ready') }
 
-/** The line under a codebase: where it stands, its secrets, when it was saved. */
-function about(e: Env): string {
-  const parts = [STATE[e.state]]
-  if (e.secrets.length) parts.push(e.secrets.length === 1 ? '1 secret' : `${e.secrets.length} secrets`)
+/** The line under a codebase: where it stands, its secrets, when it was saved, each fact in the reader's words. */
+function about(e: Env, t: Say): string {
+  const parts = [t(STATE[e.state])]
+  if (e.secrets.length) parts.push(e.secrets.length === 1 ? t('1 secret') : t('{n} secrets', { n: e.secrets.length }))
   const when = e.updated ? new Date(e.updated) : null
-  if (when && !Number.isNaN(when.getTime())) parts.push(`Updated ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`)
+  if (when && !Number.isNaN(when.getTime())) parts.push(t('Updated {date}', { date: when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) }))
   return parts.join(' · ')
 }
 
 export function Environments() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
-  const list = useRead(signed ? () => environments(t) : null, [] as Env[], [t, signed])
+  const list = useRead(signed ? () => environments(target) : null, [] as Env[], [target, signed])
   const [open, setOpen] = useState('')
   const [forgetting, setForgetting] = useState(false)
   const [note, setNote] = useState('')
@@ -40,8 +47,8 @@ export function Environments() {
   if (!signed) {
     return (
       <YStack gap="$5">
-        <Heading title="Environments" />
-        <Soft>Sign in to see your organization’s environments.</Soft>
+        <Heading title={t('Environments')} />
+        <Soft>{t('Sign in to see your organization’s environments.')}</Soft>
       </YStack>
     )
   }
@@ -51,12 +58,12 @@ export function Environments() {
       <YStack gap="$5">
         <XStack items="center" gap="$2">
           <Button size="sm" variant="ghost" onPress={() => setOpen('')}>
-            <ChevronLeft size={14} /> All environments
+            <ChevronLeft size={14} {...{ 'data-i18n-mirror': '' }} /> {t('All environments')}
           </Button>
           <XStack flex={1} />
           {host.admin ? (
             <Button size="sm" variant="outline" onPress={() => setForgetting(true)}>
-              Forget
+              {t('Forget')}
             </Button>
           ) : null}
         </XStack>
@@ -64,12 +71,12 @@ export function Environments() {
         <Confirm
           open={forgetting}
           onOpenChange={setForgetting}
-          title={`Forget ${open}’s environment?`}
-          says="Later runs on this codebase start bare: its scripts are dropped and every secret it holds is removed from KMS. This cannot be undone."
-          act="Forget"
+          title={t('Forget {repo}’s environment?', { repo: open })}
+          says={t('Later runs on this codebase start bare: its scripts are dropped and every secret it holds is removed from KMS. This cannot be undone.')}
+          act={t('Forget')}
           run={async () => {
-            await forget(t, open)
-            setNote(`${open}’s environment is forgotten`)
+            await forget(target, open)
+            setNote(t('{repo}’s environment is forgotten', { repo: open }))
             setOpen('')
             list.reload()
           }}
@@ -81,38 +88,38 @@ export function Environments() {
   return (
     <YStack gap="$5">
       <Heading
-        title="Environments"
-        detail="What a sandbox run does to a codebase before its agent starts: the install script, the start command, and the secrets it exports."
+        title={t('Environments')}
+        detail={t('What a sandbox run does to a codebase before its agent starts: the install script, the start command, and the secrets it exports.')}
       />
       {list.error ? (
-        <Soft>{list.error.message}</Soft>
+        <Soft>{told(list.error, t)}</Soft>
       ) : list.loading && list.value.length === 0 ? (
-        <Soft>Reading environments…</Soft>
+        <Soft>{t('Reading environments…')}</Soft>
       ) : list.value.length === 0 ? (
-        <Soft>No codebase has an environment yet. Set one up from New, or from a run’s Environment tab.</Soft>
+        <Soft>{t('No codebase has an environment yet. Set one up from New, or from a run’s Environment tab.')}</Soft>
       ) : (
         <Card>
           {list.value.map((e, i) => (
             <YStack
               key={e.repo}
               render="button"
-              aria-label={`Open ${e.repo}`}
+              aria-label={t('Open {repo}', { repo: e.repo })}
               onPress={() => {
                 setNote('')
                 setOpen(e.repo)
               }}
               cursor="pointer"
               hoverStyle={{ bg: '$hover' }}
-              style={{ textAlign: 'left' }}
+              $platform-web={{ textAlign: 'start' }}
             >
-              <Row first={i === 0} title={e.repo} detail={about(e)} trailing={<ChevronRight size={16} opacity={0.6} />} />
+              <Row first={i === 0} title={e.repo} detail={about(e, t)} trailing={<ChevronRight size={16} opacity={0.6} {...{ 'data-i18n-mirror': '' }} />} />
             </YStack>
           ))}
         </Card>
       )}
       {!host.admin ? (
         <SizableText size="$1" color="$soft">
-          An org admin saves an environment and sets its secrets.
+          {t('An org admin saves an environment and sets its secrets.')}
         </SizableText>
       ) : null}
       <Note>{note}</Note>

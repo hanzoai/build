@@ -4,6 +4,7 @@
  * the reason is read where the act was asked for.
  */
 import { SizableText, XStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
 
@@ -52,6 +53,7 @@ export function Confirm({
   act: string
   run: () => Promise<void>
 }) {
+  const { t } = useI18n()
   const { working, note, setNote, go } = useAct(() => onOpenChange(false))
   const close = (o: boolean) => {
     if (working) return
@@ -68,7 +70,7 @@ export function Confirm({
         <Said note={note} />
         <XStack gap="$2" justify="flex-end">
           <Button size="sm" variant="ghost" disabled={working} onPress={() => close(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button size="sm" variant="destructive" disabled={working} onPress={() => void go(run)}>
             {act}
@@ -93,6 +95,7 @@ export function Rename({
   name: string
   run: (next: string) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [value, setValue] = useState(name)
   const { working, note, setNote, go } = useAct(() => onOpenChange(false))
   useEffect(() => {
@@ -105,7 +108,7 @@ export function Rename({
   }
   const save = () => {
     const next = value.trim()
-    if (!next) return setNote('It needs a name')
+    if (!next) return setNote(t('It needs a name'))
     if (next === name) return close(false)
     void go(() => run(next))
   }
@@ -117,7 +120,7 @@ export function Rename({
           autoFocus
           value={value}
           onChangeText={setValue}
-          aria-label="Name"
+          aria-label={t('Name')}
           onKeyDown={(e: { key?: string }) => {
             if (e.key === 'Enter') save()
           }}
@@ -125,10 +128,10 @@ export function Rename({
         <Said note={note} />
         <XStack gap="$2" justify="flex-end">
           <Button size="sm" variant="ghost" disabled={working} onPress={() => close(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button size="sm" disabled={working} onPress={save}>
-            Save
+            {t('Save')}
           </Button>
         </XStack>
       </DialogContent>

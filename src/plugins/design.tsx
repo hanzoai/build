@@ -7,6 +7,7 @@
  * everything made after it follows it. From `+` › Design system it attaches to
  * any later conversation, in Chat or in Dev.
  */
+import { phrase } from '@hanzo/i18n'
 import { Palette } from '@hanzogui/lucide-icons-2'
 
 import { call, type Target } from '../api/call.ts'
@@ -73,8 +74,8 @@ export async function make(turn: Turn, t: Target, signal: AbortSignal): Promise<
 
 export const designer: Plugin = {
   id: 'design',
-  name: 'Design system',
-  note: 'Make one from a brief or a site',
+  name: phrase('Design system'),
+  note: phrase('Make one from a brief or a site'),
   icon: <Palette size={16} />,
   prepare: (turn, c, signal) => make(turn, c.target, signal),
 }

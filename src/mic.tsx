@@ -8,10 +8,14 @@
  * every capture opens it; unchosen, the system's own input. The meter listens
  * only while the menu is open, and only where the person has already let the
  * page use a microphone: opening a menu never asks for permission.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a microphone's name
+ * is the device's and a language's is its own, drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Check, ChevronDown, Mic as MicIcon } from '@hanzogui/lucide-icons-2'
 import { Control } from '@hanzo/composer'
+import { useI18n } from '@hanzo/i18n/react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,6 +83,8 @@ function useInputs(open: boolean): { inputs: MediaDeviceInfo[]; allowed: boolean
 
 /** The chosen microphone's level while the menu is open, drawn without re-rendering. */
 function Meter({ device, on }: { device: string | null; on: boolean }) {
+  // The level grows from the line's start: the right edge in a right-to-left language.
+  const { dir } = useI18n()
   const bar = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!on) return
@@ -122,8 +128,9 @@ function Meter({ device, on }: { device: string | null; on: boolean }) {
           height={4}
           width="100%"
           bg="$ink"
-          // inline-style: the level is written per frame onto the node; a style prop would mint a class per value.
-          style={{ transform: 'scaleX(0)', transformOrigin: 'left' }}
+          // Empty at rest; the level is written per frame onto the node's transform, so no class is minted per value.
+          scaleX={0}
+          transformOrigin={dir === 'rtl' ? 'right' : 'left'}
         />
       </YStack>
     </XStack>
@@ -142,6 +149,7 @@ export interface DictationProps {
 
 /** The mic and its chevron, one control on the composer's row. */
 export function Dictation({ voice, disabled = false, narrow = false, language = null, onLanguage }: DictationProps) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   // The Language list, drawn only while open (see plus.tsx).
   const [lang, setLang] = useState(false)
@@ -166,7 +174,7 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
       onBlur={() => setNear(false)}
     >
       <Control asChild size={narrow ? 44 : 30} {...PLAIN}>
-        <Voice voice={voice} disabled={disabled} says={{ idle: 'Dictate', listening: 'Dictating — click to stop' }}>
+        <Voice voice={voice} disabled={disabled} says={{ idle: t('Dictate'), listening: t('Dictating — click to stop') }}>
           {(state) => <MicIcon size={16} color="var(--foreground)" fill={state === 'idle' ? 'none' : 'var(--foreground)'} />}
         </Voice>
       </Control>
@@ -174,7 +182,7 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
         <DropdownMenuTrigger asChild disabled={disabled}>
           <XStack
             render="button"
-            aria-label="Dictation settings"
+            aria-label={t('Dictation settings')}
             data-slot="dictation-menu"
             width={16}
             height={30}
@@ -194,7 +202,7 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
           {inputs.length === 0 ? (
             <DropdownMenuLabel>
               <SizableText fontSize={14} color="$hint">
-                No devices found
+                {t('No devices found')}
               </SizableText>
             </DropdownMenuLabel>
           ) : (
@@ -211,7 +219,7 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
                 >
                   <XStack flex={1} items="center" gap={8}>
                     <SizableText fontSize={14} color="$ink" numberOfLines={1} flex={1}>
-                      {d.label || `Microphone ${i + 1}`}
+                      {d.label || t('Microphone {n}', { n: i + 1 })}
                     </SizableText>
                     {on ? <Check size={14} color="var(--primary)" aria-hidden /> : null}
                   </XStack>
@@ -224,23 +232,23 @@ export function Dictation({ voice, disabled = false, narrow = false, language = 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>
                 <SizableText fontSize={13} color="$hint">
-                  Dictation settings
+                  {t('Dictation settings')}
                 </SizableText>
               </DropdownMenuLabel>
               <DropdownMenuSub open={lang} onOpenChange={setLang}>
                 <DropdownMenuSubTrigger data-slot="dictation-language" onPress={() => setLang(true)}>
                   <XStack flex={1} items="center" gap={8}>
                     <SizableText fontSize={14} color="$ink" flex={1}>
-                      Language
+                      {t('Language')}
                     </SizableText>
                     <SizableText fontSize={14} color="$hint">
-                      {spoken?.label ?? 'Auto'}
+                      {spoken?.label ?? t('Auto')}
                     </SizableText>
                   </XStack>
                 </DropdownMenuSubTrigger>
                 {lang ? (
                 <DropdownMenuSubContent minW={160} pointerEvents="auto">
-                  {[{ id: '', label: 'Auto' }, ...LANGUAGES].map((l) => (
+                  {[{ id: '', label: t('Auto') }, ...LANGUAGES].map((l) => (
                     <DropdownMenuItem key={l.id || 'auto'} onSelect={() => onLanguage(l.id || null)}>
                       <XStack flex={1} items="center" gap={8}>
                         <SizableText fontSize={14} color="$ink" flex={1}>

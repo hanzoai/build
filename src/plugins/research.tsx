@@ -12,6 +12,7 @@
  *   POST /v1/websearch          {q} → {results: [{url, title, content}]}
  *   POST /v1/crawl              {url} → {success, data: {markdown}}; a page it could not read is success:false
  */
+import { phrase } from '@hanzo/i18n'
 import { Telescope } from '@hanzogui/lucide-icons-2'
 
 import { call, type Target } from '../api/call.ts'
@@ -155,8 +156,8 @@ export async function research(turn: Turn, t: Target, signal: AbortSignal, now =
 
 export const deep: Plugin = {
   id: 'research',
-  name: 'Deep research',
-  note: 'Get a detailed, cited report',
+  name: phrase('Deep research'),
+  note: phrase('Get a detailed, cited report'),
   icon: <Telescope size={16} />,
   prepare: (turn, c, signal) => research(turn, c.target, signal),
 }

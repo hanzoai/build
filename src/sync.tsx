@@ -5,8 +5,12 @@
  * /v1/provider/github/repos/import, which mirrors `owner/name` into this
  * organization's forge in the background. An account named unread and holding
  * no repositories is shown as needing an organization admin.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); account and
+ * repository names, and Forge, the forge's own name, are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Check, ChevronLeft, ChevronRight, Plus, X } from '@hanzogui/lucide-icons-2'
 import { Button, Input } from '@hanzo/ui'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -24,7 +28,8 @@ const EMPTY: Grants = { repos: [], unread: [] }
 
 export function Sync() {
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const signed = Boolean(host.person)
   const [q, setQ] = useState('')
   const [owner, setOwner] = useState('')
@@ -33,7 +38,7 @@ export function Sync() {
   const [busy, setBusy] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
-  const list = useRead(signed ? () => grants(t) : null, EMPTY, [t, signed])
+  const list = useRead(signed ? () => grants(target) : null, EMPTY, [target, signed])
   const rows = list.value.repos
   const orgs = useMemo(() => accounts(list.value), [list.value])
   const needle = q.trim().toLowerCase()
@@ -56,7 +61,7 @@ export function Sync() {
   }
 
   // Coming back from GitHub's App install lands here, says what happened, and reads the list again.
-  useBack(t, signed, setError, list.reload)
+  useBack(target, signed, setError, list.reload)
 
   /**
    * Install the platform's GitHub App on another account — an organization admin's
@@ -66,13 +71,13 @@ export function Sync() {
   const addOrg = async () => {
     setError('')
     if (!host.admin) {
-      setError('An organization admin installs the GitHub App on another account.')
+      setError(t('An organization admin installs the GitHub App on another account.'))
       return
     }
     try {
-      host.open(await authorize(t, 'github', here()))
+      host.open(await authorize(target, 'github', here()))
     } catch (e) {
-      setError(e instanceof Refusal && e.status === 403 ? 'An organization admin installs the GitHub App on another account.' : 'GitHub could not be reached to install the App. Try again.')
+      setError(e instanceof Refusal && e.status === 403 ? t('An organization admin installs the GitHub App on another account.') : t('GitHub could not be reached to install the App. Try again.'))
     }
   }
 
@@ -80,7 +85,7 @@ export function Sync() {
     setBusy(true)
     setError('')
     try {
-      const queued = await bring(t, picked)
+      const queued = await bring(target, picked)
       // Each waits under the name it takes on the forge, as the import says it, else as GitHub's listing says it will.
       const next: Pending[] = [
         ...readPending(host.org).filter((p) => !picked.includes(p.fullName)),
@@ -104,7 +109,7 @@ export function Sync() {
     let stop = false
     const tick = async () => {
       try {
-        const g = await grants(t)
+        const g = await grants(target)
         const landed = new Set(g.repos.filter((r) => r.imported).map((r) => r.fullName))
         const left = readPending(host.org).filter((p) => !landed.has(p.fullName))
         writePending(host.org, left)
@@ -118,59 +123,59 @@ export function Sync() {
       stop = true
       window.clearInterval(id)
     }
-  }, [syncing, t, host.org, host.go, picked])
+  }, [syncing, target, host.org, host.go, picked])
 
   return (
     <YStack flex={1} minH={0} overflow="scroll">
       <XStack px="$6" pt="$5" pb="$2" gap="$2" items="center">
-        <XStack render="button" aria-label="Back to projects" onPress={back}>
+        <XStack render="button" aria-label={t('Back to projects')} onPress={back}>
           <SizableText size="$2" color="$soft">
-            Projects
+            {t('Projects')}
           </SizableText>
         </XStack>
         <SizableText size="$2" color="$soft">
           /
         </SizableText>
         <SizableText size="$2" color="$ink">
-          Sync
+          {t('Sync')}
         </SizableText>
       </XStack>
       <YStack flex={1} items="center" justify="center" px="$6" pb="$10" gap="$5">
         <XStack justify="center" gap="$6">
-          <Step label="Select repositories" done={step === 'access'} current={step === 'pick'} />
-          <Step label="Repository access" done={false} current={step === 'access'} />
+          <Step label={t('Select repositories')} done={step === 'access'} current={step === 'pick'} />
+          <Step label={t('Repository access')} done={false} current={step === 'access'} />
         </XStack>
         <YStack borderWidth={1} borderColor="$borderColor" rounded="$5" bg="$panel" px="$6" py="$6" gap="$4" width="100%" maxW={460}>
           {step === 'pick' && !owner ? (
             <>
               <YStack gap="$1" items="center">
                 <SizableText size="$5" color="$ink">
-                  Select repositories
+                  {t('Select repositories')}
                 </SizableText>
                 <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
-                  Choose repositories to bring into {dest}
+                  {t('Choose repositories to bring into {place}', { place: dest })}
                 </SizableText>
               </YStack>
               <Panel>
-                <Input value={q} onChangeText={setQ} placeholder="Search organizations" aria-label="Search organizations" disabled={!signed} />
+                <Input value={q} onChangeText={setQ} placeholder={t('Search organizations')} aria-label={t('Search organizations')} disabled={!signed} />
                 {signed ? (
                   <SizableText size="$1" color="$soft">
-                    {`${orgs.length} ${orgs.length === 1 ? 'organization' : 'organizations'}`}
+                    {orgs.length === 1 ? t('1 organization') : t('{n} organizations', { n: orgs.length })}
                   </SizableText>
                 ) : null}
-                {list.error ? <Soft>The GitHub connection could not be read right now.</Soft> : null}
+                {list.error ? <Soft>{t('The GitHub connection could not be read right now.')}</Soft> : null}
                 {!signed ? (
-                  <Soft>Sign in to choose repositories the GitHub connection can read.</Soft>
+                  <Soft>{t('Sign in to choose repositories the GitHub connection can read.')}</Soft>
                 ) : list.loading && rows.length === 0 && orgs.length === 0 ? (
-                  <Soft>Reading the connection…</Soft>
+                  <Soft>{t('Reading the connection…')}</Soft>
                 ) : shownOrgs.length === 0 ? (
-                  <Soft>{orgs.length === 0 ? 'No organizations on this connection yet.' : 'Nothing matches.'}</Soft>
+                  <Soft>{orgs.length === 0 ? t('No organizations on this connection yet.') : t('Nothing matches.')}</Soft>
                 ) : (
                   shownOrgs.map((a) => (
                     <XStack
                       key={a.name}
                       render="button"
-                      aria-label={a.blocked ? `${a.name} needs an organization admin` : `Open ${a.name}`}
+                      aria-label={a.blocked ? t('{name} needs an organization admin', { name: a.name }) : t('Open {name}', { name: a.name })}
                       disabled={a.blocked}
                       items="center"
                       gap="$2"
@@ -187,18 +192,18 @@ export function Sync() {
                       </SizableText>
                       {a.blocked ? (
                         <SizableText size="$1" color="$soft">
-                          Needs organization admin
+                          {t('Needs organization admin')}
                         </SizableText>
                       ) : (
-                        <ChevronRight size={14} />
+                        <ChevronRight size={14} {...{ 'data-i18n-mirror': '' }} />
                       )}
                     </XStack>
                   ))
                 )}
-                <XStack render="button" aria-label="Add organization" items="center" gap="$2" py="$2" onPress={() => void addOrg()} disabled={!signed}>
+                <XStack render="button" aria-label={t('Add organization')} items="center" gap="$2" py="$2" onPress={() => void addOrg()} disabled={!signed}>
                   <Plus size={14} />
                   <SizableText size="$2" color="$ink">
-                    Add organization
+                    {t('Add organization')}
                   </SizableText>
                 </XStack>
               </Panel>
@@ -208,43 +213,43 @@ export function Sync() {
             <>
               <YStack gap="$1" items="center">
                 <SizableText size="$5" color="$ink">
-                  Select repositories
+                  {t('Select repositories')}
                 </SizableText>
                 <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
-                  Choose repositories to bring into {dest}
+                  {t('Choose repositories to bring into {place}', { place: dest })}
                 </SizableText>
               </YStack>
               <Panel>
                 <XStack items="center" gap="$2">
-                  <XStack render="button" aria-label="All organizations" onPress={() => setOwner('')}>
-                    <ChevronLeft size={16} />
+                  <XStack render="button" aria-label={t('All organizations')} onPress={() => setOwner('')}>
+                    <ChevronLeft size={16} {...{ 'data-i18n-mirror': '' }} />
                   </XStack>
                   <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
                     {owner}
                   </SizableText>
                 </XStack>
-                <Input value={q} onChangeText={setQ} placeholder="Search repositories" aria-label="Search repositories" />
+                <Input value={q} onChangeText={setQ} placeholder={t('Search repositories')} aria-label={t('Search repositories')} />
                 <XStack justify="space-between" items="center">
                   <SizableText size="$1" color="$soft">
-                    {ofOwner.length} {ofOwner.length === 1 ? 'repository' : 'repositories'}
+                    {ofOwner.length === 1 ? t('1 repository') : t('{n} repositories', { n: ofOwner.length })}
                   </SizableText>
-                  <XStack render="button" aria-label="Select all" onPress={selectShown} disabled={shownRepos.length === 0}>
+                  <XStack render="button" aria-label={t('Select all')} onPress={selectShown} disabled={shownRepos.length === 0}>
                     <SizableText size="$1" color="$ink">
-                      Select all
+                      {t('Select all')}
                     </SizableText>
                   </XStack>
                 </XStack>
                 {shownRepos.length === 0 ? (
-                  <Soft>Nothing matches.</Soft>
+                  <Soft>{t('Nothing matches.')}</Soft>
                 ) : (
                   shownRepos.map((r) => (
                     <RepoRow key={r.fullName} repo={r} on={picked.includes(r.fullName)} onPress={() => toggle(r.fullName)} />
                   ))
                 )}
-                <XStack render="button" aria-label="Grant more repositories" items="center" gap="$2" py="$2" onPress={() => void addOrg()}>
+                <XStack render="button" aria-label={t('Grant more repositories')} items="center" gap="$2" py="$2" onPress={() => void addOrg()}>
                   <Plus size={14} />
                   <SizableText size="$2" color="$ink">
-                    Add repositories
+                    {t('Add repositories')}
                   </SizableText>
                 </XStack>
               </Panel>
@@ -254,62 +259,66 @@ export function Sync() {
             <>
               <YStack gap="$1" items="center">
                 <SizableText size="$5" color="$ink">
-                  Repository access
+                  {t('Repository access')}
                 </SizableText>
                 <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
-                  Review who can read these repositories
+                  {t('Review who can read these repositories')}
                 </SizableText>
               </YStack>
               <XStack gap="$2" items="center">
                 <XStack flex={1} items="center" gap="$2" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor">
-                  <XStack render="button" aria-label="Clear the selection" onPress={() => { setPicked([]); setStep('pick') }}>
+                  <XStack render="button" aria-label={t('Clear the selection')} onPress={() => { setPicked([]); setStep('pick') }}>
                     <X size={12} />
                   </XStack>
                   <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
-                    {more ? `${lead}, +${more} more` : lead}
+                    {more ? t('{name}, +{n} more', { name: lead, n: more }) : lead}
                   </SizableText>
                 </XStack>
                 <Button size="sm" variant="outline" onPress={() => setStep('pick')}>
-                  Edit
+                  {t('Edit')}
                 </Button>
               </XStack>
               <XStack justify="space-between" gap="$4">
                 <YStack gap="$1">
                   <SizableText size="$1" color="$soft">
-                    Who gets access
+                    {t('Who gets access')}
                   </SizableText>
                   <SizableText size="$2" color="$ink">
-                    {host.person?.name || host.person?.email || 'You'} · You
+                    {t('{name} · You', { name: host.person?.name || host.person?.email || t('You') })}
                   </SizableText>
                 </YStack>
                 <YStack gap="$1" items="flex-end">
                   <SizableText size="$1" color="$soft">
-                    Role
+                    {t('Role')}
                   </SizableText>
                   <SizableText size="$2" color="$ink">
-                    {host.admin ? 'Repository admin' : 'Member'}
+                    {host.admin ? t('Repository admin') : t('Member')}
                   </SizableText>
                 </YStack>
               </XStack>
               <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
-                Anyone with access to {dest}
+                {t('Anyone with access to {place}', { place: dest })}
               </SizableText>
             </>
           ) : null}
           {error ? <Soft>{error}</Soft> : null}
           {step === 'pick' ? (
             <Button width="100%" disabled={!owner || picked.length === 0} onPress={() => setStep('access')}>
-              Continue
+              {t('Continue')}
             </Button>
           ) : (
             <YStack gap="$3" items="center" width="100%">
               <Button width="100%" disabled={busy || syncing || picked.length === 0} onPress={() => void send()}>
-                {syncing || busy ? 'Syncing…' : `Sync ${picked.length} ${picked.length === 1 ? 'repository' : 'repositories'} to ${dest}`}
+                {syncing || busy
+                  ? t('Syncing…')
+                  : picked.length === 1
+                    ? t('Sync 1 repository to {place}', { place: dest })
+                    : t('Sync {n} repositories to {place}', { n: picked.length, place: dest })}
               </Button>
               {syncing ? null : (
-                <XStack render="button" aria-label="Sync later" onPress={back}>
+                <XStack render="button" aria-label={t('Sync later')} onPress={back}>
                   <SizableText size="$2" color="$soft">
-                    Sync later
+                    {t('Sync later')}
                   </SizableText>
                 </XStack>
               )}
@@ -317,7 +326,7 @@ export function Sync() {
           )}
           {!signed ? (
             <Button width="100%" onPress={() => host.signIn?.()}>
-              Sign in
+              {t('Sign in')}
             </Button>
           ) : null}
         </YStack>
@@ -365,10 +374,11 @@ function Soft({ children }: { children: string }) {
 }
 
 function RepoRow({ repo, on, onPress }: { repo: Grant; on: boolean; onPress: () => void }) {
+  const { t } = useI18n()
   return (
     <XStack
       render="button"
-      aria-label={on ? `Selected ${repo.name}` : `Select ${repo.name}`}
+      aria-label={on ? t('Selected {name}', { name: repo.name }) : t('Select {name}', { name: repo.name })}
       aria-pressed={on}
       items="center"
       gap="$2"
@@ -383,7 +393,7 @@ function RepoRow({ repo, on, onPress }: { repo: Grant; on: boolean; onPress: () 
       </SizableText>
       {repo.imported || repo.status === 'pending' ? (
         <SizableText size="$1" color="$soft">
-          {repo.imported ? (repo.status === 'conflict' ? 'On Forge · diverged' : 'On Forge') : 'Syncing…'}
+          {repo.imported ? (repo.status === 'conflict' ? t('On Forge · diverged') : t('On Forge')) : t('Syncing…')}
         </SizableText>
       ) : null}
     </XStack>

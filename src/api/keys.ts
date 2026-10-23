@@ -12,7 +12,9 @@
  * whole. A limit only narrows what a key may reach — `model:zen5`,
  * `project:acme`, `product:train`, `read:*`.
  */
-import { call, type Target } from './call.ts'
+import { phrase } from '@hanzo/i18n'
+
+import { call, Sentence, type Target } from './call.ts'
 
 export const KINDS = ['secret', 'publishable'] as const
 export type Kind = (typeof KINDS)[number]
@@ -78,7 +80,7 @@ export function limits(raw: string): string[] {
     .map((s) => s.trim())
     .filter(Boolean)
   const bad = out.find((s) => !LIMIT.test(s))
-  if (bad) throw new Error(`${bad} is not a limit — write it as kind:name, like model:zen5`)
+  if (bad) throw new Sentence(phrase('{limit} is not a limit — write it as kind:name, like model:zen5'), { limit: bad })
   return out
 }
 
@@ -89,7 +91,7 @@ export async function mint(t: Target, type: Kind, name = '', limit: string[] = [
   if (limit.length) body.limit = limit
   const r = await call<Record<string, unknown>>(t, 'POST', '/v1/account/keys', body)
   const key = str(r?.key)
-  if (!key) throw new Error('The platform answered no key')
+  if (!key) throw new Error(phrase('The platform answered no key'))
   return { id: str(r?.id), name: str(r?.name), type: kind(r?.type) ?? type, key, limit: list(r?.limit) }
 }
 

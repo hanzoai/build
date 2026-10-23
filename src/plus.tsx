@@ -7,8 +7,14 @@
  *
  * On a laptop each shelf opens beside the menu; on a phone it is a page of the
  * same menu, with Back.
+ *
+ * The menu's own words are the reader's language (@hanzo/i18n `t`); what a
+ * shelf holds — its rows, its links, its search and empty words — is the
+ * surface's, drawn as given.
  */
 import { SizableText, useMedia, XStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import {
   Blocks,
   Bot,
@@ -91,15 +97,21 @@ export interface PlusProps {
 
 const ICON = 16
 
-/** The shelves, in the menu's order, with their names and marks. */
+/**
+ * The shelves, in the menu's order, with their names and marks, and the three
+ * sentences a shelf says of itself: its search's name, while it reads, and
+ * when it holds nothing. Whole sentences, so a language puts the noun where it goes.
+ */
 const SHELVES = [
-  { key: 'agents', label: 'Agents', icon: <Bot size={ICON} /> },
-  { key: 'skills', label: 'Skills', icon: <ScrollText size={ICON} /> },
-  { key: 'connectors', label: 'Connectors', icon: <Blocks size={ICON} /> },
-  { key: 'design', label: 'Design system', icon: <Palette size={ICON} /> },
-  { key: 'plugins', label: 'Plugins', icon: <Plug size={ICON} /> },
-  { key: 'devices', label: 'Devices', icon: <Monitor size={ICON} /> },
+  { key: 'agents', label: phrase('Agents'), search: phrase('Search agents'), reading: phrase('Reading agents'), none: phrase('No agents yet'), icon: <Bot size={ICON} /> },
+  { key: 'skills', label: phrase('Skills'), search: phrase('Search skills'), reading: phrase('Reading skills'), none: phrase('No skills yet'), icon: <ScrollText size={ICON} /> },
+  { key: 'connectors', label: phrase('Connectors'), search: phrase('Search connectors'), reading: phrase('Reading connectors'), none: phrase('No connectors yet'), icon: <Blocks size={ICON} /> },
+  { key: 'design', label: phrase('Design system'), search: phrase('Search design system'), reading: phrase('Reading design system'), none: phrase('No design system yet'), icon: <Palette size={ICON} /> },
+  { key: 'plugins', label: phrase('Plugins'), search: phrase('Search plugins'), reading: phrase('Reading plugins'), none: phrase('No plugins yet'), icon: <Plug size={ICON} /> },
+  { key: 'devices', label: phrase('Devices'), search: phrase('Search devices'), reading: phrase('Reading devices'), none: phrase('No devices yet'), icon: <Monitor size={ICON} /> },
 ] as const
+
+type Words = (typeof SHELVES)[number]
 
 type Key = (typeof SHELVES)[number]['key']
 
@@ -129,17 +141,18 @@ function Line({ icon, label, note, on, tail }: { icon?: ReactNode; label: string
 }
 
 /** A shelf's rows, its status, then its ways to more. */
-function Contents({ shelf, name, close }: { shelf: Shelf; name: string; close: () => void }) {
+function Contents({ shelf, words, close }: { shelf: Shelf; words: Words; close: () => void }) {
+  const { t } = useI18n()
   const [q, setQ] = useState('')
   const needle = q.trim().toLowerCase()
   const rows = needle ? shelf.rows.filter((r) => `${r.label} ${r.note ?? ''}`.toLowerCase().includes(needle)) : shelf.rows
   const links = [shelf.create, shelf.manage, shelf.browse].filter((l): l is Link => Boolean(l))
   return (
     <>
-      {shelf.search ? <DropdownMenuSearch value={q} onValueChange={setQ} placeholder={shelf.search} aria-label={`Search ${name.toLowerCase()}`} /> : null}
-      {shelf.loading && !shelf.rows.length ? <DropdownMenuLoading>Reading {name.toLowerCase()}</DropdownMenuLoading> : null}
+      {shelf.search ? <DropdownMenuSearch value={q} onValueChange={setQ} placeholder={shelf.search} aria-label={t(words.search)} /> : null}
+      {shelf.loading && !shelf.rows.length ? <DropdownMenuLoading>{t(words.reading)}</DropdownMenuLoading> : null}
       {shelf.error ? <DropdownMenuEmpty>{shelf.error}</DropdownMenuEmpty> : null}
-      {!shelf.loading && !shelf.error && !rows.length ? <DropdownMenuEmpty>{needle ? 'Nothing matches' : (shelf.empty ?? `No ${name.toLowerCase()} yet`)}</DropdownMenuEmpty> : null}
+      {!shelf.loading && !shelf.error && !rows.length ? <DropdownMenuEmpty>{needle ? t('Nothing matches') : (shelf.empty ?? t(words.none))}</DropdownMenuEmpty> : null}
       {rows.map((r) => (
         <DropdownMenuItem key={r.id} preventCloseOnSelect onSelect={() => shelf.pick(r.id)} aria-checked={r.on ?? false} data-slot="plus-row">
           <Line icon={r.icon} label={r.label} note={r.note} on={r.on} />
@@ -163,6 +176,7 @@ function Contents({ shelf, name, close }: { shelf: Shelf; name: string; close: (
 
 /** The `+` and its menu. */
 export function Plus(p: PlusProps) {
+  const { t } = useI18n()
   const media = useMedia()
   const wide = media.sm
   const [open, setOpen] = useState(false)
@@ -171,8 +185,8 @@ export function Plus(p: PlusProps) {
   const close = () => setOpen(false)
   const shelves = useMemo(() => SHELVES.filter((s) => p[s.key as Key]), [p])
   const switches = [
-    p.research ? { key: 'research', label: 'Research', icon: <Telescope size={ICON} />, s: p.research } : null,
-    p.memory ? { key: 'memory', label: 'Memory', icon: <Brain size={ICON} />, s: p.memory } : null,
+    p.research ? { key: 'research', label: t('Research'), icon: <Telescope size={ICON} />, s: p.research } : null,
+    p.memory ? { key: 'memory', label: t('Memory'), icon: <Brain size={ICON} />, s: p.memory } : null,
   ].filter((x): x is NonNullable<typeof x> => x !== null)
 
   const main = (
@@ -185,7 +199,7 @@ export function Plus(p: PlusProps) {
             p.upload?.()
           }}
         >
-          <Line icon={<Paperclip size={ICON} />} label="Upload or add files" tail={<DropdownMenuShortcut>Ctrl+U</DropdownMenuShortcut>} />
+          <Line icon={<Paperclip size={ICON} />} label={t('Upload or add files')} tail={<DropdownMenuShortcut data-i18n-ltr>Ctrl+U</DropdownMenuShortcut>} />
         </DropdownMenuItem>
       ) : null}
       {p.upload && shelves.length ? <DropdownMenuSeparator /> : null}
@@ -193,18 +207,18 @@ export function Plus(p: PlusProps) {
         wide ? (
           <DropdownMenuSub key={s.key} open={sub === s.key} onOpenChange={(o) => setSub(o ? s.key : sub === s.key ? null : sub)}>
             <DropdownMenuSubTrigger data-slot={`plus-${s.key}`} onPress={() => setSub(s.key)}>
-              <Line icon={s.icon} label={s.label} />
+              <Line icon={s.icon} label={t(s.label)} />
             </DropdownMenuSubTrigger>
             {/* Drawn only while open: a closed shelf stays laid out under the menu, and its rows would take its clicks. */}
             {sub === s.key ? (
             <DropdownMenuSubContent minW={200} maxW={340} maxH={420} pointerEvents="auto" style={{ overflowY: "auto" }}>
-              <Contents shelf={p[s.key as Key]!} name={s.label} close={close} />
+              <Contents shelf={p[s.key as Key]!} words={s} close={close} />
             </DropdownMenuSubContent>
             ) : null}
           </DropdownMenuSub>
         ) : (
           <DropdownMenuItem key={s.key} page={s.key} data-slot={`plus-${s.key}`}>
-            <Line icon={s.icon} label={s.label} />
+            <Line icon={s.icon} label={t(s.label)} />
           </DropdownMenuItem>
         ),
       )}
@@ -223,7 +237,7 @@ export function Plus(p: PlusProps) {
         <XStack
           render="button"
           data-slot="plus"
-          aria-label="Add files, agents, skills and more"
+          aria-label={t('Add files, agents, skills and more')}
           width={32}
           height={32}
           rounded={8}
@@ -248,8 +262,8 @@ export function Plus(p: PlusProps) {
             <DropdownMenuPage id="main">{main}</DropdownMenuPage>
             {shelves.map((s) => (
               <DropdownMenuPage key={s.key} id={s.key}>
-                <DropdownMenuBack>{s.label}</DropdownMenuBack>
-                <Contents shelf={p[s.key as Key]!} name={s.label} close={close} />
+                <DropdownMenuBack>{t(s.label)}</DropdownMenuBack>
+                <Contents shelf={p[s.key as Key]!} words={s} close={close} />
               </DropdownMenuPage>
             ))}
           </>

@@ -8,12 +8,18 @@
  * (../back.ts), which this page finishes and reports. Anyone connects their own
  * GitHub; installing the App and connecting Slack are an org admin's, which is
  * the platform's rule.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); an account's,
+ * a channel's and a provider's names, and the platform's own notes, are drawn
+ * as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Github, Hash, Lock, Megaphone, Slack } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { useState } from 'react'
 
+import { told } from '../api/call.ts'
 import { connect, connection, disconnect as unlinkGithub, installations, type Connection, type Installation } from '../api/github.ts'
 import { authorize, channels, disconnect, read, SOCIAL, type Channels, type Connector } from '../api/provider.ts'
 import { here, useBack } from '../back.ts'
@@ -22,18 +28,19 @@ import { useHost, useTarget } from '../host.tsx'
 import { Card, day, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
 export function Integrations() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
-  const mine = useRead(signed ? () => connection(t) : null, null as Connection | null, [t, signed])
-  const installed = useRead(signed ? () => installations(t) : null, [] as Installation[], [t, signed])
-  const slack = useRead(signed ? () => read(t, 'slack') : null, null as Connector | null, [t, signed])
+  const mine = useRead(signed ? () => connection(target) : null, null as Connection | null, [target, signed])
+  const installed = useRead(signed ? () => installations(target) : null, [] as Installation[], [target, signed])
+  const slack = useRead(signed ? () => read(target, 'slack') : null, null as Connector | null, [target, signed])
   const joined = slack.value?.connected ?? false
-  const rooms = useRead(signed && joined ? () => channels(t) : null, { channels: [], next: '' } as Channels, [t, signed, joined])
+  const rooms = useRead(signed && joined ? () => channels(target) : null, { channels: [], next: '' } as Channels, [target, signed, joined])
   const social = useSocial(signed, SOCIAL.map((p) => p.id))
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
-  useBack(t, signed, setNote, () => {
+  useBack(target, signed, setNote, () => {
     mine.reload()
     installed.reload()
     slack.reload()
@@ -43,8 +50,8 @@ export function Integrations() {
   if (!signed) {
     return (
       <YStack gap="$5">
-        <Heading title="Integrations" />
-        <Soft>Sign in to see this organization’s integrations.</Soft>
+        <Heading title={t('Integrations')} />
+        <Soft>{t('Sign in to see this organization’s integrations.')}</Soft>
       </YStack>
     )
   }
@@ -57,7 +64,7 @@ export function Integrations() {
       after()
       setNote(done)
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     } finally {
       setWorking(false)
     }
@@ -70,7 +77,7 @@ export function Integrations() {
     try {
       host.open(await where())
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
       setWorking(false)
     }
   }
@@ -80,74 +87,77 @@ export function Integrations() {
 
   return (
     <YStack gap="$6">
-      <Heading title="Integrations" detail={`What ${host.org ?? 'this organization'} and you have connected.`} />
+      <Heading
+        title={t('Integrations')}
+        detail={host.org ? t('What {org} and you have connected.', { org: host.org }) : t('What this organization and you have connected.')}
+      />
 
-      <Group title="GitHub" detail="Your connection brings your repositories; the App brings an account’s to the organization.">
+      <Group title="GitHub" detail={t('Your connection brings your repositories; the App brings an account’s to the organization.')}>
         <Card>
           <Row
             first
             leading={<Github size={16} />}
-            title="Your GitHub"
+            title={t('Your GitHub')}
             detail={
               mine.error
-                ? mine.error.message
+                ? told(mine.error, t)
                 : !me
-                  ? 'Reading…'
+                  ? t('Reading…')
                   : !me.configured
-                    ? 'This deployment cannot connect GitHub yet.'
+                    ? t('This deployment cannot connect GitHub yet.')
                     : me.connected
-                      ? `Connected as @${me.login}`
-                      : 'Not connected'
+                      ? t('Connected as @{login}', { login: me.login })
+                      : t('Not connected')
             }
             trailing={
               me?.configured ? (
                 me.connected ? (
-                  <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => unlinkGithub(t), 'Your GitHub is disconnected', mine.reload)}>
-                    Disconnect
+                  <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => unlinkGithub(target), t('Your GitHub is disconnected'), mine.reload)}>
+                    {t('Disconnect')}
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => connect(t, here()))}>
-                    Connect
+                  <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => connect(target, here()))}>
+                    {t('Connect')}
                   </Button>
                 )
               ) : null
             }
           />
           {installed.error ? (
-            <Row title="App installations" detail={installed.error.message} />
+            <Row title={t('App installations')} detail={told(installed.error, t)} />
           ) : (
             installed.value.map((i) => (
               <Row
                 key={i.login}
                 leading={<Github size={16} />}
                 title={i.login}
-                detail={[i.type, i.grant === 'all' ? 'every repository' : i.grant === 'selected' ? 'selected repositories' : ''].filter(Boolean).join(' · ')}
+                detail={[i.type, i.grant === 'all' ? t('every repository') : i.grant === 'selected' ? t('selected repositories') : ''].filter(Boolean).join(' · ')}
                 trailing={
                   <SizableText size="$1" color={i.connected ? '$ink' : '$soft'}>
-                    {i.connected ? 'Installed' : 'Removed on GitHub'}
+                    {i.connected ? t('Installed') : t('Removed on GitHub')}
                   </SizableText>
                 }
               />
             ))
           )}
           {!installed.error && !installed.loading && installed.value.length === 0 ? (
-            <Row title="No GitHub accounts installed" detail="Install the App on a GitHub account to bring its repositories here." />
+            <Row title={t('No GitHub accounts installed')} detail={t('Install the App on a GitHub account to bring its repositories here.')} />
           ) : null}
         </Card>
         {host.admin ? (
           <XStack>
-            <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(t, 'github', here()))}>
-              Install on a GitHub account
+            <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(target, 'github', here()))}>
+              {t('Install on a GitHub account')}
             </Button>
           </XStack>
         ) : (
           <SizableText size="$1" color="$soft">
-            An org admin installs the App on a GitHub account.
+            {t('An org admin installs the App on a GitHub account.')}
           </SizableText>
         )}
       </Group>
 
-      <Group title="Slack" detail="Talk to Hanzo from your workspace’s channels.">
+      <Group title="Slack" detail={t('Talk to Hanzo from your workspace’s channels.')}>
         <Card>
           <Row
             first
@@ -155,30 +165,32 @@ export function Integrations() {
             title={s?.connected && s.account ? s.account : 'Slack'}
             detail={
               slack.error
-                ? slack.error.message
+                ? told(slack.error, t)
                 : !s
-                  ? 'Reading…'
+                  ? t('Reading…')
                   : s.connected
-                    ? `Connected${s.since ? ` since ${day(s.since)}` : ''}`
+                    ? s.since
+                      ? t('Connected since {day}', { day: day(s.since) })
+                      : t('Connected')
                     : s.available
-                      ? 'Not connected'
-                      : s.note || 'This deployment cannot connect Slack yet.'
+                      ? t('Not connected')
+                      : s.note || t('This deployment cannot connect Slack yet.')
             }
             trailing={
               host.admin && s && (s.connected || s.available) ? (
                 s.connected ? (
-                  <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => disconnect(t, 'slack'), 'Slack is disconnected', slack.reload)}>
-                    Disconnect
+                  <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => disconnect(target, 'slack'), t('{name} is disconnected', { name: 'Slack' }), slack.reload)}>
+                    {t('Disconnect')}
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(t, 'slack', here()))}>
-                    Connect
+                  <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(target, 'slack', here()))}>
+                    {t('Connect')}
                   </Button>
                 )
               ) : null
             }
           />
-          {joined && rooms.error ? <Row title="Channels" detail={rooms.error.message} /> : null}
+          {joined && rooms.error ? <Row title={t('Channels')} detail={told(rooms.error, t)} /> : null}
           {joined
             ? rooms.value.channels.map((c) => (
                 <Row
@@ -187,7 +199,7 @@ export function Integrations() {
                   title={c.name || c.id}
                   trailing={
                     <SizableText size="$1" color={c.member ? '$ink' : '$soft'}>
-                      {c.member ? 'Joined' : 'Not joined'}
+                      {c.member ? t('Joined') : t('Not joined')}
                     </SizableText>
                   }
                 />
@@ -196,12 +208,12 @@ export function Integrations() {
         </Card>
         {!host.admin ? (
           <SizableText size="$1" color="$soft">
-            An org admin connects the Slack workspace.
+            {t('An org admin connects the Slack workspace.')}
           </SizableText>
         ) : null}
       </Group>
 
-      <Group title="Social accounts" detail="Where automations post what their agent writes.">
+      <Group title={t('Social accounts')} detail={t('Where automations post what their agent writes.')}>
         <Card>
           {SOCIAL.map((p, i) => {
             const c = social.value[p.id]
@@ -213,24 +225,29 @@ export function Integrations() {
                 title={c?.connected && c.account ? `${p.name} · ${c.account}` : p.name}
                 detail={
                   social.error
-                    ? social.error.message
+                    ? told(social.error, t)
                     : !c
-                      ? 'Reading…'
+                      ? t('Reading…')
                       : c.connected
-                        ? `Connected${c.since ? ` since ${day(c.since)}` : ''}${p.takes ? `. ${p.takes}` : ''}`
+                        ? // Connected, then what the account takes, as two sentences.
+                          p.takes
+                          ? `${c.since ? t('Connected since {day}.', { day: day(c.since) }) : t('Connected.')} ${t(p.takes)}`
+                          : c.since
+                            ? t('Connected since {day}', { day: day(c.since) })
+                            : t('Connected')
                         : c.available
-                          ? p.takes || 'Not connected'
-                          : p.takes ? `${p.takes} ${p.needs}` : p.needs
+                          ? p.takes ? t(p.takes) : t('Not connected')
+                          : p.takes ? `${t(p.takes)} ${t(p.needs)}` : t(p.needs)
                 }
                 trailing={
                   host.admin && c && (c.connected || c.available) ? (
                     c.connected ? (
-                      <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => disconnect(t, p.id), `${p.name} is disconnected`, social.reload)}>
-                        Disconnect
+                      <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => disconnect(target, p.id), t('{name} is disconnected', { name: p.name }), social.reload)}>
+                        {t('Disconnect')}
                       </Button>
                     ) : (
-                      <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(t, p.id, here()))} aria-label={`Connect ${p.name}`}>
-                        Connect
+                      <Button size="sm" variant="outline" disabled={working} onPress={() => void away(() => authorize(target, p.id, here()))} aria-label={t('Connect {name}', { name: p.name })}>
+                        {t('Connect')}
                       </Button>
                     )
                   ) : null
@@ -241,7 +258,7 @@ export function Integrations() {
         </Card>
         {!host.admin ? (
           <SizableText size="$1" color="$soft">
-            An org admin connects the organization’s social accounts.
+            {t('An org admin connects the organization’s social accounts.')}
           </SizableText>
         ) : null}
       </Group>

@@ -1,3 +1,4 @@
+import { useI18n } from '@hanzo/i18n/react'
 import { useIam } from '@hanzo/iam/react'
 import { Box, Text, YStack } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
@@ -18,6 +19,7 @@ import { back } from './enter.ts'
  */
 export function Callback() {
   const go = useNavigate()
+  const { t } = useI18n()
   const { handleCallback } = useIam()
   const [error, setError] = useState<string | null>(null)
 
@@ -40,10 +42,10 @@ export function Callback() {
     <Box flex={1} items="center" justify="center" bg="$background">
       <YStack gap="$2" items="center">
         <Text fontSize="$5" color="$ink">
-          {error ?? 'Completing sign-in…'}
+          {error ?? t('Completing sign-in…')}
         </Text>
         <Text fontSize="$3" color="$soft">
-          {error ? 'Try signing in again.' : 'One moment.'}
+          {error ? t('Try signing in again.') : t('One moment.')}
         </Text>
       </YStack>
     </Box>

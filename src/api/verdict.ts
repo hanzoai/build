@@ -7,6 +7,8 @@
  * The receipt says whether it landed; a verdict that did not is reported, not
  * shown as recorded.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, type Target } from './call.ts'
 
 export type Verdict = 'up' | 'down' | null
@@ -18,5 +20,5 @@ export async function verdict(t: Target, session: string, project: string, v: Ve
     sessionId: session,
     properties: { verdict: v ?? 'cleared', project },
   })
-  if (!out || !out.accepted) throw new Error('The verdict was not recorded')
+  if (!out || !out.accepted) throw new Error(phrase('The verdict was not recorded'))
 }

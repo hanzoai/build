@@ -5,6 +5,10 @@
  * a new chat, starts its run, or makes its scheduled task. Nothing only fills
  * the composer. Its × dismisses it, and the account remembers.
  *
+ * A row's words are the person's own, made from their activity, and drawn as
+ * given; a starter's are authored (suggest.ts `STARTERS`), so drawn and sent in
+ * the reader's language (@hanzo/i18n `t`).
+ *
  * `useSuggestions` reads the kept rows from the account (`suggest` in /v1/pref)
  * and, when they are due (suggest.ts `due`), reads the person's activity and
  * asks Hanzo's model for new ones. One document per page, read once per person
@@ -23,6 +27,7 @@
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { Bot, CalendarClock, FileText, Github, MessageSquare, X } from '@hanzogui/lucide-icons-2'
+import { useI18n } from '@hanzo/i18n/react'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@hanzo/ui'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
@@ -34,7 +39,7 @@ import { read, save, type Prefs } from './api/pref.ts'
 import { list } from './api/sessions.ts'
 import { everything } from './api/work.ts'
 import { claims } from './claims.ts'
-import { answer, dismissed, due, fill, inputs, request, seed, sig, skip, stale, TAKE, type Act, type Icon, type Input, type Kept, type Seed, type Suggestion } from './suggest.ts'
+import { answer, dismissed, due, fill, inputs, request, seed, sig, skip, stale, starter, TAKE, type Act, type Icon, type Input, type Kept, type Seed, type Suggestion } from './suggest.ts'
 
 /** A source that refuses this person (a 4xx other than an expired sign-in or a rate) has nothing for them; any other failure leaves it unknown. */
 function soft<T>(p: Promise<T>, none: T): Promise<T> {
@@ -216,11 +221,12 @@ export interface SuggestionsProps {
 
 /** The rows, or nothing when there are none. */
 export function Suggestions({ rows, onAct, onDismiss }: SuggestionsProps) {
+  const { t } = useI18n()
   // A phone has no hover: its × stays in sight.
   const touch = !useMedia().sm
   if (!rows.length) return null
   return (
-    <YStack role="list" aria-label="Suggestions" data-slot="suggestions">
+    <YStack role="list" aria-label={t('Suggestions')} data-slot="suggestions">
       {rows.map((r) => (
         <Row key={r.id} row={r} touch={touch} onAct={onAct} onDismiss={onDismiss} />
       ))}
@@ -229,8 +235,11 @@ export function Suggestions({ rows, onAct, onDismiss }: SuggestionsProps) {
 }
 
 /** One row: the whole of it one button that does the act, and its × beside it. Two stops for the keyboard, neither inside the other. */
-function Row({ row, touch, onAct, onDismiss }: { row: Suggestion; touch: boolean; onAct: (act: Act, row: Suggestion) => void; onDismiss: (id: string) => void }) {
+function Row({ row: kept, touch, onAct, onDismiss }: { row: Suggestion; touch: boolean; onAct: (act: Act, row: Suggestion) => void; onDismiss: (id: string) => void }) {
+  const { t } = useI18n()
   const [near, setNear] = useState(false)
+  // A starter in the reader's words, its prompt too: what is sent is what they pressed.
+  const row = starter(kept) ? { ...kept, title: t(kept.title), act: 'prompt' in kept.act ? { ...kept.act, prompt: t(kept.act.prompt) } : kept.act } : kept
   const Mark = MARKS[row.icon]
   const button = (
     <XStack
@@ -243,7 +252,7 @@ function Row({ row, touch, onAct, onDismiss }: { row: Suggestion; touch: boolean
       self="stretch"
       items="center"
       gap="$3"
-      pl="$3"
+      paddingInlineStart="$3"
       rounded="$4"
       cursor="pointer"
       focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
@@ -261,7 +270,7 @@ function Row({ row, touch, onAct, onDismiss }: { row: Suggestion; touch: boolean
       items="center"
       gap="$1"
       minH={PITCH}
-      pr="$2"
+      paddingInlineEnd="$2"
       rounded="$4"
       hoverStyle={{ bg: '$hover' }}
       onPointerEnter={() => setNear(true)}
@@ -283,7 +292,7 @@ function Row({ row, touch, onAct, onDismiss }: { row: Suggestion; touch: boolean
       )}
       <XStack
         render="button"
-        aria-label={`Dismiss ${row.title}`}
+        aria-label={t('Dismiss {suggestion}', { suggestion: row.title })}
         onPress={() => onDismiss(row.id)}
         p="$1.5"
         rounded="$2"

@@ -12,6 +12,8 @@
  * `useBack` reads that answer once, takes it off the address so a reload does
  * not replay it, finishes a GitHub grant, and says what happened.
  */
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { useEffect } from 'react'
 
 import type { Target } from './api/call.ts'
@@ -65,13 +67,14 @@ export function here(): string {
 const NAMES: Record<string, string> = { github: 'GitHub', slack: 'Slack' }
 
 /** A provider id as people write it. */
-export const named = (id: string): string => NAMES[id] ?? (id ? id[0].toUpperCase() + id.slice(1) : 'The connection')
+export const named = (id: string): string => NAMES[id] ?? (id ? id[0].toUpperCase() + id.slice(1) : phrase('The connection'))
 
 /**
  * Finish what a return carried, once a person is signed in: `say` gets the
  * sentence, and `after` runs once something was connected.
  */
 export function useBack(t: Target, signed: boolean, say: (note: string) => void, after: () => void): void {
+  const { t: words } = useI18n()
   useEffect(() => {
     if (!signed) return
     const l = landed(window.location.search)
@@ -80,18 +83,23 @@ export function useBack(t: Target, signed: boolean, say: (note: string) => void,
     const next = clean(window.location.href)
     window.history.replaceState(window.history.state, '', next)
     if (l.kind === 'error') {
-      say(`${named(l.provider)}: ${l.reason || 'not connected'}`)
+      // The provider's own reason is said as it came; with none, ours.
+      say(l.reason ? `${words(named(l.provider))}: ${l.reason}` : words('{provider}: not connected', { provider: words(named(l.provider)) }))
       return
     }
     if (l.kind === 'connected') {
-      say(`${named(l.provider)} is connected${l.account ? ` as ${l.account}` : ''}`)
+      say(
+        l.account
+          ? words('{provider} is connected as {account}', { provider: words(named(l.provider)), account: l.account })
+          : words('{provider} is connected', { provider: words(named(l.provider)) }),
+      )
       after()
       return
     }
     if (l.provider !== 'github') return
     complete(t, l.grant).then(
       (c) => {
-        say(c.connected ? `Connected as @${c.login}` : 'GitHub did not connect; connect again')
+        say(c.connected ? words('Connected as @{login}', { login: c.login }) : words('GitHub did not connect; connect again'))
         after()
       },
       (e: unknown) => say((e as Error).message),

@@ -7,6 +7,8 @@
  * starts a server the first time it calls it; the server stays up afterwards.
  * `describe` is how a caller reads one operation's schema, so it is not a server.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, Refusal, type Target } from './call.ts'
 
 export interface Native {
@@ -23,11 +25,11 @@ export function nativesOf(body: unknown): Native[] {
   const err = root.error
   if (err && typeof err === 'object') {
     const message = (err as { message?: unknown }).message
-    throw new Refusal(200, typeof message === 'string' && message ? message : 'The MCP server refused the list')
+    throw new Refusal(200, typeof message === 'string' && message ? message : phrase('The MCP server refused the list'))
   }
   const result = root.result && typeof root.result === 'object' ? (root.result as Record<string, unknown>) : null
   const tools = result && Array.isArray(result.tools) ? result.tools : null
-  if (!tools) throw new Refusal(502, 'The MCP server did not list its tools')
+  if (!tools) throw new Refusal(502, phrase('The MCP server did not list its tools'))
   const out: Native[] = []
   for (const raw of tools) {
     if (!raw || typeof raw !== 'object') continue

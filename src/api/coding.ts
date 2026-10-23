@@ -28,15 +28,23 @@
  * A sandbox run keeps its sandbox after it ends, so `after` continues the earlier
  * run in that same sandbox and working tree, resumed if it parked.
  */
+import { phrase } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
+
+import { english } from '../say.ts'
 import { call, headers, reason, Refusal, seg, type Target } from './call.ts'
 
 export type Mode = 'build' | 'plan' | 'setup'
 
-/** Why this mode cannot run where it is sent, or '' when it can. */
-export const unhonoured = (mode: Mode | undefined, target?: string): string =>
-  (mode === 'plan' || mode === 'setup') && target?.trim()
-    ? `A ${mode} runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Cloud, or switch to Build.`
-    : ''
+/** Why this mode cannot run where it is sent, in the words of the `t` handed (English without one), or '' when it can. */
+export const unhonoured = (mode: Mode | undefined, target?: string, t: Say = english): string =>
+  !target?.trim()
+    ? ''
+    : mode === 'plan'
+      ? t('A plan runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Cloud, or switch to Build.')
+      : mode === 'setup'
+        ? t('A setup runs in the Hanzo sandbox: a machine clones and pushes with its own credential. Choose Cloud, or switch to Build.')
+        : ''
 
 export interface Ask {
   /** The task, in the words you would use with a colleague. */
@@ -88,12 +96,12 @@ export function body(ask: Ask): Record<string, string | number | boolean> {
 }
 
 export async function start(t: Target, ask: Ask): Promise<Run> {
-  if (!ask.prompt.trim()) throw new Refusal(400, 'Say what the run should do')
+  if (!ask.prompt.trim()) throw new Refusal(400, phrase('Say what the run should do'))
   const why = unhonoured(ask.mode, ask.targetId)
   if (why) throw new Refusal(400, why)
   const r = await call<Partial<Record<string, unknown>>>(t, 'POST', '/v1/agent/coding', body(ask))
   const s = (k: string) => (typeof r?.[k] === 'string' ? (r[k] as string) : '')
-  if (!s('sessionId')) throw new Refusal(502, 'The run was admitted but named no session')
+  if (!s('sessionId')) throw new Refusal(502, phrase('The run was admitted but named no session'))
   return {
     session: s('sessionId'),
     repo: s('repo'),
@@ -228,7 +236,7 @@ export async function artifacts(t: Target, session: string): Promise<Left> {
 /** One stored artifact's bytes. */
 export async function artifact(t: Target, session: string, name: string): Promise<Blob> {
   const parts = name.split('/')
-  if (parts.some((p) => p === '' || p === '.' || p === '..')) throw new Refusal(400, 'That artifact has no name to fetch it by')
+  if (parts.some((p) => p === '' || p === '.' || p === '..')) throw new Refusal(400, phrase('That artifact has no name to fetch it by'))
   const res = await fetch(`${t.api}/v1/agent/coding/${seg(session)}/artifacts/${parts.map(seg).join('/')}`, { headers: headers(t), cache: 'no-store' })
   if (!res.ok) throw new Refusal(res.status, (await reason(res)) || `The artifact answered ${res.status}`)
   // Bytes, whatever type the store named: a page is saved, never opened here.

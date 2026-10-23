@@ -3,12 +3,17 @@
  * every matching event is POSTed to, signed with a secret shown once, when the
  * webhook is added. A test sends one signed event now; the log says what each
  * delivery got back.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); an address, an event
+ * pattern, a description and what an endpoint answered are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Copy, Plus, Webhook, X } from '@hanzogui/lucide-icons-2'
 import { Button, Input } from '@hanzo/ui'
 import { useState } from 'react'
 
+import { told } from '../api/call.ts'
 import { add, deliveries, endpoints, patterns, refuse, remove, test, type Attempt, type Endpoint } from '../api/webhooks.ts'
 import { useRead } from '../data.ts'
 import { useHost, useTarget } from '../host.tsx'
@@ -17,10 +22,11 @@ import { Card, day, Field, Group, Heading, Note, Row, Soft } from './ui.tsx'
 const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 
 export function Notifications() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
-  const list = useRead(signed ? () => endpoints(t) : null, [] as Endpoint[], [t, signed])
+  const list = useRead(signed ? () => endpoints(target) : null, [] as Endpoint[], [target, signed])
   const [adding, setAdding] = useState(false)
   const [url, setUrl] = useState('')
   const [events, setEvents] = useState('')
@@ -33,8 +39,8 @@ export function Notifications() {
   if (!signed) {
     return (
       <YStack gap="$5">
-        <Heading title="Notifications" />
-        <Soft>Sign in to see this organization’s webhooks.</Soft>
+        <Heading title={t('Notifications')} />
+        <Soft>{t('Sign in to see this organization’s webhooks.')}</Soft>
       </YStack>
     )
   }
@@ -45,7 +51,7 @@ export function Notifications() {
     try {
       setNote(await what())
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     } finally {
       setWorking(false)
     }
@@ -55,36 +61,41 @@ export function Notifications() {
     const draft = { url, events: patterns(events), description }
     const why = refuse(draft)
     if (why) {
-      setNote(why)
+      setNote(t(why))
       return
     }
     void act(async () => {
-      const e = await add(t, draft)
+      const e = await add(target, draft)
       setSecret(e.secret)
       setAdding(false)
       setUrl('')
       setEvents('')
       setDescription('')
       list.reload()
-      return `${e.url} is added`
+      return t('{url} is added', { url: e.url })
     })
   }
 
   const trial = (e: Endpoint) =>
     void act(async () => {
-      const r = await test(t, e.id)
-      if (log?.id === e.id) setLog({ id: e.id, rows: await deliveries(t, e.id) })
+      const r = await test(target, e.id)
+      if (log?.id === e.id) setLog({ id: e.id, rows: await deliveries(target, e.id) })
+      // What the endpoint answered is its own; the sentence around it is ours.
       return r.delivered
-        ? `The test reached ${e.url}: ${r.status} in ${r.ms} ms`
-        : `The test did not reach ${e.url}: ${r.error || (r.status ? `it answered ${r.status}` : 'no answer')}`
+        ? t('The test reached {url}: {status} in {ms} ms', { url: e.url, status: r.status, ms: r.ms })
+        : r.error
+          ? t('The test did not reach {url}: {error}', { url: e.url, error: r.error })
+          : r.status
+            ? t('The test did not reach {url}: it answered {status}', { url: e.url, status: r.status })
+            : t('The test did not reach {url}: no answer', { url: e.url })
     })
 
   const drop = (e: Endpoint) =>
     void act(async () => {
-      await remove(t, e.id)
+      await remove(target, e.id)
       if (log?.id === e.id) setLog(null)
       list.reload()
-      return `${e.url} is deleted`
+      return t('{url} is deleted', { url: e.url })
     })
 
   const show = (e: Endpoint) => {
@@ -93,7 +104,7 @@ export function Notifications() {
       return
     }
     void act(async () => {
-      setLog({ id: e.id, rows: await deliveries(t, e.id) })
+      setLog({ id: e.id, rows: await deliveries(target, e.id) })
       return ''
     })
   }
@@ -101,12 +112,16 @@ export function Notifications() {
   return (
     <YStack gap="$6">
       <Heading
-        title="Notifications"
-        detail={`Webhooks: events in ${host.org ?? 'this organization'}, POSTed and signed to an address you run.`}
+        title={t('Notifications')}
+        detail={
+          host.org
+            ? t('Webhooks: events in {org}, POSTed and signed to an address you run.', { org: host.org })
+            : t('Webhooks: events in this organization, POSTed and signed to an address you run.')
+        }
         action={
           adding || !host.admin ? undefined : (
             <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
-              <Plus size={14} /> Add webhook
+              <Plus size={14} /> {t('Add webhook')}
             </Button>
           )
         }
@@ -114,21 +129,21 @@ export function Notifications() {
 
       {adding ? (
         <YStack gap="$3" p="$4" borderWidth={1} borderColor="$borderColor" rounded="$3">
-          <Field label="Endpoint URL" hint="https only.">
-            <Input value={url} onChangeText={setUrl} placeholder="https://example.com/hooks/hanzo" aria-label="Endpoint URL" autoCapitalize="none" inputMode="url" />
+          <Field label={t('Endpoint URL')} hint={t('https only.')}>
+            <Input value={url} onChangeText={setUrl} placeholder="https://example.com/hooks/hanzo" aria-label={t('Endpoint URL')} autoCapitalize="none" inputMode="url" />
           </Field>
-          <Field label="Events" hint="Subject patterns, comma separated, such as commerce.order.> — leave empty for every event.">
-            <Input value={events} onChangeText={setEvents} placeholder="commerce.order.>, event.>" aria-label="Events" autoCapitalize="none" />
+          <Field label={t('Events')} hint={t('Subject patterns, comma separated, such as {example} — leave empty for every event.', { example: 'commerce.order.>' })}>
+            <Input value={events} onChangeText={setEvents} placeholder="commerce.order.>, event.>" aria-label={t('Events')} autoCapitalize="none" />
           </Field>
-          <Field label="Description">
-            <Input value={description} onChangeText={setDescription} placeholder="What this endpoint is for" aria-label="Description" />
+          <Field label={t('Description')}>
+            <Input value={description} onChangeText={setDescription} placeholder={t('What this endpoint is for')} aria-label={t('Description')} />
           </Field>
           <XStack gap="$2" justify="flex-end">
             <Button size="sm" variant="ghost" onPress={() => setAdding(false)}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button size="sm" disabled={working || !url.trim()} onPress={create}>
-              Add webhook
+              {t('Add webhook')}
             </Button>
           </XStack>
         </YStack>
@@ -137,33 +152,33 @@ export function Notifications() {
       {secret ? (
         <YStack gap="$2" p="$4" borderWidth={1} borderColor="$ink" rounded="$3">
           <SizableText size="$2" color="$ink">
-            Signing secret
+            {t('Signing secret')}
           </SizableText>
           <SizableText size="$1" color="$soft">
-            Shown this once. Keep it where your endpoint checks each delivery’s signature.
+            {t('Shown this once. Keep it where your endpoint checks each delivery’s signature.')}
           </SizableText>
           <XStack items="center" gap="$2">
-            <SizableText flex={1} size="$2" color="$ink" style={{ ...mono, wordBreak: 'break-all' }} aria-label="Signing secret">
+            <SizableText flex={1} size="$2" color="$ink" fontFamily="$mono" $platform-web={{ wordBreak: 'break-all' }} aria-label={t('Signing secret')}>
               {secret}
             </SizableText>
-            <Button size="sm" variant="outline" onPress={() => void navigator.clipboard?.writeText(secret).then(() => setNote('The secret is copied'))}>
-              <Copy size={14} /> Copy
+            <Button size="sm" variant="outline" onPress={() => void navigator.clipboard?.writeText(secret).then(() => setNote(t('The secret is copied')))}>
+              <Copy size={14} /> {t('Copy')}
             </Button>
-            <XStack render="button" aria-label="Hide the secret" p="$1" onPress={() => setSecret('')}>
+            <XStack render="button" aria-label={t('Hide the secret')} p="$1" onPress={() => setSecret('')}>
               <X size={14} />
             </XStack>
           </XStack>
         </YStack>
       ) : null}
 
-      <Group title="Webhooks">
+      <Group title={t('Webhooks')}>
         {list.error ? (
-          <Soft>{list.error.message}</Soft>
+          <Soft>{told(list.error, t)}</Soft>
         ) : list.loading && !list.value.length ? (
-          <Soft>Reading webhooks…</Soft>
+          <Soft>{t('Reading webhooks…')}</Soft>
         ) : list.value.length === 0 ? (
           <Card>
-            <Soft>No webhooks yet.</Soft>
+            <Soft>{t('No webhooks yet.')}</Soft>
           </Card>
         ) : (
           <Card>
@@ -176,15 +191,15 @@ export function Notifications() {
                   title={e.url}
                   detail={[
                     e.description,
-                    e.events.length ? e.events.join(', ') : 'every event',
-                    e.status === 'disabled' ? 'disabled' : '',
-                    `${e.deliveries} delivered, ${e.failures} failed this week`,
+                    e.events.length ? e.events.join(', ') : t('every event'),
+                    e.status === 'disabled' ? t('disabled') : '',
+                    t('{delivered} delivered, {failed} failed this week', { delivered: e.deliveries, failed: e.failures }),
                   ]
                     .filter(Boolean)
                     .join(' · ')}
                   trailing={
                     host.admin ? (
-                      <XStack render="button" aria-label={`Delete ${e.url}`} p="$1" onPress={() => drop(e)}>
+                      <XStack render="button" aria-label={t('Delete {url}', { url: e.url })} p="$1" onPress={() => drop(e)}>
                         <X size={14} />
                       </XStack>
                     ) : undefined
@@ -192,25 +207,25 @@ export function Notifications() {
                 />
                 <XStack gap="$2" px="$3" pb="$2.5" flexWrap="wrap">
                   {host.admin ? (
-                    <Button size="sm" variant="outline" disabled={working} aria-label={`Send a test to ${e.url}`} onPress={() => trial(e)}>
-                      Send test
+                    <Button size="sm" variant="outline" disabled={working} aria-label={t('Send a test to {url}', { url: e.url })} onPress={() => trial(e)}>
+                      {t('Send test')}
                     </Button>
                   ) : null}
-                  <Button size="sm" variant="ghost" disabled={working} aria-label={`Deliveries to ${e.url}`} onPress={() => show(e)}>
-                    {log?.id === e.id ? 'Hide deliveries' : 'Deliveries'}
+                  <Button size="sm" variant="ghost" disabled={working} aria-label={t('Deliveries to {url}', { url: e.url })} onPress={() => show(e)}>
+                    {log?.id === e.id ? t('Hide deliveries') : t('Deliveries')}
                   </Button>
                 </XStack>
                 {log?.id === e.id ? (
                   <YStack px="$3" pb="$3" gap="$1.5">
                     {log.rows.length === 0 ? (
                       <SizableText size="$1" color="$soft">
-                        Nothing delivered yet.
+                        {t('Nothing delivered yet.')}
                       </SizableText>
                     ) : (
                       log.rows.map((a, n) => (
                         <XStack key={`${a.at}-${n}`} gap="$3" items="baseline">
                           <SizableText size="$1" color={a.status === 'ok' ? '$ink' : '$soft'} width={64}>
-                            {a.status === 'ok' ? 'OK' : a.status === 'failed' ? 'Failed' : 'Retrying'}
+                            {a.status === 'ok' ? t('OK') : a.status === 'failed' ? t('Failed') : t('Retrying')}
                           </SizableText>
                           <SizableText flex={1} size="$1" color="$soft" numberOfLines={1} style={mono}>
                             {`${a.subject}${a.code ? ` → ${a.code}` : ''}${a.error ? ` · ${a.error}` : ''}`}

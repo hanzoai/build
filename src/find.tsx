@@ -5,6 +5,8 @@
  * the first page lands it searches the rail's own recents.
  */
 import { ScrollView, SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
 import type { RailSession } from '@hanzo/ui/chat'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -14,11 +16,11 @@ import { useHost, useTarget } from './host.tsx'
 
 /** The statuses the platform filters on, and every run. */
 const FILTERS = [
-  { id: '', label: 'All' },
-  { id: 'running', label: 'Running' },
-  { id: 'paused', label: 'Paused' },
-  { id: 'done', label: 'Done' },
-  { id: 'error', label: 'Error' },
+  { id: '', label: phrase('All') },
+  { id: 'running', label: phrase('Running') },
+  { id: 'paused', label: phrase('Paused') },
+  { id: 'done', label: phrase('Done') },
+  { id: 'error', label: phrase('Error') },
 ] as const
 
 const PAGE = 50
@@ -40,6 +42,7 @@ export function Find({
   recents: RailSession[]
   onOpen: (id: string) => void
 }) {
+  const { t: say } = useI18n()
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
@@ -83,33 +86,33 @@ export function Find({
   const hits = useMemo((): Hit[] => {
     const n = q.trim().toLowerCase()
     const all: Hit[] = rows
-      ? rows.map((s) => ({ id: s.id, title: s.title || 'Untitled run', line: [s.repo, s.status].filter(Boolean).join(' · ') }))
+      ? rows.map((s) => ({ id: s.id, title: s.title || say('Untitled run'), line: [s.repo, s.status].filter(Boolean).join(' · ') }))
       : status
         ? []
         : recents.map((r) => ({ id: r.id, title: r.title, line: '' }))
     return n ? all.filter((h) => `${h.title} ${h.line}`.toLowerCase().includes(n)) : all
-  }, [q, rows, recents, status])
+  }, [q, rows, recents, status, say])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxW={520}>
-        <DialogTitle>Find a run</DialogTitle>
+        <DialogTitle>{say('Find a run')}</DialogTitle>
         <Input
           autoFocus
           value={q}
           onChangeText={setQ}
-          placeholder="Search runs…"
-          aria-label="Search runs"
+          placeholder={say('Search runs…')}
+          aria-label={say('Search runs')}
           onKeyDown={(e: { key?: string }) => {
             if (e.key === 'Enter' && hits[0]) onOpen(hits[0].id)
           }}
         />
-        <XStack gap="$1" flexWrap="wrap" role="group" aria-label="Status">
+        <XStack gap="$1" flexWrap="wrap" role="group" aria-label={say('Status')}>
           {FILTERS.map((f) => (
             <XStack
               key={f.id || 'all'}
               render="button"
-              aria-label={f.label}
+              aria-label={say(f.label)}
               aria-pressed={status === f.id}
               onPress={() => setStatus(f.id)}
               px="$2.5"
@@ -121,7 +124,7 @@ export function Find({
               hoverStyle={{ bg: '$hover' }}
             >
               <SizableText size="$1" color={status === f.id ? '$ink' : '$soft'}>
-                {f.label}
+                {say(f.label)}
               </SizableText>
             </XStack>
           ))}
@@ -154,7 +157,7 @@ export function Find({
             ))}
             {!loading && !error && hits.length === 0 ? (
               <SizableText size="$2" color="$soft" px="$2">
-                {rows && next ? 'No run read so far matches.' : 'No run matches.'}
+                {rows && next ? say('No run read so far matches.') : say('No run matches.')}
               </SizableText>
             ) : null}
           </YStack>
@@ -166,12 +169,12 @@ export function Find({
         ) : null}
         {loading ? (
           <SizableText size="$1" color="$soft" role="status">
-            Reading runs…
+            {say('Reading runs…')}
           </SizableText>
         ) : next ? (
           <XStack>
             <Button size="sm" variant="outline" onPress={() => void read(next)}>
-              Older runs
+              {say('Older runs')}
             </Button>
           </XStack>
         ) : null}

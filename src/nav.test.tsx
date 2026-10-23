@@ -35,6 +35,16 @@ describe('the builder’s places, once for every rail', () => {
     ])
   })
 
+  it('says each place in the caller’s language, and English with no caller', () => {
+    const FR: Record<string, string> = { Work: 'Travail', 'New run': 'Nouvelle exécution', Projects: 'Projets', Docs: 'Docs', Agents: 'Agents', Skills: 'Compétences', Upload: 'Importer' }
+    const t = ((source: string) => FR[source] ?? source) as Parameters<typeof nav>[2]
+    const work = nav(host(), () => {}, t)[0]!
+    expect([work.label, work.links.map((l) => l.label)]).toEqual(['Travail', ['Nouvelle exécution', 'Projets', 'Issues', 'Templates']])
+    expect(own(host(), () => {}, t)[0]!.label).toBe('Travail')
+    expect(tabs(host(), () => {}, t)[0]!.links.map((l) => l.label)).toEqual(['Agents', 'Compétences', 'Connectors', 'Plugins'])
+    expect(library(host(), () => {}, t)[0]!.links[0]!.label).toBe('Importer')
+  })
+
   it('moves to an address the grammar reads back as that place', () => {
     // Issues forgets the board it last pinned, in this browser: one with nothing kept.
     vi.stubGlobal('window', { dispatchEvent: () => true })

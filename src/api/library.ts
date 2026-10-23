@@ -12,22 +12,24 @@
  * shares it, and changes it never. Its `url`, `download` and `preview` are
  * signed and stop working at `expires`: read the item again for fresh ones.
  */
-import { call, query, seg, type Target } from './call.ts'
+import { phrase } from '@hanzo/i18n'
+
+import { call, query, seg, Sentence, type Target } from './call.ts'
 
 export const KIND_IDS = ['image', 'video', 'audio', 'document', 'slides', 'type', 'model', 'code', 'file'] as const
 export type Kind = (typeof KIND_IDS)[number]
 
-/** The kinds a reader narrows to, in the order the Library lists them, '' being all. */
+/** The kinds a reader narrows to, in the order the Library lists them, '' being all; each label English and marked (`phrase`), drawn through `t`. */
 export const KINDS: readonly { id: Kind | ''; label: string }[] = [
-  { id: '', label: 'All' },
-  { id: 'image', label: 'Images' },
-  { id: 'video', label: 'Videos' },
-  { id: 'audio', label: 'Audio' },
-  { id: 'document', label: 'Documents' },
-  { id: 'slides', label: 'Slides' },
-  { id: 'model', label: '3D' },
-  { id: 'code', label: 'Code' },
-  { id: 'file', label: 'Files' },
+  { id: '', label: phrase('All') },
+  { id: 'image', label: phrase('Images') },
+  { id: 'video', label: phrase('Videos') },
+  { id: 'audio', label: phrase('Audio') },
+  { id: 'document', label: phrase('Documents') },
+  { id: 'slides', label: phrase('Slides') },
+  { id: 'model', label: phrase('3D') },
+  { id: 'code', label: phrase('Code') },
+  { id: 'file', label: phrase('Files') },
 ]
 
 export const SOURCES = ['chat', 'dev', 'studio', 'workflow'] as const
@@ -35,8 +37,8 @@ export type Source = (typeof SOURCES)[number]
 
 export type Scope = 'all' | 'mine' | 'shared'
 
-/** A product, as a person names it. */
-export const SOURCE: Record<Source, string> = { chat: 'Chat', dev: 'Dev', studio: 'Studio', workflow: 'Workflow' }
+/** A product, as a person names it: Chat, Dev and Studio are names, and Workflow a word, marked (`phrase`). */
+export const SOURCE: Record<Source, string> = { chat: 'Chat', dev: 'Dev', studio: 'Studio', workflow: phrase('Workflow') }
 
 export interface Item {
   id: string
@@ -165,7 +167,7 @@ export async function items(t: Target, f: Filter = {}, init?: { signal?: AbortSi
 
 export async function get(t: Target, id: string): Promise<Item> {
   const x = item(await call<unknown>(t, 'GET', `/v1/library/${seg(id)}`))
-  if (!x) throw new Error('The item came back without an id')
+  if (!x) throw new Error(phrase('The item came back without an id'))
   return x
 }
 
@@ -196,8 +198,8 @@ export function base64(bytes: Uint8Array): string {
 
 /** Keep a file in the Library. */
 export async function upload(t: Target, file: { name: string; type: string; bytes: Uint8Array }, made: Made): Promise<Item> {
-  if (!file.bytes.length) throw new Error(`${file.name} is empty`)
-  if (file.bytes.length > INLINE) throw new Error(`${file.name} is larger than 10 MB`)
+  if (!file.bytes.length) throw new Sentence(phrase('{name} is empty'), { name: file.name })
+  if (file.bytes.length > INLINE) throw new Sentence(phrase('{name} is larger than 10 MB'), { name: file.name })
   const x = item(
     await call<unknown>(t, 'POST', '/v1/library', {
       name: file.name,
@@ -206,7 +208,7 @@ export async function upload(t: Target, file: { name: string; type: string; byte
       ...made,
     }),
   )
-  if (!x) throw new Error('The item was kept and came back without an id')
+  if (!x) throw new Error(phrase('The item was kept and came back without an id'))
   return x
 }
 
@@ -218,7 +220,7 @@ export interface Change {
 
 export async function change(t: Target, id: string, c: Change): Promise<Item> {
   const x = item(await call<unknown>(t, 'PATCH', `/v1/library/${seg(id)}`, c))
-  if (!x) throw new Error('The item was changed and came back without an id')
+  if (!x) throw new Error(phrase('The item was changed and came back without an id'))
   return x
 }
 
@@ -239,14 +241,14 @@ export function size(bytes: number): string {
   return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${units[u]}`
 }
 
-/** The day an instant falls on, as a section of the Library: Today, Yesterday, then the month. */
+/** The day an instant falls on, as a section of the Library: Today, Yesterday (English, marked), then the month. */
 export function day(iso: string, now = new Date()): string {
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return 'Earlier'
+  if (Number.isNaN(d.getTime())) return phrase('Earlier')
   const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const days = Math.round((start(now) - start(d)) / 86_400_000)
-  if (days <= 0) return 'Today'
-  if (days === 1) return 'Yesterday'
+  if (days <= 0) return phrase('Today')
+  if (days === 1) return phrase('Yesterday')
   return d.toLocaleDateString(undefined, d.getFullYear() === now.getFullYear() ? { month: 'long' } : { month: 'long', year: 'numeric' })
 }
 

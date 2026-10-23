@@ -9,9 +9,15 @@
  * own: a task is its person's, in the org the builder is in. A save sends only
  * what changed; the switch sends `enabled` alone, so turning one on or off never
  * changes who it runs as.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a task's name, its
+ * instructions, a run's summary and post and the platform's refusals are drawn
+ * as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { ChevronLeft } from '@hanzogui/lucide-icons-2'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { StatusDot, type SessionStatus } from '@hanzo/ui/chat'
 import { ModelPicker } from '@hanzo/ui/models'
@@ -24,7 +30,7 @@ import { current, subscriptions, type Subscription } from './api/billing.ts'
 import { SOCIAL } from './api/provider.ts'
 import { Out } from './out.tsx'
 import { useSocial } from './settings/integrations.tsx'
-import { Refusal } from './api/call.ts'
+import { Refusal, told } from './api/call.ts'
 import { ENSO, limits as readLimits, models } from './api/models.ts'
 import { Choice, Confirm, Field, Line, Sheet } from './customize/ui.tsx'
 import { useRead } from './data.ts'
@@ -41,41 +47,42 @@ export const zone = (): string => {
   }
 }
 
+/** The lists' words are English, marked (`phrase`), and drawn through `t`. */
 export const KINDS: readonly { id: Kind; label: string }[] = [
-  { id: 'manual', label: 'When I run it' },
-  { id: 'once', label: 'Once' },
-  { id: 'hourly', label: 'Every hour' },
-  { id: 'daily', label: 'Every day' },
-  { id: 'weekdays', label: 'Weekdays' },
-  { id: 'weekly', label: 'Every week' },
-  { id: 'cron', label: 'Cron' },
+  { id: 'manual', label: phrase('When I run it') },
+  { id: 'once', label: phrase('Once') },
+  { id: 'hourly', label: phrase('Every hour') },
+  { id: 'daily', label: phrase('Every day') },
+  { id: 'weekdays', label: phrase('Weekdays') },
+  { id: 'weekly', label: phrase('Every week') },
+  { id: 'cron', label: phrase('Cron') },
 ]
 
 const DAYS = [
-  { id: 'mon', label: 'Monday' },
-  { id: 'tue', label: 'Tuesday' },
-  { id: 'wed', label: 'Wednesday' },
-  { id: 'thu', label: 'Thursday' },
-  { id: 'fri', label: 'Friday' },
-  { id: 'sat', label: 'Saturday' },
-  { id: 'sun', label: 'Sunday' },
+  { id: 'mon', label: phrase('Monday') },
+  { id: 'tue', label: phrase('Tuesday') },
+  { id: 'wed', label: phrase('Wednesday') },
+  { id: 'thu', label: phrase('Thursday') },
+  { id: 'fri', label: phrase('Friday') },
+  { id: 'sat', label: phrase('Saturday') },
+  { id: 'sun', label: phrase('Sunday') },
 ]
 
 const PERMISSIONS = [
-  { id: 'ask', label: 'Ask first' },
-  { id: 'auto', label: 'Act on its own' },
+  { id: 'ask', label: phrase('Ask first') },
+  { id: 'auto', label: phrase('Act on its own') },
 ] as const
 
-/** A run's status as the rail's dot draws it. */
+/** A run's status as the rail's dot draws it, and in words (marked, drawn through `t`). */
 export const DOT: Record<string, SessionStatus> = { succeeded: 'done', failed: 'error', running: 'running', queued: 'running', review: 'paused', skipped: 'stopped', refused: 'stopped' }
 export const WORD: Record<string, string> = {
-  succeeded: 'Succeeded',
-  failed: 'Failed',
-  running: 'Running',
-  queued: 'Queued',
-  review: 'Waiting for your review',
-  skipped: 'Skipped',
-  refused: 'Refused',
+  succeeded: phrase('Succeeded'),
+  failed: phrase('Failed'),
+  running: phrase('Running'),
+  queued: phrase('Queued'),
+  review: phrase('Waiting for your review'),
+  skipped: phrase('Skipped'),
+  refused: phrase('Refused'),
 }
 const NAME: Record<string, string> = Object.fromEntries(SOCIAL.map((p) => [p.id, p.name]))
 export const live = (s: string): boolean => s === 'running' || s === 'queued'
@@ -108,11 +115,11 @@ export function shaped(kind: Kind, was: Schedule): Schedule {
   }
 }
 
-/** What is wrong with a schedule before it is sent, or ''. */
+/** What is wrong with a schedule before it is sent, or '': English, marked (`phrase`), so a screen says it through `t`. */
 export function unready(s: Schedule): string {
-  if ((s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly') && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(s.at ?? '')) return 'Time of day is HH:MM on a 24-hour clock.'
-  if (s.kind === 'once' && s.at && !/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(s.at)) return 'Once is a date and a time: YYYY-MM-DDTHH:MM.'
-  if (s.kind === 'cron' && (s.cron ?? '').trim().split(/\s+/).length !== 5) return 'Cron is five fields: minute, hour, day of month, month, day of week.'
+  if ((s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly') && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(s.at ?? '')) return phrase('Time of day is HH:MM on a 24-hour clock.')
+  if (s.kind === 'once' && s.at && !/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(s.at)) return phrase('Once is a date and a time: YYYY-MM-DDTHH:MM.')
+  if (s.kind === 'cron' && (s.cron ?? '').trim().split(/\s+/).length !== 5) return phrase('Cron is five fields: minute, hour, day of month, month, day of week.')
   return ''
 }
 
@@ -152,16 +159,19 @@ function rebase(cur: Draft, was: Draft, next: Draft): Draft {
   return out
 }
 
-/** A run the platform refused for want of a plan: a free org with no credit for the run fee. */
+/** A run the platform refused for want of a plan: a free org with no credit for the run fee. `PLAN` says so, marked, drawn through `t`. */
 export const unplanned = (e: unknown): boolean => e instanceof Refusal && e.status === 402
-export const PLAN = 'Automations run on a paid plan; on Free each run needs $1 of credit, and this organization has none. Upgrade to run it.'
+export const PLAN = phrase('Automations run on a paid plan; on Free each run needs $1 of credit, and this organization has none. Upgrade to run it.')
 
 
 const BLANK = (): Draft => ({ name: '', instructions: '', model: null, schedule: { kind: 'manual' }, permissions: 'ask', notify: false, postTo: [], enabled: true, source: 'dev' })
 
 /** When a task runs, chosen: how often, the day and time, and the zone it is read in. */
 export function When({ s, onChange, disabled }: { s: Schedule; onChange: (s: Schedule) => void; disabled?: boolean }) {
+  const { t } = useI18n()
   const setWhen = (p: Partial<Schedule>) => onChange({ ...s, ...p })
+  const kinds = useMemo(() => KINDS.map((k) => ({ ...k, label: t(k.label) })), [t])
+  const days = useMemo(() => DAYS.map((x) => ({ ...x, label: t(x.label) })), [t])
   const zones = useMemo(() => {
     try {
       return ['UTC', ...Intl.supportedValuesOf('timeZone').filter((z) => z !== 'UTC')].map((z) => ({ id: z, label: z }))
@@ -169,37 +179,37 @@ export function When({ s, onChange, disabled }: { s: Schedule; onChange: (s: Sch
       return [{ id: 'UTC', label: 'UTC' }]
     }
   }, [])
-  const kind = KINDS.find((k) => k.id === s.kind) ?? KINDS[0]!
+  const kind = kinds.find((k) => k.id === s.kind) ?? kinds[0]!
   return (
     <XStack gap="$2" flexWrap="wrap" rowGap="$2" items="center" opacity={disabled ? 0.6 : 1} pointerEvents={disabled ? 'none' : 'auto'}>
-      <ChipSelect name="When it runs" label={kind.label} chosen={kind} items={KINDS} onChange={(k) => onChange(shaped(k.id, s))} placement="bottom-start" width={200} />
-      {s.kind === 'weekly' ? <ChipSelect name="Day" label={DAYS.find((x) => x.id === s.day)?.label ?? 'Monday'} chosen={DAYS.find((x) => x.id === s.day)} items={DAYS} onChange={(x) => setWhen({ day: x.id })} placement="bottom-start" width={180} /> : null}
+      <ChipSelect name={t('When it runs')} label={kind.label} chosen={kind} items={kinds} onChange={(k) => onChange(shaped(k.id, s))} placement="bottom-start" width={200} />
+      {s.kind === 'weekly' ? <ChipSelect name={t('Day')} label={days.find((x) => x.id === s.day)?.label ?? t('Monday')} chosen={days.find((x) => x.id === s.day)} items={days} onChange={(x) => setWhen({ day: x.id })} placement="bottom-start" width={180} /> : null}
       {s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly' ? (
         <YStack width={110}>
-          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label="Time of day" inputMode="text" />
+          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label={t('Time of day')} inputMode="text" />
         </YStack>
       ) : null}
       {s.kind === 'once' ? (
         <YStack width={190}>
-          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="2026-10-20T09:00" aria-label="Date and time" autoCapitalize="none" />
+          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="2026-10-20T09:00" aria-label={t('Date and time')} autoCapitalize="none" />
         </YStack>
       ) : null}
       {s.kind === 'hourly' ? (
         <XStack items="center" gap="$2">
           <SizableText size="$2" color="$soft">
-            at minute
+            {t('at minute')}
           </SizableText>
           <YStack width={70}>
-            <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label="Minute" inputMode="numeric" />
+            <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label={t('Minute')} inputMode="numeric" />
           </YStack>
         </XStack>
       ) : null}
       {s.kind === 'cron' ? (
         <YStack width={200}>
-          <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label="Cron" autoCapitalize="none" />
+          <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label={t('Cron')} autoCapitalize="none" />
         </YStack>
       ) : null}
-      {s.kind !== 'manual' ? <ChipSelect name="Time zone" label={s.tz || 'UTC'} chosen={{ id: s.tz || 'UTC', label: s.tz || 'UTC' }} items={zones} onChange={(z) => setWhen({ tz: z.id })} placeholder="Search zones…" placement="bottom-start" width={260} /> : null}
+      {s.kind !== 'manual' ? <ChipSelect name={t('Time zone')} label={s.tz || 'UTC'} chosen={{ id: s.tz || 'UTC', label: s.tz || 'UTC' }} items={zones} onChange={(z) => setWhen({ tz: z.id })} placeholder={t('Search zones…')} placement="bottom-start" width={260} /> : null}
     </XStack>
   )
 }
@@ -207,16 +217,17 @@ export function When({ s, onChange, disabled }: { s: Schedule; onChange: (s: Sch
 /** One automation: what it does and when, its switch, Run now, and its runs. `new` writes one. */
 export function Editor({ id }: { id: string }) {
   const host = useHost()
-  const t = useTarget()
+  const { t } = useI18n()
+  const target = useTarget()
   const signed = Boolean(host.person)
   const fresh = id === 'new'
   // `tick` reads the automation again; `beat` reads its runs again.
   const [tick, setTick] = useState(0)
   const [beat, setBeat] = useState(0)
-  const saved = useRead(signed && !fresh ? () => automation(t, id) : null, null as Automation | null, [t, signed, id, tick])
-  const history = useRead(signed && !fresh ? () => runs(t, id) : null, [] as Run[], [t, signed, id, beat])
-  const catalog = useRead(signed ? () => models(t) : null, [], [t, signed])
-  const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
+  const saved = useRead(signed && !fresh ? () => automation(target, id) : null, null as Automation | null, [target, signed, id, tick])
+  const history = useRead(signed && !fresh ? () => runs(target, id) : null, [] as Run[], [target, signed, id, beat])
+  const catalog = useRead(signed ? () => models(target) : null, [], [target, signed])
+  const { limits } = useLimits(signed ? (signal) => readLimits(target, signal) : null, target)
   // `base` is what the form started from; a save sends what changed since, and only that.
   const [base, setBase] = useState<Draft>(BLANK)
   const [d, setD] = useState<Draft>(BLANK)
@@ -228,12 +239,12 @@ export function Editor({ id }: { id: string }) {
   const [leaving, setLeaving] = useState('')
   const [upgrade, setUpgrade] = useState(false)
   const social = useSocial(signed, SOCIAL.filter((p) => p.posts).map((p) => p.id))
-  const subs = useRead(signed ? () => subscriptions(t) : null, [] as Subscription[], [t, signed])
+  const subs = useRead(signed ? () => subscriptions(target) : null, [] as Subscription[], [target, signed])
   // Free is what the platform says when it names no live subscription; a read that failed says nothing.
   const free = !subs.loading && !subs.error && !current(subs.value)
   const nameRef = useRef<HTMLInputElement>(null)
   const asksRef = useRef<HTMLTextAreaElement>(null)
-  const offered = useRead(signed && fresh ? () => starters(t) : null, [] as Starter[], [t, signed, fresh])
+  const offered = useRead(signed && fresh ? () => starters(target) : null, [] as Starter[], [target, signed, fresh])
   const here = useRef(true)
   useEffect(() => {
     here.current = true
@@ -277,7 +288,7 @@ export function Editor({ id }: { id: string }) {
     setUpgrade(false)
     setD((x) => ({ ...x, ...p }))
   }
-  const wrong = unready(d.schedule)
+  const wrong = t(unready(d.schedule))
 
   // A draft waits on its instructions: they have the focus when it opens.
   const drafty = Boolean(a?.draft)
@@ -294,7 +305,7 @@ export function Editor({ id }: { id: string }) {
     } catch (e) {
       // Wanting a plan is said in these words only where a run was asked for.
       const run = what === 'run' && unplanned(e)
-      setNote(run ? PLAN : (e as Error).message)
+      setNote(run ? t(PLAN) : told(e, t))
       setUpgrade(run)
     } finally {
       setBusy('')
@@ -303,7 +314,7 @@ export function Editor({ id }: { id: string }) {
 
   /** What a save still needs, said, with the focus on where to give it; true when nothing. */
   const complete = (): boolean => {
-    const ask = !d.name.trim() ? (['Name it first.', nameRef] as const) : !d.instructions.trim() ? (['Add instructions first.', asksRef] as const) : null
+    const ask = !d.name.trim() ? ([t('Name it first.'), nameRef] as const) : !d.instructions.trim() ? ([t('Add instructions first.'), asksRef] as const) : null
     if (ask) {
       setNote(ask[0])
       ask[1].current?.focus()
@@ -319,7 +330,7 @@ export function Editor({ id }: { id: string }) {
   const keep = () =>
     act('save', async () => {
       if (fresh) {
-        const made = await create(t, tidy(d))
+        const made = await create(target, tidy(d))
         // Only while still here: a person who left during the create stays where they went.
         if (here.current) host.go(path({ kind: 'automation', id: made.id }), { replace: true })
         return
@@ -327,27 +338,27 @@ export function Editor({ id }: { id: string }) {
       const snap = d
       const send = changes(base, tidy(snap))
       if (switchesAlone) delete send.enabled
-      const now = Object.keys(send).length ? await save(t, id, send) : a!
+      const now = Object.keys(send).length ? await save(target, id, send) : a!
       // What was typed while the save was in flight stands.
       setBase(drafted(now))
       setD((cur) => rebase(cur, snap, drafted(now)))
       setTick((n) => n + 1)
-      setNote('Saved.')
+      setNote(t('Saved.'))
     })
 
   const flip = (on: boolean) => {
     if (!switchesAlone) return set({ enabled: on })
     void act('switch', async () => {
-      await save(t, id, { enabled: on })
+      await save(target, id, { enabled: on })
       setTick((n) => n + 1)
     })
   }
 
   const go = () =>
     act('run', async () => {
-      const run = await start(t, id)
+      const run = await start(target, id)
       setBeat((n) => n + 1)
-      if (run.status === 'skipped') setNote('Not started: the previous run is still going.')
+      if (run.status === 'skipped') setNote(t('Not started: the previous run is still going.'))
     })
 
   const leave = (how?: { replace?: boolean }) => host.go(path({ kind: 'screen', screen: 'automations' }), how)
@@ -355,7 +366,7 @@ export function Editor({ id }: { id: string }) {
   const [answered, setAnswered] = useState(() => new Set<string>())
   const answer = (r: Run, post: boolean) =>
     act('review', async () => {
-      await review(t, id, r.id, post)
+      await review(target, id, r.id, post)
       setAnswered((x) => new Set(x).add(r.id))
       setBeat((n) => n + 1)
       setTick((n) => n + 1)
@@ -370,9 +381,9 @@ export function Editor({ id }: { id: string }) {
     asksRef.current?.focus()
   }
 
-  if (!signed) return <Page title="Automation" onBack={() => leave()} says="Sign in to see this organization's automations." />
-  if (!fresh && saved.error && !a) return <Page title="Automation" onBack={() => leave()} says={saved.error.message} />
-  if (!ready) return <Page title="Automation" onBack={() => leave()} says="Reading the automation…" />
+  if (!signed) return <Page title={t('Automation')} onBack={() => leave()} says={t("Sign in to see this organization's automations.")} />
+  if (!fresh && saved.error && !a) return <Page title={t('Automation')} onBack={() => leave()} says={told(saved.error, t)} />
+  if (!ready) return <Page title={t('Automation')} onBack={() => leave()} says={t('Reading the automation…')} />
 
   const s = d.schedule
   // An automation that posts speaks for the organization: only an admin changes it.
@@ -380,16 +391,16 @@ export function Editor({ id }: { id: string }) {
   // A new automation or a draft has nothing to switch on until it says what to do.
   const can = switchesAlone || Boolean(d.instructions.trim())
   const on = switchesAlone ? Boolean(a?.enabled) : can && d.enabled
-  const says = switchesAlone ? (on ? 'On' : 'Off') : !can ? 'Add instructions first' : on ? 'On when saved' : 'Off when saved'
-  const state = fresh ? 'Not created yet' : dirty ? 'Unsaved changes' : ''
+  const says = switchesAlone ? (on ? t('On') : t('Off')) : !can ? t('Add instructions first') : on ? t('On when saved') : t('Off when saved')
+  const state = fresh ? t('Not created yet') : dirty ? t('Unsaved changes') : ''
   const sayId = `${id}-switch`
   return (
     <YStack flex={1} minH={0}>
       <YStack shrink={0} px="$6" pt="$4" pb="$3" borderBottomWidth={1} borderColor="$borderColor">
         <XStack width="100%" maxW={760} mx="auto" items="center" gap="$3" flexWrap="wrap" rowGap="$2">
-          <Button size="sm" variant="ghost" onPress={back} aria-label="All scheduled tasks">
-            <ChevronLeft size={14} />
-            Scheduled tasks
+          <Button size="sm" variant="ghost" onPress={back} aria-label={t('All scheduled tasks')}>
+            <ChevronLeft size={14} {...{ 'data-i18n-mirror': '' }} />
+            {t('Scheduled tasks')}
           </Button>
           <SizableText size="$1" color="$soft" role="status">
             {state}
@@ -403,13 +414,13 @@ export function Editor({ id }: { id: string }) {
               checked={on}
               disabled={busy === 'switch' || !can}
               onCheckedChange={flip}
-              aria-label={switchesAlone ? `${a!.name} on` : 'On when saved'}
+              aria-label={switchesAlone ? t('{name} on', { name: a!.name }) : t('On when saved')}
               aria-describedby={sayId}
             />
           </XStack>
           {a && !a.draft ? (
             <Button size="sm" variant="outline" disabled={Boolean(busy) || dirty} onPress={() => void go()}>
-              {busy === 'run' ? 'Starting…' : 'Run now'}
+              {busy === 'run' ? t('Starting…') : t('Run now')}
             </Button>
           ) : null}
           {a && dirty ? (
@@ -423,11 +434,11 @@ export function Editor({ id }: { id: string }) {
                 setNote('')
               }}
             >
-              Discard changes
+              {t('Discard changes')}
             </Button>
           ) : null}
           <Button size="sm" disabled={Boolean(busy) || locked || !(fresh || drafty || dirty)} onPress={() => complete() && void keep()}>
-            {busy === 'save' ? 'Saving…' : fresh ? 'Create' : 'Save'}
+            {busy === 'save' ? t('Saving…') : fresh ? t('Create') : t('Save')}
           </Button>
         </XStack>
         {note ? (
@@ -435,7 +446,7 @@ export function Editor({ id }: { id: string }) {
             <Line>{note}</Line>
             {upgrade ? (
               <Button size="sm" variant="outline" onPress={() => away(path({ kind: 'screen', screen: 'plans' }))}>
-                See plans
+                {t('See plans')}
               </Button>
             ) : null}
           </XStack>
@@ -445,101 +456,107 @@ export function Editor({ id }: { id: string }) {
         <YStack width="100%" maxW={760} mx="auto" gap="$5">
           {locked ? (
             <SizableText size="$1" color="$soft" role="note">
-              This automation posts to the organization’s accounts, so only an org admin changes it.
+              {t('This automation posts to the organization’s accounts, so only an org admin changes it.')}
             </SizableText>
           ) : null}
           {free ? (
             <XStack items="center" gap="$3" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" flexWrap="wrap" rowGap="$2">
               <SizableText flex={1} minW={200} size="$1" color="$soft">
-                Paid plans include automation runs. On the Free plan each run needs $1 of credit.
+                {t('Paid plans include automation runs. On the Free plan each run needs $1 of credit.')}
               </SizableText>
               <Button size="sm" variant="outline" onPress={() => away(path({ kind: 'screen', screen: 'plans' }))}>
-                See plans
+                {t('See plans')}
               </Button>
             </XStack>
           ) : null}
           <YStack gap="$1">
             <SizableText render="h1" size="$6" color="$ink" numberOfLines={1}>
-              {fresh ? 'New automation' : a?.name}
+              {fresh ? t('New automation') : a?.name}
             </SizableText>
             <SizableText size="$2" color="$soft">
               {fresh
-                ? 'Name it, say what it should do, and when. It runs as you, in this organization.'
+                ? t('Name it, say what it should do, and when. It runs as you, in this organization.')
                 : a?.draft
-                  ? 'A draft: say what it should do and save it, and it runs.'
-                  : [`From ${SOURCE[a!.source]}`, words(a!.schedule), a!.next && a!.enabled ? `next ${local(a!.next)}` : a!.schedule.kind === 'manual' ? '' : 'off'].filter(Boolean).join(' · ')}
+                  ? t('A draft: say what it should do and save it, and it runs.')
+                  : [
+                      t('From {product}', { product: t(SOURCE[a!.source]) }),
+                      words(a!.schedule, t),
+                      a!.next && a!.enabled ? t('next {when}', { when: local(a!.next) }) : a!.schedule.kind === 'manual' ? '' : t('off'),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
             </SizableText>
           </YStack>
 
           {fresh && offered.value.length && !d.instructions.trim() ? (
             <XStack gap="$2" flexWrap="wrap" rowGap="$2" items="center">
               <SizableText size="$2" color="$soft">
-                Start from
+                {t('Start from')}
               </SizableText>
               {offered.value.map((x) => (
-                <Button key={x.key} size="sm" variant="outline" onPress={() => begin(x)} aria-label={`Start from ${x.name}`}>
+                <Button key={x.key} size="sm" variant="outline" onPress={() => begin(x)} aria-label={t('Start from {name}', { name: x.name })}>
                   {x.name}
                 </Button>
               ))}
             </XStack>
           ) : null}
-          <Field label="Name">
+          <Field label={t('Name')}>
             <Input
               ref={nameRef}
               value={d.name}
               onChangeText={(v: string) => set({ name: v })}
               onSubmitEditing={() => asksRef.current?.focus()}
-              placeholder="Morning briefing"
-              aria-label="Automation name"
+              placeholder={t('Morning briefing')}
+              aria-label={t('Automation name')}
               autoFocus={fresh}
               disabled={locked}
             />
           </Field>
-          <Field label="Instructions (required)" hint="What the agent does each run. It works in a Dev sandbox with this organization's connectors, MCP servers and skills.">
+          <Field label={t('Instructions (required)')} hint={t("What the agent does each run. It works in a Dev sandbox with this organization's connectors, MCP servers and skills.")}>
             <Textarea
               ref={asksRef}
               disabled={locked}
               value={d.instructions}
               onChangeText={(v: string) => set({ instructions: v })}
-              placeholder="What should it do each run? For example: summarize what needs my attention today across calendar, email and messages."
-              aria-label="Instructions"
+              placeholder={t('What should it do each run? For example: summarize what needs my attention today across calendar, email and messages.')}
+              aria-label={t('Instructions')}
               rows={7}
             />
           </Field>
-          <Field label="When it runs" hint={s.kind === 'cron' ? 'Five fields: minute, hour, day of month, month, day of week.' : s.kind === 'once' ? 'It runs at that time and then switches itself off.' : undefined}>
+          <Field label={t('When it runs')} hint={s.kind === 'cron' ? t('Five fields: minute, hour, day of month, month, day of week.') : s.kind === 'once' ? t('It runs at that time and then switches itself off.') : undefined}>
             <When s={s} onChange={(next) => set({ schedule: next })} disabled={locked} />
           </Field>
-          <Field label="Model">
+          <Field label={t('Model')}>
             <XStack>
               <ModelPicker
                 size="sm"
-                name="Model"
+                name={t('Model')}
                 models={catalog.value}
                 scope="chat"
                 limits={limits}
                 value={d.model ?? ENSO}
                 onChange={(id) => set({ model: id === ENSO ? null : id })}
                 loading={catalog.loading}
-                error={catalog.error?.message ?? null}
+                error={catalog.error ? told(catalog.error, t) : null}
               />
             </XStack>
           </Field>
           <Field
-            label="Permissions"
-            hint={d.permissions === 'auto' ? 'Works and uses connectors without stopping.' : 'Reads and researches, changes nothing, and ends with the actions it would take for you to approve.'}
+            label={t('Permissions')}
+            hint={d.permissions === 'auto' ? t('Works and uses connectors without stopping.') : t('Reads and researches, changes nothing, and ends with the actions it would take for you to approve.')}
           >
-            <Choice label="Permissions" value={d.permissions} options={PERMISSIONS} onChange={(p) => set({ permissions: p })} />
+            <Choice label={t('Permissions')} value={d.permissions} options={PERMISSIONS.map((p) => ({ ...p, label: t(p.label) }))} onChange={(p) => set({ permissions: p })} />
           </Field>
           <Field
-            label="Post to"
+            label={t('Post to')}
             hint={
               !host.admin
-                ? 'An org admin chooses where automations post: the accounts are the organization’s.'
+                ? t('An org admin chooses where automations post: the accounts are the organization’s.')
                 : !d.postTo.length
-                  ? 'Turn an account on and each run’s answer is a post for it.'
+                  ? t('Turn an account on and each run’s answer is a post for it.')
                   : d.permissions === 'auto'
-                    ? 'Each run posts what the agent writes, as written.'
-                    : 'Each run holds what the agent writes for you to post or discard.'
+                    ? t('Each run posts what the agent writes, as written.')
+                    : t('Each run holds what the agent writes for you to post or discard.')
             }
           >
             <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
@@ -554,15 +571,17 @@ export function Editor({ id }: { id: string }) {
                       </SizableText>
                       <SizableText size="$1" color="$soft">
                         {social.error
-                          ? social.error.message
+                          ? told(social.error, t)
                           : !c
-                            ? 'Reading…'
+                            ? t('Reading…')
                             : c.connected
-                              ? `Connected${c.account ? ` as ${c.account}` : ''}`
-                              : `${c.available ? 'Not connected: an org admin connects it in Settings → Integrations.' : p.needs} ${
+                              ? c.account
+                                ? t('Connected as {account}', { account: c.account })
+                                : t('Connected')
+                              : `${c.available ? t('Not connected: an org admin connects it in Settings → Integrations.') : t(p.needs)} ${
                                   on || d.permissions === 'ask'
-                                    ? 'Runs hold the post for you to read; posting it fails until it is connected.'
-                                    : 'Acting on its own, it posts only to a connected account.'
+                                    ? t('Runs hold the post for you to read; posting it fails until it is connected.')
+                                    : t('Acting on its own, it posts only to a connected account.')
                                 }`}
                       </SizableText>
                     </YStack>
@@ -570,7 +589,7 @@ export function Editor({ id }: { id: string }) {
                       checked={on}
                       disabled={!host.admin || (!on && !c?.connected && d.permissions === 'auto')}
                       onCheckedChange={(v: boolean) => set({ postTo: v ? [...d.postTo, p.id].sort() : d.postTo.filter((x) => x !== p.id) })}
-                      aria-label={`Post to ${p.name}`}
+                      aria-label={t('Post to {name}', { name: p.name })}
                     />
                   </XStack>
                 )
@@ -578,27 +597,27 @@ export function Editor({ id }: { id: string }) {
             </YStack>
             <XStack>
               <Button size="sm" variant="ghost" onPress={() => away(path({ kind: 'settings', section: 'integrations' }))}>
-                Connect accounts
+                {t('Connect accounts')}
               </Button>
             </XStack>
           </Field>
           <XStack items="center" gap="$3">
             <YStack flex={1} minW={0}>
               <SizableText size="$2" color="$ink">
-                Email me when a run ends
+                {t('Email me when a run ends')}
               </SizableText>
               <SizableText size="$1" color="$soft">
-                One line on how it went, with a link to the run.
+                {t('One line on how it went, with a link to the run.')}
               </SizableText>
             </YStack>
-            <Switch checked={d.notify} onCheckedChange={(v: boolean) => set({ notify: v })} aria-label="Email me when a run ends" />
+            <Switch checked={d.notify} onCheckedChange={(v: boolean) => set({ notify: v })} aria-label={t('Email me when a run ends')} />
           </XStack>
 
           {dirty && wrong && note !== wrong ? <Line>{wrong}</Line> : null}
           {a ? (
             <XStack>
               <Button size="sm" variant="ghost" disabled={Boolean(busy)} onPress={() => setAsking(true)}>
-                Delete
+                {t('Delete')}
               </Button>
             </XStack>
           ) : null}
@@ -606,16 +625,16 @@ export function Editor({ id }: { id: string }) {
           {a ? (
             <YStack gap="$2">
               <SizableText size="$3" color="$ink">
-                Runs
+                {t('Runs')}
               </SizableText>
               {history.error && !history.value.length ? (
-                <Line>{history.error.message}</Line>
+                <Line>{told(history.error, t)}</Line>
               ) : !history.value.length ? (
                 <SizableText size="$2" color="$soft">
-                  {history.loading ? 'Reading its runs…' : a.draft ? 'It runs once its instructions are saved.' : 'No runs yet. Run now starts one.'}
+                  {history.loading ? t('Reading its runs…') : a.draft ? t('It runs once its instructions are saved.') : t('No runs yet. Run now starts one.')}
                 </SizableText>
               ) : (
-                <YStack role="list" borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden" aria-label="Run history">
+                <YStack role="list" borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden" aria-label={t('Run history')}>
                   {history.value.map((r, i) => (
                     <XStack role="listitem" key={r.id} items="flex-start" gap="$3" px="$3" py="$2.5" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
                       <YStack pt="$1">
@@ -623,13 +642,13 @@ export function Editor({ id }: { id: string }) {
                       </YStack>
                       <YStack flex={1} minW={0} gap="$0.5">
                         <SizableText size="$2" color="$ink">
-                          {`${WORD[r.status] ?? r.status} · ${local(r.at)}`}
+                          {`${WORD[r.status] ? t(WORD[r.status]) : r.status} · ${local(r.at)}`}
                         </SizableText>
                         <SizableText size="$1" color="$soft" style={{ whiteSpace: 'pre-wrap' }}>
-                          {r.summary || (live(r.status) ? 'Working…' : '')}
+                          {r.summary || (live(r.status) ? t('Working…') : '')}
                         </SizableText>
                         {r.draft ? (
-                          <YStack mt="$1.5" px="$3" py="$2" rounded="$2" bg="$raised" role="group" aria-label="The post">
+                          <YStack mt="$1.5" px="$3" py="$2" rounded="$2" bg="$raised" role="group" aria-label={t('The post')}>
                             <SizableText size="$2" color="$ink" style={{ whiteSpace: 'pre-wrap' }}>
                               {r.draft}
                             </SizableText>
@@ -642,9 +661,9 @@ export function Editor({ id }: { id: string }) {
                               {NAME[x.to] ?? x.to}
                             </SizableText>
                             {x.url ? (
-                              <Out href={x.url} label={`Open the ${NAME[x.to] ?? x.to} post`}>
+                              <Out href={x.url} label={t('Open the {name} post', { name: NAME[x.to] ?? x.to })}>
                                 <SizableText size="$1" color="$ink" textDecorationLine="underline">
-                                  Posted · open
+                                  {t('Posted · open')}
                                 </SizableText>
                               </Out>
                             ) : (
@@ -656,22 +675,22 @@ export function Editor({ id }: { id: string }) {
                         ))}
                         {r.status === 'review' && host.admin && !answered.has(r.id) ? (
                           <XStack gap="$2" pt="$2">
-                            <Button size="sm" disabled={Boolean(busy)} onPress={() => void answer(r, true)} aria-label={`Post the post of ${local(r.at)}`}>
-                              Post it
+                            <Button size="sm" disabled={Boolean(busy)} onPress={() => void answer(r, true)} aria-label={t('Post the post of {when}', { when: local(r.at) })}>
+                              {t('Post it')}
                             </Button>
-                            <Button size="sm" variant="ghost" disabled={Boolean(busy)} onPress={() => void answer(r, false)} aria-label={`Discard the post of ${local(r.at)}`}>
-                              Discard
+                            <Button size="sm" variant="ghost" disabled={Boolean(busy)} onPress={() => void answer(r, false)} aria-label={t('Discard the post of {when}', { when: local(r.at) })}>
+                              {t('Discard')}
                             </Button>
                           </XStack>
                         ) : r.status === 'review' && !host.admin ? (
                           <SizableText size="$1" color="$soft" pt="$1">
-                            An org admin posts or discards it.
+                            {t('An org admin posts or discards it.')}
                           </SizableText>
                         ) : null}
                       </YStack>
                       {r.session ? (
-                        <Button size="sm" variant="ghost" onPress={() => host.go(r.session!)} aria-label={`Open the Dev run of ${local(r.at)}`}>
-                          Open run
+                        <Button size="sm" variant="ghost" onPress={() => host.go(r.session!)} aria-label={t('Open the Dev run of {when}', { when: local(r.at) })}>
+                          {t('Open run')}
                         </Button>
                       ) : null}
                     </XStack>
@@ -684,25 +703,25 @@ export function Editor({ id }: { id: string }) {
         {a ? (
           <Confirm
             what={a.name}
-            says="It stops running, and its schedule and its runs go with it. A run going now is stopped."
+            says={t('It stops running, and its schedule and its runs go with it. A run going now is stopped.')}
             open={asking}
             onOpenChange={setAsking}
             onYes={async () => {
-              await remove(t, a.id)
+              await remove(target, a.id)
               leave({ replace: true })
             }}
           />
         ) : null}
-        <Sheet title="Leave without saving?" open={Boolean(leaving)} onOpenChange={(o) => !o && setLeaving('')} width={420}>
+        <Sheet title={t('Leave without saving?')} open={Boolean(leaving)} onOpenChange={(o) => !o && setLeaving('')} width={420}>
           <SizableText size="$2" color="$soft">
-            {fresh ? 'This automation is not created yet.' : 'Your changes to this automation are not saved.'}
+            {fresh ? t('This automation is not created yet.') : t('Your changes to this automation are not saved.')}
           </SizableText>
           <XStack gap="$2" justify="flex-end">
             <Button size="sm" variant="ghost" onPress={() => setLeaving('')}>
-              Keep editing
+              {t('Keep editing')}
             </Button>
             <Button size="sm" variant="destructive" onPress={() => host.go(leaving)}>
-              Leave
+              {t('Leave')}
             </Button>
           </XStack>
         </Sheet>
@@ -711,14 +730,16 @@ export function Editor({ id }: { id: string }) {
   )
 }
 
+/** A page with nothing to edit yet: its title and what it says come already said. */
 function Page({ title, says, onBack }: { title: string; says: string; onBack: () => void }) {
+  const { t } = useI18n()
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6">
       <YStack width="100%" maxW={760} mx="auto" gap="$4">
         <XStack>
-          <Button size="sm" variant="ghost" onPress={onBack} aria-label="All scheduled tasks">
-            <ChevronLeft size={14} />
-            Scheduled tasks
+          <Button size="sm" variant="ghost" onPress={onBack} aria-label={t('All scheduled tasks')}>
+            <ChevronLeft size={14} {...{ 'data-i18n-mirror': '' }} />
+            {t('Scheduled tasks')}
           </Button>
         </XStack>
         <SizableText render="h1" size="$6" color="$ink">

@@ -4,8 +4,13 @@
  * and keeps it online while it runs; one can also be registered here by hand.
  * The member who linked a machine, or an org admin, renames it, drains it,
  * mints its claim key or removes it.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a machine's name,
+ * hostname, id and hardware, and the commands to type, are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import {
   Activity,
   ChevronDown,
@@ -24,6 +29,7 @@ import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input } from 
 import { CopyButton } from '@hanzo/ui/product'
 import { useEffect, useState } from 'react'
 
+import { told } from '../api/call.ts'
 import {
   add,
   change,
@@ -54,10 +60,27 @@ const BEAT = 30_000
 /** The list before its first answer; every answer is a new array, even an empty one. */
 const UNREAD: Machine[] = []
 
+/** A machine's status in a line, the platform's word or `not seen yet`, said in the reader's language; one it does not name, as given. */
+const STATES: Record<string, string> = {
+  online: phrase('online'),
+  offline: phrase('offline'),
+  draining: phrase('draining'),
+  'not seen yet': phrase('not seen yet'),
+  '': phrase('unknown'),
+}
+
+/** What a machine is, as the platform names its kinds, said in the reader's language; one it does not name, as given. */
+const KIND: Record<string, string> = { laptop: phrase('laptop'), gpu: phrase('gpu'), cloud: phrase('cloud'), cluster: phrase('cluster'), machine: phrase('machine') }
+
+/** A status as a line says it. Code's place list says it the same way. */
+export const said = (status: string, t: Say): string => (status in STATES ? t(STATES[status]!) : status)
+
+const kindOf = (kind: string, t: Say): string => (KIND[kind] ? t(KIND[kind]) : kind)
+
 /** The line under a machine: what it is, where, how big, and what it is doing. */
-function about(m: Machine): string {
-  const load = m.running ? `${m.running} running` : m.sessions ? `${m.sessions} runs` : ''
-  return [state(m) || 'unknown', m.kind, m.host && m.host !== m.label ? m.host : '', m.capacity, load].filter(Boolean).join(' · ')
+function about(m: Machine, t: Say): string {
+  const load = m.running ? t('{n} running', { n: m.running }) : m.sessions ? t('{n} runs', { n: m.sessions }) : ''
+  return [said(state(m), t), kindOf(m.kind, t), m.host && m.host !== m.label ? m.host : '', m.capacity, load].filter(Boolean).join(' · ')
 }
 
 function Dot({ m }: { m: Machine }) {
@@ -92,22 +115,23 @@ function KindIcon({ kind, size = 16 }: { kind: string; size?: number }) {
 }
 
 function StatusBadge({ m }: { m: Machine }) {
+  const { t } = useI18n()
   const s = state(m)
   if (!s) return null
   let color: '$green10' | '$yellow10' | '$blue10' | '$soft' = '$soft'
   let text = s
   if (s === 'online') {
     color = '$green10'
-    text = 'Online'
+    text = t('Online')
   } else if (s === 'draining') {
     color = '$yellow10'
-    text = 'Draining'
+    text = t('Draining')
   } else if (s === 'not seen yet') {
     color = '$blue10'
-    text = 'Not seen yet'
+    text = t('Not seen yet')
   } else if (s === 'offline') {
     color = '$soft'
-    text = 'Offline'
+    text = t('Offline')
   }
   return (
     <XStack px="$2" py="$0.5" rounded="$10" borderWidth={1} borderColor={color} items="center" gap="$1.5">
@@ -120,10 +144,11 @@ function StatusBadge({ m }: { m: Machine }) {
 }
 
 export function Machines() {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
-  const list = useRead(signed ? () => machines(t) : null, UNREAD, [t, signed])
+  const list = useRead(signed ? () => machines(target) : null, UNREAD, [target, signed])
   const [adding, setAdding] = useState(false)
   const [renaming, setRenaming] = useState<Machine | null>(null)
   const [removing, setRemoving] = useState<Machine | null>(null)
@@ -144,8 +169,8 @@ export function Machines() {
   if (!signed) {
     return (
       <YStack gap="$5">
-        <Heading title="Machines" />
-        <Soft>Sign in to see your organization’s machines.</Soft>
+        <Heading title={t('Machines')} />
+        <Soft>{t('Sign in to see your organization’s machines.')}</Soft>
       </YStack>
     )
   }
@@ -153,38 +178,38 @@ export function Machines() {
   const drain = async (m: Machine, status: 'online' | 'draining') => {
     setNote('')
     try {
-      await change(t, m.id, { status })
-      setNote(status === 'draining' ? `${m.label} takes no new runs` : `${m.label} takes runs again`)
+      await change(target, m.id, { status })
+      setNote(status === 'draining' ? t('{name} takes no new runs', { name: m.label }) : t('{name} takes runs again', { name: m.label }))
       list.reload()
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
     }
   }
 
   return (
     <YStack gap="$6">
-      <Heading title="Machines" detail="Your organization’s own computers. A run sent to one runs there instead of in the Hanzo sandbox." />
+      <Heading title={t('Machines')} detail={t('Your organization’s own computers. A run sent to one runs there instead of in the Hanzo sandbox.')} />
 
-      <Group title="Link a machine" detail="Run these on it. It registers under its hostname, and stays online while hanzo link runs.">
+      <Group title={t('Link a machine')} detail={t('Run these on it. It registers under its hostname, and stays online while {command} runs.', { command: 'hanzo link' })}>
         <XStack items="flex-start" gap="$2" px="$3" py="$2.5" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$raised">
-          <SizableText flex={1} minW={0} size="$2" color="$ink" aria-label="Link commands" style={{ ...mono, whiteSpace: 'pre-wrap' }}>
+          <SizableText flex={1} minW={0} size="$2" color="$ink" aria-label={t('Link commands')} {...{ 'data-i18n-ltr': '' }} fontFamily="$mono" $platform-web={{ whiteSpace: 'pre-wrap' }}>
             {LINK}
           </SizableText>
-          <CopyButton value={LINK} label="Copy the commands" />
+          <CopyButton value={LINK} label={t('Copy the commands')} />
         </XStack>
 
         <XStack items="center" justify="space-between" flexWrap="wrap" gap="$2">
           <XStack items="center" gap="$2">
             <Button size="sm" variant="ghost" onPress={() => setAdding(true)}>
-              <Plus size={14} /> Register one by hand
+              <Plus size={14} /> {t('Register one by hand')}
             </Button>
             <Button size="sm" variant="ghost" onPress={() => setShowAdvancedLink(!showAdvancedLink)}>
               {showAdvancedLink ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              {showAdvancedLink ? 'Hide options' : 'More connection options'}
+              {showAdvancedLink ? t('Hide options') : t('More connection options')}
             </Button>
           </XStack>
           <SizableText size="$1" color="$soft">
-            Supported: macOS, Linux, Windows, NVIDIA CUDA GPUs, Cloud VMs
+            {t('Supported: macOS, Linux, Windows, NVIDIA CUDA GPUs, Cloud VMs')}
           </SizableText>
         </XStack>
 
@@ -192,50 +217,50 @@ export function Machines() {
           <YStack gap="$2.5" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$raised">
             <YStack gap="$1">
               <SizableText size="$2" color="$ink" style={{ fontWeight: 600 }}>
-                1. Background daemon (system service)
+                {t('1. Background daemon (system service)')}
               </SizableText>
               <SizableText size="$1" color="$soft">
-                Run worker continuously in the background without keeping a terminal open:
+                {t('Run worker continuously in the background without keeping a terminal open:')}
               </SizableText>
               <XStack items="center" justify="space-between" px="$2.5" py="$1.5" rounded="$2" bg="$raised" borderWidth={1} borderColor="$borderColor">
-                <SizableText size="$1" color="$ink" style={mono}>
+                <SizableText size="$1" color="$ink" {...{ 'data-i18n-ltr': '' }} fontFamily="$mono">
                   hanzo code --serve
                 </SizableText>
-                <CopyButton value="hanzo code --serve" label="Copy daemon command" />
+                <CopyButton value="hanzo code --serve" label={t('Copy daemon command')} />
               </XStack>
             </YStack>
 
             <YStack gap="$1" pt="$1">
               <SizableText size="$2" color="$ink" style={{ fontWeight: 600 }}>
-                2. Install CLI from shell
+                {t('2. Install CLI from shell')}
               </SizableText>
               <XStack items="center" justify="space-between" px="$2.5" py="$1.5" rounded="$2" bg="$raised" borderWidth={1} borderColor="$borderColor">
-                <SizableText size="$1" color="$ink" style={mono}>
+                <SizableText size="$1" color="$ink" {...{ 'data-i18n-ltr': '' }} fontFamily="$mono">
                   curl -fsSL https://hanzo.sh | sh
                 </SizableText>
-                <CopyButton value="curl -fsSL https://hanzo.sh | sh" label="Copy install command" />
+                <CopyButton value="curl -fsSL https://hanzo.sh | sh" label={t('Copy install command')} />
               </XStack>
             </YStack>
           </YStack>
         ) : null}
       </Group>
 
-      <Group title="Linked">
+      <Group title={t('Linked')}>
         {list.value === UNREAD ? (
-          <Soft>{list.error ? list.error.message : 'Reading machines…'}</Soft>
+          <Soft>{list.error ? told(list.error, t) : t('Reading machines…')}</Soft>
         ) : list.value.length === 0 ? (
           <YStack gap="$3">
-            <Soft>No machine is linked yet.</Soft>
+            <Soft>{t('No machine is linked yet.')}</Soft>
             <Card>
               <YStack p="$4" gap="$3">
                 <XStack items="center" gap="$2.5">
                   <Server size={20} />
                   <YStack gap="$0.5">
                     <SizableText size="$3" color="$ink" style={{ fontWeight: 600 }}>
-                      Connect your first computer or GPU server
+                      {t('Connect your first computer or GPU server')}
                     </SizableText>
                     <SizableText size="$2" color="$soft">
-                      Execute code, runs, and local models directly on your hardware with full privacy and zero cloud fees.
+                      {t('Execute code, runs, and local models directly on your hardware with full privacy and zero cloud fees.')}
                     </SizableText>
                   </YStack>
                 </XStack>
@@ -245,7 +270,7 @@ export function Machines() {
                       1.
                     </SizableText>
                     <SizableText size="$2" color="$ink">
-                      Install Hanzo CLI: <span style={mono}>curl -fsSL https://hanzo.sh | sh</span>
+                      {t('Install Hanzo CLI: {command}', { command: <SizableText size="$2" color="$ink" fontFamily="$mono" {...{ 'data-i18n-ltr': '' }}>curl -fsSL https://hanzo.sh | sh</SizableText> })}
                     </SizableText>
                   </XStack>
                   <XStack items="center" gap="$2">
@@ -253,7 +278,7 @@ export function Machines() {
                       2.
                     </SizableText>
                     <SizableText size="$2" color="$ink">
-                      Sign in with your account: <span style={mono}>hanzo login</span>
+                      {t('Sign in with your account: {command}', { command: <SizableText size="$2" color="$ink" fontFamily="$mono" {...{ 'data-i18n-ltr': '' }}>hanzo login</SizableText> })}
                     </SizableText>
                   </XStack>
                   <XStack items="center" gap="$2">
@@ -261,13 +286,13 @@ export function Machines() {
                       3.
                     </SizableText>
                     <SizableText size="$2" color="$ink">
-                      Link the machine: <span style={mono}>hanzo link</span>
+                      {t('Link the machine: {command}', { command: <SizableText size="$2" color="$ink" fontFamily="$mono" {...{ 'data-i18n-ltr': '' }}>hanzo link</SizableText> })}
                     </SizableText>
                   </XStack>
                 </YStack>
                 <XStack pt="$1">
                   <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
-                    <Plus size={14} /> Register one by hand
+                    <Plus size={14} /> {t('Register one by hand')}
                   </Button>
                 </XStack>
               </YStack>
@@ -289,14 +314,14 @@ export function Machines() {
                       </XStack>
                     }
                     title={m.label}
-                    detail={about(m)}
+                    detail={about(m, t)}
                     trailing={
                       <XStack items="center" gap="$2">
                         <StatusBadge m={m} />
                         {m.serving ? (
                           <XStack px="$1.5" py="$0.5" rounded="$10" borderWidth={1} borderColor="$green10">
                             <SizableText size="$1" color="$green10">
-                              Serving
+                              {t('Serving')}
                             </SizableText>
                           </XStack>
                         ) : null}
@@ -304,26 +329,26 @@ export function Machines() {
                           <XStack px="$1.5" py="$0.5" rounded="$10" bg="$raised" items="center" gap="$1">
                             <Activity size={12} color="$green10" />
                             <SizableText size="$1" color="$ink">
-                              {m.running} active
+                              {t('{n} active', { n: m.running })}
                             </SizableText>
                           </XStack>
                         ) : null}
-                        <CopyButton value={`hanzo link --target ${m.id}`} label={`Copy link command for ${m.label}`} />
+                        <CopyButton value={`hanzo link --target ${m.id}`} label={t('Copy link command for {name}', { name: m.label })} />
                         <DropdownMenu
                           trigger={
-                            <XStack render="button" aria-label={`Actions for ${m.label}`} px="$1.5" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+                            <XStack render="button" aria-label={t('Actions for {name}', { name: m.label })} px="$1.5" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
                               <MoreHorizontal size={16} />
                             </XStack>
                           }
                           items={[
-                            { key: 'details', label: isExpanded ? 'Hide details' : 'Show details', onSelect: () => setExpandedId(isExpanded ? null : m.id) },
-                            { key: 'rename', label: 'Rename', onSelect: () => setRenaming(m) },
+                            { key: 'details', label: isExpanded ? t('Hide details') : t('Show details'), onSelect: () => setExpandedId(isExpanded ? null : m.id) },
+                            { key: 'rename', label: t('Rename'), onSelect: () => setRenaming(m) },
                             m.status === 'draining'
-                              ? { key: 'online', label: 'Take runs again', onSelect: () => void drain(m, 'online') }
-                              : { key: 'drain', label: 'Drain', description: 'Finish what it has, take nothing new', onSelect: () => void drain(m, 'draining') },
-                            { key: 'key', label: 'Claim key', onSelect: () => setKeying(m) },
+                              ? { key: 'online', label: t('Take runs again'), onSelect: () => void drain(m, 'online') }
+                              : { key: 'drain', label: t('Drain'), description: t('Finish what it has, take nothing new'), onSelect: () => void drain(m, 'draining') },
+                            { key: 'key', label: t('Claim key'), onSelect: () => setKeying(m) },
                             { type: 'separator' },
-                            { key: 'remove', label: 'Remove', destructive: true, onSelect: () => setRemoving(m) },
+                            { key: 'remove', label: t('Remove'), destructive: true, onSelect: () => setRemoving(m) },
                           ]}
                         />
                       </XStack>
@@ -348,7 +373,7 @@ export function Machines() {
                             <XStack px="$2" py="$1" rounded="$2" bg="$raised" borderWidth={1} borderColor="$borderColor" items="center" gap="$1.5">
                               <Cpu size={12} />
                               <SizableText size="$1" color="$ink">
-                                {m.spec.cpus} cores
+                                {t('{n} cores', { n: m.spec.cpus })}
                               </SizableText>
                             </XStack>
                           ) : null}
@@ -356,7 +381,7 @@ export function Machines() {
                             <XStack px="$2" py="$1" rounded="$2" bg="$raised" borderWidth={1} borderColor="$borderColor" items="center" gap="$1.5">
                               <HardDrive size={12} />
                               <SizableText size="$1" color="$ink">
-                                {formatBytes(m.spec.memory)} RAM
+                                {t('{size} RAM', { size: formatBytes(m.spec.memory) })}
                               </SizableText>
                             </XStack>
                           ) : null}
@@ -377,7 +402,7 @@ export function Machines() {
                           {m.metrics.cpuUtil ? (
                             <YStack gap="$0.5">
                               <SizableText size="$1" color="$soft">
-                                CPU Utilization
+                                {t('CPU Utilization')}
                               </SizableText>
                               <SizableText size="$2" color="$ink" style={{ fontWeight: 600 }}>
                                 {formatPercent(m.metrics.cpuUtil)} {m.metrics.cpuTemp ? `· ${m.metrics.cpuTemp}°C` : ''}
@@ -386,7 +411,7 @@ export function Machines() {
                           ) : m.metrics.load1 ? (
                             <YStack gap="$0.5">
                               <SizableText size="$1" color="$soft">
-                                Load (1m, 5m, 15m)
+                                {t('Load (1m, 5m, 15m)')}
                               </SizableText>
                               <SizableText size="$2" color="$ink" style={{ fontWeight: 600 }}>
                                 {m.metrics.load1}, {m.metrics.load5 ?? 0}, {m.metrics.load15 ?? 0}
@@ -397,10 +422,10 @@ export function Machines() {
                           {m.metrics.memUsed ? (
                             <YStack gap="$0.5">
                               <SizableText size="$1" color="$soft">
-                                Memory
+                                {t('Memory')}
                               </SizableText>
                               <SizableText size="$2" color="$ink" style={{ fontWeight: 600 }}>
-                                {formatBytes(m.metrics.memUsed)} {m.spec?.memory ? `/ ${formatBytes(m.spec.memory)}` : 'used'}
+                                {m.spec?.memory ? `${formatBytes(m.metrics.memUsed)} / ${formatBytes(m.spec.memory)}` : t('{size} used', { size: formatBytes(m.metrics.memUsed) })}
                               </SizableText>
                             </YStack>
                           ) : null}
@@ -408,7 +433,7 @@ export function Machines() {
                           {m.metrics.gpuUtil !== undefined && m.metrics.gpuUtil > 0 ? (
                             <YStack gap="$0.5">
                               <SizableText size="$1" color="$soft">
-                                GPU
+                                {t('GPU')}
                               </SizableText>
                               <SizableText size="$2" color="$ink" style={{ fontWeight: 600 }}>
                                 {formatPercent(m.metrics.gpuUtil)} {m.metrics.gpuTemp ? `· ${m.metrics.gpuTemp}°C` : ''} {m.metrics.gpuPower ? `· ${m.metrics.gpuPower}W` : ''}
@@ -419,7 +444,7 @@ export function Machines() {
                           {m.metrics.model ? (
                             <YStack gap="$0.5">
                               <SizableText size="$1" color="$soft">
-                                Serving Model
+                                {t('Serving Model')}
                               </SizableText>
                               <SizableText size="$2" color="$ink" style={{ fontWeight: 600 }}>
                                 {m.metrics.model} {m.metrics.decode ? `(${m.metrics.decode} tok/s)` : ''}
@@ -433,23 +458,23 @@ export function Machines() {
                       <XStack justify="space-between" items="center" flexWrap="wrap" gap="$2" pt="$0.5">
                         <XStack items="center" gap="$3">
                           <SizableText size="$1" color="$soft" style={mono}>
-                            ID: {m.id}
+                            {t('ID: {id}', { id: m.id })}
                           </SizableText>
                           {m.seen ? (
                             <SizableText size="$1" color="$soft">
-                              Last heartbeat: {formatRelative(m.seen)}
+                              {t('Last heartbeat: {when}', { when: formatRelative(m.seen) })}
                             </SizableText>
                           ) : null}
                         </XStack>
                         <XStack items="center" gap="$2">
                           <SizableText size="$1" color="$soft">
-                            Run directly on this machine:
+                            {t('Run directly on this machine:')}
                           </SizableText>
                           <XStack items="center" gap="$1" px="$2" py="$0.5" rounded="$2" bg="$raised" borderWidth={1} borderColor="$borderColor">
-                            <SizableText size="$1" color="$ink" style={mono}>
+                            <SizableText size="$1" color="$ink" {...{ 'data-i18n-ltr': '' }} fontFamily="$mono">
                               hanzo run --target {m.id}
                             </SizableText>
-                            <CopyButton value={`hanzo run --target ${m.id}`} label={`Copy run command for ${m.label}`} />
+                            <CopyButton value={`hanzo run --target ${m.id}`} label={t('Copy run command for {name}', { name: m.label })} />
                           </XStack>
                         </XStack>
                       </XStack>
@@ -460,7 +485,7 @@ export function Machines() {
             })}
           </Card>
         )}
-        {list.error && list.value !== UNREAD ? <Soft>{list.error.message}</Soft> : null}
+        {list.error && list.value !== UNREAD ? <Soft>{told(list.error, t)}</Soft> : null}
       </Group>
       <Note>{note}</Note>
 
@@ -468,73 +493,75 @@ export function Machines() {
         open={adding}
         onOpenChange={setAdding}
         onAdded={(m) => {
-          setNote(`${m.label} is registered`)
+          setNote(t('{name} is registered', { name: m.label }))
           list.reload()
         }}
       />
       <Rename
         open={renaming !== null}
         onOpenChange={(o) => !o && setRenaming(null)}
-        title="Rename machine"
+        title={t('Rename machine')}
         name={renaming?.label ?? ''}
         // Each dialog acts only while it is open, which is while its machine is chosen.
         run={async (label) => {
-          await change(t, renaming!.id, { label })
-          setNote(`Renamed to ${label}`)
+          await change(target, renaming!.id, { label })
+          setNote(t('Renamed to {name}', { name: label }))
           list.reload()
         }}
       />
       <Confirm
         open={removing !== null}
         onOpenChange={(o) => !o && setRemoving(null)}
-        title={`Remove ${removing?.label ?? 'this machine'}?`}
-        says="Runs can no longer be sent to it, and its claim key stops working. Linking it again registers it anew."
-        act="Remove"
+        title={removing ? t('Remove {name}?', { name: removing.label }) : t('Remove this machine?')}
+        says={t('Runs can no longer be sent to it, and its claim key stops working. Linking it again registers it anew.')}
+        act={t('Remove')}
         run={async () => {
-          await remove(t, removing!.id)
-          setNote(`${removing!.label} is removed`)
+          await remove(target, removing!.id)
+          setNote(t('{name} is removed', { name: removing!.label }))
           list.reload()
         }}
       />
       <Confirm
         open={keying !== null}
         onOpenChange={(o) => !o && setKeying(null)}
-        title={`Mint a claim key for ${keying?.label ?? 'this machine'}?`}
-        says="A key it had before stops working, so a runner using it stops getting runs until it has the new one. The new key is shown once."
-        act="Mint key"
+        title={keying ? t('Mint a claim key for {name}?', { name: keying.label }) : t('Mint a claim key for this machine?')}
+        says={t('A key it had before stops working, so a runner using it stops getting runs until it has the new one. The new key is shown once.')}
+        act={t('Mint key')}
         run={async () => {
-          const k = await key(t, keying!.id)
+          const k = await key(target, keying!.id)
           setMinted({ machine: keying!, key: k })
         }}
       />
       <Dialog open={minted !== null} onOpenChange={(o) => !o && setMinted(null)}>
         <DialogContent maxW={480} showCloseButton={false}>
-          <DialogTitle>Claim key for {minted?.machine.label ?? ''}</DialogTitle>
+          <DialogTitle>{t('Claim key for {name}', { name: minted?.machine.label ?? '' })}</DialogTitle>
           {minted ? (
             <YStack gap="$3">
-              <Once value={minted.key} label="Claim key">
+              <Once value={minted.key} label={t('Claim key')} copy={t('Copy claim key')}>
                 <SizableText size="$1" color="$soft">
-                  A runner on this machine sends it as X-Target-Key when it claims the runs sent here, at POST
-                  /v1/agent/targets/{minted.machine.id}/claim.
+                  {t('A runner on this machine sends it as {header} when it claims the runs sent here, at {route}.', {
+                    header: 'X-Target-Key',
+                    route: `POST /v1/agent/targets/${minted.machine.id}/claim`,
+                  })}
                 </SizableText>
               </Once>
 
               <YStack gap="$1" p="$2.5" rounded="$2" bg="$raised" borderWidth={1} borderColor="$borderColor">
                 <SizableText size="$1" color="$ink" style={{ fontWeight: 600 }}>
-                  Start background worker with this key:
+                  {t('Start background worker with this key:')}
                 </SizableText>
                 <XStack items="center" justify="space-between" px="$2" py="$1" rounded="$2" bg="$raised">
-                  <SizableText size="$1" color="$ink" style={mono}>
+                  <SizableText size="$1" color="$ink" {...{ 'data-i18n-ltr': '' }} fontFamily="$mono">
                     export HANZO_TARGET_KEY="{minted.key}"
                   </SizableText>
-                  <CopyButton value={`export HANZO_TARGET_KEY="${minted.key}"\nhanzo code --serve --target ${minted.machine.id}`} label="Copy key command" />
+                  <CopyButton value={`export HANZO_TARGET_KEY="${minted.key}"\nhanzo code --serve --target ${minted.machine.id}`} label={t('Copy key command')} />
                 </XStack>
               </YStack>
             </YStack>
           ) : null}
           <XStack justify="flex-end" pt="$2">
             <Button size="sm" onPress={() => setMinted(null)}>
-              Done
+              {t('Done')}
             </Button>
           </XStack>
         </DialogContent>
@@ -545,7 +572,8 @@ export function Machines() {
 
 /** Registering a machine by hand: its name, what it is, and the hostname its runs report. */
 function Adding({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: (o: boolean) => void; onAdded: (m: Machine) => void }) {
-  const t = useTarget()
+  const { t } = useI18n()
+  const target = useTarget()
   const [label, setLabel] = useState('')
   const [kind, setKind] = useState<Kind>('machine')
   const [hostname, setHostname] = useState('')
@@ -568,13 +596,13 @@ function Adding({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: 
     setNote('')
     try {
       const targetLabel = label.trim() || hostname.trim()
-      if (!targetLabel) throw new Error('A machine needs a name or a hostname')
-      const m = await add(t, { label: targetLabel, kind, host: hostname, capacity: capacity.trim() || undefined })
+      if (!targetLabel) throw new Error(phrase('A machine needs a name or a hostname'))
+      const m = await add(target, { label: targetLabel, kind, host: hostname, capacity: capacity.trim() || undefined })
       setWorking(false)
       onAdded(m)
       close()
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(told(e, t))
       setWorking(false)
     }
   }
@@ -582,20 +610,20 @@ function Adding({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
       <DialogContent maxW={460} showCloseButton={false}>
-        <DialogTitle>Register a machine</DialogTitle>
+        <DialogTitle>{t('Register a machine')}</DialogTitle>
         <YStack gap="$3">
-          <Field label="Name" hint="Left empty, it takes the hostname.">
-            <Input value={label} onChangeText={setLabel} aria-label="Machine name" autoFocus />
+          <Field label={t('Name')} hint={t('Left empty, it takes the hostname.')}>
+            <Input value={label} onChangeText={setLabel} aria-label={t('Machine name')} autoFocus />
           </Field>
-          <Field label="Kind">
-            <XStack flexWrap="wrap" gap="$1.5" role="radiogroup" aria-label="Kind">
+          <Field label={t('Kind')}>
+            <XStack flexWrap="wrap" gap="$1.5" role="radiogroup" aria-label={t('Kind')}>
               {KINDS.map((k) => (
                 <XStack
                   key={k}
                   render="button"
                   role="radio"
                   aria-checked={k === kind}
-                  aria-label={k}
+                  aria-label={kindOf(k, t)}
                   onPress={() => setKind(k)}
                   px="$2.5"
                   py="$1"
@@ -607,17 +635,17 @@ function Adding({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: 
                 >
                   <KindIcon kind={k} size={14} />
                   <SizableText size="$1" color={k === kind ? '$ink' : '$soft'}>
-                    {k}
+                    {kindOf(k, t)}
                   </SizableText>
                 </XStack>
               ))}
             </XStack>
           </Field>
-          <Field label="Hostname" hint="Optional. What its runs report. hanzo link, signed in as you on a machine with this hostname, takes this row over.">
-            <Input value={hostname} onChangeText={setHostname} aria-label="Hostname" autoCapitalize="none" />
+          <Field label={t('Hostname')} hint={t('Optional. What its runs report. {command}, signed in as you on a machine with this hostname, takes this row over.', { command: 'hanzo link' })}>
+            <Input value={hostname} onChangeText={setHostname} aria-label={t('Hostname')} autoCapitalize="none" />
           </Field>
-          <Field label="Capacity / Hardware" hint="Optional human summary (e.g. 16 vCPU / 64G / 1× RTX 4090).">
-            <Input value={capacity} onChangeText={setCapacity} aria-label="Capacity" placeholder="e.g. 16 vCPU / 64G / 1× RTX 4090" />
+          <Field label={t('Capacity / Hardware')} hint={t('Optional human summary (e.g. {example}).', { example: '16 vCPU / 64G / 1× RTX 4090' })}>
+            <Input value={capacity} onChangeText={setCapacity} aria-label={t('Capacity')} placeholder={t('e.g. {example}', { example: '16 vCPU / 64G / 1× RTX 4090' })} />
           </Field>
           {note ? (
             <SizableText size="$1" color="$soft" role="status">
@@ -626,10 +654,10 @@ function Adding({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: 
           ) : null}
           <XStack gap="$2" justify="flex-end">
             <Button size="sm" variant="ghost" disabled={working} onPress={close}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button size="sm" disabled={working} onPress={() => void save()}>
-              Register
+              {t('Register')}
             </Button>
           </XStack>
         </YStack>

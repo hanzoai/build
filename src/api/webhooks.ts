@@ -11,6 +11,8 @@
  * The org is the caller's; an endpoint another org owns reads as not found.
  * Events are subject patterns (`commerce.order.>`); none means every event.
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, query, seg, type Target } from './call.ts'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -65,16 +67,16 @@ export interface Draft {
   description: string
 }
 
-/** Why a draft cannot be sent, or ''. The platform refuses the same things. */
+/** Why a draft cannot be sent, or ''. The platform refuses the same things. English, marked (`phrase`): a screen says it through `t`. */
 export function refuse(d: Draft): string {
   let u: URL
   try {
     u = new URL(d.url.trim())
   } catch {
-    return 'Enter the https address to deliver to'
+    return phrase('Enter the https address to deliver to')
   }
-  if (u.protocol !== 'https:') return 'A webhook is delivered over https only'
-  if (d.events.length > 64) return 'At most 64 event patterns'
+  if (u.protocol !== 'https:') return phrase('A webhook is delivered over https only')
+  if (d.events.length > 64) return phrase('At most 64 event patterns')
   return ''
 }
 

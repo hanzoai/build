@@ -16,8 +16,16 @@
  * composer through `Chat` (its `composer` prop) and one that draws it directly
  * (`<Prompt>`) draw the same thing. The frame is as wide as the text above it
  * (`measure`).
+ *
+ * Its words are the reader's language (@hanzo/i18n): the components here ask
+ * `useI18n` themselves, and `prompt`, which is not a component, takes `t` from
+ * `useMention`'s state, English without one. Model names, a host's own words
+ * (its placeholder, a shelf's rows and links) and what a person typed are
+ * drawn as given.
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { ArrowUp, AudioLines, Check, Square, X } from '@hanzogui/lucide-icons-2'
 import { Control } from '@hanzo/composer'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSearch, DropdownMenuTrigger, Popover, PopoverContent, PopoverTrigger } from '@hanzo/ui'
@@ -32,6 +40,7 @@ import { MODES, type Mode } from './gear.ts'
 import { Dictation } from './mic.tsx'
 import { EFFORTS, grants, nameOf, reasons, ROUTER_IDS, type Mind } from './mind.ts'
 import { Plus, type PlusProps, type Shelf } from './plus.tsx'
+import { english } from './say.ts'
 
 /** The reading measure: @hanzo/design's prose width, which Width (appearance) retunes. */
 export const MEASURE = 'var(--container-prose, 48rem)'
@@ -60,7 +69,7 @@ const QUIET = { bg: 'transparent', color: 'var(--foreground)', hoverStyle: { bg:
 const SHOWN = 40
 
 /** What every Composer placeholder says, unless a surface names who is listening. */
-export const ASK = 'Type / for skills'
+export const ASK = phrase('Type / for skills')
 
 /**
  * The frame as a pane of its own, floating on the pane it is drawn in: the
@@ -161,7 +170,7 @@ function Word({ children, dim = false, label, open }: { children: ReactNode; dim
   )
 }
 
-/** A titled list of choices, each with a line saying what it does and a check on the one in force. */
+/** A titled list of choices, each with a line saying what it does and a check on the one in force. The items' words are marked (`phrase`); the title comes translated. */
 function Choices<T extends string>({
   title,
   items,
@@ -173,6 +182,7 @@ function Choices<T extends string>({
   value: T
   onPick: (id: T) => void
 }) {
+  const { t } = useI18n()
   return (
     <YStack role={"listbox" as never} aria-label={title} gap={2} data-slot="choices">
       <SizableText fontSize={13} color="$hint" px={10} pt={6} pb={4}>
@@ -197,11 +207,11 @@ function Choices<T extends string>({
           hoverStyle={c.off ? undefined : { bg: '$hover' }}
         >
           <YStack flex={1} minW={0} items="flex-start" gap={2}>
-            <SizableText fontSize={14} color="$ink" style={{ textAlign: 'left' }}>
-              {c.label}
+            <SizableText fontSize={14} color="$ink" text="start">
+              {t(c.label)}
             </SizableText>
-            <SizableText fontSize={13} color="$hint" style={{ textAlign: 'left' }}>
-              {c.note}
+            <SizableText fontSize={13} color="$hint" text="start">
+              {t(c.note)}
             </SizableText>
           </YStack>
           {c.id === value ? <Check size={16} color="var(--primary)" mt={2} aria-hidden /> : null}
@@ -232,6 +242,7 @@ function Opens({ label, word, dim, children }: { label: string; word: ReactNode;
 
 /** The model's name, and the catalog behind it: Free's lane to pick from, the rest an upgrade. */
 function Model({ mind, onUpgrade, limits }: { mind: Mind; onUpgrade?: (model: string) => void; limits?: PauseSource | null }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   // The catalog is hundreds long, and drawing all of it is what made the menu slow
@@ -255,13 +266,13 @@ function Model({ mind, onUpgrade, limits }: { mind: Mind; onUpgrade?: (model: st
     <DropdownMenu open={open} onOpenChange={setOpen} placement="top-end">
       <DropdownMenuTrigger asChild>
         <XStack data-slot="mind">
-          <Word label={`Model: ${nameOf(mind.model, mind.models)}`} open={open}>
+          <Word label={t('Model: {name}', { name: nameOf(mind.model, mind.models) })} open={open}>
             {nameOf(mind.model, mind.models)}
           </Word>
         </XStack>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" minW={280} data-slot="model-menu">
-        <DropdownMenuSearch value={q} onValueChange={setQ} placeholder="Search models" />
+        <DropdownMenuSearch value={q} onValueChange={setQ} placeholder={t('Search models')} />
         {/* The catalog is hundreds long: the rows scroll under the search, which stays. */}
         <YStack maxH="min(420px, 60vh)" overflowY="auto" overflowX="hidden" data-slot="model-rows">
         {!mind.free && !q.trim() ? (
@@ -272,7 +283,7 @@ function Model({ mind, onUpgrade, limits }: { mind: Mind; onUpgrade?: (model: st
                   Enso
                 </SizableText>
                 <SizableText fontSize={12} color="$hint">
-                  Picks the model for each message and step
+                  {t('Picks the model for each message and step')}
                 </SizableText>
               </YStack>
               {routed ? <Check size={14} color="var(--primary)" aria-hidden /> : null}
@@ -302,12 +313,12 @@ function Model({ mind, onUpgrade, limits }: { mind: Mind; onUpgrade?: (model: st
                     </SizableText>
                     {ok ? null : (
                       <SizableText fontSize={12} color="$hint" px={6} py={1} rounded={6} borderWidth={1} borderColor="$borderColor">
-                        Upgrade
+                        {t('Upgrade')}
                       </SizableText>
                     )}
                     {ok && paused ? (
                       <SizableText fontSize={12} color="$hint">
-                        Paused
+                        {t('Paused')}
                       </SizableText>
                     ) : null}
                     {m.id === mind.model ? <Check size={14} color="var(--primary)" aria-hidden /> : null}
@@ -319,7 +330,7 @@ function Model({ mind, onUpgrade, limits }: { mind: Mind; onUpgrade?: (model: st
         ))}
         {more > 0 ? (
           <SizableText fontSize={12} color="$hint" px={8} py={8}>
-            {`Type to search ${more} more models`}
+            {t('Type to search {count} more models', { count: more })}
           </SizableText>
         ) : null}
         </YStack>
@@ -330,8 +341,11 @@ function Model({ mind, onUpgrade, limits }: { mind: Mind; onUpgrade?: (model: st
 
 /** The row under the frame: where (Dev), then the model, the effort and the mode. */
 export function Tune({ mind, mode, where, onUpgrade, limits }: { mind?: Mind | null; mode?: PromptOptions['mode']; where?: ReactNode; onUpgrade?: (model: string) => void; limits?: PauseSource | null }) {
+  const { t } = useI18n()
   const thinks = mind ? reasons(mind.model, mind.models) : false
   const pace = mind ? EFFORTS.find((e) => e.id === mind.effort)! : null
+  const now = mode ? MODES.find((m) => m.id === mode.value) : undefined
+  const way = now ? t(now.label) : ''
   return (
     <XStack data-slot="tune" width="100%" items="center" gap={2} flexWrap="wrap" rowGap={4}>
       {where ? (
@@ -341,13 +355,13 @@ export function Tune({ mind, mode, where, onUpgrade, limits }: { mind?: Mind | n
         </XStack>
       ) : null}
       <XStack flex={1} $max-sm={{ display: 'none' }} />
-      <XStack items="center" gap={2} ml="auto" shrink={0}>
+      <XStack items="center" gap={2} marginInlineStart="auto" shrink={0}>
       {mind ? <Model mind={mind} onUpgrade={onUpgrade} limits={limits} /> : null}
       {mind && thinks && pace ? (
-        <Opens label={`Effort: ${pace.label}`} word={pace.label} dim>
+        <Opens label={t('Effort: {level}', { level: t(pace.label) })} word={t(pace.label)} dim>
           {(close) => (
             <Choices
-              title="Effort"
+              title={t('Effort')}
               items={EFFORTS}
               value={mind.effort}
               onPick={(e) => {
@@ -364,11 +378,11 @@ export function Tune({ mind, mode, where, onUpgrade, limits }: { mind?: Mind | n
             <XStack
               render="button"
               data-slot="mode"
-              aria-label={`Mode: ${MODES.find((m) => m.id === mode.value)?.label}`}
+              aria-label={t('Mode: {mode}', { mode: way })}
               items="center"
               height={24}
               px={8}
-              ml={4}
+              marginInlineStart={4}
               rounded={6}
               bg="$hover"
               cursor="pointer"
@@ -377,12 +391,12 @@ export function Tune({ mind, mode, where, onUpgrade, limits }: { mind?: Mind | n
               $max-sm={{ height: 44, px: 12 }}
             >
               <SizableText fontSize={14} color="$ink">
-                {MODES.find((m) => m.id === mode.value)?.label}
+                {way}
               </SizableText>
             </XStack>
           </PopoverTrigger>
           <PopoverContent solid p={6} width={288} maxW="calc(100vw - 24px)">
-            <Choices title="Mode" items={mode.items ? MODES.filter((m) => mode.items!.includes(m.id)) : MODES} value={mode.value} onPick={mode.set} />
+            <Choices title={t('Mode')} items={mode.items ? MODES.filter((m) => mode.items!.includes(m.id)) : MODES} value={mode.value} onPick={mode.set} />
           </PopoverContent>
         </Popover>
       ) : null}
@@ -397,12 +411,14 @@ export function trigger(value: string): { char: '/' | '@'; query: string; at: nu
   return m ? { char: m[2] as '/' | '@', query: m[3]!.toLowerCase(), at: m.index + m[1]!.length } : null
 }
 
-/** The list `/` or `@` opens above the frame. */
-function Mention({ shelf, rows, index, onPick, tag, name }: { shelf: Shelf; rows: Shelf['rows']; index: number; onPick: (id: string) => void; tag: string; name: string }) {
+/** The list `/` (the skills) or `@` (the plugins) opens above the frame. */
+function Mention({ shelf, rows, index, onPick, skills }: { shelf: Shelf; rows: Shelf['rows']; index: number; onPick: (id: string) => void; skills: boolean }) {
+  const { t } = useI18n()
+  const tag = t(skills ? 'Skill' : 'Plugin')
   return (
     <YStack
       role={"listbox" as never}
-      aria-label={name}
+      aria-label={t(skills ? 'Skills' : 'Plugins')}
       data-slot="mention"
       width="100%"
       maxH={240}
@@ -416,7 +432,7 @@ function Mention({ shelf, rows, index, onPick, tag, name }: { shelf: Shelf; rows
       $max-sm={{ rounded: CORNER_PHONE }}
     >
       <SizableText fontSize={13} color="$hint" px={8} pt={4} pb={6}>
-        {shelf.search ?? `Type to search ${name.toLowerCase()}`}
+        {shelf.search ?? t(skills ? 'Type to search skills' : 'Type to search plugins')}
       </SizableText>
       {rows.length ? (
         rows.map((r, i) => (
@@ -441,26 +457,34 @@ function Mention({ shelf, rows, index, onPick, tag, name }: { shelf: Shelf; rows
                 {r.icon}
               </XStack>
             ) : null}
-            {/* A button centres its words unless told: a list reads from the left. */}
-            <SizableText fontSize={15} color="$ink" numberOfLines={1} flex={1} style={{ textAlign: 'left' }}>
+            {/* A button centres its words unless told: a list reads from its start. */}
+            <SizableText fontSize={15} color="$ink" numberOfLines={1} flex={1} text="start">
               {r.label}
             </SizableText>
             <SizableText fontSize={13} color="$hint">
-              {r.on ? 'On' : tag}
+              {r.on ? t('On') : tag}
             </SizableText>
           </XStack>
         ))
       ) : (
         <SizableText fontSize={14} color="$hint" px={8} py={8}>
-          {shelf.loading ? 'Reading…' : 'Nothing matches'}
+          {t(shelf.loading ? 'Reading…' : 'Nothing matches')}
         </SizableText>
       )}
     </YStack>
   )
 }
 
+/** What `useMention` hands `prompt`: the lit row of a `/` or `@` list, and the reader's `t`. */
+export interface Mentioned {
+  index: number
+  closed: string | null
+  t?: Say
+}
+
 /** @hanzo/ui `Composer` props for the one composer. */
-export function prompt(o: PromptOptions, state?: { index: number; closed: string | null }): ComposerProps {
+export function prompt(o: PromptOptions, state?: Mentioned): ComposerProps {
+  const t = state?.t ?? english
   const lit = o.ready ?? Boolean(o.value.trim())
   const busy = Boolean(o.busy)
   const disabled = Boolean(o.disabled)
@@ -480,7 +504,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
 
   const mention =
     listed && shelf && typed ? (
-      <Mention shelf={shelf} rows={listed} index={index} onPick={choose} tag={typed.char === '/' ? 'Skill' : 'Plugin'} name={typed.char === '/' ? 'Skills' : 'Plugins'} />
+      <Mention shelf={shelf} rows={listed} index={index} onPick={choose} skills={typed.char === '/'} />
     ) : null
 
   const head =
@@ -512,7 +536,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
       fill
       rounded={999}
       data-slot="composer-send"
-      aria-label={busy ? 'Stop' : 'Send'}
+      aria-label={t(busy ? 'Stop' : 'Send')}
       aria-disabled={!live || undefined}
       opacity={live ? 1 : 0.4}
       onClick={() => {
@@ -535,7 +559,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
     ...(o.onStop ? { onStop: o.onStop } : {}),
     busy,
     disabled,
-    placeholder: o.placeholder ?? ASK,
+    placeholder: o.placeholder ?? t(ASK),
     ...(o.label ? { label: o.label } : {}),
     // At rest two rows: one line of text, then the tools. It grows with the text to the kit's ceiling, then scrolls.
     rows: 1,
@@ -564,12 +588,12 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
       <XStack items="center" gap={4} data-slot="prompt-start" flex={1} minW={0} flexWrap="wrap">
         {o.plus ? <Plus {...o.plus} disabled={disabled || o.plus.disabled} /> : null}
         {(o.on ?? []).map((c) => (
-          <XStack key={c.id} data-slot="prompt-chip" items="center" gap={6} pl={8} pr={4} height={28} rounded={8} bg="$hover" maxW={180}>
+          <XStack key={c.id} data-slot="prompt-chip" items="center" gap={6} paddingInlineStart={8} paddingInlineEnd={4} height={28} rounded={8} bg="$hover" maxW={180}>
             {c.icon ? <XStack aria-hidden>{c.icon}</XStack> : null}
             <SizableText fontSize={13} color="$ink" numberOfLines={1} shrink={1}>
               {c.label}
             </SizableText>
-            <XStack render="button" aria-label={`Remove ${c.label}`} onPress={c.onRemove} width={20} height={20} rounded={6} items="center" justify="center" hoverStyle={{ bg: '$raised' }} cursor="pointer">
+            <XStack render="button" aria-label={t('Remove {name}', { name: c.label })} onPress={c.onRemove} width={20} height={20} rounded={6} items="center" justify="center" hoverStyle={{ bg: '$raised' }} cursor="pointer">
               <X size={12} color="$hint" />
             </XStack>
           </XStack>
@@ -586,7 +610,7 @@ export function prompt(o: PromptOptions, state?: { index: number; closed: string
               voice={o.talk}
               disabled={disabled}
               data-slot="composer-talk"
-              says={{ idle: 'Voice mode', listening: 'In conversation — click to hang up', speaking: 'Hanzo is speaking — talk to interrupt' }}
+              says={{ idle: t('Voice mode'), listening: t('In conversation — click to hang up'), speaking: t('Hanzo is speaking — talk to interrupt') }}
             >
               {() => <AudioLines size={16} color={narrow ? ON : 'var(--foreground)'} />}
             </Voice>
@@ -617,11 +641,12 @@ export function useUpload(upload: (() => void) | undefined): void {
 }
 
 /**
- * The composer's own state — which row of a `/` or `@` list is lit — and the
- * keys that move it. A surface that hands `prompt` to `Chat` calls this and
- * passes its answer through; `<Prompt>` does it for itself.
+ * The composer's own state — which row of a `/` or `@` list is lit, and the
+ * reader's `t` — and the keys that move it. A surface that hands `prompt` to
+ * `Chat` calls this and passes its answer through; `<Prompt>` does it for itself.
  */
-export function useMention(o: PromptOptions): { state: { index: number; closed: string | null }; field: ComposerProps['field'] } {
+export function useMention(o: PromptOptions): { state: Mentioned; field: ComposerProps['field'] } {
+  const { t } = useI18n()
   const [index, setIndex] = useState(0)
   const [closed, setClosed] = useState<string | null>(null)
   useUpload(o.plus?.upload)
@@ -645,7 +670,7 @@ export function useMention(o: PromptOptions): { state: { index: number; closed: 
       } else (o.field as { onKeyDown?: (e: unknown) => void } | undefined)?.onKeyDown?.(e)
     },
   } as ComposerProps['field']
-  return { state: { index, closed }, field }
+  return { state: { index, closed, t }, field }
 }
 
 /** The composer drawn on its own. */

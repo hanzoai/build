@@ -6,9 +6,13 @@
  * the review. While a setup run on the codebase is still working the scripts are
  * its to find, so they cannot be edited. A member reads; an org admin saves and
  * sets secrets, which is the platform's rule and not a choice made here.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a codebase's name, a
+ * secret's, the scripts and what the setup agent wrote are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Plus, X } from '@hanzogui/lucide-icons-2'
+import { useI18n } from '@hanzo/i18n/react'
 import { Button, Dialog, DialogContent, DialogTitle, Input, Textarea } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
 
@@ -22,11 +26,12 @@ import { useHost, useTarget } from './host.tsx'
 const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 
 export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
   // Read again when a setup run on it stops, which is when its proposal lands.
-  const env = useRead(signed && repo ? () => read(t, repo) : null, null as Env | null, [t, repo, signed, busy])
+  const env = useRead(signed && repo ? () => read(target, repo) : null, null as Env | null, [target, repo, signed, busy])
   const [install, setInstall] = useState('')
   const [startCmd, setStart] = useState('')
   const [adding, setAdding] = useState(false)
@@ -43,21 +48,21 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
   }, [shown])
 
   if (!signed) {
-    return <Soft>Sign in to see this codebase’s environment.</Soft>
+    return <Soft>{t('Sign in to see this codebase’s environment.')}</Soft>
   }
   if (!repo) {
-    return <Soft>This run has no codebase, so it has no environment.</Soft>
+    return <Soft>{t('This run has no codebase, so it has no environment.')}</Soft>
   }
   if (env.error) {
-    return <Soft>{`${repo}’s environment could not be read right now.`}</Soft>
+    return <Soft>{t('{repo}’s environment could not be read right now.', { repo })}</Soft>
   }
   if (!shown) {
-    return <Soft>Reading the environment…</Soft>
+    return <Soft>{t('Reading the environment…')}</Soft>
   }
 
   const changed = install !== shown.install || startCmd !== shown.start || shown.proposal !== null
   const needed = (shown.proposal?.secrets ?? []).filter((n) => !shown.secrets.includes(n))
-  const status = busy ? 'Setting up' : shown.state === 'proposed' ? 'Proposed' : shown.state === 'ready' ? 'Ready' : 'Not set up'
+  const status = busy ? t('Setting up') : shown.state === 'proposed' ? t('Proposed') : shown.state === 'ready' ? t('Ready') : t('Not set up')
 
   /** One write, then the record read again. Answers whether it took. */
   const act = async (what: () => Promise<Env>, done = ''): Promise<boolean> => {
@@ -69,7 +74,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
       setNote(done)
       return true
     } catch (e) {
-      setNote(plain(e, repo, 'save'))
+      setNote(plain(e, repo, 'save', t))
       return false
     } finally {
       setWorking(false)
@@ -80,22 +85,22 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
     setWorking(true)
     setNote('')
     try {
-      const run = await start(t, { prompt: SETUP, repo, mode: 'setup' })
+      const run = await start(target, { prompt: SETUP, repo, mode: 'setup' })
       host.go(run.session)
     } catch (e) {
-      setNote(plain(e, repo, 'start'))
+      setNote(plain(e, repo, 'start', t))
       setWorking(false)
     }
   }
 
   const add = () => {
     const n = name.trim()
-    const why = refuse(n) || (value ? '' : 'A secret needs a value')
+    const why = refuse(n, t) || (value ? '' : t('A secret needs a value'))
     if (why) {
       setNote(why)
       return
     }
-    void act(() => setSecret(t, repo, n, value), `${n} is set`).then((took) => {
+    void act(() => setSecret(target, repo, n, value), t('{name} is set', { name: n })).then((took) => {
       if (!took) return
       setAdding(false)
       setName('')
@@ -116,8 +121,8 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
           </SizableText>
         </XStack>
         {host.admin ? (
-          <Button size="sm" variant="outline" disabled={busy || working || !changed} onPress={() => void act(() => save(t, repo, { install, start: startCmd }), 'Saved')}>
-            Save
+          <Button size="sm" variant="outline" disabled={busy || working || !changed} onPress={() => void act(() => save(target, repo, { install, start: startCmd }), t('Saved'))}>
+            {t('Save')}
           </Button>
         ) : null}
       </XStack>
@@ -125,7 +130,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
       {shown.proposal?.note ? (
         <YStack gap="$1" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor">
           <SizableText size="$1" color="$soft">
-            What the setup agent found
+            {t('What the setup agent found')}
           </SizableText>
           <SizableText size="$2" color="$ink" numberOfLines={8}>
             {shown.proposal.note}
@@ -134,29 +139,29 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
       ) : null}
 
       <Script
-        label="Install Script"
+        label={t('Install Script')}
         value={install}
         onChange={setInstall}
         locked={busy || !host.admin}
-        hint={busy ? 'Install script editing will be available when the agent stops running' : 'pnpm install --frozen-lockfile'}
+        hint={busy ? t('Install script editing will be available when the agent stops running') : 'pnpm install --frozen-lockfile'}
       />
       <Script
-        label="Start Script"
+        label={t('Start Script')}
         value={startCmd}
         onChange={setStart}
         locked={busy || !host.admin}
-        hint={busy ? 'Start script editing will be available when the agent stops running' : 'pnpm dev'}
+        hint={busy ? t('Start script editing will be available when the agent stops running') : 'pnpm dev'}
       />
 
       <YStack gap="$2">
         <XStack items="center" gap="$2">
           <SizableText size="$2" color="$ink" flex={1}>
-            Secrets
+            {t('Secrets')}
           </SizableText>
           {host.admin ? (
             <Button size="sm" variant="outline" disabled={working} onPress={() => setAdding(true)}>
               <Plus size={14} />
-              New Secret
+              {t('New Secret')}
             </Button>
           ) : null}
         </XStack>
@@ -164,7 +169,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
           {shown.secrets.length === 0 && needed.length === 0 && !adding ? (
             <YStack py="$5" items="center">
               <SizableText size="$2" color="$soft">
-                No secrets yet
+                {t('No secrets yet')}
               </SizableText>
             </YStack>
           ) : null}
@@ -174,10 +179,10 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
                 {s}
               </SizableText>
               <SizableText size="$1" color="$soft">
-                set
+                {t('set')}
               </SizableText>
               {host.admin ? (
-                <XStack render="button" aria-label={`Remove ${s}`} px="$1" onPress={() => void act(() => removeSecret(t, repo, s), `${s} is removed`)}>
+                <XStack render="button" aria-label={t('Remove {name}', { name: s })} px="$1" onPress={() => void act(() => removeSecret(target, repo, s), t('{name} is removed', { name: s }))}>
                   <X size={14} />
                 </XStack>
               ) : null}
@@ -189,10 +194,10 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
                 {s}
               </SizableText>
               <SizableText size="$1" color="$soft">
-                needed, not set
+                {t('needed, not set')}
               </SizableText>
               {host.admin ? (
-                <XStack render="button" aria-label={`Set ${s}`} px="$1" onPress={() => { setAdding(true); setName(s) }}>
+                <XStack render="button" aria-label={t('Set {name}', { name: s })} px="$1" onPress={() => { setAdding(true); setName(s) }}>
                   <Plus size={14} />
                 </XStack>
               ) : null}
@@ -200,37 +205,37 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
           ))}
           {adding ? (
             <YStack gap="$2" px="$3" py="$3" borderTopWidth={shown.secrets.length || needed.length ? 1 : 0} borderColor="$borderColor">
-              <Input value={name} onChangeText={setName} placeholder="NAME" aria-label="Secret name" autoCapitalize="characters" />
-              <Input value={value} onChangeText={setValue} placeholder="Value" aria-label="Secret value" secureTextEntry />
+              <Input value={name} onChangeText={setName} placeholder={t('NAME')} aria-label={t('Secret name')} autoCapitalize="characters" />
+              <Input value={value} onChangeText={setValue} placeholder={t('Value')} aria-label={t('Secret value')} secureTextEntry />
               <XStack gap="$2" justify="flex-end">
                 <Button size="sm" variant="ghost" onPress={() => { setAdding(false); setName(''); setValue('') }}>
-                  Cancel
+                  {t('Cancel')}
                 </Button>
                 <Button size="sm" disabled={working} onPress={add}>
-                  Add secret
+                  {t('Add secret')}
                 </Button>
               </XStack>
             </YStack>
           ) : null}
         </YStack>
         <SizableText size="$1" color="$soft">
-          Values are sealed in KMS and exported to every run on this codebase. They are never shown again.
+          {t('Values are sealed in KMS and exported to every run on this codebase. They are never shown again.')}
         </SizableText>
       </YStack>
 
       {shown.state === 'none' && !busy ? (
         <YStack gap="$2" items="flex-start">
           <Button size="sm" disabled={working} onPress={() => void setup()}>
-            Set up with an agent
+            {t('Set up with an agent')}
           </Button>
           <SizableText size="$1" color="$soft">
-            An agent explores the codebase, installs and checks it, and proposes the scripts for you to review and save.
+            {t('An agent explores the codebase, installs and checks it, and proposes the scripts for you to review and save.')}
           </SizableText>
         </YStack>
       ) : null}
       {!host.admin ? (
         <SizableText size="$1" color="$soft">
-          An org admin saves the environment and sets its secrets.
+          {t('An org admin saves the environment and sets its secrets.')}
         </SizableText>
       ) : null}
       {note ? (
@@ -267,8 +272,9 @@ export function SetupDialog({
   onSaved: (repo: string) => void
   onRepo: (home: Home) => void
 }) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const [chosen, setChosen] = useState(repo)
   const [q, setQ] = useState('')
   const [working, setWorking] = useState<'' | 'save' | 'start'>('')
@@ -298,14 +304,14 @@ export function SetupDialog({
     setNote('')
     try {
       if (what === 'save') {
-        await save(t, repo, { install: '', start: '' })
+        await save(target, repo, { install: '', start: '' })
         onSaved(repo)
       } else {
         await onStart(repo)
         onOpenChange(false)
       }
     } catch (e) {
-      setNote(plain(e, repo, what))
+      setNote(plain(e, repo, what, t))
     } finally {
       setWorking('')
     }
@@ -315,44 +321,44 @@ export function SetupDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxW={480} showCloseButton={false}>
         <XStack items="center" justify="space-between" gap="$2">
-          <DialogTitle>Set up an environment</DialogTitle>
-          <XStack render="button" aria-label="Close" p="$1" onPress={() => onOpenChange(false)}>
+          <DialogTitle>{t('Set up an environment')}</DialogTitle>
+          <XStack render="button" aria-label={t('Close')} p="$1" onPress={() => onOpenChange(false)}>
             <X size={16} />
           </XStack>
         </XStack>
         <YStack gap="$3">
           <YStack gap="$1.5">
             <SizableText size="$2" color="$soft">
-              Repository
+              {t('Repository')}
             </SizableText>
-            <XStack px="$3" py="$2" rounded="$3" borderWidth={1} borderColor={stranger ? '$ink' : '$borderColor'} items="center" gap="$2" aria-label="Chosen repository">
+            <XStack px="$3" py="$2" rounded="$3" borderWidth={1} borderColor={stranger ? '$ink' : '$borderColor'} items="center" gap="$2" aria-label={t('Chosen repository')}>
               <SizableText size="$2" color={home || (chosen && !stranger) ? '$ink' : '$soft'} numberOfLines={1} flex={1} minW={0}>
-                {home ? home.label : chosen || 'Choose a repository'}
+                {home ? home.label : chosen || t('Choose a repository')}
               </SizableText>
             </XStack>
             {stranger ? (
               <SizableText size="$1" color="$ink" role="alert">
-                {`${chosen} is not one of this organization’s repositories. Choose one below.`}
+                {t('{repo} is not one of this organization’s repositories. Choose one below.', { repo: chosen })}
               </SizableText>
             ) : null}
-            <Input value={q} onChangeText={setQ} placeholder="Find a repository…" aria-label="Find a repository" />
-            <YStack gap={2} aria-label="Repositories">
+            <Input value={q} onChangeText={setQ} placeholder={t('Find a repository…')} aria-label={t('Find a repository')} />
+            <YStack gap={2} aria-label={t('Repositories')}>
               {homes.loading && !list.length ? (
                 <SizableText size="$1" color="$soft">
-                  Reading the repositories…
+                  {t('Reading the repositories…')}
                 </SizableText>
               ) : homes.error && !list.length ? (
                 <XStack items="center" gap="$2" flexWrap="wrap">
                   <SizableText size="$1" color="$soft">
-                    The repository list could not be read right now.
+                    {t('The repository list could not be read right now.')}
                   </SizableText>
                   <Button size="sm" variant="outline" onPress={homes.reload}>
-                    Read again
+                    {t('Read again')}
                   </Button>
                 </XStack>
               ) : shown.length === 0 ? (
                 <SizableText size="$1" color="$soft">
-                  {list.length ? 'Nothing matches.' : 'This organization has no repositories on the forge yet.'}
+                  {list.length ? t('Nothing matches.') : t('This organization has no repositories on the forge yet.')}
                 </SizableText>
               ) : (
                 shown.map((h) => {
@@ -362,7 +368,7 @@ export function SetupDialog({
                       key={h.name}
                       render="button"
                       aria-pressed={on}
-                      aria-label={`Choose ${h.label}`}
+                      aria-label={t('Choose {repo}', { repo: h.label })}
                       onPress={() => {
                         setChosen(h.name)
                         setNote('')
@@ -384,8 +390,7 @@ export function SetupDialog({
             </YStack>
           </YStack>
           <SizableText size="$2" color="$soft">
-            An agent onboards the codebase: it explores it, writes the install and start scripts, and names the secrets
-            it needs. It takes several minutes. Interrupt it anytime, or take over in the terminal.
+            {t('An agent onboards the codebase: it explores it, writes the install and start scripts, and names the secrets it needs. It takes several minutes. Interrupt it anytime, or take over in the terminal.')}
           </SizableText>
           {note ? (
             <XStack items="center" gap="$2" flexWrap="wrap">
@@ -394,7 +399,7 @@ export function SetupDialog({
               </SizableText>
               {last ? (
                 <Button size="sm" variant="outline" disabled={working !== ''} onPress={() => void run(last)}>
-                  Try again
+                  {t('Try again')}
                 </Button>
               ) : null}
             </XStack>
@@ -402,13 +407,13 @@ export function SetupDialog({
           <XStack gap="$2" justify="space-between" items="center">
             {host.admin ? (
               <Button size="sm" variant="secondary" disabled={working !== '' || !ready} onPress={() => void run('save')}>
-                {working === 'save' ? 'Saving…' : 'Skip & save'}
+                {working === 'save' ? t('Saving…') : t('Skip & save')}
               </Button>
             ) : (
               <YStack />
             )}
             <Button size="sm" variant="primary" disabled={working !== '' || !ready} onPress={() => void run('start')}>
-              {working === 'start' ? 'Starting the agent…' : 'Start agent'}
+              {working === 'start' ? t('Starting the agent…') : t('Start agent')}
             </Button>
           </XStack>
         </YStack>

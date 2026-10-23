@@ -6,6 +6,7 @@
  * `document` template writes the ask up and renders it as a PDF, and the answer
  * is the file.
  */
+import { phrase } from '@hanzo/i18n'
 import { FileText } from '@hanzogui/lucide-icons-2'
 
 import type { Target } from '../api/call.ts'
@@ -81,7 +82,7 @@ export function pdf(makes: boolean): Plugin {
   return {
     id: 'pdf',
     name: 'PDF',
-    note: makes ? 'Read, create and verify PDFs' : 'Read and verify PDFs',
+    note: makes ? phrase('Read, create and verify PDFs') : phrase('Read and verify PDFs'),
     icon: <FileText size={16} />,
     prepare: (turn, c, signal) => (turn.files.some(isPdf) || !makes ? study(turn.files) : create(turn, c.target, signal)),
   }

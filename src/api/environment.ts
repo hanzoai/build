@@ -14,7 +14,11 @@
  * here as `proposal` until someone saves it. Secrets are names only; their values
  * are sealed in KMS and reach the run's environment, never this record.
  */
-import { call, Refusal, seg, type Target } from './call.ts'
+import { phrase } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
+
+import { english } from '../say.ts'
+import { call, Refusal, seg, told, type Target } from './call.ts'
 
 export type State = 'none' | 'proposed' | 'ready'
 
@@ -71,24 +75,25 @@ export const unset = (e: Environment): boolean => e.state === 'none' && !e.updat
 
 /**
  * What a refused save or setup run says to the person who pressed it: what is
- * wrong and what to do, in the reader's words rather than the platform's.
+ * wrong and what to do, in the reader's words rather than the platform's, and
+ * in the language of the `t` handed (English without one).
  */
-export function plain(e: unknown, repo: string, act: 'save' | 'start' | 'run'): string {
+export function plain(e: unknown, repo: string, act: 'save' | 'start' | 'run', t: Say = english): string {
   // This page's own refusals (a secret's name, an empty value) are already a reader's words.
-  if (e instanceof Error && !(e instanceof Refusal) && e.name === 'Error' && e.message) return e.message
+  if (e instanceof Error && !(e instanceof Refusal) && e.name === 'Error' && e.message) return told(e, t)
   if (e instanceof Refusal) {
     const why = e.message
-    if (e.status === 401) return 'Your session ended. Sign in again, then try again.'
-    if (e.status === 403 && act === 'save') return 'Only an organization admin saves an environment. Start the agent instead; an admin reviews what it proposes.'
-    if (e.status === 402) return 'This run needs a plan with runs left. See Plans to change it.'
-    if (e.status === 403) return `This account cannot start a run on ${repo}. Ask an organization admin for access.`
-    if (e.status === 429) return 'Too many runs are going right now. Try again in a minute.'
-    if (e.status >= 500) return act === 'save' ? 'The environment store is not answering right now. Try again shortly.' : 'The code workspace is not answering right now. Try again shortly.'
-    if (/no repository named|not one of this organization|is not a repository/.test(why)) return `${repo} is not a repository this organization has on the forge. Choose one of its repositories.`
-    if (/no account on the forge|verify .* first|no forge identity/.test(why)) return 'Your forge account is not ready yet: sign in to the forge once, then try again.'
+    if (e.status === 401) return t('Your session ended. Sign in again, then try again.')
+    if (e.status === 403 && act === 'save') return t('Only an organization admin saves an environment. Start the agent instead; an admin reviews what it proposes.')
+    if (e.status === 402) return t('This run needs a plan with runs left. See Plans to change it.')
+    if (e.status === 403) return t('This account cannot start a run on {repo}. Ask an organization admin for access.', { repo })
+    if (e.status === 429) return t('Too many runs are going right now. Try again in a minute.')
+    if (e.status >= 500) return act === 'save' ? t('The environment store is not answering right now. Try again shortly.') : t('The code workspace is not answering right now. Try again shortly.')
+    if (/no repository named|not one of this organization|is not a repository/.test(why)) return t('{repo} is not a repository this organization has on the forge. Choose one of its repositories.', { repo })
+    if (/no account on the forge|verify .* first|no forge identity/.test(why)) return t('Your forge account is not ready yet: sign in to the forge once, then try again.')
   }
-  if (act === 'save') return `The environment for ${repo} could not be saved. Try again.`
-  return act === 'start' ? `The setup run on ${repo} could not start. Try again.` : `The run on ${repo} could not start. Try again.`
+  if (act === 'save') return t('The environment for {repo} could not be saved. Try again.', { repo })
+  return act === 'start' ? t('The setup run on {repo} could not start. Try again.', { repo }) : t('The run on {repo} could not start. Try again.', { repo })
 }
 
 export async function environments(t: Target): Promise<Environment[]> {
@@ -112,18 +117,18 @@ export async function forget(t: Target, repo: string): Promise<void> {
 export const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
 const RESERVED = ['PATH', 'HOME', 'USER', 'SHELL', 'PWD', 'HOSTNAME', 'IFS', 'ENV', 'BASH_ENV']
 
-/** Why a secret name cannot be set, or '' when it can. */
-export function refuse(name: string): string {
-  if (!NAME.test(name)) return `${name || 'That'} is not an environment variable name`
+/** Why a secret name cannot be set, in the words of the `t` handed, or '' when it can. */
+export function refuse(name: string, t: Say = english): string {
+  if (!NAME.test(name)) return name ? t('{name} is not an environment variable name', { name }) : t('That is not an environment variable name')
   const up = name.toUpperCase()
-  if (up.startsWith('HANZO_') || RESERVED.includes(up)) return `${name} is reserved for the run itself`
+  if (up.startsWith('HANZO_') || RESERVED.includes(up)) return t('{name} is reserved for the run itself', { name })
   return ''
 }
 
 export async function setSecret(t: Target, repo: string, name: string, value: string): Promise<Environment> {
   const why = refuse(name)
   if (why) throw new Error(why)
-  if (!value) throw new Error('A secret needs a value')
+  if (!value) throw new Error(phrase('A secret needs a value'))
   return environment(await call<unknown>(t, 'PUT', `/v1/environment/${seg(repo)}/secrets/${seg(name)}`, { value }), repo)
 }
 

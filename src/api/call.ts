@@ -5,7 +5,17 @@
  * no-store cache rule and the reading of a refusal are decided once. The
  * platform answers a refusal as RFC 9457 problem details; older handlers still
  * answer `{error:{message}}` or `{msg}`, and all three read the same way here.
+ *
+ * A sentence this client writes is English, marked (`phrase`) for the
+ * translator: a module is not a component and asks no `t`, so a screen says
+ * what a module threw through its own (`told`), and a module that builds text
+ * takes the screen's `t` as its last argument, English (../say.ts `english`)
+ * when none is handed.
  */
+import { phrase, translate } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
+
+import { english } from '../say.ts'
 
 /** Where the platform is and who is asking. The host supplies it. */
 export interface Target {
@@ -26,6 +36,29 @@ export class Refusal extends Error {
     super(message)
     this.name = 'Refusal'
   }
+}
+
+/**
+ * A sentence this client wrote with something of the moment in it (a file's
+ * name, an address), thrown where no `t` is at hand: its message is the
+ * English, filled, and a screen says it from its source and values.
+ */
+export class Sentence extends Error {
+  constructor(
+    readonly source: string,
+    readonly values: Readonly<Record<string, string | number>> = {},
+  ) {
+    super(translate({}, source, values))
+  }
+}
+
+/**
+ * An error's own sentence, as the screen that caught it says it: one this
+ * client wrote, in the reader's language; the platform's, which is no key, as given.
+ */
+export function told(e: unknown, t: Say = english): string {
+  if (e instanceof Sentence) return t(e.source, e.values)
+  return t(e instanceof Error ? e.message : String(e))
 }
 
 export type Query = Record<string, string | number | boolean | null | undefined>
@@ -107,6 +140,6 @@ export async function call<T>(
  */
 export function unwrap(raw: unknown): unknown {
   const r = (raw && typeof raw === 'object' ? raw : {}) as { status?: unknown; msg?: unknown; data?: unknown }
-  if (r.status === 'error') throw new Refusal(400, typeof r.msg === 'string' && r.msg ? r.msg : 'The platform refused that')
+  if (r.status === 'error') throw new Refusal(400, typeof r.msg === 'string' && r.msg ? r.msg : phrase('The platform refused that'))
   return r.data
 }

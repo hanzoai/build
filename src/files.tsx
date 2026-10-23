@@ -5,8 +5,12 @@
  * or changed and the whole change as a patch, kept after its sandbox is gone; its
  * previews, pull request and deployments — then its published site, its branch,
  * its environment proposal and its project.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); names, paths and a
+ * file's contents are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { Download, ExternalLink, File, FileDiff, Folder, Globe, GitBranch, GitPullRequest, Layers, MonitorPlay, Rocket, Settings2 } from '@hanzogui/lucide-icons-2'
 import { useState, type ReactNode } from 'react'
 
@@ -35,6 +39,7 @@ export function Files({
   sandbox: string
   live: boolean
 }) {
+  const { t } = useI18n()
   const reachable = live && Boolean(sandbox)
   // Live once the sandbox is reachable, unless the branch was picked.
   const [source, setSource] = useState<Source | null>(null)
@@ -45,10 +50,10 @@ export function Files({
       {reachable ? (
         <XStack gap="$1" items="center" flexWrap="wrap">
           <Pick on={from === 'live'} onPress={() => setSource('live')}>
-            Live
+            {t('Live')}
           </Pick>
           <Pick on={from === 'branch'} onPress={() => setSource('branch')}>
-            Branch
+            {t('Branch')}
           </Pick>
         </XStack>
       ) : null}
@@ -59,18 +64,19 @@ export function Files({
 
 /** The sandbox's working tree, as it is right now. */
 function Live({ sandbox }: { sandbox: string }) {
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const [dir, setDir] = useState('')
   const [file, setFile] = useState('')
-  const list = useRead(() => look(t, sandbox, dir), null as Node | null, [t, sandbox, dir])
-  const body = useRead(file ? () => look(t, sandbox, file) : null, null as Node | null, [t, sandbox, file])
+  const list = useRead(() => look(target, sandbox, dir), null as Node | null, [target, sandbox, dir])
+  const body = useRead(file ? () => look(target, sandbox, file) : null, null as Node | null, [target, sandbox, file])
   const at = (name: string) => (dir ? `${dir}/${name}` : name)
 
   // A name is only a name until it is read: the answer says whether it was a directory.
   const open = async (name: string) => {
     const path = at(name)
     try {
-      const n = await look(t, sandbox, path)
+      const n = await look(target, sandbox, path)
       if (n.dir) {
         setDir(path)
         setFile('')
@@ -95,10 +101,10 @@ function Live({ sandbox }: { sandbox: string }) {
           ? body.error.message
           : body.value
             ? body.value.binary
-              ? 'Binary file'
+              ? t('Binary file')
               : body.value.truncated
-                ? 'Too large to show'
-                : body.value.text || 'Empty file'
+                ? t('Too large to show')
+                : body.value.text || t('Empty file')
             : ''
       }
     />
@@ -108,14 +114,15 @@ function Live({ sandbox }: { sandbox: string }) {
 /** The run's branch on the forge; its base until it has pushed. */
 function Branch({ session, label }: { session: string; label: string }) {
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const signed = Boolean(host.person)
   const [dir, setDir] = useState('')
   const [file, setFile] = useState('')
-  const list = useRead(signed ? () => tree(t, session, dir) : null, [] as Entry[], [t, session, dir, signed])
-  const body = useRead(file ? () => blob(t, session, file) : null, null as Blob | null, [t, session, file])
+  const list = useRead(signed ? () => tree(target, session, dir) : null, [] as Entry[], [target, session, dir, signed])
+  const body = useRead(file ? () => blob(target, session, file) : null, null as Blob | null, [target, session, file])
 
-  if (!signed) return <Soft>Sign in to read this run’s files.</Soft>
+  if (!signed) return <Soft>{t('Sign in to read this run’s files.')}</Soft>
   return (
     <Listing
       where={`${label}${dir ? `/${dir}` : ''}`}
@@ -134,10 +141,10 @@ function Branch({ session, label }: { session: string; label: string }) {
           ? body.error.message
           : body.value
             ? body.value.binary
-              ? 'Binary file'
+              ? t('Binary file')
               : body.value.truncated
-                ? 'Too large to show'
-                : body.value.text || 'Empty file'
+                ? t('Too large to show')
+                : body.value.text || t('Empty file')
             : ''
       }
     />
@@ -161,13 +168,14 @@ function Listing({
   file: string
   body: string
 }) {
+  const { t } = useI18n()
   return (
     <YStack gap="$2">
       <XStack gap="$2" items="center">
         {up ? (
-          <XStack render="button" aria-label="Up one directory" onPress={up} px="$1" py="$1">
+          <XStack render="button" aria-label={t('Up one directory')} onPress={up} px="$1" py="$1">
             <SizableText size="$1" color="$soft">
-              Up
+              {t('Up')}
             </SizableText>
           </XStack>
         ) : null}
@@ -181,18 +189,18 @@ function Listing({
         </SizableText>
       ) : loading ? (
         <SizableText size="$2" color="$soft">
-          Reading…
+          {t('Reading…')}
         </SizableText>
       ) : rows.length === 0 ? (
         <SizableText size="$2" color="$soft">
-          This directory is empty.
+          {t('This directory is empty.')}
         </SizableText>
       ) : (
         rows.map((r) => (
           <XStack
             key={r.key}
             render="button"
-            aria-label={r.dir === false ? `Read ${r.name}` : `Open ${r.name}`}
+            aria-label={r.dir === false ? t('Read {name}', { name: r.name }) : t('Open {name}', { name: r.name })}
             onPress={r.onPress}
             items="center"
             gap="$2"
@@ -200,7 +208,7 @@ function Listing({
             hoverStyle={{ bg: '$hover' }}
           >
             {r.dir === false ? <File size={14} /> : r.dir ? <Folder size={14} /> : <File size={14} opacity={0.6} />}
-            <SizableText size="$2" color="$ink" numberOfLines={1} style={{ textAlign: 'left' }}>
+            <SizableText size="$2" color="$ink" numberOfLines={1} text="start">
               {r.name}
             </SizableText>
           </XStack>
@@ -223,13 +231,13 @@ function Listing({
 /** A stored artifact's size, as a person reads it. */
 const size = (n: number): string => (n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(1)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`)
 
-/** What each kind of artifact is drawn with, and says it is. */
-const KIND: Record<Artifact['kind'], { icon: ReactNode; note: (a: Artifact) => string }> = {
-  file: { icon: <File size={16} />, note: (a) => `Changed file · ${size(a.size)}` },
-  patch: { icon: <FileDiff size={16} />, note: (a) => `The whole change as a patch · ${size(a.size)}` },
-  preview: { icon: <MonitorPlay size={16} />, note: (a) => `What the run served on port ${a.port}` },
-  pull: { icon: <GitPullRequest size={16} />, note: () => 'Pull request' },
-  deploy: { icon: <Rocket size={16} />, note: () => 'Deployment' },
+/** What each kind of artifact is drawn with, and says it is, in the reader's language. */
+const KIND: Record<Artifact['kind'], { icon: ReactNode; note: (a: Artifact, t: Say) => string }> = {
+  file: { icon: <File size={16} />, note: (a, t) => t('Changed file · {size}', { size: size(a.size) }) },
+  patch: { icon: <FileDiff size={16} />, note: (a, t) => t('The whole change as a patch · {size}', { size: size(a.size) }) },
+  preview: { icon: <MonitorPlay size={16} />, note: (a, t) => t('What the run served on port {port}', { port: a.port }) },
+  pull: { icon: <GitPullRequest size={16} />, note: (_, t) => t('Pull request') },
+  deploy: { icon: <Rocket size={16} />, note: (_, t) => t('Deployment') },
 }
 
 export function Artifacts({
@@ -256,14 +264,15 @@ export function Artifacts({
   onEnvironment: () => void
 }) {
   const host = useHost()
-  const t = useTarget()
-  const left = useRead(host.person ? () => artifacts(t, session) : null, { saved: '', artifacts: [] }, [t, session, host.person])
+  const target = useTarget()
+  const { t } = useI18n()
+  const left = useRead(host.person ? () => artifacts(target, session) : null, { saved: '', artifacts: [] }, [target, session, host.person])
   const [note, setNote] = useState('')
 
   // Bytes come with the person's bearer, so a stored artifact is fetched, then saved.
   const save = async (a: Artifact) => {
     try {
-      const url = URL.createObjectURL(await artifact(t, session, a.name))
+      const url = URL.createObjectURL(await artifact(target, session, a.name))
       const link = document.createElement('a')
       link.href = url
       link.download = a.name.split('/').pop() || a.name
@@ -274,7 +283,7 @@ export function Artifacts({
     }
   }
   // A preview is opened with a fresh ticket, in a tab of its own.
-  const open = (a: Artifact) => away(preview(t, sandbox, a.port)).catch((e: Error) => setNote(e.message))
+  const open = (a: Artifact) => away(preview(target, sandbox, a.port)).catch((e: Error) => setNote(e.message))
 
   const items: { key: string; icon: ReactNode; title: string; note: string; href?: string; onPress?: () => void; action?: ReactNode }[] = []
   for (const a of left.value.artifacts) {
@@ -285,19 +294,19 @@ export function Artifacts({
       key: `${a.kind}:${a.name}`,
       icon: KIND[a.kind].icon,
       title: link ? a.url.replace(/^https:\/\//, '') : a.name,
-      note: KIND[a.kind].note(a),
+      note: KIND[a.kind].note(a, t),
       href: link ? a.url : undefined,
       onPress: stored ? () => void save(a) : a.kind === 'preview' ? () => void open(a) : undefined,
       action: stored ? <Download size={14} /> : a.kind === 'preview' ? <ExternalLink size={14} /> : undefined,
     })
   }
-  if (site) items.push({ key: 'site', icon: <Globe size={16} />, title: site.replace(/^https:\/\//, ''), note: 'Where this run is published', href: site })
-  if (pr.href) items.push({ key: 'pr', icon: <GitPullRequest size={16} />, title: `Pull request ${pr.label}`, note: 'Opened on the forge', href: pr.href })
-  if (branch) items.push({ key: 'branch', icon: <GitBranch size={16} />, title: branch, note: repo ? `The branch this run pushes to in ${repo}` : 'The branch this run pushes to' })
-  if (mode === 'setup') items.push({ key: 'environment', icon: <Settings2 size={16} />, title: 'Environment proposal', note: 'The install and start scripts this run found', onPress: onEnvironment })
-  if (project) items.push({ key: 'project', icon: <Layers size={16} />, title: project, note: 'The project this run builds', onPress: () => host.go(project) })
+  if (site) items.push({ key: 'site', icon: <Globe size={16} />, title: site.replace(/^https:\/\//, ''), note: t('Where this run is published'), href: site })
+  if (pr.href) items.push({ key: 'pr', icon: <GitPullRequest size={16} />, title: t('Pull request {pr}', { pr: pr.label }), note: t('Opened on the forge'), href: pr.href })
+  if (branch) items.push({ key: 'branch', icon: <GitBranch size={16} />, title: branch, note: repo ? t('The branch this run pushes to in {repo}', { repo }) : t('The branch this run pushes to') })
+  if (mode === 'setup') items.push({ key: 'environment', icon: <Settings2 size={16} />, title: t('Environment proposal'), note: t('The install and start scripts this run found'), onPress: onEnvironment })
+  if (project) items.push({ key: 'project', icon: <Layers size={16} />, title: project, note: t('The project this run builds'), onPress: () => host.go(project) })
 
-  if (!items.length) return <Soft>{left.error?.message || (left.loading ? 'Reading what this run left…' : 'This run has produced no artifacts yet.')}</Soft>
+  if (!items.length) return <Soft>{left.error?.message || (left.loading ? t('Reading what this run left…') : t('This run has produced no artifacts yet.'))}</Soft>
   return (
     <YStack gap="$2">
       {note ? (
@@ -310,7 +319,7 @@ export function Artifacts({
           const row = (
             <XStack items="center" gap="$3" px="$3" py="$2.5" borderTopWidth={i ? 1 : 0} borderColor="$borderColor" hoverStyle={a.href || a.onPress ? { bg: '$hover' } : undefined}>
               {a.icon}
-              <YStack flex={1} minW={0} style={{ textAlign: 'left' }}>
+              <YStack flex={1} minW={0} $platform-web={{ textAlign: 'start' }}>
                 <SizableText size="$2" color="$ink" numberOfLines={1}>
                   {a.title}
                 </SizableText>

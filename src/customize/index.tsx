@@ -8,8 +8,12 @@
  * Skills and connectors ride into every run in the org, so adding, switching
  * and removing them is an org admin's and a member reads them; plugins and
  * agents are any member's.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { BookOpen, Bot, Plug, Plus, Puzzle } from '@hanzogui/lucide-icons-2'
 import { Button, Input } from '@hanzo/ui'
 import { useCallback, useState, type ReactNode } from 'react'
@@ -25,14 +29,43 @@ import { Choice, type Pane, type View } from './ui.tsx'
 /** What every run in the org loads: an org admin's to add to, a member's to read. */
 export const ORG_KIT: Tab[] = ['skills', 'connectors']
 
-const LABEL: Record<Tab, { title: string; says: string; add: string; find: string; icon: ReactNode }> = {
-  skills: { title: 'Skills', says: 'Know-how an agent reads before it works.', add: 'New skill', find: 'Search skills', icon: <BookOpen size={15} /> },
-  connectors: { title: 'Connectors', says: 'Apps and tools an agent can call.', add: 'Add by URL', find: 'Search connectors', icon: <Plug size={15} /> },
-  plugins: { title: 'Plugins', says: 'Connectors you build in TypeScript.', add: 'Build plugin', find: 'Search plugins', icon: <Puzzle size={15} /> },
-  agents: { title: 'Agents', says: 'Agents with their own model, instructions and budget.', add: 'New agent', find: 'Search agents', icon: <Bot size={15} /> },
+/**
+ * Each tab's words, English and marked (`phrase`), drawn through `t`: its name,
+ * its line, its add control, its search and the search's hint, and, for a tab
+ * an org admin keeps (ORG_KIT), what a member is told.
+ */
+const LABEL: Record<Tab, { title: string; says: string; add: string; find: string; typing: string; admin?: string; icon: ReactNode }> = {
+  skills: {
+    title: phrase('Skills'),
+    says: phrase('Know-how an agent reads before it works.'),
+    add: phrase('New skill'),
+    find: phrase('Search skills'),
+    typing: phrase('Search skills…'),
+    admin: phrase('Only an org admin can add or change skills. You can see what is on.'),
+    icon: <BookOpen size={15} />,
+  },
+  connectors: {
+    title: phrase('Connectors'),
+    says: phrase('Apps and tools an agent can call.'),
+    add: phrase('Add by URL'),
+    find: phrase('Search connectors'),
+    typing: phrase('Search connectors…'),
+    admin: phrase('Only an org admin can add or change connectors. You can see what is on.'),
+    icon: <Plug size={15} />,
+  },
+  plugins: { title: phrase('Plugins'), says: phrase('Connectors you build in TypeScript.'), add: phrase('Build plugin'), find: phrase('Search plugins'), typing: phrase('Search plugins…'), icon: <Puzzle size={15} /> },
+  agents: {
+    title: phrase('Agents'),
+    says: phrase('Agents with their own model, instructions and budget.'),
+    add: phrase('New agent'),
+    find: phrase('Search agents'),
+    typing: phrase('Search agents…'),
+    icon: <Bot size={15} />,
+  },
 }
 
 export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
+  const { t } = useI18n()
   const host = useHost()
   const [view, setView] = useState<View>(first ?? 'discover')
   const [q, setQ] = useState('')
@@ -56,15 +89,15 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
         {/* A host whose sidebar lists the tabs heads the page with the tab itself. */}
         <YStack gap="$1">
           <SizableText render="h1" size="$6" color="$ink">
-            {host.sections ? LABEL[tab].title : 'Customize'}
+            {host.sections ? t(LABEL[tab].title) : t('Customize')}
           </SizableText>
           <SizableText size="$2" color="$soft">
-            {host.sections ? LABEL[tab].says : 'What your agent can use in every run.'}
+            {host.sections ? t(LABEL[tab].says) : t('What your agent can use in every run.')}
           </SizableText>
         </YStack>
 
         {host.sections ? null : (
-        <XStack role="tablist" aria-label="Customize" gap="$4" borderBottomWidth={1} borderColor="$borderColor" $max-md={{ gap: '$3' }}>
+        <XStack role="tablist" aria-label={t('Customize')} gap="$4" borderBottomWidth={1} borderColor="$borderColor" $max-md={{ gap: '$3' }}>
           {TABS.map((id) => {
             const on = id === tab
             return (
@@ -86,7 +119,7 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
                   {LABEL[id].icon}
                 </XStack>
                 <SizableText size="$3" color={on ? '$ink' : '$soft'}>
-                  {LABEL[id].title}
+                  {t(LABEL[id].title)}
                 </SizableText>
               </XStack>
             )
@@ -96,31 +129,31 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
 
         {host.sections ? null : (
           <SizableText size="$2" color="$soft">
-            {LABEL[tab].says}
+            {t(LABEL[tab].says)}
           </SizableText>
         )}
 
         <XStack items="center" gap="$2">
           <Choice
-            label="Show"
+            label={t('Show')}
             value={view}
             options={[
-              { id: 'discover', label: 'Browse' },
-              { id: 'yours', label: 'Yours', count },
+              { id: 'discover', label: t('Browse') },
+              { id: 'yours', label: t('Yours'), count },
             ]}
             onChange={setView}
           />
           <XStack flex={1} />
           {may ? (
             <Button size="sm" onPress={() => setAdding(true)}>
-              <Plus size={14} /> {LABEL[tab].add}
+              <Plus size={14} /> {t(LABEL[tab].add)}
             </Button>
           ) : null}
         </XStack>
-        <Input value={q} onChangeText={setQ} placeholder={`${LABEL[tab].find}…`} aria-label={LABEL[tab].find} />
-        {host.person && kit && !host.admin ? (
+        <Input value={q} onChangeText={setQ} placeholder={t(LABEL[tab].typing)} aria-label={t(LABEL[tab].find)} />
+        {host.person && kit && !host.admin && LABEL[tab].admin ? (
           <SizableText size="$1" color="$soft">
-            Only an org admin can add or change {LABEL[tab].title.toLowerCase()}. You can see what is on.
+            {t(LABEL[tab].admin)}
           </SizableText>
         ) : null}
 

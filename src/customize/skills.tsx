@@ -6,8 +6,12 @@
  * all adding is: the platform keeps no copy. Yours is the org's own skills —
  * written here, each with its switch — and the catalogue's skills it has added.
  * A skill written here is switched on when it is saved.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); a skill's name,
+ * description and SKILL.md are the platform's or the org's, drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { BookOpen } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { Code } from '@hanzo/ui/chat'
@@ -30,14 +34,15 @@ interface Reading {
 }
 
 export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
+  const { t } = useI18n()
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
   const signed = Boolean(host.person)
   // What every run in the org loads is an org admin's to change; a member reads it.
   const may = signed && host.admin
-  const own = useLoad(signed ? () => authored(t) : null, [] as Skill[], [t, signed])
-  const on = useLoad(signed ? () => active(t) : null, [] as Tool[], [t, signed])
-  const shelf = useLoad(view === 'discover' ? () => brand(t) : null, null as Catalogue | null, [t.api, view])
+  const own = useLoad(signed ? () => authored(target) : null, [] as Skill[], [target, signed])
+  const on = useLoad(signed ? () => active(target) : null, [] as Tool[], [target, signed])
+  const shelf = useLoad(view === 'discover' ? () => brand(target) : null, null as Catalogue | null, [target.api, view])
   const [editing, setEditing] = useState<Skill | null>(null)
   const [reading, setReading] = useState<Reading | null>(null)
   const [busy, setBusy] = useState('')
@@ -54,11 +59,11 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
     setBusy(name)
     setNote('')
     try {
-      await toggle(t, next ? [tool(name)] : [], next ? [] : [tool(name)])
+      await toggle(target, next ? [tool(name)] : [], next ? [] : [tool(name)])
       on.reload()
-      setNote(next ? `${name} is on` : `${name} is off`)
+      setNote(next ? t('{name} is on', { name }) : t('{name} is off', { name }))
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setBusy('')
     }
@@ -89,13 +94,13 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
           own.reload()
           on.reload()
           onView('yours')
-          setNote(fresh ? `${s.name} is saved and on` : `${s.name} is saved`)
+          setNote(fresh ? t('{name} is saved and on', { name: s.name }) : t('{name} is saved', { name: s.name }))
         }}
         onDeleted={(name) => {
           setEditing(null)
           own.reload()
           on.reload()
-          setNote(`${name} is deleted`)
+          setNote(t('{name} is deleted', { name }))
         }}
       />
     ) : null
@@ -106,19 +111,19 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
     return (
       <YStack gap="$3">
         <Line>{note}</Line>
-        <Part title="From Hanzo" detail="Add one and every run in your organization can use it.">
+        <Part title={t('From Hanzo')} detail={t('Add one and every run in your organization can use it.')}>
           {shelf.error && !shelf.value ? (
             <Failed error={shelf.error} onRetry={shelf.reload} />
           ) : !shelf.value ? (
-            <Soft>Loading skills…</Soft>
+            <Soft>{t('Loading skills…')}</Soft>
           ) : !found.length ? (
-            <Soft>{all.length ? `No skill matches “${q.trim()}”.` : 'There are no skills to add yet.'}</Soft>
+            <Soft>{all.length ? t('No skill matches “{q}”.', { q: q.trim() }) : t('There are no skills to add yet.')}</Soft>
           ) : (
             <>
               <SizableText size="$1" color="$soft">
-                {found.length === all.length ? `${all.length} skills` : `${found.length} of ${all.length} skills`}
+                {found.length === all.length ? t('{n} skills', { n: all.length }) : t('{found} of {n} skills', { found: found.length, n: all.length })}
               </SizableText>
-              <Grid label="Skills to add">
+              <Grid label={t('Skills to add')}>
                 {found.slice(0, shown).map((e: Entry) => (
                   <Tile
                     key={e.name}
@@ -134,7 +139,7 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
               {found.length > shown ? (
                 <XStack justify="center">
                   <Button size="sm" variant="outline" onPress={() => setShown(shown + PAGE)}>
-                    Show more
+                    {t('Show more')}
                   </Button>
                 </XStack>
               ) : null}
@@ -148,7 +153,7 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
   }
 
   if (!signed) {
-    return <Visitor>Sign in to see your skills.</Visitor>
+    return <Visitor>{t('Sign in to see your skills.')}</Visitor>
   }
   const ownShown = own.value.filter((s) => matches(q, s.name, s.description))
   const addedShown = added.filter((x) => matches(q, nameOf(x.name), x.description))
@@ -165,39 +170,43 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
           }}
         />
       ) : (own.loading || on.loading) && !own.value.length && !on.value.length ? (
-        <Soft>Loading your skills…</Soft>
+        <Soft>{t('Loading your skills…')}</Soft>
       ) : !own.value.length && !added.length ? (
-        <Empty title="No skills yet" detail={may ? 'Add one from Hanzo, or write your own.' : 'An org admin adds skills. Browse what there is.'}>
+        <Empty title={t('No skills yet')} detail={may ? t('Add one from Hanzo, or write your own.') : t('An org admin adds skills. Browse what there is.')}>
           <Button size="sm" variant="outline" onPress={() => onView('discover')}>
-            Browse skills
+            {t('Browse skills')}
           </Button>
           {may ? (
             <Button size="sm" onPress={() => onAdding(true)}>
-              Write a skill
+              {t('Write a skill')}
             </Button>
           ) : null}
         </Empty>
       ) : !ownShown.length && !addedShown.length ? (
-        <Soft>{`No skill of yours matches “${q.trim()}”.`}</Soft>
+        <Soft>{t('No skill of yours matches “{q}”.', { q: q.trim() })}</Soft>
       ) : (
         <>
           {ownShown.length ? (
-            <Part title="Made by your team" detail="Off keeps a skill but leaves it out of every run.">
-              <Grid label="Your skills">
+            <Part title={t('Made by your team')} detail={t('Off keeps a skill but leaves it out of every run.')}>
+              <Grid label={t('Your skills')}>
                 {ownShown.map((s) => (
                   <Tile
                     key={s.id}
                     title={s.name}
                     detail={s.description || firstLine(s.content)}
-                    meta={[s.source ? `From ${s.source}` : day(s.created) ? `Saved ${day(s.created)}` : '', s.admitted ? '' : 'Not in runs until an admin saves it'].filter(Boolean).join(' · ') || undefined}
+                    meta={
+                      [s.source ? t('From {source}', { source: s.source }) : day(s.created) ? t('Saved {date}', { date: day(s.created) }) : '', s.admitted ? '' : t('Not in runs until an admin saves it')]
+                        .filter(Boolean)
+                        .join(' · ') || undefined
+                    }
                     mark={<Mark name={s.name} />}
                     onOpen={() => setEditing(s)}
                     action={
                       may ? (
-                        <Switch checked={lit.has(tool(s.name))} disabled={busy === s.name} onCheckedChange={(v: boolean) => void flip(s.name, v)} aria-label={`${s.name} on`} />
+                        <Switch checked={lit.has(tool(s.name))} disabled={busy === s.name} onCheckedChange={(v: boolean) => void flip(s.name, v)} aria-label={t('{name} on', { name: s.name })} />
                       ) : (
                         <SizableText size="$1" color="$soft">
-                          {lit.has(tool(s.name)) ? 'On' : 'Off'}
+                          {lit.has(tool(s.name)) ? t('On') : t('Off')}
                         </SizableText>
                       )
                     }
@@ -207,8 +216,8 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
             </Part>
           ) : null}
           {addedShown.length ? (
-            <Part title="Added from Hanzo" detail="On for every run in your organization.">
-              <Grid label="Added skills">
+            <Part title={t('Added from Hanzo')} detail={t('On for every run in your organization.')}>
+              <Grid label={t('Added skills')}>
                 {addedShown.map((x) => {
                   const name = nameOf(x.name)
                   return (
@@ -220,8 +229,8 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
                       onOpen={() => setReading({ name, description: x.description, product: '' })}
                       action={
                         may ? (
-                          <Button size="sm" variant="ghost" disabled={busy === name} onPress={() => void flip(name, false)} aria-label={`Remove ${name}`}>
-                            Remove
+                          <Button size="sm" variant="ghost" disabled={busy === name} onPress={() => void flip(name, false)} aria-label={t('Remove {name}', { name })}>
+                            {t('Remove')}
                           </Button>
                         ) : undefined
                       }
@@ -261,8 +270,9 @@ function Reader({
   onFlip: (next: boolean) => void
   onClose: () => void
 }) {
-  const t = useTarget()
-  const doc = useLoad(() => document(t, skill.name), '', [t.api, skill.name])
+  const { t } = useI18n()
+  const target = useTarget()
+  const doc = useLoad(() => document(target, skill.name), '', [target.api, skill.name])
   return (
     <Sheet title={skill.name} open onOpenChange={(o) => !o && onClose()} width={720}>
       {skill.description ? (
@@ -273,17 +283,17 @@ function Reader({
       {signed ? (
         <XStack gap="$2" items="center">
           <Button size="sm" variant={added ? 'outline' : 'default'} disabled={busy} onPress={() => onFlip(!added)}>
-            {added ? 'Remove' : 'Add to your skills'}
+            {added ? t('Remove') : t('Add to your skills')}
           </Button>
           <SizableText size="$1" color="$soft" flex={1}>
-            {added ? 'On for your organization.' : 'Every run in your organization can use it once added.'}
+            {added ? t('On for your organization.') : t('Every run in your organization can use it once added.')}
           </SizableText>
         </XStack>
       ) : null}
       {doc.error ? (
         <Failed error={doc.error} onRetry={doc.reload} />
       ) : doc.loading && !doc.value ? (
-        <Soft>Loading SKILL.md…</Soft>
+        <Soft>{t('Loading SKILL.md…')}</Soft>
       ) : (
         <Code language="SKILL.md" value={doc.value}>
           <SizableText size="$1" color="$ink" style={{ ...mono, whiteSpace: 'pre-wrap' }}>
@@ -310,7 +320,8 @@ function Editor({
   onSaved: (s: Skill, fresh: boolean) => void
   onDeleted: (name: string) => void
 }) {
-  const t = useTarget()
+  const { t } = useI18n()
+  const target = useTarget()
   const [name, setName] = useState(skill?.name ?? '')
   const [description, setDescription] = useState(skill?.description ?? '')
   const [content, setContent] = useState(skill?.content ?? '')
@@ -322,58 +333,58 @@ function Editor({
     setWorking(true)
     setNote('')
     try {
-      const saved = await write(t, { name: name.trim(), description: description.trim(), content })
+      const saved = await write(target, { name: name.trim(), description: description.trim(), content })
       // A new skill is switched on as it is saved; a revised one keeps its switch.
-      if (!skill) await toggle(t, [tool(saved.name)])
+      if (!skill) await toggle(target, [tool(saved.name)])
       onSaved(saved, !skill)
     } catch (e) {
-      setNote(say(e))
+      setNote(say(e, t))
     } finally {
       setWorking(false)
     }
   }
 
   return (
-    <Sheet title={skill ? skill.name : 'New skill'} open onOpenChange={(o) => !o && onClose()} width={680}>
+    <Sheet title={skill ? skill.name : t('New skill')} open onOpenChange={(o) => !o && onClose()} width={680}>
       {skill?.source ? (
         <SizableText size="$2" color="$soft">
-          Read from {skill.source}. The next push of that repository replaces what is saved here.
+          {t('Read from {source}. The next push of that repository replaces what is saved here.', { source: skill.source })}
         </SizableText>
       ) : null}
-      <Field label="Name" hint={skill ? 'A skill keeps its name. Save under another name to make a new one.' : 'One lowercase word: letters, digits, _ or -.'}>
-        <Input value={name} onChangeText={setName} aria-label="Name" disabled={Boolean(skill)} autoCapitalize="none" />
+      <Field label={t('Name')} hint={skill ? t('A skill keeps its name. Save under another name to make a new one.') : t('One lowercase word: letters, digits, _ or -.')}>
+        <Input value={name} onChangeText={setName} aria-label={t('Name')} disabled={Boolean(skill)} autoCapitalize="none" />
       </Field>
-      <Field label="Description" hint="One line. An agent reads it to decide whether it needs the skill.">
-        <Input value={description} onChangeText={setDescription} placeholder="How we triage an incoming issue" aria-label="Description" />
+      <Field label={t('Description')} hint={t('One line. An agent reads it to decide whether it needs the skill.')}>
+        <Input value={description} onChangeText={setDescription} placeholder={t('How we triage an incoming issue')} aria-label={t('Description')} />
       </Field>
-      <Field label="SKILL.md" hint="Markdown: what it is for, when to use it, and the steps.">
-        <Textarea value={content} onChangeText={setContent} placeholder={'# Triage\n\n1. Read the issue…'} aria-label="SKILL.md" rows={14} style={mono} />
+      <Field label="SKILL.md" hint={t('Markdown: what it is for, when to use it, and the steps.')}>
+        <Textarea value={content} onChangeText={setContent} placeholder={t('# Triage\n\n1. Read the issue…')} aria-label="SKILL.md" rows={14} fontFamily="$mono" />
       </Field>
-      <Line>{note || (may ? '' : 'Only an org admin can write or delete skills.')}</Line>
+      <Line>{note || (may ? '' : t('Only an org admin can write or delete skills.'))}</Line>
       <XStack gap="$2" items="center">
         {skill && may ? (
           <Button size="sm" variant="ghost" onPress={() => setAsking(true)}>
-            Delete
+            {t('Delete')}
           </Button>
         ) : null}
         <XStack flex={1} />
         <Button size="sm" variant="ghost" onPress={onClose}>
-          {may ? 'Cancel' : 'Close'}
+          {may ? t('Cancel') : t('Close')}
         </Button>
         {may ? (
           <Button size="sm" disabled={working} onPress={() => void save()}>
-            Save
+            {t('Save')}
           </Button>
         ) : null}
       </XStack>
       {skill ? (
         <Confirm
           what={skill.name}
-          says="The skill leaves your organization and every agent that names it."
+          says={t('The skill leaves your organization and every agent that names it.')}
           open={asking}
           onOpenChange={setAsking}
           onYes={async () => {
-            await remove(t, skill.id)
+            await remove(target, skill.id)
             onDeleted(skill.name)
           }}
         />

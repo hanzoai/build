@@ -20,6 +20,8 @@
  * page; the console's /connectors otherwise) with `?complete=github&grant=<id>`,
  * and that page completes it (`complete`, and `landed` in ../back.ts).
  */
+import { phrase } from '@hanzo/i18n'
+
 import { call, query, seg, type Target } from './call.ts'
 import { codebases } from './codebases.ts'
 import { links, type Link } from './links.ts'
@@ -169,7 +171,7 @@ export async function connection(t: Target): Promise<Connection> {
 export async function connect(t: Target, back?: string): Promise<string> {
   const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/user/connect', back ? { return: back } : undefined))
   const url = str(raw.authorizeUrl)
-  if (!/^https:\/\/github\.com\//.test(url)) throw new Error('The platform did not name a GitHub address to connect at')
+  if (!/^https:\/\/github\.com\//.test(url)) throw new Error(phrase('The platform did not name a GitHub address to connect at'))
   return url
 }
 
@@ -317,7 +319,7 @@ export interface Queued {
 /** Queue a mirror of the named repositories onto the forge. The names are `owner/name`. */
 export async function bring(t: Target, repos: string[]): Promise<Queued> {
   const names = repos.map((n) => n.trim()).filter(Boolean)
-  if (names.length === 0) throw new Error('Choose a repository first')
+  if (names.length === 0) throw new Error(phrase('Choose a repository first'))
   const raw = obj(await call<unknown>(t, 'POST', '/v1/provider/github/repos/import', { repos: names }))
   const said = Array.isArray(raw.repos) ? raw.repos : []
   const made = Array.isArray(raw.codebases) ? raw.codebases : []

@@ -4,8 +4,13 @@
  * with Merge while it is open, Commits is its branch's history since the base.
  * While the run works it is read again every little while, because a run
  * pushes when it finishes a step.
+ *
+ * Its words are the reader's language (@hanzo/i18n `t`); branches, paths,
+ * commit messages, a pull request's title and its reviews are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { ChevronDown, ChevronRight } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
@@ -23,10 +28,11 @@ const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)', whiteSpace:
 
 export function Git({ session, title, live }: { session: string; title: string; live: boolean }) {
   const host = useHost()
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const signed = Boolean(host.person)
   const [view, setView] = useState<View>('diff')
-  const got = useRead(signed ? () => read(t, session) : null, NONE, [t, session, signed, live])
+  const got = useRead(signed ? () => read(target, session) : null, NONE, [target, session, signed, live])
   const { reload } = got
 
   useEffect(() => {
@@ -48,7 +54,7 @@ export function Git({ session, title, live }: { session: string; title: string; 
         {c.head ? (
           <SizableText size="$1" color="$soft" numberOfLines={1}>
             {`${c.head} → ${c.base}`}
-            {c.files.length ? ` · ${c.files.length} ${c.files.length === 1 ? 'file' : 'files'} +${added} −${removed}` : ''}
+            {c.files.length ? ` · ${c.files.length === 1 ? t('1 file') : t('{n} files', { n: c.files.length })} +${added} −${removed}` : ''}
           </SizableText>
         ) : null}
       </YStack>
@@ -57,7 +63,7 @@ export function Git({ session, title, live }: { session: string; title: string; 
           <XStack
             key={v}
             render="button"
-            aria-label={label(v)}
+            aria-label={t(label(v))}
             onPress={() => setView(v)}
             px="$2.5"
             py="$1"
@@ -65,17 +71,17 @@ export function Git({ session, title, live }: { session: string; title: string; 
             bg={view === v ? '$hover' : 'transparent'}
           >
             <SizableText size="$2" color={view === v ? '$ink' : '$soft'}>
-              {label(v)}
+              {t(label(v))}
             </SizableText>
           </XStack>
         ))}
       </XStack>
       {!signed ? (
-        <Soft>Sign in to see what this run pushed.</Soft>
+        <Soft>{t('Sign in to see what this run pushed.')}</Soft>
       ) : got.error ? (
         <Soft>{got.error.message}</Soft>
       ) : got.loading && !c.head ? (
-        <Soft>Reading the branch…</Soft>
+        <Soft>{t('Reading the branch…')}</Soft>
       ) : view === 'diff' ? (
         c.files.length ? (
           <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
@@ -84,7 +90,7 @@ export function Git({ session, title, live }: { session: string; title: string; 
             ))}
           </YStack>
         ) : (
-          <Soft>No pushed changes</Soft>
+          <Soft>{t('No pushed changes')}</Soft>
         )
       ) : view === 'review' ? (
         c.pull ? (
@@ -96,18 +102,18 @@ export function Git({ session, title, live }: { session: string; title: string; 
               <SizableText size="$1" color="$soft">
                 {c.pull.state === 'open'
                   ? c.pull.mergeable === false
-                    ? 'Open · conflicts with its base'
+                    ? t('Open · conflicts with its base')
                     : c.pull.mergeable
-                      ? 'Open · ready to merge'
-                      : 'Open'
+                      ? t('Open · ready to merge')
+                      : t('Open')
                   : c.pull.state === 'merged'
-                    ? 'Merged'
-                    : 'Closed'}
+                    ? t('Merged')
+                    : t('Closed')}
               </SizableText>
               {c.pull.url.startsWith('https://') ? (
-                <Out href={c.pull.url} label={`Open pull request #${c.pull.number}`}>
+                <Out href={c.pull.url} label={t('Open pull request {pr}', { pr: `#${c.pull.number}` })}>
                   <SizableText size="$1" color="$ink" textDecorationLine="underline">
-                    Open on the forge
+                    {t('Open on the forge')}
                   </SizableText>
                 </Out>
               ) : null}
@@ -117,7 +123,7 @@ export function Git({ session, title, live }: { session: string; title: string; 
               c.pull.reviews.map((r, i) => (
                 <YStack key={i} gap="$1" pb="$2" borderBottomWidth={1} borderColor="$borderColor">
                   <SizableText size="$1" color="$soft">
-                    {[r.author || 'Someone', verdict(r.state), when(r.at)].filter(Boolean).join(' · ')}
+                    {[r.author || t('Someone'), verdict(r.state, t), when(r.at)].filter(Boolean).join(' · ')}
                   </SizableText>
                   {r.body ? (
                     <SizableText size="$2" color="$ink">
@@ -127,11 +133,11 @@ export function Git({ session, title, live }: { session: string; title: string; 
                 </YStack>
               ))
             ) : (
-              <Soft>No reviews yet</Soft>
+              <Soft>{t('No reviews yet')}</Soft>
             )}
           </YStack>
         ) : (
-          <Soft>No pull request yet. The run opens one when it pushes its changes.</Soft>
+          <Soft>{t('No pull request yet. The run opens one when it pushes its changes.')}</Soft>
         )
       ) : c.commits.length ? (
         <YStack>
@@ -152,7 +158,7 @@ export function Git({ session, title, live }: { session: string; title: string; 
           ))}
         </YStack>
       ) : (
-        <Soft>No pushed commits</Soft>
+        <Soft>{t('No pushed commits')}</Soft>
       )}
     </YStack>
   )
@@ -166,7 +172,8 @@ export function Git({ session, title, live }: { session: string; title: string; 
  * what closes the button: the pull request reads merged.
  */
 export function Merge({ session, open, onMerged }: { session: string; open: boolean; onMerged: () => void }) {
-  const t = useTarget()
+  const target = useTarget()
+  const { t } = useI18n()
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const press = async () => {
@@ -174,8 +181,8 @@ export function Merge({ session, open, onMerged }: { session: string; open: bool
     setBusy(true)
     setNote('')
     try {
-      const done = await merge(t, session)
-      setNote(done.base ? `Merged into ${done.base}` : 'Merged')
+      const done = await merge(target, session)
+      setNote(done.base ? t('Merged into {branch}', { branch: done.base }) : t('Merged'))
       onMerged()
     } catch (e) {
       setNote((e as Error).message)
@@ -188,7 +195,7 @@ export function Merge({ session, open, onMerged }: { session: string; open: bool
     <XStack items="center" gap="$2" flexWrap="wrap">
       {open ? (
         <Button size="sm" variant="outline" aria-busy={busy} onPress={() => void press()}>
-          {busy ? 'Merging…' : 'Merge'}
+          {busy ? t('Merging…') : t('Merge')}
         </Button>
       ) : null}
       {note ? (
@@ -201,13 +208,14 @@ export function Merge({ session, open, onMerged }: { session: string; open: bool
 }
 
 function File({ change: f, first }: { change: Change; first: boolean }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const lines = f.patch ? f.patch.split('\n') : []
   return (
     <YStack borderTopWidth={first ? 0 : 1} borderColor="$borderColor">
       <XStack
         render="button"
-        aria-label={`${open ? 'Hide' : 'Show'} ${f.path}`}
+        aria-label={open ? t('Hide {path}', { path: f.path }) : t('Show {path}', { path: f.path })}
         onPress={() => setOpen(!open)}
         items="center"
         gap="$2"
@@ -215,11 +223,11 @@ function File({ change: f, first }: { change: Change; first: boolean }) {
         py="$2"
         hoverStyle={{ bg: '$hover' }}
       >
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} {...{ 'data-i18n-mirror': '' }} />}
         <SizableText size="$1" color="$soft" width={12}>
           {f.status[0]!.toUpperCase()}
         </SizableText>
-        <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1} style={{ textAlign: 'left' }}>
+        <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1} text="start">
           {f.from ? `${f.from} → ${f.path}` : f.path}
         </SizableText>
         <SizableText size="$1" color="$green10">{`+${f.additions}`}</SizableText>
@@ -231,12 +239,12 @@ function File({ change: f, first }: { change: Change; first: boolean }) {
             <Patch text={f.patch} />
           ) : (
             <SizableText size="$1" color="$soft">
-              {f.truncated ? 'Too large to show here.' : 'Binary file'}
+              {f.truncated ? t('Too large to show here.') : t('Binary file')}
             </SizableText>
           )}
           {lines.length && f.truncated ? (
             <SizableText size="$1" color="$soft">
-              The rest of this file’s change is too large to show here.
+              {t('The rest of this file’s change is too large to show here.')}
             </SizableText>
           ) : null}
         </YStack>
@@ -263,20 +271,22 @@ export function Patch({ text }: { text: string }) {
   )
 }
 
+/** A view's name, marked (`phrase`): drawn through `t`. */
 function label(v: View): string {
-  return v === 'diff' ? 'Diff' : v === 'review' ? 'Review' : 'Commits'
+  return v === 'diff' ? phrase('Diff') : v === 'review' ? phrase('Review') : phrase('Commits')
 }
 
-function verdict(state: string): string {
+/** What a reviewer did, in the reader's language; a state the forge names that is not one of these is drawn as given. */
+function verdict(state: string, t: Say): string {
   switch (state.toUpperCase()) {
     case 'APPROVED':
-      return 'approved'
+      return t('approved')
     case 'REQUEST_CHANGES':
-      return 'asked for changes'
+      return t('asked for changes')
     case 'COMMENT':
-      return 'commented'
+      return t('commented')
     default:
-      return state.toLowerCase() || 'reviewed'
+      return state.toLowerCase() || t('reviewed')
   }
 }
 

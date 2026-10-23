@@ -15,6 +15,7 @@
  * Memory, the mode); a skill or a plugin is picked for the conversation it was
  * picked in.
  */
+import { phrase } from '@hanzo/i18n'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 
 import { call, type Target } from './api/call.ts'
@@ -26,12 +27,13 @@ export type Mode = 'auto' | 'manual' | 'plan'
  * The modes, one line each. Chat offers Auto and Manual; Dev adds Plan. Manual
  * is a real pause: before a plugin runs for a message (a search, a site read, a
  * deck), the person allows it once, always in this conversation, or not, and a
- * Dev run is asked for before it starts.
+ * Dev run is asked for before it starts. Written in English and marked
+ * (`phrase`): the composer draws each word through `t`.
  */
 export const MODES: readonly { id: Mode; label: string; note: string }[] = [
-  { id: 'auto', label: 'Auto', note: 'Runs tools on its own; pauses only for anything risky.' },
-  { id: 'manual', label: 'Manual', note: 'Asks before each tool, connector or site it opens.' },
-  { id: 'plan', label: 'Plan', note: 'Writes the plan and waits for your go before changing anything.' },
+  { id: 'auto', label: phrase('Auto'), note: phrase('Runs tools on its own; pauses only for anything risky.') },
+  { id: 'manual', label: phrase('Manual'), note: phrase('Asks before each tool, connector or site it opens.') },
+  { id: 'plan', label: phrase('Plan'), note: phrase('Writes the plan and waits for your go before changing anything.') },
 ]
 
 /** The modes each surface offers. */

@@ -4,6 +4,8 @@
  * the research plan and its sources, a template's skill, a deck's answer, a
  * PDF's place in the system turn — with the platform's wire as sent.
  */
+import { translate } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Target } from '../api/call.ts'
@@ -140,6 +142,28 @@ describe('the shelf', () => {
     expect(merge([{ reply: 'made' , design: 'brand_1' }, { system: 's' }])).toEqual({ reply: 'made', system: 's', design: 'brand_1' })
     const broken = [{ ...list[0]!, prepare: async () => Promise.reject(new Error('the web search did not answer: down')) }]
     await expect(prep(broken, g, turn('hi'), c, new AbortController().signal)).rejects.toThrow('Deep research: the web search did not answer: down')
+  })
+
+  it('says its words, and a failed plugin’s name, in the caller’s language; the reason as said', async () => {
+    const fr: Record<string, string> = {
+      Sketch: 'Croquis',
+      Draw: 'Dessiner',
+      'Deep research': 'Recherche approfondie',
+      'Type to search plugins': 'Tapez pour chercher des plugins',
+      'No plugins here': 'Aucun plugin ici',
+      'Create plugin': 'Créer un plugin',
+      '{plugin}: {reason}': '{plugin} : {reason}',
+    }
+    const t = ((source: string, values?: Record<string, string | number>) => translate(fr, source, values)) as Say
+    const s = shelf({ plugins, loading: false, error: null }, gears(), composer(target(admin)), t)
+    expect(s.rows.slice(0, 2).map((r) => [r.label, r.note])).toEqual([
+      ['Croquis', 'Dessiner'],
+      ['Recherche approfondie', 'Report'],
+    ])
+    expect([s.search, s.empty, s.create!.label]).toEqual(['Tapez pour chercher des plugins', 'Aucun plugin ici', 'Créer un plugin'])
+    const broken = [{ ...plugins[1]!, prepare: async () => Promise.reject(new Error('the web search did not answer: down')) }]
+    const g = { ...BARE, research: true }
+    await expect(prep(broken, g, turn('hi'), composer(target(admin)), new AbortController().signal, [], t)).rejects.toThrow('Recherche approfondie : the web search did not answer: down')
   })
 })
 
