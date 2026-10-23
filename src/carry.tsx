@@ -110,8 +110,8 @@ function Allow({ what, onAnswer }: { what: Asked; onAnswer: (v: Leave) => void }
   return (
     <Dialog open onOpenChange={(o) => !o && onAnswer('deny')}>
       <DialogContent maxW={440} width="100%" data-slot="allow">
-        <DialogTitle>{t('Allow {name}?', { name: what.name })}</DialogTitle>
-        <DialogDescription>{what.note ? `${what.note}. ${t('Manual asks before each one runs.')}` : t('Manual asks before each one runs.')}</DialogDescription>
+        <DialogTitle>{t('Allow {name}?', { name: t(what.name) })}</DialogTitle>
+        <DialogDescription>{what.note ? `${t(what.note)}. ${t('Manual asks before each one runs.')}` : t('Manual asks before each one runs.')}</DialogDescription>
         <XStack justify="flex-end" gap="$2" pt="$3" flexWrap="wrap">
           <Button size="sm" variant="ghost" onPress={() => onAnswer('deny')}>
             {t('Deny')}
@@ -171,7 +171,7 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     browse: { label: say('Browse skills'), onPress: () => customize('skills') },
   }
 
-  const plugins = pluginShelf(found, gear, composer)
+  const plugins = pluginShelf(found, gear, composer, say)
 
   // The design systems: Studio's brands, the one store for them.
   const kits = useRead(signed ? () => brands(t) : null, [], [t, signed, design])
@@ -202,7 +202,7 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     ...(design ? [{ id: 'design', label: named?.name ?? say('Design system'), icon: <Palette size={14} />, onRemove: () => gear.set({ design: '' }) }] : []),
     ...lit
       .filter((p) => p.id !== 'research')
-      .map((p) => ({ id: `plugin:${p.id}`, label: p.name, icon: p.icon, onRemove: () => gear.toggle('plugins', p.id) })),
+      .map((p) => ({ id: `plugin:${p.id}`, label: say(p.name), icon: p.icon, onRemove: () => gear.toggle('plugins', p.id) })),
   ]
 
   const signedIn = Boolean(t.token())
@@ -258,7 +258,7 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
       // One plugin at a time, so each pause is its own question.
       const denied: string[] = []
       for (const x of lit) if (!signal.aborted && !(await allow({ id: x.id, name: x.name, note: x.note }))) denied.push(x.id)
-      const p = await prep(found.plugins, gear.gear, { ...turn, design }, composer, signal, denied)
+      const p = await prep(found.plugins, gear.gear, { ...turn, design }, composer, signal, denied, say)
       if (p.design) gear.set({ design: p.design, plugins: gear.gear.plugins.filter((x) => x !== 'design') })
       return p
     },

@@ -619,7 +619,7 @@ export function Project({ at }: { at: Where }) {
           busy={busy || (running && !draft.trim())}
           placeholder={running ? t('Steer this run') : t('Ask Hanzo for edits')}
           label={t('Ask Hanzo for edits')}
-          plus={{ upload: () => pick(attached, setAttached, setNote) }}
+          plus={{ upload: () => pick(attached, setAttached, setNote, t) }}
           mode={running ? null : { value: mode === 'plan' ? 'plan' : 'auto', set: (m) => setMode(m === 'plan' ? 'plan' : 'build'), items: ['auto', 'plan'] }}
           mind={running ? null : mind}
           voice={voice}

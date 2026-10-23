@@ -511,7 +511,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             label={t('Describe a task or ask a question')}
             head={head}
             plus={{
-              upload: () => pick(files, setFiles, setNote),
+              upload: () => pick(files, setFiles, setNote, t),
               skills: carry.skills,
               design: carry.design,
               plugins: carry.plugins,
