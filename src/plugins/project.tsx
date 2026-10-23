@@ -6,6 +6,8 @@
  * written, the project's workspace opens to start one there.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { Folder } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Input } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
@@ -25,6 +27,7 @@ export function find(list: readonly Project[], q: string): Project[] {
 }
 
 function Picker({ c }: { c: Composer }) {
+  const { t } = useI18n()
   const [list, setList] = useState<Project[] | null>(null)
   const [q, setQ] = useState('')
   const [note, setNote] = useState('')
@@ -65,25 +68,25 @@ function Picker({ c }: { c: Composer }) {
   return (
     <Dialog open onOpenChange={(o) => !o && c.show(null)}>
       <DialogContent maxW={520} width="100%">
-        <DialogTitle>Work in a project</DialogTitle>
-        <DialogDescription>{ask ? 'Your message starts a Dev run on the project you pick.' : 'Open a project to start working in it.'}</DialogDescription>
-        <Input value={q} onChangeText={setQ} placeholder="Search projects" aria-label="Search projects" autoFocus />
+        <DialogTitle>{t('Work in a project')}</DialogTitle>
+        <DialogDescription>{ask ? t('Your message starts a Dev run on the project you pick.') : t('Open a project to start working in it.')}</DialogDescription>
+        <Input value={q} onChangeText={setQ} placeholder={t('Search projects')} aria-label={t('Search projects')} autoFocus />
         <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden" maxH={360} style={{ overflowY: 'auto' }}>
           {!list && !note ? (
             <SizableText size="$2" color="$soft" p="$3">
-              Reading your projects…
+              {t('Reading your projects…')}
             </SizableText>
           ) : null}
           {list && !shown.length ? (
             <SizableText size="$2" color="$soft" p="$3">
-              {q ? 'Nothing matches' : 'No projects yet'}
+              {q ? t('Nothing matches') : t('No projects yet')}
             </SizableText>
           ) : null}
           {shown.map((p, i) => (
             <XStack
               key={p.slug}
               render="button"
-              aria-label={ask ? `Start a run on ${p.name}` : `Open ${p.name}`}
+              aria-label={ask ? t('Start a run on {name}', { name: p.name }) : t('Open {name}', { name: p.name })}
               disabled={Boolean(busy)}
               onPress={() => void pick(p)}
               items="center"
@@ -94,15 +97,15 @@ function Picker({ c }: { c: Composer }) {
               borderColor="$borderColor"
               cursor={busy ? 'default' : 'pointer'}
               hoverStyle={{ bg: '$hover' }}
-              style={{ textAlign: 'left' }}
+              style={{ textAlign: 'start' }}
             >
               <Folder size={16} opacity={0.7} />
               <YStack flex={1} minW={0}>
                 <SizableText size="$2" color="$ink" numberOfLines={1}>
-                  {busy === p.slug ? 'Starting…' : p.name}
+                  {busy === p.slug ? t('Starting…') : p.name}
                 </SizableText>
                 <SizableText size="$1" color="$soft" numberOfLines={1}>
-                  {p.repo ? address(p.repo) : 'No repository yet'}
+                  {p.repo ? address(p.repo) : t('No repository yet')}
                 </SizableText>
               </YStack>
             </XStack>
@@ -115,7 +118,7 @@ function Picker({ c }: { c: Composer }) {
         ) : null}
         <XStack justify="flex-end">
           <Button size="sm" variant="ghost" onPress={() => c.show(null)}>
-            Cancel
+            {t('Cancel')}
           </Button>
         </XStack>
       </DialogContent>
@@ -125,8 +128,8 @@ function Picker({ c }: { c: Composer }) {
 
 export const project: Plugin = {
   id: 'project',
-  name: 'Work in a project',
-  note: 'Start a Dev run in a project',
+  name: phrase('Work in a project'),
+  note: phrase('Start a Dev run in a project'),
   icon: <Folder size={16} />,
   open: (c) => c.show(<Picker c={c} />),
 }

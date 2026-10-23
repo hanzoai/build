@@ -6,6 +6,8 @@
  * it is saved. Writing a skill takes an org admin, so only an admin is offered it.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
+import { useI18n } from '@hanzo/i18n/react'
 import { LayoutTemplate } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Input, Textarea } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
@@ -57,6 +59,7 @@ export function document(d: Draft): string {
 }
 
 function Creator({ c }: { c: Composer }) {
+  const { t } = useI18n()
   const from = c.draft.trim()
   const [d, setD] = useState<Draft>({ name: from ? slug(from.split(/\s+/).slice(0, 6).join(' ')) : '', description: first(from), body: from })
   const [drafting, setDrafting] = useState(Boolean(from))
@@ -97,15 +100,15 @@ function Creator({ c }: { c: Composer }) {
   return (
     <Dialog open onOpenChange={(o) => !o && c.show(null)}>
       <DialogContent maxW={640} width="100%">
-        <DialogTitle>Template Creator</DialogTitle>
+        <DialogTitle>{t('Template Creator')}</DialogTitle>
         <DialogDescription>
-          {saved ? `Saved as ${saved}. It is under + › Skills.` : drafting ? 'Hanzo is drafting the template from your message…' : 'A reusable template, saved as one of your skills.'}
+          {saved ? t('Saved as {name}. It is under + › Skills.', { name: saved }) : drafting ? t('Hanzo is drafting the template from your message…') : t('A reusable template, saved as one of your skills.')}
         </DialogDescription>
         {saved ? null : (
           <YStack gap="$3">
-            <Input value={d.name} onChangeText={(name: string) => setD({ ...d, name })} placeholder="weekly-update" aria-label="Name" autoCapitalize="none" />
-            <Input value={d.description} onChangeText={(description: string) => setD({ ...d, description })} placeholder="When to use it" aria-label="Description" />
-            <Textarea value={d.body} onChangeText={(body: string) => setD({ ...d, body })} placeholder={'# Weekly update\n\nInputs: {{team}}, {{week}}\n\n1. …'} aria-label="Template" rows={12} style={{ maxHeight: '40vh', overflowY: 'auto' }} />
+            <Input value={d.name} onChangeText={(name: string) => setD({ ...d, name })} placeholder="weekly-update" aria-label={t('Name')} autoCapitalize="none" />
+            <Input value={d.description} onChangeText={(description: string) => setD({ ...d, description })} placeholder={t('When to use it')} aria-label={t('Description')} />
+            <Textarea value={d.body} onChangeText={(body: string) => setD({ ...d, body })} placeholder={'# Weekly update\n\nInputs: {{team}}, {{week}}\n\n1. …'} aria-label={t('Template')} rows={12} style={{ maxHeight: '40vh', overflowY: 'auto' }} />
           </YStack>
         )}
         {note ? (
@@ -116,15 +119,15 @@ function Creator({ c }: { c: Composer }) {
         <XStack gap="$2" justify="flex-end">
           {saved ? (
             <Button size="sm" onPress={() => c.show(null)}>
-              Done
+              {t('Done')}
             </Button>
           ) : (
             <>
               <Button size="sm" variant="ghost" onPress={() => c.show(null)}>
-                Cancel
+                {t('Cancel')}
               </Button>
               <Button size="sm" disabled={busy || drafting || !d.name || !d.body.trim()} onPress={() => void save()}>
-                Save
+                {t('Save')}
               </Button>
             </>
           )}
@@ -136,8 +139,8 @@ function Creator({ c }: { c: Composer }) {
 
 export const template: Plugin = {
   id: 'template',
-  name: 'Template Creator',
-  note: 'Templates saved as skills',
+  name: phrase('Template Creator'),
+  note: phrase('Templates saved as skills'),
   icon: <LayoutTemplate size={16} />,
   open: (c) => c.show(<Creator c={c} />),
 }

@@ -15,6 +15,7 @@
  * off, and `prep` asks it when that is on. Every other plugin that prepares is on
  * while its id is in `Gear.plugins`; one that opens something runs when picked.
  */
+import type { Say } from '@hanzo/i18n/react'
 import { useEffect, useState } from 'react'
 
 import type { Target } from '../api/call.ts'
@@ -26,6 +27,7 @@ import type { Gear, GearState } from '../gear.ts'
 import type { Composer, Plugin, Prep, Turn } from '../plugin.ts'
 import type { Shelf } from '../plus.tsx'
 import { path } from '../route.ts'
+import { english } from '../say.ts'
 import { pdf } from './pdf.tsx'
 import { project } from './project.tsx'
 import { designer } from './design.tsx'
@@ -91,10 +93,10 @@ export function usePlugins(t: Target): Plugins {
 /** Whether a plugin that prepares is on in this conversation. */
 const on = (p: Plugin, g: Gear): boolean => (p.id === deep.id ? g.research : g.plugins.includes(p.id))
 
-/** The `+` menu's Plugins shelf. */
-export function shelf(p: Plugins, g: GearState, c: Composer): Shelf {
+/** The `+` menu's Plugins shelf, in the words of the caller's `t` (a plugin's name and note are marked where it is written). */
+export function shelf(p: Plugins, g: GearState, c: Composer, t: Say = english): Shelf {
   return {
-    rows: p.plugins.map((x) => ({ id: x.id, label: x.name, note: x.note, icon: x.icon, on: x.prepare ? on(x, g.gear) : undefined })),
+    rows: p.plugins.map((x) => ({ id: x.id, label: t(x.name), note: t(x.note), icon: x.icon, on: x.prepare ? on(x, g.gear) : undefined })),
     pick: (id) => {
       const x = p.plugins.find((y) => y.id === id)
       if (!x) return
@@ -104,9 +106,9 @@ export function shelf(p: Plugins, g: GearState, c: Composer): Shelf {
     },
     loading: p.loading,
     error: p.error,
-    search: 'Type to search plugins',
-    empty: 'No plugins here',
-    create: { label: 'Create plugin', onPress: () => c.go(BUILD) },
+    search: t('Type to search plugins'),
+    empty: t('No plugins here'),
+    create: { label: t('Create plugin'), onPress: () => c.go(BUILD) },
   }
 }
 
@@ -132,16 +134,17 @@ export function merge(preps: readonly Prep[]): Prep {
 /**
  * Ask every plugin that is on what the message carries. A plugin that fails
  * fails the message, with its name and its reason: a report asked for and not
- * researched must not arrive looking researched.
+ * researched must not arrive looking researched. Its name is said in the
+ * caller's `t`; the reason is `say`'s.
  */
-export async function prep(plugins: readonly Plugin[], g: Gear, turn: Turn, c: Composer, signal: AbortSignal, denied: readonly string[] = []): Promise<Prep> {
+export async function prep(plugins: readonly Plugin[], g: Gear, turn: Turn, c: Composer, signal: AbortSignal, denied: readonly string[] = [], t: Say = english): Promise<Prep> {
   const preps = await Promise.all(
     active(plugins, g)
       .filter((p) => !denied.includes(p.id))
       .map((p) =>
         p.prepare!(turn, c, signal).catch((e: unknown) => {
           if (signal.aborted) throw e
-          throw new Error(`${p.name}: ${say(e)}`)
+          throw new Error(t('{plugin}: {reason}', { plugin: t(p.name), reason: say(e) }))
         }),
       ),
   )
