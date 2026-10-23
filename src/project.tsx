@@ -393,11 +393,11 @@ export function Project({ at }: { at: Where }) {
         .map((e): Line => {
           // The console is where a run's error is read whole; the chat says it in one plain line.
           const body = decode(e.payload)
-          const error = e.kind === 'status' && body && typeof body === 'object' && typeof body.error === 'string' ? scrub(body.error) : ''
+          const error = e.kind === 'status' && body && typeof body === 'object' && typeof body.error === 'string' ? scrub(body.error, t) : ''
           return {
             id: `r${e.seq || e.id}`,
             level: error || (e.kind === 'status' && /error/.test(said(e, run.record?.mode).toLowerCase())) ? 'error' : e.kind === 'tool-call' ? 'info' : 'log',
-            text: error || said(e, run.record?.mode),
+            text: error || said(e, run.record?.mode, t),
             source: e.kind === 'status' ? 'run' : who(e.actor),
           }
         })
@@ -566,7 +566,7 @@ export function Project({ at }: { at: Where }) {
               <Turn run={r} open={r.id === current} onOpen={() => setChosen(r.id)} project={slug} />
               {r.id === current ? (
                 <YStack gap="$1" paddingInlineStart="$2" borderInlineStartWidth={1} borderColor="$borderColor">
-                  {fold(run.events.map((e) => ({ kind: e.kind, actor: who(e.actor), seq: e.seq, id: e.id, text: said(e, run.record?.mode) })).filter((b) => b.text)).map((b) => (
+                  {fold(run.events.map((e) => ({ kind: e.kind, actor: who(e.actor), seq: e.seq, id: e.id, text: said(e, run.record?.mode, t) })).filter((b) => b.text)).map((b) => (
                     <SizableText key={b.key} size="$1" color="$soft">
                       {b.text}
                     </SizableText>

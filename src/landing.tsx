@@ -238,7 +238,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       return
     }
     // A plan or a setup routed to a machine is refused here, in its own words, before it leaves the page.
-    const why = unhonoured(mode, place.id)
+    const why = unhonoured(mode, place.id, t)
     if (why) {
       setNote(why)
       return
@@ -281,7 +281,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       setIssue(0)
       onStarted(run.session)
     } catch (e) {
-      setNote(plain(e, repo?.name ?? hub?.full_name ?? 'a new project', 'run'))
+      setNote(plain(e, repo?.name ?? hub?.full_name ?? t('a new project'), 'run', t))
     } finally {
       setBusy(false)
     }
@@ -497,9 +497,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
               )}
             </XStack>
           ) : null}
-          {note || unhonoured(mode, place.id) || mind.note ? (
+          {note || unhonoured(mode, place.id, t) || mind.note ? (
             <SizableText size="$1" color="$soft" role="status">
-              {note || unhonoured(mode, place.id) || mind.note}
+              {note || unhonoured(mode, place.id, t) || mind.note}
             </SizableText>
           ) : null}
           <Prompt

@@ -99,7 +99,7 @@ export function Desk({
   const { t: say } = useI18n()
   const name = repo.split('/').filter(Boolean).pop() || repo
   const lines = shell(events)
-  const failed = failure(events)
+  const failed = failure(events, say)
   const box = useBox(sandbox)
   // Nothing is said of the sandbox until it has been read.
   const held = box.value?.state ?? ''

@@ -102,11 +102,11 @@ export function Run({ id }: { id: string }) {
   const mode = record?.mode ?? ''
   // A run that narrated no ask of its own opens with the one its title records, once it has said anything.
   const shown = useMemo(() => {
-    const drawn = cards(events, mode)
+    const drawn = cards(events, mode, say)
     const ask = record ? headline(record.title, record.repo) : ''
     const opens = drawn[0]?.kind === 'said' && drawn[0].who === 'person'
     return ask && drawn.length && !opens ? [{ kind: 'said' as const, key: 'ask', who: 'person' as const, text: ask }, ...drawn] : drawn
-  }, [events, mode, record])
+  }, [events, mode, record, say])
   const end = outcome(events)
   const plan = useMemo(() => steps(events), [events])
   const kept = useMemo(() => settled(events), [events])
