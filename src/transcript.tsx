@@ -16,6 +16,7 @@
  * commands, edits and steps — are cards of their own between the turns.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Button } from '@hanzo/ui'
 import { Feedback, type Verdict } from '@hanzo/ui/agents'
 import { Code, Message, Step, Thread } from '@hanzo/ui/chat'
@@ -67,12 +68,13 @@ export function Transcript({
   /** After the last card: how the run ended, when it ended on an error. */
   end?: ReactNode
 }) {
+  const { t } = useI18n()
   // A card the run never finished is cut off once the run has ended, not still going.
   const state = (ran: Ran): Ran => (ran === 'running' && !live ? 'cancelled' : ran)
   // The answer still arriving: the last thing the agent said while the run works.
   const last = live ? [...cards].reverse().find((c) => c.kind === 'said' && c.who === 'agent')?.key : undefined
   return (
-    <Thread gap={GAP} column={{ maxW: MEASURE }} aria-label="Transcript">
+    <Thread gap={GAP} column={{ maxW: MEASURE }} aria-label={t('Transcript')}>
       {header}
       {cards.length === 0 ? <YStack py="$2">{empty}</YStack> : null}
       {cards.map((c) => {
@@ -101,13 +103,13 @@ export function Transcript({
           }
           case 'think':
             return (
-              <Step key={c.key} name="Thought" detail={firstLine(c.text)} status="done" aria-label="Thought">
+              <Step key={c.key} name={t('Thought')} detail={firstLine(c.text)} status="done" aria-label={t('Thought')}>
                 <Prose text={c.text} />
               </Step>
             )
           case 'todo':
             return (
-              <YStack key={c.key} gap="$1" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label="Plan checklist">
+              <YStack key={c.key} gap="$1" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Plan checklist')}>
                 {c.items.map((x, i) => (
                   <XStack key={i} gap="$2" items="flex-start">
                     <SizableText size="$2" color={x.done ? '$ink' : '$soft'}>
@@ -122,7 +124,7 @@ export function Transcript({
             )
           case 'shell':
             return (
-              <Step key={c.key} name="Shell" detail={c.command} status={state(c.ran)} aria-label={`Command ${c.command}`}>
+              <Step key={c.key} name={t('Shell')} detail={c.command} status={state(c.ran)} aria-label={t('Command {command}', { command: c.command })}>
                 <Code language="shell" value={c.output ? `$ ${c.command}\n${c.output}` : `$ ${c.command}`}>
                   {c.output ? `$ ${c.command}\n${tail(c.output)}` : `$ ${c.command}`}
                 </Code>
@@ -132,18 +134,18 @@ export function Transcript({
             return (
               <Step
                 key={c.key}
-                name={c.files.length === 1 ? 'Edited' : c.files.length ? `Edited ${c.files.length} files` : 'Edited files'}
+                name={c.files.length === 1 ? t('Edited') : c.files.length ? t('Edited {n} files', { n: c.files.length }) : t('Edited files')}
                 detail={c.files.join(', ')}
                 status={state(c.ran)}
-                aria-label={`Edited ${c.files.join(', ') || 'files'}`}
+                aria-label={c.files.length ? t('Edited {files}', { files: c.files.join(', ') }) : t('Edited files')}
               >
                 <YStack gap="$2" items="flex-start">
                   <SizableText size="$1" color="$soft" style={{ whiteSpace: 'pre-wrap' }}>
-                    {c.files.length ? c.files.join('\n') : 'The agent named no files.'}
+                    {c.files.length ? c.files.join('\n') : t('The agent named no files.')}
                   </SizableText>
                   {onDiff ? (
                     <Button size="sm" variant="outline" onPress={onDiff}>
-                      Open the diff
+                      {t('Open the diff')}
                     </Button>
                   ) : null}
                 </YStack>
@@ -152,7 +154,8 @@ export function Transcript({
           case 'step':
             return (
               // The run's own error opens by default: it is the reason, and the line above it only says what to do.
-              <Step key={c.key} name={c.name} detail={c.detail} status={state(c.ran)} defaultOpen={c.name === 'Error'} aria-label={`${c.name} ${c.detail}`.trim()}>
+              // A step's name is ours (Error, Search) or a tool's; ours is said in the reader's language.
+              <Step key={c.key} name={t(c.name)} detail={c.detail} status={state(c.ran)} defaultOpen={c.name === 'Error'} aria-label={`${t(c.name)} ${c.detail}`.trim()}>
                 {c.name === 'Error' ? (
                   // The reason is read whole, wrapped, never scrolled sideways.
                   <SizableText size="$2" color="$ink" style={{ ...mono, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
@@ -168,21 +171,21 @@ export function Transcript({
           case 'note':
             return (
               <SizableText key={c.key} size="$1" color="$soft" role="note">
-                {c.text}
+                {t(c.text)}
               </SizableText>
             )
           case 'plan':
             return (
-              <YStack key={c.key} gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" aria-label="Plan">
+              <YStack key={c.key} gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" aria-label={t('Plan')}>
                 <SizableText size="$2" color="$soft">
-                  Plan
+                  {t('Plan')}
                 </SizableText>
                 <Prose text={c.text} />
                 <XStack items="center" gap="$2" flexWrap="wrap">
                   <Reply text={c.text} listen={listen} />
                   {onApprove ? (
                     <Button size="sm" disabled={approving} onPress={() => onApprove(c.text)}>
-                      {approving ? 'Starting the build…' : 'Approve and build'}
+                      {approving ? t('Starting the build…') : t('Approve and build')}
                     </Button>
                   ) : null}
                   <Judge onVerdict={onVerdict} />

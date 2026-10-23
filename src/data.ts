@@ -6,6 +6,7 @@
  * signed in is not attempted — the platform would refuse it and the refusal
  * would read as an outage.
  */
+import { phrase } from '@hanzo/i18n'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Target } from './api/call.ts'
@@ -56,10 +57,10 @@ export function useRead<T>(load: (() => Promise<T>) | null, initial: T, key: unk
 /** How long a read is waited on before the screen says it is taking too long. */
 export const WAIT = 15_000
 
-/** A read that did not answer in time. */
+/** A read that did not answer in time. Its message is ours, marked, so a screen drawing it through `t` says it in the reader's language. */
 export class Slow extends Error {
   constructor() {
-    super('Hanzo is taking too long to answer.')
+    super(phrase('Hanzo is taking too long to answer.'))
     this.name = 'Slow'
   }
 }

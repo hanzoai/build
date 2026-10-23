@@ -22,6 +22,7 @@
  * panel is the whole window instead (`sheet`).
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
 import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Maximize2, Minimize2, Minus, MoreHorizontal, PanelLeftOpen, Pin, Plus, RotateCcw, RotateCw, SquarePlus, X } from '@hanzogui/lucide-icons-2'
 import {
@@ -74,7 +75,10 @@ const KEYS = MAC ? '⌘⇧B' : 'Ctrl+Shift+B'
 const SHORTCUTS = 'Control+Shift+B Meta+Shift+B Control+Period Meta+Period'
 
 /** A tab's title where it has none of its own. */
-const BLANK = 'New tab'
+const BLANK = phrase('New tab')
+
+/** On an icon that points along the line (Back, Forward): it turns in a right-to-left page. */
+const MIRROR = { 'data-i18n-mirror': '' } as object
 
 /** The row heights, px: the strip (the conversation header's row), and a page's bar. */
 const STRIP = 56
@@ -192,13 +196,14 @@ function Mark({ icon, title }: { icon?: string; title: string }) {
 
 /** An empty page: the places the surface suggests, as cards in a row that scrolls sideways. */
 function Suggested({ suggested, onGo }: { suggested: readonly Suggestion[]; onGo: (url: string) => void }) {
+  const { t } = useI18n()
   return (
     <YStack data-slot="side-suggested" px="$4" pt="$4" gap="$3">
       <SizableText fontSize={13} color="$soft">
-        Suggested
+        {t('Suggested')}
       </SizableText>
       {suggested.length ? (
-        <XStack role="list" aria-label="Suggested" gap="$2" overflowX="auto" overflowY="hidden" pb="$2">
+        <XStack role="list" aria-label={t('Suggested')} gap="$2" overflowX="auto" overflowY="hidden" pb="$2">
           {suggested.map((s) => (
             <YStack
               key={s.url}
@@ -226,7 +231,7 @@ function Suggested({ suggested, onGo }: { suggested: readonly Suggestion[]; onGo
         </XStack>
       ) : (
         <SizableText fontSize={13} color="$soft">
-          No suggestions.
+          {t('No suggestions.')}
         </SizableText>
       )}
     </YStack>
@@ -235,6 +240,7 @@ function Suggested({ suggested, onGo }: { suggested: readonly Suggestion[]; onGo
 
 /** A remote address a browser page may not frame: what it is, and the one way to open it. */
 function Elsewhere({ tab }: { tab: Tab }) {
+  const { t } = useI18n()
   return (
     <YStack flex={1} items="center" justify="center" gap="$3" p="$5" data-slot="side-elsewhere">
       <Globe size={20} opacity={0.6} />
@@ -257,7 +263,7 @@ function Elsewhere({ tab }: { tab: Tab }) {
       >
         <ExternalLink size={13} />
         <SizableText fontSize={13} color="$ink">
-          Open in a new window
+          {t('Open in a new window')}
         </SizableText>
       </XStack>
     </YStack>
@@ -333,6 +339,7 @@ function Row({ label, onSelect, disabled, end }: { label: string; onSelect: () =
 
 /** The zoom row: the level between − and +, and the way back to 100. Plain buttons, so a press keeps the menu open. */
 function Zoom({ level, onLevel, disabled }: { level: number; onLevel: (percent: number) => void; disabled: boolean }) {
+  const { t } = useI18n()
   const step = (way: 1 | -1) => () => onLevel(zoomed(level, way))
   const box = (label: string, onPress: () => void, child: ReactNode) => (
     <XStack render="button" role="button" aria-label={label} aria-disabled={disabled || undefined} onPress={disabled ? undefined : onPress} width={24} height={24} {...quiet(false, disabled)} rounded={6}>
@@ -340,18 +347,18 @@ function Zoom({ level, onLevel, disabled }: { level: number; onLevel: (percent: 
     </XStack>
   )
   return (
-    <XStack data-slot="page-zoom" role="group" aria-label="Zoom" items="center" gap="$2" px={8} height={38} opacity={disabled ? 0.5 : 1}>
+    <XStack data-slot="page-zoom" role="group" aria-label={t('Zoom')} items="center" gap="$2" px={8} height={38} opacity={disabled ? 0.5 : 1}>
       <SizableText fontSize={13} color="$ink" flex={1}>
-        Zoom
+        {t('Zoom')}
       </SizableText>
       <XStack items="center" gap={2} borderWidth={1} borderColor="$borderColor" rounded={8} px={2} height={28}>
-        {box('Zoom out', step(-1), <Minus size={12} />)}
+        {box(t('Zoom out'), step(-1), <Minus size={12} />)}
         <SizableText fontSize={12} color="$ink" width={40} text="center" aria-live="polite">
           {`${level}%`}
         </SizableText>
-        {box('Zoom in', step(1), <Plus size={12} />)}
+        {box(t('Zoom in'), step(1), <Plus size={12} />)}
       </XStack>
-      {box('Reset zoom', () => onLevel(100), <RotateCcw size={13} />)}
+      {box(t('Reset zoom'), () => onLevel(100), <RotateCcw size={13} />)}
     </XStack>
   )
 }
@@ -361,12 +368,13 @@ function Zoom({ level, onLevel, disabled }: { level: number; onLevel: (percent: 
  * laid out over the menu and takes its presses.
  */
 function Skills({ skills, here }: { skills: readonly Skill[]; here: Here | null }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   return (
     <DropdownMenuSub open={open} onOpenChange={setOpen}>
       <DropdownMenuSubTrigger disabled={!here} minH={ROW} py={0}>
         <SizableText fontSize={13} color="$ink" flex={1}>
-          Skills
+          {t('Skills')}
         </SizableText>
       </DropdownMenuSubTrigger>
       {open ? (
@@ -415,6 +423,7 @@ function Actions({
   browser: Browser | null
   onPin?: (on: boolean) => void
 }) {
+  const { t } = useI18n()
   const shown = here ? { id: tab.id, ...here } : null
   const none = !shown
   const pick = () => {
@@ -439,32 +448,32 @@ function Actions({
   const print = browser?.print ?? (same ? () => frame.current?.contentWindow?.print() : undefined)
   const zoom = Boolean(browser?.zoom) || framed
   const ours = [
-    acts.onAsk ? <Row key="ask" label="Ask about this page" disabled={none} onSelect={() => void ask()} /> : null,
-    acts.onDev && shown && hosted(shown.url) ? <Row key="dev" label="Open in Dev" onSelect={() => acts.onDev?.({ url: shown.url, title: shown.title })} /> : null,
+    acts.onAsk ? <Row key="ask" label={t('Ask about this page')} disabled={none} onSelect={() => void ask()} /> : null,
+    acts.onDev && shown && hosted(shown.url) ? <Row key="dev" label={t('Open in Dev')} onSelect={() => acts.onDev?.({ url: shown.url, title: shown.title })} /> : null,
     acts.skills?.length ? <Skills key="skills" skills={acts.skills} here={here} /> : null,
-    <Row key="out" label="Open in a new window" disabled={none} onSelect={() => popOut(tab)} />,
-    <Row key="copy" label="Copy link" disabled={none || !tab.url} onSelect={() => tab.url && void navigator.clipboard?.writeText(tab.url)} />,
-    onPin ? <Row key="pin" label={tab.pinned ? 'Unpin tab' : 'Pin tab'} onSelect={() => onPin(!tab.pinned)} /> : null,
+    <Row key="out" label={t('Open in a new window')} disabled={none} onSelect={() => popOut(tab)} />,
+    <Row key="copy" label={t('Copy link')} disabled={none || !tab.url} onSelect={() => tab.url && void navigator.clipboard?.writeText(tab.url)} />,
+    onPin ? <Row key="pin" label={tab.pinned ? t('Unpin tab') : t('Pin tab')} onSelect={() => onPin(!tab.pinned)} /> : null,
   ].filter(Boolean)
   const page = [
-    browser?.find ? <Row key="find" label="Find in page" disabled={none} onSelect={() => shown && browser.find?.(shown)} /> : null,
-    print ? <Row key="print" label="Print" disabled={none} onSelect={() => shown && print(shown)} /> : null,
+    browser?.find ? <Row key="find" label={t('Find in page')} disabled={none} onSelect={() => shown && browser.find?.(shown)} /> : null,
+    print ? <Row key="print" label={t('Print')} disabled={none} onSelect={() => shown && print(shown)} /> : null,
     zoom ? <Zoom key="zoom" level={level} onLevel={onLevel} disabled={none} /> : null,
-    browser?.devices ? <Row key="devices" label="Show device toolbar" disabled={none} onSelect={() => shown && browser.devices?.(shown)} /> : null,
-    browser?.capture && acts.onCapture ? <Row key="capture" label="Take a screenshot" disabled={none} onSelect={() => void capture()} /> : null,
+    browser?.devices ? <Row key="devices" label={t('Show device toolbar')} disabled={none} onSelect={() => shown && browser.devices?.(shown)} /> : null,
+    browser?.capture && acts.onCapture ? <Row key="capture" label={t('Take a screenshot')} disabled={none} onSelect={() => void capture()} /> : null,
   ].filter(Boolean)
   const own = [
-    browser?.passwords ? <Row key="passwords" label="Passwords and autofill" onSelect={browser.passwords} end={<ChevronRight size={14} opacity={0.6} />} /> : null,
-    browser?.downloads ? <Row key="downloads" label="Downloads" onSelect={browser.downloads} /> : null,
-    browser?.history ? <Row key="history" label="History" onSelect={browser.history} /> : null,
-    browser?.clear ? <Row key="clear" label="Clear browsing data" onSelect={browser.clear} /> : null,
+    browser?.passwords ? <Row key="passwords" label={t('Passwords and autofill')} onSelect={browser.passwords} end={<ChevronRight size={14} opacity={0.6} />} /> : null,
+    browser?.downloads ? <Row key="downloads" label={t('Downloads')} onSelect={browser.downloads} /> : null,
+    browser?.history ? <Row key="history" label={t('History')} onSelect={browser.history} /> : null,
+    browser?.clear ? <Row key="clear" label={t('Clear browsing data')} onSelect={browser.clear} /> : null,
   ].filter(Boolean)
-  const settings = browser?.settings ? [<Row key="settings" label="Browser settings" onSelect={browser.settings} />] : []
+  const settings = browser?.settings ? [<Row key="settings" label={t('Browser settings')} onSelect={browser.settings} />] : []
   const groups = [ours, page, own, settings].filter((g) => g.length)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <XStack render="button" role="button" aria-label="Page actions" width={PILL} height={PILL} {...quiet()} rounded={999} bg="$edge">
+        <XStack render="button" role="button" aria-label={t('Page actions')} width={PILL} height={PILL} {...quiet()} rounded={999} bg="$edge">
           <MoreHorizontal size={16} />
         </XStack>
       </DropdownMenuTrigger>
@@ -484,6 +493,7 @@ function Actions({
  * remote page takes its own origin, and withholding same-origin breaks it.
  */
 export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested = [], ...acts }: PageProps) {
+  const { t } = useI18n()
   const Browse = useBrowse()
   const browser = useBrowser()
   const frame = useRef<HTMLIFrameElement | null>(null)
@@ -530,13 +540,13 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
     <YStack flex={1} minH={0} data-slot="side-page">
       <XStack data-slot="side-bar" height={BAR} px="$2" gap="$2" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
         <XStack items="center" height={PILL} px={4} gap={2} rounded={999} bg="$edge" shrink={0}>
-          <XStack render="button" role="button" aria-label="Back" aria-disabled={!back || undefined} onPress={back ? onBack : undefined} width={28} height={28} {...quiet(false, !back)} rounded={999}>
-            <ArrowLeft size={15} />
+          <XStack render="button" role="button" aria-label={t('Back')} aria-disabled={!back || undefined} onPress={back ? onBack : undefined} width={28} height={28} {...quiet(false, !back)} rounded={999}>
+            <ArrowLeft size={15} {...MIRROR} />
           </XStack>
-          <XStack render="button" role="button" aria-label="Forward" aria-disabled={!ahead || undefined} onPress={ahead ? onForward : undefined} width={28} height={28} {...quiet(false, !ahead)} rounded={999}>
-            <ArrowRight size={15} />
+          <XStack render="button" role="button" aria-label={t('Forward')} aria-disabled={!ahead || undefined} onPress={ahead ? onForward : undefined} width={28} height={28} {...quiet(false, !ahead)} rounded={999}>
+            <ArrowRight size={15} {...MIRROR} />
           </XStack>
-          <XStack render="button" role="button" aria-label="Reload this tab" onPress={() => again((n) => n + 1)} width={28} height={28} {...quiet()} rounded={999}>
+          <XStack render="button" role="button" aria-label={t('Reload this tab')} onPress={() => again((n) => n + 1)} width={28} height={28} {...quiet()} rounded={999}>
             <RotateCw size={14} />
           </XStack>
         </XStack>
@@ -557,8 +567,8 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
             key={tab.id}
             value={own ? tab.title : typed}
             readOnly={own}
-            placeholder="Search or enter a URL"
-            aria-label="Address"
+            placeholder={t('Search or enter a URL')}
+            aria-label={t('Address')}
             spellCheck={false}
             autoFocus={!own && !tab.url}
             onFocus={(e) => {
@@ -579,8 +589,8 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
               color: 'var(--foreground)',
               font: 'inherit',
               fontSize: 14,
-              // The resting bar reads centred, as a browser's new tab does; typed in, it reads from the left.
-              textAlign: typing || typed ? 'left' : 'center',
+              // The resting bar reads centred, as a browser's new tab does; typed in, it reads from the line's start.
+              textAlign: typing || typed ? 'start' : 'center',
             }}
           />
         </XStack>
@@ -622,9 +632,9 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
         </YStack>
       ) : (
         <YStack flex={1} items="center" justify="center" p="$5" gap="$2">
-          <SizableText size="$2" color="$soft">{`${(ext || type || 'This').toUpperCase()} previews aren’t supported yet.`}</SizableText>
+          <SizableText size="$2" color="$soft">{t('{type} previews aren’t supported yet.', { type: (ext || type || 'This').toUpperCase() })}</SizableText>
           <SizableText size="$2" color="$soft">
-            Open it in a new window to view it.
+            {t('Open it in a new window to view it.')}
           </SizableText>
         </YStack>
       )}
@@ -640,15 +650,16 @@ const DRAG = 'text/x-hanzo-tab'
  * lets it go, and closes it, whatever kind it is.
  */
 function Leaf({ tab, on, side, index, label, icon }: { tab: Tab; on: boolean; side: Deck; index: number; label: string; icon: ReactNode }) {
+  const { t } = useI18n()
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <Strip tab={tab} on={on} side={side} index={index} label={label} icon={icon} />
       </ContextMenuTrigger>
-      <ContextMenuContent minW={180} aria-label={`${label} tab`}>
-        <ContextMenuItem onSelect={() => (tab.pinned ? side.unpin(tab.id) : side.pin(tab.id))}>{tab.pinned ? 'Unpin tab' : 'Pin tab'}</ContextMenuItem>
+      <ContextMenuContent minW={180} aria-label={t('{tab} tab', { tab: label })}>
+        <ContextMenuItem onSelect={() => (tab.pinned ? side.unpin(tab.id) : side.pin(tab.id))}>{tab.pinned ? t('Unpin tab') : t('Pin tab')}</ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => side.shut(tab.id)}>Close tab</ContextMenuItem>
+        <ContextMenuItem onSelect={() => side.shut(tab.id)}>{t('Close tab')}</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )
@@ -656,6 +667,7 @@ function Leaf({ tab, on, side, index, label, icon }: { tab: Tab; on: boolean; si
 
 /** The tab itself, as the strip draws it. */
 function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: boolean; side: Deck; index: number; label: string; icon: ReactNode }) {
+  const { t } = useI18n()
   return (
     <XStack
       {...rest}
@@ -749,7 +761,7 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
         <XStack
           render="button"
           role="button"
-          aria-label={`Unpin ${label}`}
+          aria-label={t('Unpin {tab}', { tab: label })}
           tabIndex={-1}
           onPress={() => side.unpin(tab.id)}
           width={22}
@@ -767,7 +779,7 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
         <XStack
           render="button"
           role="button"
-          aria-label={`Close ${label}`}
+          aria-label={t('Close {tab}', { tab: label })}
           tabIndex={-1}
           onPress={() => side.shut(tab.id)}
           width={22}
@@ -804,7 +816,8 @@ export interface PanelProps extends Acts {
 }
 
 /** The panel: the strip, and the chosen tab. */
-export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = 'Side panel', suggested, ...acts }: PanelProps) {
+export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, suggested, ...acts }: PanelProps) {
+  const { t: say } = useI18n()
   const tab = side.tabs.find((t) => t.id === side.at) ?? null
   // The column it stands in; a phone's sheet is the whole window already.
   const stands = useSide()
@@ -816,27 +829,30 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
   const kind = tab && tab.kind !== PAGE ? kinds.find((k) => k.id === tab.kind) : undefined
   const bleed = !tab || tab.kind === PAGE || Boolean(kind?.bleed)
   const closed = kinds.filter((k) => !side.tabs.some((t) => t.kind === k.id))
-  const title = (t: Tab) => (t.kind === PAGE ? t.title || BLANK : (kinds.find((k) => k.id === t.kind)?.label ?? t.title))
+  // A page's title is the page's own; an empty one is a new tab, in the reader's language.
+  const title = (t: Tab) => (t.kind === PAGE ? (t.title && t.title !== BLANK ? t.title : say(BLANK)) : (kinds.find((k) => k.id === t.kind)?.label ?? t.title))
   const mark = (t: Tab) => (t.kind === PAGE ? <Globe size={14} /> : (kinds.find((k) => k.id === t.kind)?.icon ?? null))
   const blank = () => side.open({ kind: PAGE, title: BLANK, url: '' })
   const poppable = tab?.kind === PAGE && (tab.body !== undefined || Boolean(tab.url))
   const plus = (
-    <XStack render="button" role="button" aria-label="Open a tab" width={28} height={28} {...quiet()} onPress={closed.length ? undefined : blank}>
+    <XStack render="button" role="button" aria-label={say('Open a tab')} width={28} height={28} {...quiet()} onPress={closed.length ? undefined : blank}>
       <Plus size={16} />
     </XStack>
   )
 
   const body = (
-    <YStack role="complementary" aria-label={label} data-slot="side" flex={1} minW={0} minH={0} overflow="hidden" style={{ borderRadius: 'inherit' }}>
+    <YStack role="complementary" aria-label={label ?? say('Side panel')} data-slot="side" flex={1} minW={0} minH={0} overflow="hidden" style={{ borderRadius: 'inherit' }}>
       <XStack data-slot="side-strip" height={STRIP} px="$2" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
         {column?.hidden && !column.full ? (
           <XStack render="button" role="button" data-slot="side-show" onPress={column.show} height={32} px="$2" gap="$1.5" {...quiet()}>
             <PanelLeftOpen size={16} />
-            <SizableText fontSize={13} color="$ink">{`Show ${column.main}`}</SizableText>
+            <SizableText fontSize={13} color="$ink">
+              {column.main === 'run' ? say('Show run') : column.main === 'chat' ? say('Show chat') : say('Show {main}', { main: column.main })}
+            </SizableText>
           </XStack>
         ) : null}
         {/* The strip scrolls sideways in a narrow panel; `+`, the menu, pop-out and hide stay put. */}
-        <XStack role="tablist" aria-label="Tabs" shrink={1} minW={0} gap="$1" items="center" overflowX="auto" overflowY="hidden" $platform-web={{ scrollbarWidth: 'none' }}>
+        <XStack role="tablist" aria-label={say('Tabs')} shrink={1} minW={0} gap="$1" items="center" overflowX="auto" overflowY="hidden" $platform-web={{ scrollbarWidth: 'none' }}>
           {side.tabs.map((t, i) => (
             <Leaf key={t.id} tab={t} on={t.id === side.at} side={side} index={i} label={title(t)} icon={mark(t)} />
           ))}
@@ -846,7 +862,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
             trigger={plus}
             items={[
               ...closed.map((k) => ({ key: k.id, label: k.label, onSelect: () => side.open({ kind: k.id, title: k.label }) })),
-              { key: PAGE, label: 'Page', description: 'An address, framed here', onSelect: blank },
+              { key: PAGE, label: say('Page'), description: say('An address, framed here'), onSelect: blank },
             ]}
           />
         ) : (
@@ -857,7 +873,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
         <XStack
           render="button"
           role="button"
-          aria-label="Open this tab in a new window"
+          aria-label={say('Open this tab in a new window')}
           aria-disabled={!poppable || undefined}
           onPress={poppable ? () => popOut(tab) : undefined}
           width={28}
@@ -871,10 +887,10 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
             render="button"
             role="button"
             data-slot="side-full"
-            aria-label={column.full ? 'Exit full screen' : 'Full screen'}
+            aria-label={column.full ? say('Exit full screen') : say('Full screen')}
             aria-pressed={column.full}
             aria-keyshortcuts={column.full ? 'Escape' : undefined}
-            {...({ title: column.full ? 'Exit full screen (Esc)' : 'Full screen' } as object)}
+            {...({ title: column.full ? say('Exit full screen ({key})', { key: 'Esc' }) : say('Full screen') } as object)}
             onPress={() => column.fill(!column.full)}
             width={28}
             height={28}
@@ -887,10 +903,10 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
           render="button"
           role="button"
           data-slot="side-toggle"
-          aria-label="Hide tabs"
+          aria-label={say('Hide tabs')}
           aria-expanded
           aria-keyshortcuts={SHORTCUTS}
-          {...({ title: `Hide tabs (${KEYS})` } as object)}
+          {...({ title: say('Hide tabs ({keys})', { keys: KEYS }) } as object)}
           onPress={onHide}
           width={32}
           height={32}
@@ -916,7 +932,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
         {!tab ? (
           <YStack flex={1} items="center" justify="center" p="$5">
             <SizableText fontSize={13} color="$soft">
-              No tabs open.
+              {say('No tabs open.')}
             </SizableText>
           </YStack>
         ) : tab.kind === PAGE ? (
@@ -935,7 +951,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label = '
           kind.render()
         ) : (
           <SizableText size="$2" color="$soft">
-            This tab is not offered here.
+            {say('This tab is not offered here.')}
           </SizableText>
         )}
       </YStack>

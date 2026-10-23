@@ -3,15 +3,24 @@
  * took, what it cost, and the one line under its title. Pure, so the screen and
  * its tests read the same sentences.
  */
+import { phrase } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
 import type { SessionStatus } from '@hanzo/ui/chat'
 
 import { ago } from './ago.ts'
 import type { Job, State } from './api/auto.ts'
 import { SOURCE } from './api/library.ts'
+import { english } from './say.ts'
 
 /** A job's state as the rail's dot draws it, and in words. */
 export const DOTS: Record<State, SessionStatus> = { scheduled: 'idle', running: 'running', succeeded: 'done', failed: 'error', cancelled: 'stopped' }
-export const SAID: Record<State, string> = { scheduled: 'Scheduled', running: 'Running', succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled' }
+export const SAID: Record<State, string> = {
+  scheduled: phrase('Scheduled'),
+  running: phrase('Running'),
+  succeeded: phrase('Succeeded'),
+  failed: phrase('Failed'),
+  cancelled: phrase('Cancelled'),
+}
 
 /** How long a run took, or has taken so far. */
 export function lasted(started: string, finished: string | null, now = Date.now()): string {
@@ -29,10 +38,10 @@ export function lasted(started: string, finished: string | null, now = Date.now(
 /** Cents as dollars. */
 export const dollars = (cents: number): string => `$${(cents / 100).toFixed(2)}`
 
-/** One line about a job: when it started, how long, what it cost, what it made. */
-export function about(j: Job, now = Date.now()): string {
-  const made = j.outputs.length ? `${j.outputs.length} ${j.outputs.length === 1 ? 'output' : 'outputs'}` : ''
-  return [SOURCE[j.product], j.started ? ago(j.started) : '', lasted(j.started, j.finished, now), j.cost !== null ? dollars(j.cost) : '', made].filter(Boolean).join(' · ')
+/** One line about a job: when it started, how long, what it cost, what it made. Its words in the language of `t`. */
+export function about(j: Job, now = Date.now(), t: Say = english): string {
+  const made = j.outputs.length ? (j.outputs.length === 1 ? t('{n} output', { n: 1 }) : t('{n} outputs', { n: j.outputs.length })) : ''
+  return [SOURCE[j.product] ? t(SOURCE[j.product]) : '', j.started ? ago(j.started) : '', lasted(j.started, j.finished, now), j.cost !== null ? dollars(j.cost) : '', made].filter(Boolean).join(' · ')
 }
 
 /** The jobs, newest first, with `j` in its place. */

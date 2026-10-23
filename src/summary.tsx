@@ -11,6 +11,7 @@
  */
 import { useMemo, useState, type ReactNode } from 'react'
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { FilePlus2, ListTodo } from '@hanzogui/lucide-icons-2'
 import { Popover, PopoverContent, PopoverTrigger } from '@hanzo/ui'
 import type { Kind } from './panel.tsx'
@@ -131,7 +132,9 @@ function Rows({ section, done, details = false }: { section: Section; done?: () 
  * The summary, from the outline mark in a header. `onOpen` runs after a row is
  * pressed, for the host to show the panel the row opened a tab in.
  */
-export function Summary({ sections, onOpen, label = 'Summary' }: { sections: readonly Section[]; onOpen?: () => void; label?: string }) {
+export function Summary({ sections, onOpen, label: named }: { sections: readonly Section[]; onOpen?: () => void; label?: string }) {
+  const { t } = useI18n()
+  const label = named ?? t('Summary')
   const [open, setOpen] = useState(false)
   const done = () => {
     setOpen(false)

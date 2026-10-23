@@ -16,6 +16,7 @@
  * (Chat its agents, Dev its devices) beside these.
  */
 import { SizableText, XStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { BookOpen, ListChecks, Palette, ScrollText } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '@hanzo/ui'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -105,20 +106,21 @@ export interface Asked {
 
 /** Manual's pause: what is about to run, what it does, and the three answers. Closing it is a no. */
 function Allow({ what, onAnswer }: { what: Asked; onAnswer: (v: Leave) => void }) {
+  const { t } = useI18n()
   return (
     <Dialog open onOpenChange={(o) => !o && onAnswer('deny')}>
       <DialogContent maxW={440} width="100%" data-slot="allow">
-        <DialogTitle>{`Allow ${what.name}?`}</DialogTitle>
-        <DialogDescription>{what.note ? `${what.note}. Manual asks before each one runs.` : 'Manual asks before each one runs.'}</DialogDescription>
+        <DialogTitle>{t('Allow {name}?', { name: what.name })}</DialogTitle>
+        <DialogDescription>{what.note ? `${what.note}. ${t('Manual asks before each one runs.')}` : t('Manual asks before each one runs.')}</DialogDescription>
         <XStack justify="flex-end" gap="$2" pt="$3" flexWrap="wrap">
           <Button size="sm" variant="ghost" onPress={() => onAnswer('deny')}>
-            Deny
+            {t('Deny')}
           </Button>
           <Button size="sm" variant="outline" onPress={() => onAnswer('always')}>
-            <SizableText fontSize={14}>Always in this chat</SizableText>
+            <SizableText fontSize={14}>{t('Always in this chat')}</SizableText>
           </Button>
           <Button size="sm" onPress={() => onAnswer('once')}>
-            Allow once
+            {t('Allow once')}
           </Button>
         </XStack>
       </DialogContent>
@@ -132,6 +134,7 @@ function Allow({ what, onAnswer }: { what: Asked; onAnswer: (v: Leave) => void }
  * surface offers (a choice it does not offer reads as Auto).
  */
 export function useCarry(t: Target, key: string, customize: (tab: 'skills') => void, lent: Lent, modes: readonly Mode[] = DEV_MODES): Carry {
+  const { t: say } = useI18n()
   const gear = useGear(t, key)
   const [dialog, show] = useState<ReactNode>(null)
   // The composer a plugin acts on, read when it acts: the draft moves under it.
@@ -161,11 +164,11 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     rows: names.map((n) => ({ id: n, label: n, icon: <ScrollText size={16} />, on: skills.includes(n) })),
     pick: (id) => gear.toggle('skills', id),
     loading: list.loading,
-    error: list.error ? 'The skills could not be read.' : null,
-    search: names.length > 8 ? 'Search skills' : undefined,
-    empty: 'No skills are on for this organization',
-    manage: { label: 'Manage skills', onPress: () => customize('skills') },
-    browse: { label: 'Browse skills', onPress: () => customize('skills') },
+    error: list.error ? say('The skills could not be read.') : null,
+    search: names.length > 8 ? say('Search skills') : undefined,
+    empty: say('No skills are on for this organization'),
+    manage: { label: say('Manage skills'), onPress: () => customize('skills') },
+    browse: { label: say('Browse skills'), onPress: () => customize('skills') },
   }
 
   const plugins = pluginShelf(found, gear, composer)
@@ -179,13 +182,14 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
     }),
     pick: (id) => gear.set({ design: design === id ? '' : id }),
     loading: kits.loading,
-    error: kits.error ? 'The design systems could not be read.' : null,
-    empty: 'No design systems yet',
+    error: kits.error ? say('The design systems could not be read.') : null,
+    empty: say('No design systems yet'),
     create: {
-      label: 'Create design system',
+      label: say('Create design system'),
       onPress: () => {
         if (!gear.gear.plugins.includes('design')) gear.toggle('plugins', 'design')
-        lentNow.current.setDraft('Make me a design system for ')
+        // The person's own words to finish, so in their language.
+        lentNow.current.setDraft(say('Make me a design system for '))
       },
     },
   }
@@ -193,9 +197,9 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
 
   const on: Chip[] = [
     ...skills.map((n) => ({ id: `skill:${n}`, label: n, icon: <ScrollText size={14} />, onRemove: () => gear.toggle('skills', n) })),
-    ...(research ? [{ id: 'research', label: 'Research', icon: <BookOpen size={14} />, onRemove: () => gear.set({ research: false }) }] : []),
-    ...(mode === 'plan' ? [{ id: 'plan', label: 'Plan', icon: <ListChecks size={14} />, onRemove: () => gear.set({ mode: 'auto' }) }] : []),
-    ...(design ? [{ id: 'design', label: named?.name ?? 'Design system', icon: <Palette size={14} />, onRemove: () => gear.set({ design: '' }) }] : []),
+    ...(research ? [{ id: 'research', label: say('Research'), icon: <BookOpen size={14} />, onRemove: () => gear.set({ research: false }) }] : []),
+    ...(mode === 'plan' ? [{ id: 'plan', label: say('Plan'), icon: <ListChecks size={14} />, onRemove: () => gear.set({ mode: 'auto' }) }] : []),
+    ...(design ? [{ id: 'design', label: named?.name ?? say('Design system'), icon: <Palette size={14} />, onRemove: () => gear.set({ design: '' }) }] : []),
     ...lit
       .filter((p) => p.id !== 'research')
       .map((p) => ({ id: `plugin:${p.id}`, label: p.name, icon: p.icon, onRemove: () => gear.toggle('plugins', p.id) })),

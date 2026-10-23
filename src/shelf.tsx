@@ -8,6 +8,7 @@
  * so what opens is that template, not a model's imitation of it.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { Boxes, ExternalLink, Globe, Lock, MoreHorizontal } from '@hanzogui/lucide-icons-2'
 import { Button, DropdownMenu } from '@hanzo/ui'
 import { useState } from 'react'
@@ -85,21 +86,21 @@ function useFork() {
 const when = (p: Project): number => p.updated || p.created
 
 /** The org's projects under the month each was last edited, newest first. */
-function months(list: Project[]): { label: string; rows: Project[] }[] {
+function months(list: Project[], say: Say): { label: string; rows: Project[] }[] {
   const out = new Map<string, Project[]>()
   for (const p of [...list].sort((a, b) => when(b) - when(a))) {
     const s = when(p)
-    const label = s ? new Date(s * 1000).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'Earlier'
+    const label = s ? new Date(s * 1000).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : say('Earlier')
     out.set(label, [...(out.get(label) ?? []), p])
   }
   return [...out].map(([label, rows]) => ({ label, rows }))
 }
 
-function edited(s: number): string {
+function edited(s: number, say: Say): string {
   if (!s) return ''
   const d = new Date(s * 1000)
   const year = d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric'
-  return `Edited ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year })}`
+  return say('Edited {date}', { date: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year }) })
 }
 
 /**
@@ -110,6 +111,7 @@ function edited(s: number): string {
  * is why it is a section of its own under the Library's items, which are yours.
  */
 export function Sites() {
+  const { t: say } = useI18n()
   const t = useTarget()
   const host = useHost()
   const list = useProjects(t, Boolean(host.person))
@@ -124,7 +126,7 @@ export function Sites() {
     setNote('')
     try {
       await change(t, p.slug, { visibility })
-      setNote(`${p.name} is ${visibility} now`)
+      setNote(visibility === 'public' ? say('{name} is public now', { name: p.name }) : say('{name} is private now', { name: p.name }))
       list.reload()
     } catch (e) {
       setNote((e as Error).message)
@@ -133,14 +135,14 @@ export function Sites() {
 
   const said = failed || note
   return (
-    <YStack width="100%" role="region" aria-label="Sites">
+    <YStack width="100%" role="region" aria-label={say('Sites')}>
       <YStack width="100%">
         <YStack gap="$1" pb="$4">
           <SizableText render="h2" size="$5" color="$ink">
-            Sites
+            {say('Sites')}
           </SizableText>
           <SizableText size="$2" color="$soft">
-            What this organization has built. Open one to keep building it.
+            {`${say('What this organization has built.')} ${say('Open one to keep building it.')}`}
           </SizableText>
         </YStack>
         {said ? (
@@ -151,15 +153,15 @@ export function Sites() {
         {starters.value.length ? (
           <YStack gap="$3" pb="$6">
             <SizableText size="$3" color="$ink">
-              Make something new
+              {say('Make something new')}
             </SizableText>
             <XStack flexWrap="wrap" gap="$3">
               {starters.value.slice(0, 4).map((x) => (
-                <Card key={x.slug} small label={`Start from ${x.title}`} onPress={() => void take(x.slug)}>
+                <Card key={x.slug} small label={say('Start from {template}', { template: x.title })} onPress={() => void take(x.slug)}>
                   <Shot slug={x.slug} />
                   <YStack px="$3" py="$2.5">
                     <SizableText size="$2" color="$ink" numberOfLines={1}>
-                      {busy === x.slug ? 'Copying…' : x.title}
+                      {busy === x.slug ? say('Copying…') : x.title}
                     </SizableText>
                   </YStack>
                 </Card>
@@ -169,28 +171,28 @@ export function Sites() {
         ) : null}
         {list.error ? (
           <SizableText size="$2" color="$soft">
-            {list.error.message}
+            {say(list.error.message)}
           </SizableText>
         ) : !host.person ? (
           <SizableText size="$2" color="$soft">
-            Sign in to see what your organization has built.
+            {say('Sign in to see what your organization has built.')}
           </SizableText>
         ) : list.loading && list.value.length === 0 ? (
           <SizableText size="$2" color="$soft">
-            Reading your projects…
+            {say('Reading your projects…')}
           </SizableText>
         ) : list.value.length === 0 ? (
           <YStack gap="$3" items="flex-start">
             <SizableText size="$2" color="$soft">
-              Nothing built yet. Describe something on the New page and it lands here.
+              {`${say('Nothing built yet.')} ${say('Describe something on the New page and it lands here.')}`}
             </SizableText>
             <Button size="sm" onPress={() => host.go('')}>
-              New run
+              {say('New run')}
             </Button>
           </YStack>
         ) : (
           <YStack gap="$5">
-            {months(list.value).map((g) => (
+            {months(list.value, say).map((g) => (
               <YStack key={g.label} gap="$2">
                 <SizableText size="$2" color="$soft">
                   {g.label}
@@ -202,7 +204,7 @@ export function Sites() {
                         flex={1}
                         minW={0}
                         render="button"
-                        aria-label={`Open ${p.name}`}
+                        aria-label={say('Open {name}', { name: p.name })}
                         onPress={() => host.go(p.slug)}
                         items="center"
                         gap="$3"
@@ -217,7 +219,7 @@ export function Sites() {
                             {p.name}
                           </SizableText>
                           <SizableText size="$1" color="$soft" numberOfLines={1}>
-                            {[p.visibility === 'private' ? 'Private' : 'Public', edited(when(p)), p.live ? new URL(p.live).host : 'Not deployed yet']
+                            {[p.visibility === 'private' ? say('Private') : say('Public'), edited(when(p), say), p.live ? new URL(p.live).host : say('Not deployed yet')]
                               .filter(Boolean)
                               .join(' · ')}
                           </SizableText>
@@ -225,15 +227,15 @@ export function Sites() {
                       </XStack>
                       <DropdownMenu
                         trigger={
-                          <XStack render="button" aria-label={`Actions for ${p.name}`} px="$1.5" py="$1" rounded="$2" hoverStyle={{ bg: '$raised' }}>
+                          <XStack render="button" aria-label={say('Actions for {name}', { name: p.name })} px="$1.5" py="$1" rounded="$2" hoverStyle={{ bg: '$raised' }}>
                             <MoreHorizontal size={16} />
                           </XStack>
                         }
                         items={[
-                          { key: 'rename', label: 'Rename', onSelect: () => setRenaming(p) },
-                          { key: 'visibility', label: p.visibility === 'private' ? 'Make public' : 'Make private', onSelect: () => void flip(p) },
+                          { key: 'rename', label: say('Rename'), onSelect: () => setRenaming(p) },
+                          { key: 'visibility', label: p.visibility === 'private' ? say('Make public') : say('Make private'), onSelect: () => void flip(p) },
                           { type: 'separator' },
-                          { key: 'delete', label: 'Delete', destructive: true, onSelect: () => setDeleting(p) },
+                          { key: 'delete', label: say('Delete'), destructive: true, onSelect: () => setDeleting(p) },
                         ]}
                       />
                     </XStack>
@@ -248,11 +250,11 @@ export function Sites() {
         <Rename
           open
           onOpenChange={(o) => !o && setRenaming(null)}
-          title="Rename"
+          title={say('Rename')}
           name={renaming.name}
           run={async (name) => {
             await change(t, renaming.slug, { name })
-            setNote(`Renamed to ${name}`)
+            setNote(say('Renamed to {name}', { name }))
             list.reload()
           }}
         />
@@ -261,12 +263,12 @@ export function Sites() {
         <Confirm
           open
           onOpenChange={(o) => !o && setDeleting(null)}
-          title={`Delete ${deleting.name}?`}
-          says="Its site stops answering, its releases are dropped, and its address is released. This cannot be undone."
-          act="Delete"
+          title={say('Delete {name}?', { name: deleting.name })}
+          says={`${say('Its site stops answering, its releases are dropped, and its address is released.')} ${say('This cannot be undone.')}`}
+          act={say('Delete')}
           run={async () => {
             await remove(t, deleting.slug)
-            setNote(`${deleting.name} is deleted`)
+            setNote(say('{name} is deleted', { name: deleting.name }))
             list.reload()
           }}
         />
@@ -304,6 +306,7 @@ function Shot({ slug }: { slug: string }) {
 }
 
 export function Templates() {
+  const { t: say } = useI18n()
   const t = useTarget()
   const list = useRead(() => templates(t), [] as Template[], [t.api])
   const { busy, failed, take } = useFork()
@@ -311,7 +314,7 @@ export function Templates() {
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" items="center">
       <YStack width="100%" maxW={1080}>
-        <Head title="Templates" says="Start from a working app. Picking one copies its repository into a project of yours." />
+        <Head title={say('Templates')} says={`${say('Start from a working app.')} ${say('Picking one copies its repository into a project of yours.')}`} />
         {failed ? (
           <SizableText size="$2" color="$soft" role="status" pb="$3">
             {failed}
@@ -319,25 +322,25 @@ export function Templates() {
         ) : null}
         {list.error ? (
           <SizableText size="$2" color="$soft">
-            {list.error.message}
+            {say(list.error.message)}
           </SizableText>
         ) : list.loading && !list.value.length ? (
           <SizableText size="$2" color="$soft">
-            Reading templates…
+            {say('Reading templates…')}
           </SizableText>
         ) : !list.value.length ? (
           <SizableText size="$2" color="$soft">
-            No templates here right now. The whole catalog has more.
+            {`${say('No templates here right now.')} ${say('The whole catalog has more.')}`}
           </SizableText>
         ) : (
           <XStack flexWrap="wrap" gap="$3">
             {list.value.map((x) => (
-              <Card key={x.slug} label={`Start from ${x.title}`} onPress={() => void take(x.slug)}>
+              <Card key={x.slug} label={say('Start from {template}', { template: x.title })} onPress={() => void take(x.slug)}>
                 <Shot slug={x.slug} />
                 <YStack p="$3" gap="$1">
                   <XStack items="center" gap="$2">
                     <SizableText size="$3" color="$ink" numberOfLines={1} flex={1}>
-                      {busy === x.slug ? 'Copying…' : x.title}
+                      {busy === x.slug ? say('Copying…') : x.title}
                     </SizableText>
                     {x.framework ? (
                       <SizableText size="$1" color="$soft">
@@ -356,7 +359,7 @@ export function Templates() {
         <YStack pt="$5">
           <Out href="https://gallery.hanzo.ai">
             <SizableText size="$2" color="$soft">
-              The whole catalog
+              {say('The whole catalog')}
             </SizableText>
             <ExternalLink size={12} opacity={0.6} />
           </Out>

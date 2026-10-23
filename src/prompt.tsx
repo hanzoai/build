@@ -24,7 +24,7 @@
  * drawn as given.
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
-import { phrase, translate } from '@hanzo/i18n'
+import { phrase } from '@hanzo/i18n'
 import { useI18n, type Say } from '@hanzo/i18n/react'
 import { ArrowUp, AudioLines, Check, Square, X } from '@hanzogui/lucide-icons-2'
 import { Control } from '@hanzo/composer'
@@ -40,6 +40,7 @@ import { MODES, type Mode } from './gear.ts'
 import { Dictation } from './mic.tsx'
 import { EFFORTS, grants, nameOf, reasons, ROUTER_IDS, type Mind } from './mind.ts'
 import { Plus, type PlusProps, type Shelf } from './plus.tsx'
+import { english } from './say.ts'
 
 /** The reading measure: @hanzo/design's prose width, which Width (appearance) retunes. */
 export const MEASURE = 'var(--container-prose, 48rem)'
@@ -69,9 +70,6 @@ const SHOWN = 40
 
 /** What every Composer placeholder says, unless a surface names who is listening. */
 export const ASK = phrase('Type / for skills')
-
-/** `t` where no provider answers: the English, its arguments filled. */
-const english = ((source: string, values?: Readonly<Record<string, string | number>>) => translate({}, source, values)) as Say
 
 /**
  * The frame as a pane of its own, floating on the pane it is drawn in: the

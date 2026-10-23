@@ -8,6 +8,7 @@
  * from its own bytes (`blob`).
  */
 import { SizableText, XStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Check, Copy, PanelRight, Square, Volume2 } from '@hanzogui/lucide-icons-2'
 import { mouth, speech } from '@hanzo/voice'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -139,6 +140,7 @@ function Act({ label, onPress, children, lit = false }: { label: string; onPress
 
 /** Copy, Listen and Open under an answer; `children` follow them. */
 export function Reply({ text, listen, onOpen, children }: { text: string; listen?: Listen; onOpen?: () => void; children?: ReactNode }) {
+  const { t: say } = useI18n()
   const [took, setTook] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const stop = useRef<(() => void) | null>(null)
@@ -150,12 +152,12 @@ export function Reply({ text, listen, onOpen, children }: { text: string; listen
   useEffect(() => () => stop.current?.(), [])
   return (
     <XStack data-slot="reply" ml="$-1" items="center" gap="$1.5" flexWrap="wrap">
-      <Act label={took ? 'Copied' : 'Copy this answer'} lit={took} onPress={() => void navigator.clipboard?.writeText(text).then(() => setTook(true), () => {})}>
+      <Act label={took ? say('Copied') : say('Copy this answer')} lit={took} onPress={() => void navigator.clipboard?.writeText(text).then(() => setTook(true), () => {})}>
         {took ? <Check size={13} /> : <Copy size={13} />}
       </Act>
       {listen ? (
         <Act
-          label={speaking ? 'Stop reading' : 'Listen to this answer'}
+          label={speaking ? say('Stop reading') : say('Listen to this answer')}
           lit={speaking}
           onPress={() => {
             if (speaking) {
@@ -169,15 +171,15 @@ export function Reply({ text, listen, onOpen, children }: { text: string; listen
         >
           {speaking ? <Square size={12} /> : <Volume2 size={13} />}
           <SizableText size="$1" color="$ink">
-            {speaking ? 'Stop' : 'Listen'}
+            {speaking ? say('Stop') : say('Listen')}
           </SizableText>
         </Act>
       ) : null}
       {onOpen ? (
-        <Act label="Open in the side panel" onPress={onOpen}>
+        <Act label={say('Open in the side panel')} onPress={onOpen}>
           <PanelRight size={13} />
           <SizableText size="$1" color="$ink">
-            Open
+            {say('Open')}
           </SizableText>
         </Act>
       ) : null}
@@ -188,9 +190,10 @@ export function Reply({ text, listen, onOpen, children }: { text: string; listen
 
 /** Which model answered, where the gateway says it was not the one asked for or a router. */
 export function Served({ served, asked }: { served: string; asked?: string }) {
+  const { t } = useI18n()
   return (
     <SizableText size="$1" color="$soft" data-slot="served">
-      {`answered by ${served}${asked && asked !== served ? ` · ${asked} was unavailable` : ''}`}
+      {asked && asked !== served ? t('answered by {model} · {asked} was unavailable', { model: served, asked }) : t('answered by {model}', { model: served })}
     </SizableText>
   )
 }

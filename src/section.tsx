@@ -10,6 +10,7 @@
  * host's own `go`.
  */
 import { SizableText } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { SidebarItem, SidebarSection, StatusDot, type SessionStatus } from '@hanzo/ui/chat'
 import { useMemo, type ReactNode } from 'react'
 
@@ -49,14 +50,16 @@ const Note = ({ children }: { children: string }) => (
 export function DevSection({
   host,
   onPick,
-  label = 'Runs',
+  label,
   children,
 }: {
   host: Host
   onPick?: () => void
+  /** The runs' heading; absent, "Runs" in the reader's language. */
   label?: string
   children?: ReactNode
 }) {
+  const { t } = useI18n()
   const sessions = useSessions(host)
   const r = route(host.path)
   // Every row, a place or a run, closes a drawer behind it.
@@ -66,7 +69,7 @@ export function DevSection({
   }
   return (
     <>
-      {nav(host, host.go).map((g) => (
+      {nav(host, host.go, t).map((g) => (
         <SidebarSection key={g.id} label={g.label}>
           {g.links.map((l) => (
             <SidebarItem key={l.id} icon={l.icon} active={l.active} onPress={then(l.onPress)}>
@@ -76,9 +79,9 @@ export function DevSection({
         </SidebarSection>
       ))}
       {children}
-      <SidebarSection label={label}>
+      <SidebarSection label={label ?? t('Runs')}>
         {!host.person ? (
-          <Note>Sign in to see your runs.</Note>
+          <Note>{t('Sign in to see your runs.')}</Note>
         ) : sessions.value.length ? (
           sessions.value.map((s) => (
             <SidebarItem
@@ -87,11 +90,17 @@ export function DevSection({
               active={r.kind === 'run' && r.id === s.id}
               onPress={then(() => host.go(s.id))}
             >
-              {s.title || 'Untitled run'}
+              {s.title || t('Untitled run')}
             </SidebarItem>
           ))
         ) : (
-          <Note>{sessions.error ? sessions.error.message : sessions.loading ? 'Reading…' : 'No runs yet. Say what to build and it lands here.'}</Note>
+          <Note>
+            {sessions.error
+              ? t(sessions.error.message)
+              : sessions.loading
+                ? t('Reading…')
+                : `${t('No runs yet.')} ${t('Say what to build and it lands here.')}`}
+          </Note>
         )}
       </SidebarSection>
     </>

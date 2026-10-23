@@ -27,6 +27,7 @@
  * `DevSection`, section.tsx): one left column, never two.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
 import { Menu, Search } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { SessionRail, type RailSession } from '@hanzo/ui/chat'
@@ -57,6 +58,7 @@ import { Settings } from './settings/index.tsx'
 type Order = 'newest' | 'running'
 
 function Shell() {
+  const { t: say } = useI18n()
   const host = useHost()
   const t = useTarget()
   const r = route(host.path)
@@ -74,10 +76,10 @@ function Shell() {
   }
 
   const rows: RailSession[] = useMemo(() => {
-    const list = recents.value.map((s) => ({ id: s.id, title: s.title || 'Untitled run', status: DOTS[s.status] ?? 'idle' }))
+    const list = recents.value.map((s) => ({ id: s.id, title: s.title || say('Untitled run'), status: DOTS[s.status] ?? 'idle' }))
     if (order === 'running') list.sort((a, b) => Number(b.status === 'running') - Number(a.status === 'running'))
     return list
-  }, [recents.value, order])
+  }, [recents.value, order, say])
 
   // The top left, as on claude.ai: the builder's name, which leads to New, and under
   // it the search that finds a run. The organization is the account's, so it is
@@ -85,7 +87,7 @@ function Shell() {
   // the drawer's button below it — one place at a time.
   const name = <Name onPress={() => go('')} />
   // Every place in view, none behind a More; the rail's own New starts a run.
-  const links = nav(host, go)
+  const links = nav(host, go, say)
     .flatMap((g) => g.links)
     .filter((l) => l.id !== NEW)
 
@@ -100,10 +102,10 @@ function Shell() {
         active={r.kind === 'run' ? r.id : null}
         onOpen={(id) => go(id)}
         onSort={() => setOrder(order === 'newest' ? 'running' : 'newest')}
-        sortLabel={order === 'newest' ? 'Show running first' : 'Show newest first'}
+        sortLabel={order === 'newest' ? say('Show running first') : say('Show newest first')}
         empty={
           <SizableText size="$1" color="$soft" px="$2">
-            {!host.person ? 'Sign in to see your runs.' : recents.error ? recents.error.message : recents.loading ? 'Reading…' : 'No runs yet.'}
+            {!host.person ? say('Sign in to see your runs.') : recents.error ? say(recents.error.message) : recents.loading ? say('Reading…') : say('No runs yet.')}
           </SizableText>
         }
         notice={
@@ -121,7 +123,7 @@ function Shell() {
                   who.toggle()
                 },
               }
-            : { name: 'Sign in', onPress: () => host.signIn?.() }
+            : { name: say('Sign in'), onPress: () => host.signIn?.() }
         }
         collapsed={collapsed}
         onCollapse={setCollapsed}
@@ -129,14 +131,14 @@ function Shell() {
         pt={collapsed ? undefined : 92}
         open={drawer}
         onOpenChange={setDrawer}
-        label="Runs"
+        label={say('Runs')}
       />
       {collapsed ? null : (
         <YStack position="absolute" t={10} l={8} r={8} z={2} gap="$2.5" $max-md={{ display: 'none' }}>
           <XStack px="$2.5">{name}</XStack>
           <XStack
             render="button"
-            aria-label="Search runs"
+            aria-label={say('Search runs')}
             onPress={() => setFinding(true)}
             items="center"
             gap="$2"
@@ -150,7 +152,7 @@ function Shell() {
           >
             <Search size={15} color="$soft" />
             <SizableText size="$2" color="$soft">
-              Search
+              {say('Search')}
             </SizableText>
           </XStack>
         </YStack>
@@ -161,12 +163,12 @@ function Shell() {
         {/* Below md the rail is a drawer; this is the one control that opens it. */}
         {/* Its own row, in flow: laid over the pane it covered the heading's mark. */}
         <XStack height={44} px="$2" gap="$2" items="center" shrink={0} $md={{ display: 'none' }}>
-          <Button variant="ghost" size="icon-sm" onPress={() => setDrawer(true)} aria-label="Open runs">
+          <Button variant="ghost" size="icon-sm" onPress={() => setDrawer(true)} aria-label={say('Open runs')}>
             <Menu size={18} />
           </Button>
           {name}
           <XStack flex={1} />
-          <Button variant="ghost" size="icon-sm" onPress={() => setFinding(true)} aria-label="Search runs">
+          <Button variant="ghost" size="icon-sm" onPress={() => setFinding(true)} aria-label={say('Search runs')}>
             <Search size={18} />
           </Button>
         </XStack>
