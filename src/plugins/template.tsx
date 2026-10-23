@@ -108,7 +108,7 @@ function Creator({ c }: { c: Composer }) {
           <YStack gap="$3">
             <Input value={d.name} onChangeText={(name: string) => setD({ ...d, name })} placeholder="weekly-update" aria-label={t('Name')} autoCapitalize="none" />
             <Input value={d.description} onChangeText={(description: string) => setD({ ...d, description })} placeholder={t('When to use it')} aria-label={t('Description')} />
-            <Textarea value={d.body} onChangeText={(body: string) => setD({ ...d, body })} placeholder={'# Weekly update\n\nInputs: {{team}}, {{week}}\n\n1. …'} aria-label={t('Template')} rows={12} style={{ maxHeight: '40vh', overflowY: 'auto' }} />
+            <Textarea value={d.body} onChangeText={(body: string) => setD({ ...d, body })} placeholder={'# Weekly update\n\nInputs: {{team}}, {{week}}\n\n1. …'} aria-label={t('Template')} rows={12} maxH="40vh" overflowY="auto" />
           </YStack>
         )}
         {note ? (

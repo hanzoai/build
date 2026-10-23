@@ -208,7 +208,7 @@ function Listing({
             hoverStyle={{ bg: '$hover' }}
           >
             {r.dir === false ? <File size={14} /> : r.dir ? <Folder size={14} /> : <File size={14} opacity={0.6} />}
-            <SizableText size="$2" color="$ink" numberOfLines={1} style={{ textAlign: 'start' }}>
+            <SizableText size="$2" color="$ink" numberOfLines={1} text="start">
               {r.name}
             </SizableText>
           </XStack>
@@ -319,7 +319,7 @@ export function Artifacts({
           const row = (
             <XStack items="center" gap="$3" px="$3" py="$2.5" borderTopWidth={i ? 1 : 0} borderColor="$borderColor" hoverStyle={a.href || a.onPress ? { bg: '$hover' } : undefined}>
               {a.icon}
-              <YStack flex={1} minW={0} style={{ textAlign: 'start' }}>
+              <YStack flex={1} minW={0} $platform-web={{ textAlign: 'start' }}>
                 <SizableText size="$2" color="$ink" numberOfLines={1}>
                   {a.title}
                 </SizableText>

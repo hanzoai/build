@@ -227,7 +227,7 @@ function File({ change: f, first }: { change: Change; first: boolean }) {
         <SizableText size="$1" color="$soft" width={12}>
           {f.status[0]!.toUpperCase()}
         </SizableText>
-        <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1} style={{ textAlign: 'start' }}>
+        <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1} text="start">
           {f.from ? `${f.from} → ${f.path}` : f.path}
         </SizableText>
         <SizableText size="$1" color="$green10">{`+${f.additions}`}</SizableText>

@@ -525,7 +525,7 @@ export function Run({ id }: { id: string }) {
                     {say('Steps · {n}', { n: plan.length })}
                   </SizableText>
                   {current && !unfolded ? (
-                    <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={{ textAlign: 'end' }}>
+                    <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} text="end">
                       {current.name}
                     </SizableText>
                   ) : null}

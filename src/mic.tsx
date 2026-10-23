@@ -128,8 +128,9 @@ function Meter({ device, on }: { device: string | null; on: boolean }) {
           height={4}
           width="100%"
           bg="$ink"
-          // inline-style: the level is written per frame onto the node; a style prop would mint a class per value.
-          style={{ transform: 'scaleX(0)', transformOrigin: dir === 'rtl' ? 'right' : 'left' }}
+          // Empty at rest; the level is written per frame onto the node's transform, so no class is minted per value.
+          scaleX={0}
+          transformOrigin={dir === 'rtl' ? 'right' : 'left'}
         />
       </YStack>
     </XStack>

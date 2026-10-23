@@ -394,7 +394,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             <SizableText size="$1" color="$soft">
               {t('Run {command} on a machine: it joins this list, and a run there uses its checkout and credentials.', {
                 command: (
-                  <SizableText size="$1" color="$ink" style={{ fontFamily: 'var(--f-mono, ui-monospace, monospace)' }} {...{ 'data-i18n-ltr': '' }}>
+                  <SizableText size="$1" color="$ink" fontFamily="$mono" {...{ 'data-i18n-ltr': '' }}>
                     hanzo link
                   </SizableText>
                 ),

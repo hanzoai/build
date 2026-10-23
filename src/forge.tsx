@@ -245,7 +245,7 @@ function Projects() {
                     render="button"
                     aria-label={t('Open {repo}', { repo: `${c.org ? `${c.org}/` : ''}${c.name}` })}
                     onPress={() => open(c)}
-                    style={{ textAlign: 'start' }}
+                    $platform-web={{ textAlign: 'start' }}
                     items="center"
                     gap="$3"
                     px="$3"
@@ -280,7 +280,7 @@ function Projects() {
                         {c.branch}
                       </SizableText>
                     </XStack>
-                    <SizableText size="$1" color="$soft" width={120} style={{ textAlign: 'end' }}>
+                    <SizableText size="$1" color="$soft" width={120} text="end">
                       {syncing.has(c.name) ? t('Syncing…') : ago(c.updated)}
                     </SizableText>
                   </XStack>
@@ -340,7 +340,7 @@ function Choice({ label, icon, says, onPress }: { label: string; icon: ReactNode
         </SizableText>
         <ArrowRight size={14} {...{ 'data-i18n-mirror': '' }} />
       </XStack>
-      <SizableText size="$2" color="$soft" style={{ textAlign: 'start' }}>
+      <SizableText size="$2" color="$soft" text="start">
         {says}
       </SizableText>
     </YStack>
@@ -701,7 +701,7 @@ function Issues() {
         hoverStyle={{ bg: '$hover' }}
         shrink={0}
       >
-        <SizableText flex={1} size="$2" color={on ? '$ink' : '$soft'} numberOfLines={1} style={{ textAlign: 'start' }}>
+        <SizableText flex={1} size="$2" color={on ? '$ink' : '$soft'} numberOfLines={1} text="start">
           {name}
         </SizableText>
         {count ? (

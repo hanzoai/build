@@ -97,7 +97,7 @@ function Picker({ c }: { c: Composer }) {
               borderColor="$borderColor"
               cursor={busy ? 'default' : 'pointer'}
               hoverStyle={{ bg: '$hover' }}
-              style={{ textAlign: 'start' }}
+              $platform-web={{ textAlign: 'start' }}
             >
               <Folder size={16} opacity={0.7} />
               <YStack flex={1} minW={0}>

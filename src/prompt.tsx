@@ -207,10 +207,10 @@ function Choices<T extends string>({
           hoverStyle={c.off ? undefined : { bg: '$hover' }}
         >
           <YStack flex={1} minW={0} items="flex-start" gap={2}>
-            <SizableText fontSize={14} color="$ink" style={{ textAlign: 'start' }}>
+            <SizableText fontSize={14} color="$ink" text="start">
               {t(c.label)}
             </SizableText>
-            <SizableText fontSize={13} color="$hint" style={{ textAlign: 'start' }}>
+            <SizableText fontSize={13} color="$hint" text="start">
               {t(c.note)}
             </SizableText>
           </YStack>
@@ -458,7 +458,7 @@ function Mention({ shelf, rows, index, onPick, skills }: { shelf: Shelf; rows: S
               </XStack>
             ) : null}
             {/* A button centres its words unless told: a list reads from its start. */}
-            <SizableText fontSize={15} color="$ink" numberOfLines={1} flex={1} style={{ textAlign: 'start' }}>
+            <SizableText fontSize={15} color="$ink" numberOfLines={1} flex={1} text="start">
               {r.label}
             </SizableText>
             <SizableText fontSize={13} color="$hint">

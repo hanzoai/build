@@ -841,7 +841,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
   )
 
   const body = (
-    <YStack role="complementary" aria-label={label ?? say('Side panel')} data-slot="side" flex={1} minW={0} minH={0} overflow="hidden" style={{ borderRadius: 'inherit' }}>
+    <YStack role="complementary" aria-label={label ?? say('Side panel')} data-slot="side" flex={1} minW={0} minH={0} overflow="hidden" rounded="inherit">
       <XStack data-slot="side-strip" height={STRIP} px="$2" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
         {column?.hidden && !column.full ? (
           <XStack render="button" role="button" data-slot="side-show" onPress={column.show} height={32} px="$2" gap="$1.5" {...quiet()}>
