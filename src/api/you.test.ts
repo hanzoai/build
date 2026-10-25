@@ -213,12 +213,12 @@ describe('project visibility', () => {
   it('changes one project, escaped, and reads what was saved', async () => {
     const seen = answer(200, { slug: 'shop', name: 'Shop', visibility: 'private' })
     expect(await change(T, 'shop', { visibility: 'private' })).toMatchObject({ slug: 'shop', visibility: 'private' })
-    expect(seen[0]).toMatchObject({ method: 'PATCH', url: 'https://api.hanzo.ai/v1/projects/shop', body: { visibility: 'private' } })
+    expect(seen[0]).toMatchObject({ method: 'PATCH', url: 'https://api.hanzo.ai/v1/project/shop', body: { visibility: 'private' } })
   })
 
   it('passes on the refusal an unfunded org gets for private', async () => {
     const seen = answer(402, { detail: 'payment required' })
     await expect(change(T, 'a b', { visibility: 'private' })).rejects.toMatchObject({ status: 402, message: 'payment required' })
-    expect(seen[0].url).toBe('https://api.hanzo.ai/v1/projects/a%20b')
+    expect(seen[0].url).toBe('https://api.hanzo.ai/v1/project/a%20b')
   })
 })

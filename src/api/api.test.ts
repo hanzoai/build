@@ -373,7 +373,7 @@ describe('templates', () => {
     const seen = answer(201, { slug: 'shop', name: 'shop', liveUrl: 'https://shop.hanzo.app' })
     const { fork } = await import('./projects.ts')
     expect((await fork(T, 'shop')).live).toBe('https://shop.hanzo.app/')
-    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/projects/fork', body: { slug: 'shop' } })
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/project/fork', body: { slug: 'shop' } })
   })
 })
 

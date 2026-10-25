@@ -103,7 +103,7 @@ test('Privacy records the two answers and makes a project private', async ({ pag
   expect(sent.filter((s) => s.path === '/v1/iam/consent' && s.method === 'PUT').map((s) => s.body)).toEqual([{ training: 'granted' }, { insights: false }])
   await page.getByRole('button', { name: 'Make private' }).click()
   await expect(page.getByRole('button', { name: 'Make public' })).toBeVisible()
-  expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/projects/shop', query: '', body: { visibility: 'private' } })
+  expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/project/shop', query: '', body: { visibility: 'private' } })
   await page.screenshot({ path: info.outputPath('privacy.png') })
 })
 

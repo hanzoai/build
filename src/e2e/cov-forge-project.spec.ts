@@ -148,7 +148,7 @@ async function studio(page: Page, seed: Partial<World> = {}, who?: Who) {
   }
   const answer = ({ method, path, query, body }: Sent): Reply | undefined => {
     const q = new URLSearchParams(query)
-    if (path === '/v1/projects') return { json: world.projects }
+    if (path === '/v1/project') return { json: world.projects }
     if (path === '/v1/templates') return { json: { data: STARTERS } }
     if (path === '/v1/agent/sessions') return { json: { sessions: world.runs.filter((r) => !q.has('project') || r.project === q.get('project')), next: '' } }
     if (path === '/v1/git/repos') return { json: { data: world.repos } }
@@ -521,7 +521,7 @@ test.describe('the workspace', () => {
     await expect(page.getByText('Reading this project’s runs…')).toBeVisible()
     await expect(page.getByText('Added a cart to the header.')).toBeVisible()
     world.slow = {}
-    world.down['GET /v1/projects'] = 'Projects are resting'
+    world.down['GET /v1/project'] = 'Projects are resting'
     await page.getByRole('button', { name: 'All runs' }).click()
     await via(page, 'Artifacts')
     await expect(page.getByText('Projects are resting')).toBeVisible()
@@ -844,9 +844,9 @@ test.describe('publishing and merging', () => {
     await expect(page.getByText('Synapse could not be published.', { exact: false })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Publish again' })).toBeVisible()
     // Ended, it is not read again.
-    const was = reads(sent, '/v1/projects')
+    const was = reads(sent, '/v1/project')
     await page.waitForTimeout(6000)
-    expect(reads(sent, '/v1/projects')).toBe(was)
+    expect(reads(sent, '/v1/project')).toBe(was)
   })
 
   test('a copy still building ten minutes on says so, and Publish again builds it from its repository, saying the platform’s reason when it is refused', async ({ page }) => {
@@ -893,7 +893,7 @@ test.describe('publishing and merging', () => {
     await expect(page.getByText('Its build ended without saying why.')).toBeVisible()
     await page.goto('/blog')
     await expect(page.getByText('Publishing…', { exact: true })).toBeVisible()
-    world.down['GET /v1/projects/synapse/deployments'] = 'Deployments are resting'
+    world.down['GET /v1/project/synapse/deployments'] = 'Deployments are resting'
     await page.goto('/synapse')
     await expect(page.getByText('Deployments are resting')).toBeVisible()
   })
@@ -921,11 +921,11 @@ test.describe('publishing and merging', () => {
     // An admin, and still nothing to take to main: the build is the release.
     await expect(dialog.getByRole('button', { name: /Ship to main|Waiting for the build/ })).toHaveCount(0)
 
-    const was = reads(sent, '/v1/projects')
+    const was = reads(sent, '/v1/project')
     world.site = 'Shop, published'
     world.builds = [{ ...world.builds[0], status: 'succeeded', duration: '41s' }]
     await expect(dialog.getByText('Build dep_7 succeeded — it is live at the project’s address.')).toBeVisible({ timeout: 10_000 })
-    await expect.poll(() => reads(sent, '/v1/projects')).toBeGreaterThan(was)
+    await expect.poll(() => reads(sent, '/v1/project')).toBeGreaterThan(was)
     await dialog.getByRole('button', { name: 'Done' }).click()
     await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop, published' })).toBeVisible()
   })
@@ -936,13 +936,13 @@ test.describe('publishing and merging', () => {
     const chat = page.getByRole('region', { name: 'Chat' })
     await expect(chat.getByText('Added a cart to the header.')).toBeVisible()
     await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
-    const was = reads(sent, '/v1/projects')
+    const was = reads(sent, '/v1/project')
     world.site = 'Shop with a cart'
     world.runs[0]!.status = 'done'
     world.events[CART]!.push(ev(CART, 5, 'status', { status: 'done', changed: true, branch: 'agent/cart', pr: '#4', live: LIVE }))
     await expect(chat.getByText('Pushed agent/cart — #4 — published')).toBeVisible()
     await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop with a cart' })).toBeVisible()
-    expect(reads(sent, '/v1/projects')).toBeGreaterThan(was)
+    expect(reads(sent, '/v1/project')).toBeGreaterThan(was)
     // The run is read again every second; the status it already said is not news.
     world.site = 'Shop, reloaded again'
     await page.waitForTimeout(2500)
@@ -955,12 +955,12 @@ test.describe('publishing and merging', () => {
     const chat = page.getByRole('region', { name: 'Chat' })
     await expect(page.frameLocator('iframe[title="Shop preview"]').getByRole('heading', { name: 'Shop' })).toBeVisible()
     const served = world.served
-    const was = reads(sent, '/v1/projects')
+    const was = reads(sent, '/v1/project')
     world.runs[0]!.status = 'done'
     world.events[CART]!.push(ev(CART, 5, 'status', { status: 'done', changed: true, branch: 'agent/cart', unpublished: WHY }))
     await expect(chat.getByText(`Pushed agent/cart — not published: ${WHY}`)).toBeVisible()
     expect(world.served).toBe(served)
-    expect(reads(sent, '/v1/projects')).toBe(was)
+    expect(reads(sent, '/v1/project')).toBe(was)
   })
 
   test('Merge lands the open run’s pull request once however often it is pressed, and Files is read again', async ({ page }) => {

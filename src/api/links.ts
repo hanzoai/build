@@ -12,7 +12,7 @@
  * `conflict`, `pending` (not on the forge yet) or `paused` — and is absent when
  * the forge could not be read, which is not reported as healthy.
  *
- * Every link the sync app holds is also a row of GET /v1/projects (apps/sync
+ * Every link the sync app holds is also a row of GET /v1/project (apps/sync
  * project.go), so this list is the org's linked projects and not a copy of them.
  */
 import { call, type Target } from './call.ts'

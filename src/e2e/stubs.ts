@@ -396,11 +396,11 @@ export function rail(page: Page, kept: Record<string, unknown> = {}): Promise<Se
   return signIn(
     page,
     ({ method, path, query, body }) => {
-      if (path === '/v1/projects' && method === 'GET') return { json: PROJECTS }
+      if (path === '/v1/project' && method === 'GET') return { json: PROJECTS }
       if (path === '/v1/templates') return { json: { data: STARTERS } }
-      if (path === '/v1/projects/fork') return { status: 201, json: { slug: `${(body as { slug: string }).slug}-2`, name: 'Copy' } }
-      if (path.startsWith('/v1/projects/') && method === 'PATCH') return { json: { ...PROJECTS[0], ...(body as object) } }
-      if (path.startsWith('/v1/projects/') && method === 'DELETE') return { status: 204, text: '' }
+      if (path === '/v1/project/fork') return { status: 201, json: { slug: `${(body as { slug: string }).slug}-2`, name: 'Copy' } }
+      if (path.startsWith('/v1/project/') && method === 'PATCH') return { json: { ...PROJECTS[0], ...(body as object) } }
+      if (path.startsWith('/v1/project/') && method === 'DELETE') return { status: 204, text: '' }
       if (path === '/v1/agent/targets' && method === 'GET') return { json: { targets: MACHINES } }
       if (path === '/v1/agent/targets' && method === 'POST') return { status: 201, json: { id: 'tgt_3', ...(body as object) } }
       if (path === '/v1/agent/targets/tgt_1/key') return { json: { targetId: 'tgt_1', claimKey: 'tk_live_once' } }
@@ -836,11 +836,11 @@ export async function you(page: Page, seed: Partial<World> = {}, kept: Record<st
         world.memories = world.memories.filter((m) => `${m.owner}/${m.name}` !== b.id)
         return { json: { status: 'ok', msg: '', data: true } }
       }
-      if (path === '/v1/projects/shop' && method === 'PATCH') {
+      if (path === '/v1/project/shop' && method === 'PATCH') {
         Object.assign(world.projects[0]!, { visibility: b.visibility })
         return { json: world.projects[0] }
       }
-      if (path === '/v1/projects') return { json: world.projects }
+      if (path === '/v1/project') return { json: world.projects }
       if (path === '/v1/account/avatar') return { json: { avatar: FACE } }
       return undefined
     },
@@ -884,7 +884,7 @@ export function forge(page: Page) {
     }
     if (path === '/v1/provider/github/installations') return { json: { installations: [{ login: ORG, type: 'Organization', grant: 'all', connected: true }] } }
     if (path === '/v1/sync') return { json: { data: [linked(ORG, 'site', 'site'), linked(ORG, 'widgets', 'acme_widgets', 'pending')] } }
-    if (path === '/v1/projects') return { json: [{ slug: 'shop', name: 'Shop', repo: { url: `https://git.hanzo.ai/${ORG}/shop.git`, branch: 'main' }, visibility: 'private', updatedAt: sec('2026-09-28T00:00:00Z') }] }
+    if (path === '/v1/project') return { json: [{ slug: 'shop', name: 'Shop', repo: { url: `https://git.hanzo.ai/${ORG}/shop.git`, branch: 'main' }, visibility: 'private', updatedAt: sec('2026-09-28T00:00:00Z') }] }
     if (path === '/v1/task/projects') return { json: BOARDS }
     if (path === '/v1/task/board') return { json: WORK }
     const board = path.match(/^\/v1\/task\/projects\/([^/]+)\/issues$/)?.[1]
@@ -911,7 +911,7 @@ export async function workspace(page: Page) {
   const shop = { ...PROJECTS[0], repo: { url: `https://git.hanzo.ai/${ORG}/shop.git`, branch: 'main' } }
   const ran = { id: SESSION, title: 'Add a cart', status: 'done', kind: 'coding', repo: 'shop', project: 'shop', base: 'main', branch: 'agent/cart' }
   const sent = await signIn(page, ({ path, query }) => {
-    if (path === '/v1/projects') return { json: [shop, ...PROJECTS.slice(1)] }
+    if (path === '/v1/project') return { json: [shop, ...PROJECTS.slice(1)] }
     if (path === '/v1/agent/sessions') return { json: { sessions: [ran], next: '' } }
     if (path === `/v1/agent/sessions/${SESSION}`) {
       const ev = (seq: number, kind: string, payload: unknown) => ({ id: `e${seq}`, sessionId: SESSION, seq, kind, actor: `${ORG}/dave`, payload, createdAt: '' })
@@ -1052,7 +1052,7 @@ export async function library(page: Page, seed = ITEMS()) {
       items.splice(i, 1)
       return { json: {} }
     }
-    if (path === '/v1/projects') return { json: PROJECTS }
+    if (path === '/v1/project') return { json: PROJECTS }
     return undefined
   })
   await page.route(`${SIGNED}/**`, (r) => {

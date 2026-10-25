@@ -44,7 +44,7 @@ export interface Project {
   synced: string
   /** Its link's state: `synced`, `conflict`, `pending`, `paused`, `linked` when its forge copy could not be read; '' with no link. */
   status: string
-  /** The org's project (GET /v1/projects) that builds from it, by slug, or ''. */
+  /** The org's project (GET /v1/project) that builds from it, by slug, or ''. */
   slug: string
   /** The name GitHub's listing says it takes on the forge once brought there, or ''. */
   codebase: string
@@ -154,7 +154,7 @@ export interface Linked {
   branch: string
 }
 
-/** One of the org's projects (GET /v1/projects) that builds from a repository. */
+/** One of the org's projects (GET /v1/project) that builds from a repository. */
 export interface Site {
   slug: string
   /** Its clone address. */

@@ -2,7 +2,7 @@
  * The plugins the composer offers, from `+` › Plugins and by typing `@`: only
  * those that run for this person, each on Hanzo's own services.
  *
- *   Work in a project   the org has a project (GET /v1/projects)
+ *   Work in a project   the org has a project (GET /v1/project)
  *   Deep research       signed in: web search, page reading and a Hanzo model, as the person
  *   Sketch              always: it draws in the page
  *   Template Creator    an org admin: only an admin writes the org's skills

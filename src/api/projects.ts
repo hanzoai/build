@@ -1,10 +1,10 @@
 /**
  * The org's projects: what it has built, and where each one is served.
  *
- *   GET    /v1/projects                     → Project[]
- *   PATCH  /v1/projects/{slug}              rename it, or make it public or private
- *   DELETE /v1/projects/{slug}              delete it and take its site down
- *   GET    /v1/projects/{slug}/deployments  → Deployment[], newest first
+ *   GET    /v1/project                     → Project[]
+ *   PATCH  /v1/project/{slug}              rename it, or make it public or private
+ *   DELETE /v1/project/{slug}              delete it and take its site down
+ *   GET    /v1/project/{slug}/deployments  → Deployment[], newest first
  *
  * `slug` is the one key every surface shares — the address under /dev, the
  * site's name, the `project` a run is tagged with. A project belongs to the org,
@@ -82,7 +82,7 @@ export function project(raw: unknown): Project {
 }
 
 export async function projects(t: Target): Promise<Project[]> {
-  const raw = await call<unknown>(t, 'GET', '/v1/projects')
+  const raw = await call<unknown>(t, 'GET', '/v1/project')
   const rows = Array.isArray(raw) ? raw : Array.isArray((raw as { data?: unknown })?.data) ? (raw as { data: unknown[] }).data : []
   return rows
     .map(project)
@@ -99,12 +99,12 @@ export async function change(t: Target, slug: string, what: { name?: string; vis
     body.name = n
   }
   if (what.visibility !== undefined) body.visibility = what.visibility
-  return project(await call<unknown>(t, 'PATCH', `/v1/projects/${seg(slug)}`, body))
+  return project(await call<unknown>(t, 'PATCH', `/v1/project/${seg(slug)}`, body))
 }
 
 /** Delete a project. Its site stops answering and its slug is free again. */
 export async function remove(t: Target, slug: string): Promise<void> {
-  await call<unknown>(t, 'DELETE', `/v1/projects/${seg(slug)}`)
+  await call<unknown>(t, 'DELETE', `/v1/project/${seg(slug)}`)
 }
 
 /** One attempt to put a project on its address, as the platform recorded it. */
@@ -138,7 +138,7 @@ export function deployment(raw: unknown): Deployment {
 
 /** A project's deployments, newest first: the first says how its latest build went. */
 export async function deployments(t: Target, slug: string): Promise<Deployment[]> {
-  const raw = await call<unknown>(t, 'GET', `/v1/projects/${seg(slug)}/deployments`)
+  const raw = await call<unknown>(t, 'GET', `/v1/project/${seg(slug)}/deployments`)
   return (Array.isArray(raw) ? raw : [])
     .map(deployment)
     .filter((d) => d.id)
@@ -191,7 +191,7 @@ export async function templates(t: Target): Promise<Template[]> {
  * once, and answers `building` until it is `live` or its build failed.
  */
 export async function fork(t: Target, slug: string): Promise<Project> {
-  return project(await call<unknown>(t, 'POST', '/v1/projects/fork', { slug }))
+  return project(await call<unknown>(t, 'POST', '/v1/project/fork', { slug }))
 }
 
 /** `owner/name` from a clone URL — its last two path segments, without `.git`. */

@@ -137,7 +137,7 @@ function answer(w: World, s: Sent): Reply | undefined {
     case 'PUT /v1/iam/consent':
       Object.assign(w.consent, b)
       return { json: { status: 'ok', msg: '', data: w.consent } }
-    case 'GET /v1/projects':
+    case 'GET /v1/project':
       return { json: w.projects }
     case 'GET /v1/tool':
       return { json: { tools: w.tools } }
@@ -620,7 +620,7 @@ test('Privacy records each answer to training and to insights, and a project’s
   expect(p.writes()).toEqual([
     ['PUT /v1/iam/consent', { insights: true }],
     ['PUT /v1/iam/consent', { training: 'granted' }],
-    ['PATCH /v1/projects/shop', { visibility: 'public' }],
+    ['PATCH /v1/project/shop', { visibility: 'public' }],
   ])
 
   await page.reload()
@@ -632,7 +632,7 @@ test('Privacy records each answer to training and to insights, and a project’s
   expect(p.writes().at(-1)).toEqual(['PUT /v1/iam/consent', { training: 'refused' }])
 
   // A platform that saves without saying what it saved is still read as saved.
-  p.once('PATCH /v1/projects/shop', { json: { slug: 'shop', name: 'Shop' } })
+  p.once('PATCH /v1/project/shop', { json: { slug: 'shop', name: 'Shop' } })
   await page.getByRole('button', { name: 'Make private' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Shop is saved' })).toBeVisible()
   await expect(page.getByText('Private', { exact: true })).toBeVisible()
@@ -641,20 +641,20 @@ test('Privacy records each answer to training and to insights, and a project’s
 test('Privacy says what the platform refused', async ({ page }) => {
   const p = await platform(page)
   p.fail('GET /v1/iam/consent', { json: { status: 'error', msg: 'Please sign in first' } })
-  p.fail('GET /v1/projects', refusal('The project store is down', 503))
+  p.fail('GET /v1/project', refusal('The project store is down', 503))
   await page.goto('/-/settings/privacy')
   await expect(page.getByText('Please sign in first')).toBeVisible()
   await expect(page.getByText('The project store is down')).toBeVisible()
   await expect(page.getByRole('switch')).toHaveCount(0)
 
   p.pass('GET /v1/iam/consent')
-  p.pass('GET /v1/projects')
+  p.pass('GET /v1/project')
   await page.reload()
   p.fail('PUT /v1/iam/consent', refusal('Consent is recorded by IAM, which is down', 503))
   await page.getByRole('switch', { name: 'Usage insights' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Consent is recorded by IAM, which is down' })).toBeVisible()
   await expect(page.getByRole('switch', { name: 'Usage insights' })).toBeChecked()
-  p.fail('PATCH /v1/projects/shop', refusal('A private project needs a paid plan', 402))
+  p.fail('PATCH /v1/project/shop', refusal('A private project needs a paid plan', 402))
   await page.getByRole('button', { name: 'Make private' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'A private project needs a paid plan' })).toBeVisible()
   await expect(page.getByText('Public', { exact: true })).toBeVisible()
@@ -1889,7 +1889,7 @@ test('every section says the platform’s refusal of what it reads', async ({ pa
   const down = 'The platform is down for maintenance'
   for (const key of [
     'GET /v1/iam/consent',
-    'GET /v1/projects',
+    'GET /v1/project',
     'GET /v1/billing/subscriptions',
     'GET /v1/billing/methods',
     'GET /v1/billing/invoices',

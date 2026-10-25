@@ -143,7 +143,7 @@ test.describe('Sites, at the foot of the Library', () => {
     await page.goto('/-/artifacts')
     await page.getByRole('button', { name: 'Start from Circle' }).click()
     await expect(page).toHaveURL(/\/circle-2$/)
-    expect(sent).toContainEqual({ method: 'POST', path: '/v1/projects/fork', query: '', body: { slug: 'circle' } })
+    expect(sent).toContainEqual({ method: 'POST', path: '/v1/project/fork', query: '', body: { slug: 'circle' } })
   })
 
   test('opening a project goes to its workspace', async ({ page }) => {
@@ -164,16 +164,16 @@ test.describe('Sites, at the foot of the Library', () => {
     await page.screenshot({ path: info.outputPath('artifacts-rename.png') })
     await rename.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
-    expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/projects/shop', query: '', body: { name: 'Store' } })
+    expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/project/shop', query: '', body: { name: 'Store' } })
 
     await page.getByRole('button', { name: 'Actions for Shop' }).click()
     await pick(page, 'Make public')
     await expect(page.getByText('Shop is public now')).toBeVisible()
-    expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/projects/shop', query: '', body: { visibility: 'public' } })
+    expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/project/shop', query: '', body: { visibility: 'public' } })
 
     await page.getByRole('button', { name: 'Actions for Blog' }).click()
     await pick(page, 'Make private')
-    expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/projects/blog', query: '', body: { visibility: 'private' } })
+    expect(sent).toContainEqual({ method: 'PATCH', path: '/v1/project/blog', query: '', body: { visibility: 'private' } })
 
     // Under the Library's items the last site is below the fold: scrolled to first, as a reader does.
     await page.getByRole('button', { name: 'Actions for Docs site' }).scrollIntoViewIfNeeded()
@@ -184,7 +184,7 @@ test.describe('Sites, at the foot of the Library', () => {
     await expect(confirm.getByText('Delete Docs site?')).toBeVisible()
     await confirm.getByRole('button', { name: 'Delete' }).click()
     await expect(page.getByText('Docs site is deleted')).toBeVisible()
-    expect(sent).toContainEqual({ method: 'DELETE', path: '/v1/projects/docs', query: '', body: null })
+    expect(sent).toContainEqual({ method: 'DELETE', path: '/v1/project/docs', query: '', body: null })
   })
 
   test('fits a phone', async ({ page }, info) => {

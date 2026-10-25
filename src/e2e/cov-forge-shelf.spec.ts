@@ -44,9 +44,9 @@ async function shelf(page: Page, seed: Partial<World> = {}) {
   const world: World = { projects: PROJECTS(), starters: STARTERS, forks: [], holds: {}, down: {}, slow: {}, ...seed }
   const answer = ({ method, path, body }: Sent): Reply | undefined => {
     const b = (body ?? {}) as Record<string, unknown>
-    if (path === '/v1/projects') return { json: world.projects }
+    if (path === '/v1/project') return { json: world.projects }
     if (path === '/v1/templates') return { json: { data: world.starters } }
-    if (path === '/v1/projects/fork') return { status: 201, json: world.forks.shift() ?? { slug: `${b.slug}-2`, name: 'Copy' } }
+    if (path === '/v1/project/fork') return { status: 201, json: world.forks.shift() ?? { slug: `${b.slug}-2`, name: 'Copy' } }
     const slug = path.match(/^\/v1\/projects\/([^/]+)$/)?.[1]
     const i = world.projects.findIndex((p) => p.slug === slug)
     if (slug && method === 'PATCH') {
@@ -89,7 +89,7 @@ test.describe('Sites', () => {
   test('a starter is copied one at a time, a refused copy says why, and a copy the platform does not name opens as the starter', async ({ page, baseURL }) => {
     const { sent } = await shelf(page, {
       forks: [{ slug: 'synapse-2', name: 'Synapse' }, {}],
-      holds: { 'POST /v1/projects/fork': [{ wait: 2500 }, { status: 402, detail: 'Private projects need a paid plan' }] },
+      holds: { 'POST /v1/project/fork': [{ wait: 2500 }, { status: 402, detail: 'Private projects need a paid plan' }] },
     })
     await page.goto('/-/artifacts')
     await page.getByRole('button', { name: 'Start from Synapse' }).click()
@@ -97,7 +97,7 @@ test.describe('Sites', () => {
     // One copy at a time: a second press while it is out does nothing.
     await page.getByRole('button', { name: 'Start from Folio' }).click()
     await expect(page).toHaveURL(new URL('/synapse-2', baseURL).href)
-    expect(sentTo(sent, 'POST', '/v1/projects/fork').map((s) => s.body)).toEqual([{ slug: 'synapse' }])
+    expect(sentTo(sent, 'POST', '/v1/project/fork').map((s) => s.body)).toEqual([{ slug: 'synapse' }])
     // The workspace does not know it yet, and offers the way back.
     await expect(page.getByText(`${ORG} has no project named synapse-2.`)).toBeVisible()
     await page.getByRole('button', { name: 'See what this organization has built' }).click()
@@ -111,7 +111,7 @@ test.describe('Sites', () => {
 
   test('a rename that is empty is refused in the dialog, the same name changes nothing, Enter saves, and a refusal stays', async ({ page }, info) => {
     const { sent } = await shelf(page, {
-      holds: { 'PATCH /v1/projects/shop': [{}, { status: 409, detail: 'A project named Taken exists' }, { wait: 2500 }] },
+      holds: { 'PATCH /v1/project/shop': [{}, { status: 409, detail: 'A project named Taken exists' }, { wait: 2500 }] },
     })
     await page.goto('/-/artifacts')
     await act(page, 'Shop', 'Rename')
@@ -124,7 +124,7 @@ test.describe('Sites', () => {
     await name.fill('Shop')
     await dialog.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
-    expect(sentTo(sent, 'PATCH', '/v1/projects/shop')).toHaveLength(0)
+    expect(sentTo(sent, 'PATCH', '/v1/project/shop')).toHaveLength(0)
 
     await act(page, 'Shop', 'Rename')
     await name.fill('')
@@ -152,18 +152,18 @@ test.describe('Sites', () => {
     await expect(dialog.last()).toBeVisible()
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Open Storefront' })).toBeVisible()
-    expect(sentTo(sent, 'PATCH', '/v1/projects/shop').map((s) => s.body)).toEqual([{ name: 'Store' }, { name: 'Taken' }, { name: 'Storefront' }])
+    expect(sentTo(sent, 'PATCH', '/v1/project/shop').map((s) => s.body)).toEqual([{ name: 'Store' }, { name: 'Taken' }, { name: 'Storefront' }])
   })
 
   test('a delete is confirmed first, a refusal is said in the dialog, and one that goes takes the project off the list', async ({ page }) => {
-    const { sent } = await shelf(page, { holds: { 'DELETE /v1/projects/blog': [{ status: 409, detail: 'Blog is still deploying' }, { wait: 2500 }] } })
+    const { sent } = await shelf(page, { holds: { 'DELETE /v1/project/blog': [{ status: 409, detail: 'Blog is still deploying' }, { wait: 2500 }] } })
     await page.goto('/-/artifacts')
     await act(page, 'Blog', 'Delete')
     const dialog = page.getByRole('dialog')
     await expect(dialog.getByText('Delete Blog?')).toBeVisible()
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
-    expect(sentTo(sent, 'DELETE', '/v1/projects/blog')).toHaveLength(0)
+    expect(sentTo(sent, 'DELETE', '/v1/project/blog')).toHaveLength(0)
 
     await act(page, 'Blog', 'Delete')
     await dialog.getByRole('button', { name: 'Delete' }).click()
@@ -175,19 +175,19 @@ test.describe('Sites', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByText('Blog is deleted')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Open Blog' })).toHaveCount(0)
-    expect(sentTo(sent, 'DELETE', '/v1/projects/blog')).toHaveLength(2)
+    expect(sentTo(sent, 'DELETE', '/v1/project/blog')).toHaveLength(2)
   })
 
   test('making one private is the platform’s to refuse, and it says why', async ({ page }) => {
-    const { sent } = await shelf(page, { holds: { 'PATCH /v1/projects/blog': [{ status: 402, detail: 'Private projects need a paid plan' }] } })
+    const { sent } = await shelf(page, { holds: { 'PATCH /v1/project/blog': [{ status: 402, detail: 'Private projects need a paid plan' }] } })
     await page.goto('/-/artifacts')
     await act(page, 'Blog', 'Make private')
     await expect(page.getByRole('status')).toHaveText('Private projects need a paid plan')
-    expect(sentTo(sent, 'PATCH', '/v1/projects/blog')[0]?.body).toEqual({ visibility: 'private' })
+    expect(sentTo(sent, 'PATCH', '/v1/project/blog')[0]?.body).toEqual({ visibility: 'private' })
   })
 
   test('says it is reading, why a read failed, and when nothing is built yet', async ({ page }) => {
-    const { world } = await shelf(page, { projects: [], slow: { 'GET /v1/projects': 3000 } })
+    const { world } = await shelf(page, { projects: [], slow: { 'GET /v1/project': 3000 } })
     await page.goto('/-/artifacts')
     await expect(page.getByText('Reading your projects…')).toBeVisible()
     await expect(page.getByText('Nothing built yet. Describe something on the New page and it lands here.')).toBeVisible()
@@ -196,7 +196,7 @@ test.describe('Sites', () => {
     await page.getByRole('button', { name: 'New run', exact: true }).click()
     await expect(page).toHaveURL(/\/$/)
     await via(page, 'Library')
-    world.down['GET /v1/projects'] = 'Projects are resting'
+    world.down['GET /v1/project'] = 'Projects are resting'
     await via(page, 'Projects')
     await via(page, 'Library')
     await expect(page.getByText('Projects are resting')).toBeVisible()
@@ -213,7 +213,7 @@ test.describe('Sites', () => {
 
 test.describe('Templates', () => {
   test('each starter says its framework when it has one, and one is copied into a project', async ({ page, baseURL }, info) => {
-    const { sent } = await shelf(page, { holds: { 'POST /v1/projects/fork': [{ status: 402, detail: 'Private projects need a paid plan' }, { wait: 2500 }] } })
+    const { sent } = await shelf(page, { holds: { 'POST /v1/project/fork': [{ status: 402, detail: 'Private projects need a paid plan' }, { wait: 2500 }] } })
     await page.goto('/-/templates')
     await expect(page.getByRole('button', { name: 'Start from Synapse' })).toContainText('Next.js')
     await expect(page.getByRole('button', { name: 'Start from Circle' })).toContainText(/^CIRCLE\s*Circle\s*A community$/i)
@@ -223,7 +223,7 @@ test.describe('Templates', () => {
     await page.getByRole('button', { name: 'Start from Circle' }).click()
     await expect(page.getByRole('button', { name: 'Start from Circle' })).toContainText('Copying…')
     await expect(page).toHaveURL(new URL('/circle-2', baseURL).href)
-    expect(sentTo(sent, 'POST', '/v1/projects/fork').map((s) => s.body)).toEqual([{ slug: 'mint' }, { slug: 'circle' }])
+    expect(sentTo(sent, 'POST', '/v1/project/fork').map((s) => s.body)).toEqual([{ slug: 'mint' }, { slug: 'circle' }])
   })
 
   test('a starter taken into a workspace the platform made opens publishing, and frames the copy once it is live', async ({ page, baseURL }) => {
@@ -249,7 +249,7 @@ test.describe('Templates', () => {
     await expect(page.locator('iframe')).toHaveAttribute('src', 'https://synapse-2.hanzo.app/', { timeout: 10_000 })
     await expect(page.frameLocator('iframe').getByRole('heading', { name: 'Your Synapse' })).toBeVisible()
     await expect(page.getByText('Publishing your copy…')).toHaveCount(0)
-    expect(sentTo(sent, 'POST', '/v1/projects/fork').map((s) => s.body)).toEqual([{ slug: 'synapse' }])
+    expect(sentTo(sent, 'POST', '/v1/project/fork').map((s) => s.body)).toEqual([{ slug: 'synapse' }])
   })
 
   // A card shows the whole capture: the frame has the shot's own 16:10 shape at

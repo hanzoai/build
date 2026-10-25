@@ -68,14 +68,14 @@ describe('what is offered', () => {
   const studio = (ids: string[]) => [200, { data: ids.map((id) => ({ id })) }] as [number, unknown]
 
   it('an admin with projects and Studio gets every plugin, in the menu’s order', async () => {
-    wire((p) => (p === '/v1/projects' ? [200, [{ slug: 'site', name: 'Site' }]] : studio(['slides', 'document', 'image'])))
+    wire((p) => (p === '/v1/project' ? [200, [{ slug: 'site', name: 'Site' }]] : studio(['slides', 'document', 'image'])))
     const list = await probe(target(admin))
     expect(list.map((p) => p.id)).toEqual(['project', 'research', 'sketch', 'template', 'slides', 'design', 'pdf'])
     expect(list.find((p) => p.id === 'pdf')!.note).toBe('Read, create and verify PDFs')
   })
 
   it('a member with no projects and no Studio gets what runs for them', async () => {
-    wire((p) => (p === '/v1/projects' ? [200, []] : [503, { detail: 'down' }]))
+    wire((p) => (p === '/v1/project' ? [200, []] : [503, { detail: 'down' }]))
     const list = await probe(target(member))
     expect(list.map((p) => p.id)).toEqual(['research', 'sketch', 'pdf'])
     expect(list.find((p) => p.id === 'pdf')!.note).toBe('Read and verify PDFs')

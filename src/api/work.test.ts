@@ -176,7 +176,7 @@ describe('what projects are made from', () => {
       { id: 's3', kind: 'git', scope: 'repo', source: { provider: 'github', locator: 'https://github.com/luxfi/node.git' }, target: { provider: 'hanzo-git', locator: 'node' }, direction: 'pull', trigger: 'poll', createdAt: '2026-09-01T00:00:00Z' },
     ],
   }
-  /** GET /v1/projects: a linked repository's project, and one built from the forge. */
+  /** GET /v1/project: a linked repository's project, and one built from the forge. */
   const BUILT = [
     { slug: 'hanzoai-cloud', name: 'hanzoai/cloud', repo: { url: 'https://github.com/hanzoai/cloud.git', branch: 'main' }, visibility: 'public', updatedAt: 1790000000 },
     { slug: 'shop', name: 'Shop', repo: { url: 'https://git.hanzo.ai/acme/shop.git', branch: 'main' }, visibility: 'private', updatedAt: 0 },
@@ -188,7 +188,7 @@ describe('what projects are made from', () => {
       '/v1/provider/github/repos': { body: HUB },
       '/v1/git/repos': { body: HELD },
       '/v1/sync': { body: SYNC },
-      '/v1/projects': { body: BUILT },
+      '/v1/project': { body: BUILT },
       '/v1/provider/github/installations': { body: { installations: [{ login: 'hanzoai', type: 'Organization', grant: 'all', connected: true }] } },
     })
     const got = await sources(T, { q: ' bui ', owner: 'hanzoai' })

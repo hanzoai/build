@@ -37,7 +37,7 @@ describe('projects', () => {
   it('renames with only the name, trimmed', async () => {
     const seen = answer(200, { slug: 'site', name: 'Shop', visibility: 'public' })
     const p = await change(T, 'site', { name: '  Shop ' })
-    expect(seen[0]).toEqual({ method: 'PATCH', url: 'https://api.hanzo.ai/v1/projects/site', body: { name: 'Shop' } })
+    expect(seen[0]).toEqual({ method: 'PATCH', url: 'https://api.hanzo.ai/v1/project/site', body: { name: 'Shop' } })
     expect(p).toMatchObject({ slug: 'site', name: 'Shop' })
   })
 
@@ -61,7 +61,7 @@ describe('projects', () => {
   it('deletes by an escaped slug', async () => {
     const seen = answer(204, undefined)
     await remove(T, 'a/b')
-    expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/projects/a%2Fb' })
+    expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/project/a%2Fb' })
   })
 })
 

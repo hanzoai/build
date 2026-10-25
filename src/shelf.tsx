@@ -2,9 +2,9 @@
  * Two shelves: the sites this org has deployed (Sites, drawn at the foot of the
  * Library — library.tsx), and the public starters (Templates).
  *
- * A project is a real row — `/v1/projects`, the same one a deployed site is
+ * A project is a real row — `/v1/project`, the same one a deployed site is
  * served from — so opening one opens its workspace at its own address. A
- * starter is taken as a COPY of its own repository (`POST /v1/projects/fork`),
+ * starter is taken as a COPY of its own repository (`POST /v1/project/fork`),
  * so what opens is that template, not a model's imitation of it.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'

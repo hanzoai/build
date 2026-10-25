@@ -1,5 +1,5 @@
 /**
- * Work in a project: pick one of the org's projects (GET /v1/projects). A
+ * Work in a project: pick one of the org's projects (GET /v1/project). A
  * conversation does not belong to a project — work in one is a Dev run tagged
  * with it — so a message in the composer starts a Dev run on the picked project
  * (POST /v1/agent/coding, the person's saved model) and opens it; with nothing

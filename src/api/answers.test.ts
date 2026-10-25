@@ -563,7 +563,7 @@ describe('projects', () => {
     expect(seen[0].body).toEqual({ name: 'Store', visibility: 'private' })
     seen = answer(204, undefined)
     await projects.remove(T, 'my shop')
-    expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/projects/my%20shop' })
+    expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/project/my%20shop' })
   })
 
   it('reads the catalog’s thin rows, and an answer with no rows as none', async () => {
@@ -611,7 +611,7 @@ describe('projects', () => {
       created: 5,
       updated: 6,
     })
-    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/projects/fork', body: { slug: 'synapse' } })
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/project/fork', body: { slug: 'synapse' } })
   })
 
   it('reads a project’s deployments newest first, a thin one as empty values, one with no id as none', async () => {
@@ -627,7 +627,7 @@ describe('projects', () => {
       { id: 'dep_1', version: 1, status: 'live', commit: 'abc123', message: '', created: 10, updated: 20 },
       { id: 'dep_3', version: 0, status: '', commit: '', message: '', created: 0, updated: 0 },
     ])
-    expect(seen[0]).toMatchObject({ method: 'GET', url: 'https://api.hanzo.ai/v1/projects/my%20shop/deployments' })
+    expect(seen[0]).toMatchObject({ method: 'GET', url: 'https://api.hanzo.ai/v1/project/my%20shop/deployments' })
     answer(200, { data: [{ id: 'dep_1' }] })
     expect(await projects.deployments(T, 'shop')).toEqual([])
     answer(404, { status: 404, detail: 'project not found' })
