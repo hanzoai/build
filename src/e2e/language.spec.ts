@@ -32,8 +32,7 @@ const FR: Record<string, string> = {
   'Model: {name}': 'Modèle : {name}',
   'Effort: {level}': 'Réflexion : {level}',
   Effort: 'Réflexion',
-  Medium: 'Moyenne',
-  'Thinks before it answers': 'Réfléchit avant de répondre',
+  'Adaptive reasoning based on task complexity': 'Réflexion adaptée à la complexité de la tâche',
   'Mode: {mode}': 'Mode : {mode}',
   Auto: 'Automatique',
   Manual: 'Manuel',
@@ -47,7 +46,6 @@ const AR: Record<string, string> = {
   'Type / for skills': 'اكتب / للمهارات',
   'Add files, agents, skills and more': 'أضف ملفات ووكلاء ومهارات والمزيد',
   'Voice mode': 'الوضع الصوتي',
-  Medium: 'متوسط',
   Auto: 'تلقائي',
 }
 
@@ -87,14 +85,14 @@ test('in French, every word of an empty Chat’s composer is the catalog’s', a
 
   // The row under the frame: the model by its own name, the effort and the mode in French.
   await expect(page.getByLabel('Modèle : Enso', { exact: true })).toHaveText('Enso')
-  const effort = page.getByLabel('Réflexion : Moyenne', { exact: true })
-  await expect(effort).toHaveText('Moyenne')
+  const effort = page.getByLabel('Réflexion : Automatique', { exact: true })
+  await expect(effort).toHaveText('Automatique')
   await expect(page.getByLabel('Mode : Automatique', { exact: true })).toHaveText('Automatique')
   await effort.click()
   const efforts = page.getByRole('listbox', { name: 'Réflexion' })
-  await expect(efforts.getByRole('option', { name: /Moyenne/ })).toContainText('Réfléchit avant de répondre')
+  await expect(efforts.getByRole('option', { name: /Automatique/ })).toContainText('Réflexion adaptée à la complexité de la tâche')
   // A word the catalog lacks is its English, never a key.
-  await expect(efforts.getByRole('option', { name: /High/ })).toContainText('Slow and careful, for hard problems')
+  await expect(efforts.getByRole('option', { name: /XHigh/ })).toContainText('Extended multi-step reasoning for hard tasks')
   await page.keyboard.press('Escape')
 
   // `+`, its rows, and a shelf's empty sentence.
@@ -133,8 +131,7 @@ test('in Arabic, the frame reads right to left: `+` at its right, the row’s ch
   expect(plus.x).toBeGreaterThan(middle)
   expect(talk.x).toBeLessThan(middle)
   expect(mind.x + mind.width).toBeLessThan(middle)
-  await expect(page.getByLabel(/متوسط/)).toHaveText('متوسط')
-  await expect(page.getByLabel(/تلقائي/)).toHaveText('تلقائي')
+  await expect(page.getByLabel(/تلقائي/)).toHaveText(['تلقائي', 'تلقائي'])
 
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 844 })

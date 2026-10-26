@@ -106,6 +106,8 @@ export interface Host {
   browser?: Browser
   /** The host's sidebar lists Settings' sections and Customize's tabs, so the pages draw neither. */
   sections?: boolean
+  /** The composer names the model and offers its picker beside the effort: the person turned the model selector on in the host's settings. Absent, the effort alone. */
+  models?: boolean
   /** The default agents Customize › Agents offers to start from. Absent, none. */
   cast?: readonly Cast[]
   /** Every persona Customize › Agents offers to start from, read when Browse opens. Absent, none. */

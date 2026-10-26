@@ -70,7 +70,7 @@ export function Code() {
   // The choices in the reader's words, kept by id.
   const efforts = EFFORTS.map((e) => ({ ...e, label: t(e.label) }))
   const modes = MODES.map((m) => ({ ...m, label: t(m.label), hint: t(m.hint) }))
-  const effort = efforts.find((e) => e.id === choice.effort)!
+  const effort = efforts.find((e) => e.id === choice.effort) ?? efforts[0]!
   const mode = modes.find((m) => m.id === now.mode)!
 
   return (

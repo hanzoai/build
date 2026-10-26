@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Target } from './api/call.ts'
 import { ENSO } from './api/models.ts'
-import { catalog, EFFORTS, FIRST, keep, kept, nameOf, reasons, useMind } from './mind.ts'
+import { catalog, EFFORTS, FIRST, keep, kept, level, nameOf, useMind } from './mind.ts'
 
 /** A browser's storage and events, enough for the store: what was written, and who heard. */
 function browser(seed: Record<string, string> = {}) {
@@ -37,8 +37,8 @@ beforeEach(() => vi.unstubAllGlobals())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('the kept choice', () => {
-  it('is Enso at Medium where nothing is kept, and on a server', () => {
-    expect(FIRST).toEqual({ model: ENSO, effort: 'medium' })
+  it('is Enso at Auto where nothing is kept, and on a server', () => {
+    expect(FIRST).toEqual({ model: ENSO, effort: 'auto' })
     expect(kept()).toEqual(FIRST)
     browser()
     expect(kept()).toEqual(FIRST)
@@ -47,24 +47,38 @@ describe('the kept choice', () => {
   it('is kept under one key for Chat and Dev, and the change is announced', () => {
     const { items, heard } = browser()
     keep({ model: 'zen6' })
-    keep({ effort: 'high' })
-    expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'high' })
+    keep({ effort: 'xhigh' })
+    expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'xhigh' })
     expect(heard).toEqual(['hanzo:mind', 'hanzo:mind'])
-    expect(kept()).toEqual({ model: 'zen6', effort: 'high' })
+    expect(kept()).toEqual({ model: 'zen6', effort: 'xhigh' })
   })
 
   it('reads what another tab kept', () => {
     const { items } = browser()
     expect(kept()).toEqual(FIRST)
-    items.set('hanzo.mind', JSON.stringify({ model: 'zen6-flash', effort: 'low' }))
-    expect(kept()).toEqual({ model: 'zen6-flash', effort: 'low' })
+    items.set('hanzo.mind', JSON.stringify({ model: 'zen6-flash', effort: 'max' }))
+    expect(kept()).toEqual({ model: 'zen6-flash', effort: 'max' })
   })
 
   it('reads an effort it does not know, a blank model and a broken entry as the defaults', () => {
     browser({ 'hanzo.mind': JSON.stringify({ model: '  ', effort: 'extreme' }) })
     expect(kept()).toEqual(FIRST)
+    // Low and Medium were offered once; a choice kept from then opens on Auto, which a run sends as medium.
+    for (const effort of ['low', 'medium']) {
+      browser({ 'hanzo.mind': JSON.stringify({ model: 'zen6', effort }) })
+      expect(kept()).toEqual({ model: 'zen6', effort: 'auto' })
+    }
     browser({ 'hanzo.mind': '{not json' })
     expect(kept()).toEqual(FIRST)
+  })
+
+  it('keeps only an effort it offers, whoever asks', () => {
+    const { items } = browser()
+    keep({ model: 'zen6', effort: 'max' })
+    keep({ effort: 'low' as never })
+    expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'auto' })
+    keep({ model: 'zen6-flash' })
+    expect(kept()).toEqual({ model: 'zen6-flash', effort: 'auto' })
   })
 
   it('holds a choice for the page where the browser refuses to store it', () => {
@@ -77,23 +91,20 @@ describe('the kept choice', () => {
       },
       dispatchEvent: () => true,
     })
-    keep({ model: 'zen6', effort: 'low' })
-    expect(kept()).toEqual({ model: 'zen6', effort: 'low' })
+    keep({ model: 'zen6', effort: 'auto' })
+    expect(kept()).toEqual({ model: 'zen6', effort: 'auto' })
   })
 
-  it('offers the efforts both planes take, and nothing else', () => {
-    expect(EFFORTS.map((e) => e.id)).toEqual(['low', 'medium', 'high'])
+  it('offers Auto, High, XHigh and Max, in that order, and nothing else', () => {
+    expect(EFFORTS.map((e) => e.label)).toEqual(['Auto', 'High', 'XHigh', 'Max'])
+  })
+
+  it('names to a coding run only an effort it takes: medium for Auto, high for the rest', () => {
+    expect(EFFORTS.map((e) => level(e.id))).toEqual(['medium', 'high', 'high', 'high'])
   })
 })
 
 describe('the catalog', () => {
-  it('lets Enso and a model it does not describe take an effort, and a listed model only if it reasons', () => {
-    expect(reasons(ENSO, [])).toBe(true)
-    expect(reasons('zen6', CATALOG)).toBe(true)
-    expect(reasons('zen6-flash', CATALOG)).toBe(false)
-    expect(reasons('unlisted', CATALOG)).toBe(true)
-  })
-
   it('names a model as the catalog does, and the router as Enso', () => {
     expect(nameOf(ENSO, [])).toBe('Enso')
     expect(nameOf('zen6', CATALOG)).toBe('Zen 6')
@@ -119,7 +130,7 @@ describe('the catalog', () => {
     expect(asked).toBe(2)
   })
 
-  it('starts a surface on Enso at Medium, with the catalog already read on the first render', async () => {
+  it('starts a surface on Enso at Auto, with the catalog already read on the first render', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: CATALOG }), { status: 200 })))
     const t: Target = { api: 'https://api.first', token: () => 'tok', org: null }
     await catalog(t)
@@ -129,7 +140,7 @@ describe('the catalog', () => {
       return null
     }
     renderToString(<Reads />)
-    expect(seen).toMatchObject({ model: ENSO, effort: 'medium', loading: false, error: null })
+    expect(seen).toMatchObject({ model: ENSO, effort: 'auto', loading: false, error: null })
     expect(seen!.models).toHaveLength(4)
   })
 })

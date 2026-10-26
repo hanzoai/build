@@ -41,7 +41,7 @@ import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Desk, SEED } from './desk.tsx'
 import { useHost, useTarget } from './host.tsx'
-import { useMind } from './mind.ts'
+import { level, useMind } from './mind.ts'
 import { Out } from './out.tsx'
 import { Gutter } from './gutter.tsx'
 import { gap, pane } from './pane.ts'
@@ -209,7 +209,7 @@ export function Run({ id }: { id: string }) {
    * itself: a run that names none takes the person's saved coding default
    * (apps/coding start.go), which is not what the composer shows.
    */
-  const tuned = (a: Ask): Ask => ({ ...a, model: mind.model, effort: mind.effort })
+  const tuned = (a: Ask): Ask => ({ ...a, model: mind.model, effort: level(mind.effort) })
 
   // A setup run's work IS its environment: the panel opens on it.
   useEffect(() => {
@@ -586,7 +586,8 @@ export function Run({ id }: { id: string }) {
             head={files.length ? <XStack gap="$1.5" flexWrap="wrap"><Files files={files} onFiles={setFiles} /></XStack> : undefined}
             plus={{ upload: () => pick(files, setFiles, setNote, say) }}
             // What a new run from here is made with; words that steer this run use neither.
-            mind={signed && !steering ? mind : null}
+            model={signed && !steering && host.models ? mind : null}
+            effort={signed && !steering ? mind : null}
             limits={limits}
             voice={voice}
           />

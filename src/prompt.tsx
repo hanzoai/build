@@ -5,10 +5,10 @@
  * one round button that is voice mode while the draft is empty, send once it
  * has words, and stop while a turn runs. Nothing else is in the frame.
  *
- * Under the frame, at its end, one quiet row: the model, the effort (dim) and
- * the mode as a pill, each opening its choices; Dev puts where the run goes
- * and its repository at the row's start (`where`). Under that, the person's
- * suggestions (`below`; above the frame on a phone).
+ * Under the frame, at its end, one quiet row: the model (only where the host
+ * shows it), the effort (dim) and the mode as a pill, each opening its choices;
+ * Dev puts where the run goes and its repository at the row's start (`where`).
+ * Under that, the person's suggestions (`below`; above the frame on a phone).
  *
  * `/` opens the skills and `@` the plugins, in a list just above the frame.
  *
@@ -38,7 +38,7 @@ import type { Target } from './api/call.ts'
 import { ENSO } from './api/models.ts'
 import { MODES, type Mode } from './gear.ts'
 import { Dictation } from './mic.tsx'
-import { EFFORTS, grants, nameOf, reasons, ROUTER_IDS, type Mind } from './mind.ts'
+import { EFFORTS, grants, nameOf, ROUTER_IDS, type Mind } from './mind.ts'
 import { Plus, type PlusProps, type Shelf } from './plus.tsx'
 import { english } from './say.ts'
 
@@ -112,8 +112,10 @@ export interface PromptOptions {
   /** Above the frame, at its width: what the draft is sent with. */
   head?: ReactNode
   field?: ComposerProps['field']
-  /** The model and effort. Null where the next send uses neither (steering a run). */
-  mind?: Mind | null
+  /** The model chip: given only where the person turned the model selector on (the host's setting). Absent, no model is named. */
+  model?: Mind | null
+  /** The effort selector (Auto, High, XHigh, Max). Null where the next send takes none (steering a run). */
+  effort?: Mind | null
   limits?: PauseSource | null
   /** A model the plan does not grant was asked for: the way to the plan that does. */
   onUpgrade?: (model: string) => void
@@ -339,11 +341,24 @@ function Model({ mind, onUpgrade, limits }: { mind: Mind; onUpgrade?: (model: st
   )
 }
 
-/** The row under the frame: where (Dev), then the model, the effort and the mode. */
-export function Tune({ mind, mode, where, onUpgrade, limits }: { mind?: Mind | null; mode?: PromptOptions['mode']; where?: ReactNode; onUpgrade?: (model: string) => void; limits?: PauseSource | null }) {
+/** The row under the frame: where (Dev), then the model where the host shows it, the effort and the mode. */
+export function Tune({
+  model,
+  effort,
+  mode,
+  where,
+  onUpgrade,
+  limits,
+}: {
+  model?: Mind | null
+  effort?: Mind | null
+  mode?: PromptOptions['mode']
+  where?: ReactNode
+  onUpgrade?: (model: string) => void
+  limits?: PauseSource | null
+}) {
   const { t } = useI18n()
-  const thinks = mind ? reasons(mind.model, mind.models) : false
-  const pace = mind ? EFFORTS.find((e) => e.id === mind.effort)! : null
+  const pace = effort ? EFFORTS.find((e) => e.id === effort.effort)! : null
   const now = mode ? MODES.find((m) => m.id === mode.value) : undefined
   const way = now ? t(now.label) : ''
   return (
@@ -356,16 +371,16 @@ export function Tune({ mind, mode, where, onUpgrade, limits }: { mind?: Mind | n
       ) : null}
       <XStack flex={1} $max-sm={{ display: 'none' }} />
       <XStack items="center" gap={2} marginInlineStart="auto" shrink={0}>
-      {mind ? <Model mind={mind} onUpgrade={onUpgrade} limits={limits} /> : null}
-      {mind && thinks && pace ? (
+      {model ? <Model mind={model} onUpgrade={onUpgrade} limits={limits} /> : null}
+      {effort && pace ? (
         <Opens label={t('Effort: {level}', { level: t(pace.label) })} word={t(pace.label)} dim>
           {(close) => (
             <Choices
               title={t('Effort')}
               items={EFFORTS}
-              value={mind.effort}
+              value={effort.effort}
               onPick={(e) => {
-                mind.pace(e)
+                effort.pace(e)
                 close()
               }}
             />
@@ -522,9 +537,9 @@ export function prompt(o: PromptOptions, state?: Mentioned): ComposerProps {
     ) : undefined
 
   const foot =
-    o.mind || o.mode || o.where || (!narrow && o.below) ? (
+    o.model || o.effort || o.mode || o.where || (!narrow && o.below) ? (
       <YStack {...measure} gap={10} data-slot="prompt-foot">
-        <Tune mind={o.mind} mode={o.mode} where={o.where} onUpgrade={o.onUpgrade} limits={o.limits} />
+        <Tune model={o.model} effort={o.effort} mode={o.mode} where={o.where} onUpgrade={o.onUpgrade} limits={o.limits} />
         {narrow ? null : o.below}
       </YStack>
     ) : undefined

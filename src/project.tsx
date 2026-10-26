@@ -93,7 +93,7 @@ import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Merge } from './git.tsx'
 import { Gutter } from './gutter.tsx'
 import { useHost, useTarget } from './host.tsx'
-import { useMind } from './mind.ts'
+import { level, useMind } from './mind.ts'
 import { Out } from './out.tsx'
 import { Prompt, useEar } from './prompt.tsx'
 import { useSpoken } from './voice.ts'
@@ -450,7 +450,7 @@ export function Project({ at }: { at: Where }) {
         mode,
         // Enso named as itself: a run that names none takes the person's saved coding default.
         model: mind.model,
-        effort: mind.effort,
+        effort: level(mind.effort),
       })
       setDraft('')
       setPicked([])
@@ -621,7 +621,8 @@ export function Project({ at }: { at: Where }) {
           label={t('Ask Hanzo for edits')}
           plus={{ upload: () => pick(attached, setAttached, setNote, t) }}
           mode={running ? null : { value: mode === 'plan' ? 'plan' : 'auto', set: (m) => setMode(m === 'plan' ? 'plan' : 'build'), items: ['auto', 'plan'] }}
-          mind={running ? null : mind}
+          model={running || !host.models ? null : mind}
+          effort={running ? null : mind}
           voice={voice}
         />
       </YStack>

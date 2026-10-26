@@ -69,7 +69,8 @@ function Page() {
           research: { on: research, set: setResearch },
           memory: { on: memory, set: setMemory },
         }}
-        mind={mind}
+        model={mind}
+        effort={mind}
         mode={{ value: mode, set: setMode, items: CHAT_MODES }}
         voice={voice}
         talk={talk}

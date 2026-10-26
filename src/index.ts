@@ -50,7 +50,7 @@ export { href, parse, path, PLACES, route, SESSION, SLUG, type Route, type Scree
  * (`prompt`), the row under an answer (`Reply`), and the side panel (`Panel`
  * over a `Deck` of tabs).
  */
-export { catalog, EFFORTS, FIRST, FREE, grants, isFree, keep, kept, nameOf, reasons, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
+export { catalog, EFFORTS, FIRST, FREE, grants, isFree, keep, kept, nameOf, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
 export { ASK, cut, GAP, MEASURE, measure, Prompt, prompt, ROUND, trigger, Tune, useEar, useMention, useUpload, type Chip, type PromptOptions } from './prompt.tsx'
 export { Plus, type Link, type PlusProps, type Row as ShelfRow, type Shelf, type Switch } from './plus.tsx'
 export { BARE, CHAT_MODES, DEV_MODES, gearOf, MODES, useGear, useLanguage, type Gear, type GearState, type Mode as GearMode } from './gear.ts'

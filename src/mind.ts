@@ -5,16 +5,20 @@
  *   GET /v1/models   the catalog, read once per platform and shared
  *   hanzo.mind       the person's choice, in this browser: {model, effort}
  *
- * Effort is on the chip and the model is one press in. Enso routes every ask —
- * a message in Chat, a step in Dev — so naming a model is an override, and the
- * panel says so before it offers one. A premium model is picked for the screen
- * it was picked on (`usePick`) and never kept, so the next conversation or run
- * opens on what was kept, Enso until something else is.
+ * The effort is always under the composer; the model chip only where the host
+ * shows it (Hanzo's Advanced settings › model selector, `Host.models`). Enso
+ * routes every ask — a message in Chat, a step in Dev — so naming a model is an
+ * override, and the panel says so before it offers one. A premium model is
+ * picked for the screen it was picked on (`usePick`) and never kept, so the next
+ * conversation or run opens on what was kept, Enso until something else is.
  *
- * The efforts are the set both planes take: `reasoning_effort` on a completion
- * and `effort` on a coding run (apps/coding `efforts`). A model the catalog
- * lists as not reasoning offers none; Enso and a model the catalog does not
- * describe offer all three.
+ * The efforts are Auto, High, XHigh and Max, Chat's words (Hanzo's
+ * ThinkingEffort), Auto until another is chosen. A coding run takes low, medium
+ * or high (apps/coding `efforts`), so `level` is what a run names: medium for
+ * Auto, what a run took before anyone chose, and high for the rest, the most it
+ * takes. Auto names one rather than none, because a run that names none takes
+ * an effort the person saved to their account once (apps/coding start.go) and
+ * no screen shows any more.
  */
 import { phrase } from '@hanzo/i18n'
 import { parseModels } from '@hanzo/ui/models/catalog'
@@ -24,14 +28,18 @@ import { Refusal, type Target } from './api/call.ts'
 import { ENSO, models as read, type Model } from './api/models.ts'
 import { usePick } from './pick.ts'
 
-export type Effort = 'low' | 'medium' | 'high'
+export type Effort = 'auto' | 'high' | 'xhigh' | 'max'
 
-/** The efforts, in English and marked (`phrase`): the composer draws each word through `t`. */
+/** The efforts, in order, in English and marked (`phrase`): the composer draws each word through `t`. */
 export const EFFORTS: readonly { id: Effort; label: string; note: string }[] = [
-  { id: 'low', label: phrase('Low'), note: phrase('A quick pass') },
-  { id: 'medium', label: phrase('Medium'), note: phrase('Thinks before it answers') },
-  { id: 'high', label: phrase('High'), note: phrase('Slow and careful, for hard problems') },
+  { id: 'auto', label: phrase('Auto'), note: phrase('Adaptive reasoning based on task complexity') },
+  { id: 'high', label: phrase('High'), note: phrase('Deep reasoning for complex problems') },
+  { id: 'xhigh', label: phrase('XHigh'), note: phrase('Extended multi-step reasoning for hard tasks') },
+  { id: 'max', label: phrase('Max'), note: phrase('Maximum compute and exhaustive verification') },
 ]
+
+/** The effort a coding run names (apps/coding takes low, medium or high): medium for Auto, high for the rest. */
+export const level = (effort: Effort): 'medium' | 'high' => (effort === 'auto' ? 'medium' : 'high')
 
 /** What a person chose: the model (Enso routes) and the effort. */
 export interface Choice {
@@ -39,7 +47,7 @@ export interface Choice {
   effort: Effort
 }
 
-export const FIRST: Choice = { model: ENSO, effort: 'medium' }
+export const FIRST: Choice = { model: ENSO, effort: 'auto' }
 
 /** What Free answers on: the catalog's free lane, Enso's first. `free` is an alias of it. */
 export const FREE = 'enso-free'
@@ -66,7 +74,7 @@ let held: Choice = FIRST
 /** A choice the browser would not store, held for the page. */
 let memo: Choice | null = null
 
-/** The kept choice, Enso and Medium where nothing is kept. Stable while the stored text is. */
+/** The kept choice, Enso and Auto where nothing is kept. Stable while the stored text is. Low and Medium, offered once, read as Auto. */
 export function kept(): Choice {
   if (memo) return memo
   let now: string | null = null
@@ -88,7 +96,8 @@ export function kept(): Choice {
 
 /** Keep a change, in this browser, for every surface that reads it. */
 export function keep(patch: Partial<Choice>): void {
-  const next = { ...kept(), ...patch }
+  const was = kept()
+  const next = { ...was, ...patch, effort: patch.effort === undefined ? was.effort : effortOf(patch.effort) }
   try {
     store()?.setItem(KEY, JSON.stringify(next))
     memo = null
@@ -111,13 +120,6 @@ function subscribe(change: () => void): () => void {
 /** The kept choice and the way to change it. The server and the first render read the default. */
 export function useChoice(): readonly [Choice, (patch: Partial<Choice>) => void] {
   return [useSyncExternalStore(subscribe, kept, () => FIRST), keep] as const
-}
-
-/** Whether `model` takes an effort: the router and an undescribed model do, a listed one only if it reasons. */
-export function reasons(model: string, catalog: readonly Model[]): boolean {
-  if (model === ENSO) return true
-  const row = catalog.find((m) => m.id === model)
-  return !row || row.supports_reasoning === true
 }
 
 /** A model's name as the catalog spells it; Enso for the router. */

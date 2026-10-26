@@ -118,9 +118,12 @@ French and right to left in Arabic.
 One of each, shared with Chat (@hanzo/rooms imports them):
 
 - `useMind` — the model and effort: `GET /v1/models` read once per platform,
-  and the choice kept in this browser (`hanzo.mind`, Enso and Medium until
-  changed). `Tune` is the chip that changes it; Settings → Code writes the same
-  choice. `@hanzo/build/mind` serves the store alone, without the builder.
+  and the choice kept in this browser (`hanzo.mind`, Enso and Auto until
+  changed). `Tune` is the row that changes it: the effort (Auto, High, XHigh,
+  Max) always, the model chip only where the host shows it (`Host.models`, a
+  composer's `model`) — on hanzo.ai, Settings' model selector. Settings → Code
+  writes the same choice. `@hanzo/build/mind` serves the store alone, without
+  the builder.
 - `prompt` / `Prompt` — the composer, as wide as the text above it (`measure`).
 - `Reply` — copy, Listen and Open under an answer.
 - `Panel` over `useDeck` — the side panel and its kept tabs.
@@ -255,8 +258,8 @@ machines follow under remote control, each linked with `hanzo link`), the
 codebase and the branch — the forge's repositories, filtered as you type, read
 again with Refresh list, and a way to Sync for a GitHub repository that is not
 there yet — then the ask, in the composer Chat draws too (`prompt`): the paperclip
-and Build or Plan at its start; the model and effort (`Tune`), dictation and
-send at its end. A codebase can be added to a project. Opening a codebase or an
+and Build or Plan at its start; the effort, the model where the host shows it
+(`Tune`), dictation and send at its end. A codebase can be added to a project. Opening a codebase or an
 issue from its own screen lands here with that choice already made.
 
 **A run.** The transcript as it streams, drawn by what each part is: what the
@@ -351,7 +354,8 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 `mode`, `model` and `effort` are sent with a run as asked — Enso as
 `enso-auto`, never left out — and `issue`, the number a run started from an
 issue closes; the platform honours them where it does and nothing here
-simulates them.
+simulates them. A run takes `low`, `medium` or `high`, so Auto names `medium`
+and High, XHigh and Max name `high` (`level`).
 
 ## Layout
 
@@ -369,7 +373,7 @@ src/
   prose.tsx     markdown, drawn as text (markdown.ts reads it)
   desk.tsx      the pane beside a run
   mind.ts       the model and effort, one choice with Chat
-  prompt.tsx    the composer, and Tune, the model and effort chip
+  prompt.tsx    the composer, and Tune, the effort and model row
   reply.tsx     the row under an answer
   panel.tsx     the side panel; tabs.ts its kept tabs
   side.tsx      the column it stands in: width, the middle column, full screen

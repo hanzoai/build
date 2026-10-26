@@ -36,7 +36,7 @@ import { ready, SANDBOX, type Place } from './api/places.ts'
 import { asHub, isForge, isHub, settle, type HubRepo } from './choice.ts'
 import { useCached, useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
-import { useMind } from './mind.ts'
+import { level, useMind } from './mind.ts'
 import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
@@ -273,7 +273,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         targetId: place.id,
         mode,
         model: mind.model,
-        effort: mind.effort,
+        effort: level(mind.effort),
         issue,
       })
       setDraft('')
@@ -338,7 +338,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   /** Start the agent that finds a codebase's environment, and open it: its run is the progress. A refusal is the dialog's to say. */
   const setup = async (repo: string) => {
-    const run = await start(target, { prompt: SETUP, repo, mode: 'setup', model: mind.model, effort: mind.effort })
+    const run = await start(target, { prompt: SETUP, repo, mode: 'setup', model: mind.model, effort: level(mind.effort) })
     onStarted(run.session)
   }
 
@@ -524,7 +524,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             mode={carry.mode}
             where={where}
             below={<Suggestions rows={hints.rows} onAct={act} onDismiss={hints.dismiss} />}
-            mind={mind}
+            model={host.models ? mind : null}
+            effort={mind}
             limits={limits}
             onUpgrade={() => host.go(path({ kind: 'screen', screen: 'plans' }))}
             voice={voice}
