@@ -1,12 +1,12 @@
 /**
  * Which model answers, and how hard it thinks: one store for Chat and Dev, and
- * the catalog both offer. The chip that changes it is `Tune` (prompt.tsx).
+ * the catalog both offer. The composer (@hanzo/ui/chat) changes it.
  *
  *   GET /v1/models   the catalog, read once per platform and shared
  *   hanzo.mind       the person's choice, in this browser: {model, effort}
  *
- * The effort is always under the composer; the model chip only where the host
- * shows it (Hanzo's Advanced settings › model selector, `Host.models`). Enso
+ * The effort is always under the composer; the model chip only where the person
+ * turned it on (Settings → Appearance › Model in composer). Enso
  * routes every ask — a message in Chat, a step in Dev — so naming a model is an
  * override, and the panel says so before it offers one. A premium model is
  * picked for the screen it was picked on (`usePick`) and never kept, so the next
@@ -20,7 +20,8 @@
  * an effort the person saved to their account once (apps/coding start.go) and
  * no screen shows any more.
  */
-import { phrase } from '@hanzo/i18n'
+import type { Modes } from '@hanzo/ui/chat'
+import { EFFORTS as EVERY } from '@hanzo/ui/chat/pure'
 import { parseModels } from '@hanzo/ui/models/catalog'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
@@ -30,13 +31,8 @@ import { usePick } from './pick.ts'
 
 export type Effort = 'auto' | 'high' | 'xhigh' | 'max'
 
-/** The efforts, in order, in English and marked (`phrase`): the composer draws each word through `t`. */
-export const EFFORTS: readonly { id: Effort; label: string; note: string }[] = [
-  { id: 'auto', label: phrase('Auto'), note: phrase('Adaptive reasoning based on task complexity') },
-  { id: 'high', label: phrase('High'), note: phrase('Deep reasoning for complex problems') },
-  { id: 'xhigh', label: phrase('XHigh'), note: phrase('Extended multi-step reasoning for hard tasks') },
-  { id: 'max', label: phrase('Max'), note: phrase('Maximum compute and exhaustive verification') },
-]
+/** The efforts a Dev run offers, in order: the composer's own list (Chat offers every one), less Low and Medium. Marked English, drawn through `t`. */
+export const EFFORTS = EVERY.filter((e): e is (typeof EVERY)[number] & { id: Effort } => ['auto', 'high', 'xhigh', 'max'].includes(e.id))
 
 /** The effort a coding run names (apps/coding takes low, medium or high): medium for Auto, high for the rest. */
 export const level = (effort: Effort): 'medium' | 'high' => (effort === 'auto' ? 'medium' : 'high')
@@ -241,6 +237,9 @@ export function grants(free: boolean, model: string, catalog: readonly Model[]):
   if (!free) return true
   return catalog.find((m) => m.id === model)?.class === 'free'
 }
+
+/** The effort as the composer reads it: the one in force, its list, and the way to change it. */
+export const pacing = (m: Pick<Mind, 'effort' | 'pace'>): Modes<Effort> => ({ value: m.effort, set: m.pace, items: EFFORTS })
 
 /** The chip's whole state: the catalog, what answers next, and how to change either. */
 export interface Mind {

@@ -73,9 +73,11 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
 
 const posted = (sent: Sent[], path: string) => sent.filter((s) => s.method === 'POST' && s.path === path)
 const chip = (page: Page, name: string) => page.getByRole('button', { name: new RegExp(`^${name}: `) })
-/** The model and effort chip, and the panel it opens. */
-const mind = (page: Page) => page.locator('[data-slot="mind"]')
-const tune = (page: Page) => page.getByRole('dialog', { name: 'Model and effort' })
+/** The model (named only where the person turned the model selector on) and the effort. */
+const mind = (page: Page) => page.locator('[data-slot="mind"] [role="button"]')
+const effort = (page: Page) => page.getByRole('button', { name: /^Effort: / })
+/** The person turned the model selector on in Settings → Appearance. */
+const SELECTOR = { 'hanzo.composer': { model: true } }
 const list = (page: Page, name: string) => page.getByRole('listbox', { name })
 const ask = (page: Page) => page.getByRole('textbox', { name: 'Describe a task or ask a question' })
 
@@ -99,34 +101,33 @@ test.describe('New', () => {
     // The person's old coding defaults name a model and an effort; the one kept choice wins.
     const { sent } = await desk(page, { prefs: { callName: 'Dave', code: { model: 'zen5.8-coder', effort: 'low', mode: 'build' } } }, DAVE, {
       'hanzo.mind': { model: 'zen5.8', effort: 'high' },
+      ...SELECTOR,
     })
     await page.goto('/')
     await expect(page.getByText('Build what’s next.')).toBeVisible({ timeout: 45_000 })
-    await expect(mind(page)).toHaveAccessibleName('Model and effort: zen5.8, High')
+    await expect(mind(page)).toHaveAccessibleName('Model: zen5.8')
+    await expect(effort(page)).toHaveAccessibleName('Effort: High')
 
+    await effort(page).click()
+    await list(page, 'Effort').getByRole('option', { name: /^Auto/ }).click()
     await mind(page).click()
-    await tune(page).getByRole('button', { name: /^Low/ }).click()
-    await mind(page).click()
-    await tune(page).getByRole('button', { name: /^Model: / }).click()
     await list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ }).click()
-    await expect(mind(page)).toHaveAccessibleName('Model and effort: zen5.8-coder, Low')
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hanzo.mind') ?? 'null'))).toEqual({ model: 'zen5.8-coder', effort: 'low' })
+    await expect(mind(page)).toHaveAccessibleName('Model: zen5.8-coder')
+    await expect(effort(page)).toHaveAccessibleName('Effort: Auto')
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hanzo.mind') ?? 'null'))).toEqual({ model: 'zen5.8-coder', effort: 'auto' })
     await chip(page, 'Where the run runs').click()
     const places = list(page, 'Where the run runs')
     await expect(places.getByRole('option', { name: /rack/ })).toHaveAttribute('aria-disabled', 'true')
-    await expect(places.getByText('Remote control · online · 10 vCPU / 32G')).toBeVisible()
+    await expect(places.getByText('online · 10 vCPU / 32G')).toBeVisible()
     await page.screenshot({ path: info.outputPath('new-places.png') })
     await places.getByRole('option', { name: /dave-laptop/ }).click()
     await expect(chip(page, 'Where the run runs')).toHaveAccessibleName('Where the run runs: dave-laptop')
 
-    // A plan runs in the sandbox only: said as soon as it is chosen for a machine.
-    await page.getByRole('button', { name: 'Mode: Build' }).click()
-    await page.getByRole('menuitem', { name: /^Plan/ }).click()
-    const plan = page.getByText(/^A plan runs in the Hanzo sandbox/)
-    await expect(plan).toBeVisible()
+    // Dev has no mode picker: no Auto beside the effort.
+    await expect(page.locator('[data-slot="mode"]')).toHaveCount(0)
 
     // A run works on a project, so with none chosen it is said, the picker opens, and nothing is sent.
-    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Choose a project')
+    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Repository')
     await ask(page).fill('Add a footer')
     await ask(page).press('Enter')
     await expect(page.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
@@ -141,12 +142,6 @@ test.describe('New', () => {
     await list(page, 'Branch').getByRole('option', { name: 'dev' }).click()
     await expect(chip(page, 'Branch')).toHaveAccessibleName('Branch: dev')
 
-    // Sent as a plan on a machine, it is refused before it leaves the page.
-    await ask(page).press('Enter')
-    await expect(plan).toBeVisible()
-    expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
-    await page.getByRole('button', { name: 'Mode: Plan' }).click()
-    await page.getByRole('menuitem', { name: /^Build/ }).click()
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
     expect(posted(sent, '/v1/agent/coding')[0]?.body).toEqual({
@@ -156,14 +151,14 @@ test.describe('New', () => {
       targetId: 'tgt_1',
       mode: 'build',
       model: 'zen5.8-coder',
-      effort: 'low',
+      effort: 'medium',
     })
   })
 
   test('with no project chosen, an ask in the sandbox opens the picker and makes no project up', async ({ page, baseURL }) => {
     const { sent } = await desk(page)
     await page.goto('/')
-    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Choose a project', { timeout: 45_000 })
+    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Repository', { timeout: 45_000 })
     await ask(page).fill('Build a todo app')
     await ask(page).press('Enter')
     await expect(page.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
@@ -203,9 +198,6 @@ test.describe('New', () => {
     )
     await page.goto('/')
     await expect(page.getByText('A proposed environment for universe is waiting for review.')).toBeVisible({ timeout: 45_000 })
-    await chip(page, 'Where the run runs').click()
-    await expect(list(page, 'Where the run runs').getByText('Hanzo sandbox · universe environment proposed')).toBeVisible()
-    await page.keyboard.press('Escape')
     await page.screenshot({ path: info.outputPath('new-proposed.png') })
 
     // A proposal no run is reviewing is set up from here.
@@ -251,46 +243,45 @@ test.describe('New', () => {
       page,
       { down: { 'GET /v1/agent/targets': 'Machines are resting', 'GET /v1/models': 'The catalog is resting' } },
       DAVE,
-      { ...holding(FORGE), 'hanzo.mind': { effort: 'extreme', model: 'retired-model' } },
+      { ...holding(FORGE), ...SELECTOR, 'hanzo.mind': { effort: 'extreme', model: 'retired-model' } },
     )
     await page.goto('/')
-    // An effort it does not know is Medium; a kept model the catalog cannot vouch for is shown as kept, never renamed.
-    await expect(mind(page)).toHaveAccessibleName('Model and effort: retired-model, Medium', { timeout: 45_000 })
+    // An effort it does not know is Auto; a kept model the catalog cannot vouch for is shown as kept, never renamed.
+    await expect(mind(page)).toHaveAccessibleName('Model: retired-model', { timeout: 45_000 })
+    await expect(effort(page)).toHaveAccessibleName('Effort: Auto')
     await chip(page, 'Where the run runs').click()
     await expect(list(page, 'Where the run runs').locator('..').getByText('Machines are resting')).toBeVisible()
     await page.keyboard.press('Escape')
     await mind(page).click()
-    await tune(page).getByRole('button', { name: /^Model: / }).click()
     // In a reader's words, never the platform's.
     await expect(page.getByText('The model list could not be read right now.')).toBeVisible()
     await expect(page.getByText('The catalog is resting')).toHaveCount(0)
   })
 
   test('a model list refused once the quota is spent shows the list last read, with a note, never an empty chooser', async ({ page }) => {
-    const { world } = await desk(page, {}, DAVE, holding(FORGE))
+    const { world } = await desk(page, {}, DAVE, { ...holding(FORGE), ...SELECTOR })
     await page.goto('/')
-    await expect(mind(page)).toHaveAccessibleName('Model and effort: Enso, Medium', { timeout: 45_000 })
+    await expect(mind(page)).toHaveAccessibleName('Model: Enso', { timeout: 45_000 })
     // The list is read once, whole, and this browser keeps it.
     await mind(page).click()
-    await tune(page).getByRole('button', { name: /^Model: / }).click()
     await expect(list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ })).toBeVisible()
     await page.keyboard.press('Escape')
     // Every read of the list is refused while the quota is spent, however often the page asks.
     world.holds['GET /v1/models'] = Array.from({ length: 8 }, () => ({ status: 429, detail: 'rate limited' }))
     await page.reload()
     await expect(page.getByText('The model list could not be refreshed; these are the models as last read.')).toBeVisible({ timeout: 45_000 })
-    await expect(mind(page)).toHaveAccessibleName('Model and effort: Enso, Medium')
+    await expect(mind(page)).toHaveAccessibleName('Model: Enso')
     await mind(page).click()
-    await tune(page).getByRole('button', { name: /^Model: / }).click()
     await expect(list(page, 'Model').getByRole('option', { name: /^zen5\.8-coder,/ })).toBeVisible()
   })
 
-  test('a codebase handed over with only its words opens on Enso and Medium, not on an empty chooser', async ({ page }) => {
+  test('a codebase handed over with only its words opens on Enso and Auto, not on an empty chooser', async ({ page }) => {
     // What pinCodebase leaves in a browser that kept nothing before: the codebase, its branch and the words.
-    await desk(page, {}, DAVE, { [`hanzo.build.new.${ORG}`]: { repo: FORGE, branch: 'main', ask: 'Fix the footer' } })
+    await desk(page, {}, DAVE, { [`hanzo.build.new.${ORG}`]: { repo: FORGE, branch: 'main', ask: 'Fix the footer' }, ...SELECTOR })
     await page.goto('/')
     await expect(ask(page)).toHaveValue('Fix the footer', { timeout: 45_000 })
-    await expect(mind(page)).toHaveAccessibleName('Model and effort: Enso, Medium')
+    await expect(mind(page)).toHaveAccessibleName('Model: Enso')
+    await expect(effort(page)).toHaveAccessibleName('Effort: Auto')
     await expect(page.getByText('Choose a model')).toHaveCount(0)
   })
 

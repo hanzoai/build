@@ -1,12 +1,11 @@
 /**
  * Files with an ask, for every composer the builder draws: they ride the
  * prompt as text — nothing is uploaded anywhere else. The paperclip is the
- * composer's (prompt.tsx); this reads what it picks and draws the chips.
+ * composer's (@hanzo/ui/chat); this reads what it picks and says what is held.
  */
-import { SizableText, XStack } from '@hanzo/gui'
-import { useI18n, type Say } from '@hanzo/i18n/react'
-import { Paperclip, X } from '@hanzogui/lucide-icons-2'
-import { ComposerTool } from '@hanzo/ui/chat'
+import type { Say } from '@hanzo/i18n/react'
+import { Paperclip } from '@hanzogui/lucide-icons-2'
+import type { Carried } from '@hanzo/ui/chat'
 
 import { english } from './say.ts'
 
@@ -61,20 +60,7 @@ export function pick(have: Attached[], onFiles: (f: Attached[]) => void, onNote:
   ask.click()
 }
 
-/** The attached files as small removable marks. */
-export function Files({ files, onFiles }: { files: Attached[]; onFiles: (f: Attached[]) => void }) {
-  const { t } = useI18n()
-  return (
-    <>
-      {files.map((f) => (
-        <XStack key={f.name} items="center" gap="$1" px="$2" height={24} rounded="$2" bg="$raised">
-          <Paperclip size={12} />
-          <SizableText size="$1" color="$ink" numberOfLines={1} maxW={140}>
-            {f.name}
-          </SizableText>
-          <ComposerTool label={t('Remove {name}', { name: f.name })} icon={<X size={12} />} onPress={() => onFiles(files.filter((x) => x !== f))} />
-        </XStack>
-      ))}
-    </>
-  )
+/** The attached files as what the composer carries: a removable chip each. */
+export function carrying(files: Attached[], onFiles: (f: Attached[]) => void): Carried[] {
+  return files.map((f) => ({ id: `file:${f.name}`, label: f.name, icon: <Paperclip size={14} />, onRemove: () => onFiles(files.filter((x) => x !== f)) }))
 }

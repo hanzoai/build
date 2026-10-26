@@ -3,8 +3,8 @@
  * the pane the composer — where the run goes (Cloud: the sandbox with the
  * codebase's environment; or one of the org's machines, under remote control),
  * which repository and branch it starts from, and the ask itself — the one
- * composer Chat draws too (prompt.tsx): attach and the mode at its start, the
- * model and effort, dictation and send at its end.
+ * composer Chat draws too (@hanzo/ui/chat): Dev hands it the three pills, the
+ * chips that go to its repositories, issues and templates, and its commands.
  *
  * Sending starts a coding run on a project and opens it. A project is a
  * repository — the org's on the forge, or one its GitHub grants — so a run
@@ -18,8 +18,9 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { Cloud, Monitor } from '@hanzogui/lucide-icons-2'
+import { CircleDot, Cloud, Code, GitBranch, LayoutTemplate, Monitor, Play } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
+import { Composer, MEASURE, type Chip, type Command } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useTalk, useVoice } from '@hanzo/voice'
@@ -36,7 +37,7 @@ import { ready, SANDBOX, type Place } from './api/places.ts'
 import { asHub, isForge, isHub, settle, type HubRepo } from './choice.ts'
 import { useCached, useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
-import { level, useMind } from './mind.ts'
+import { level, pacing, useMind } from './mind.ts'
 import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
@@ -45,10 +46,8 @@ import { DEV_MODES } from './gear.ts'
 import { book, hand, Suggestions, taken, useSuggestions } from './suggestions.tsx'
 import type { Act } from './suggest.ts'
 import { want } from './library.tsx'
-import { MEASURE, Prompt, useEar } from './prompt.tsx'
-import { Monitor as Device } from '@hanzogui/lucide-icons-2'
-import { compose, Files, pick, read as readFiles, type Attached } from './tools.tsx'
-import { useSpoken } from './voice.ts'
+import { carrying, compose, pick, read as readFiles, type Attached } from './tools.tsx'
+import { useEar, useSpoken } from './voice.ts'
 
 /** One vocabulary for the mode, on New and in a workspace: English, marked (`phrase`), drawn through `t`. */
 export const MODES = [
@@ -139,9 +138,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState<Source | null>(null)
   const [offering, setOffering] = useState(false)
-  // The repository list is read again each time it opens; Refresh reads it again while open.
+  // The repository and branch lists are read again each time they open.
   const [picking, setPicking] = useState(false)
-  const [round, setRound] = useState(0)
+  const [branching, setBranching] = useState(false)
 
   // A codebase or an issue hands its words over once. Left in the kept choice,
   // every later visit to New would put them back.
@@ -206,7 +205,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       for (const r of repos) known.current.set(r.name, r)
       const github = (hub?.repos ?? []).map(asHub)
       for (const r of github) hubs.current.set(r.full_name.toLowerCase(), r)
-      return { repos: [...repos, ...github], next: null }
+      return { repos: [...repos.map((r) => ({ ...r, source: 'forge' })), ...github.map((r) => ({ ...r, source: 'github' }))], next: null }
     },
     [target],
   )
@@ -349,65 +348,44 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     set({ repo: row, branch: row.default_branch })
   }
 
-  // Cloud is the sandbox, set up by the chosen codebase's environment.
-  const setUp =
-    codebase && env.value
-      ? env.value.state === 'ready'
-        ? t('{repo} environment', { repo: codebase })
-        : env.value.state === 'proposed'
-          ? t('{repo} environment proposed', { repo: codebase })
-          : unset(env.value)
-            ? t('no {repo} environment yet', { repo: codebase })
-            : t('{repo} environment, empty', { repo: codebase })
-      : ''
+  // Cloud is the sandbox, set up by the chosen codebase's environment; the rest are the org's machines.
   const placeItems = useMemo(
     () =>
       (places.value.length ? places.value : [SANDBOX]).map((p) => ({
         id: p.id || 'sandbox',
         label: p.id ? p.label : t('Cloud'),
-        hint: p.id ? [t('Remote control'), p.status, p.capacity].filter(Boolean).join(' · ') : [t('Hanzo sandbox'), setUp].filter(Boolean).join(' · '),
+        hint: p.id ? [p.status, p.capacity].filter(Boolean).join(' · ') : '',
+        icon: p.id ? <Monitor size={13} color="$soft" /> : <Cloud size={13} color="$soft" />,
         disabled: !ready(p),
         place: p,
       })),
-    [places.value, setUp, t],
+    [places.value, t],
   )
 
   const branch = kept.branch || kept.repo?.default_branch || 'main'
+  const forge = isForge(kept.repo)
+  const screen = (to: 'issues' | 'templates' | 'projects' | 'sync') => () => host.go(path({ kind: 'screen', screen: to }))
 
-  const where = (
-    <XStack gap={6} items="center" flexWrap="wrap">
+  // The composer's pills: where the run goes, which repository, which branch.
+  const pills = (
+    <>
       <ChipSelect
         name={t('Where the run runs')}
-        icon={place.id ? <Monitor size={13} /> : <Cloud size={13} />}
+        icon={place.id ? <Monitor size={13} color="$soft" /> : <Cloud size={13} color="$soft" />}
         label={place.id ? place.label : t('Cloud')}
         chosen={placeItems.find((i) => i.place.id === place.id)}
         items={placeItems}
         onChange={(i) => set({ place: i.place.id })}
         placeholder={t('Search machines…')}
+        placement="top-start"
         loading={places.loading}
         error={places.error?.message ?? null}
-        footer={
-          <YStack gap="$0.5">
-            <SizableText size="$1" color="$ink">
-              {t('Set up remote control')}
-            </SizableText>
-            <SizableText size="$1" color="$soft">
-              {t('Run {command} on a machine: it joins this list, and a run there uses its checkout and credentials.', {
-                command: (
-                  <SizableText size="$1" color="$ink" fontFamily="$mono" {...{ 'data-i18n-ltr': '' }}>
-                    hanzo link
-                  </SizableText>
-                ),
-              })}
-            </SizableText>
-          </YStack>
-        }
+        footer={<FooterLink label={t('Manage…')} onPress={() => host.go(path({ kind: 'settings', section: 'machines' }))} />}
       />
       <RepoSelect
-        key={round}
         open={picking}
         onOpenChange={setPicking}
-        value={isForge(kept.repo) || isHub(kept.repo) ? kept.repo : null}
+        value={isForge(kept.repo) ? { ...kept.repo, source: 'forge' } : isHub(kept.repo) ? { ...kept.repo, source: 'github' } : null}
         onChange={(r) => {
           const hub = (r as { github?: boolean }).github ? hubs.current.get((r.full_name ?? "").toLowerCase()) : undefined
           setIssue(0)
@@ -419,16 +397,12 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           set({ repo: row, branch: row.default_branch })
         }}
         load={loadRepos}
-        troubleshoot={{
-          label: t('Missing a GitHub repository? Bring it onto the forge'),
-          onPress: () => host.go(path({ kind: 'screen', screen: 'sync' })),
-        }}
-        connect={
-          <XStack justify="flex-end">
-            <FooterLink label={t('Refresh list')} onPress={() => setRound((n) => n + 1)} />
-          </XStack>
-        }
-        note={t("Repositories on the forge and on your organization's GitHub. Type to search.")}
+        tabs={[
+          { id: 'all', label: t('All') },
+          { id: 'forge', label: t('Organization') },
+          { id: 'github', label: 'GitHub' },
+        ]}
+        troubleshoot={{ label: t('Bring a repository from GitHub'), onPress: screen('sync') }}
         action={{
           label: t('Add to project'),
           onPress: (r) => {
@@ -441,34 +415,48 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             })
           },
         }}
-        placeholder={t('Choose a project')}
+        placeholder={t('Repository')}
+        placement="top-start"
         disabled={!signed}
       />
-      {isForge(kept.repo) ? <BranchSelect value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} /> : null}
-    </XStack>
+      {forge ? <BranchSelect open={branching} onOpenChange={setBranching} value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} placement="top-start" /> : null}
+    </>
   )
-  const head = files.length ? (
-    <XStack gap={6} items="center" flexWrap="wrap">
-      <Files files={files} onFiles={setFiles} />
-    </XStack>
-  ) : undefined
-  // The machines a run can go to, as the `+` menu's Devices: the same choice as `where`'s.
+
+  // Where a run goes from here: its repositories, branches, issues and templates, each one press away.
+  const chips: Chip[] = [
+    { id: 'repos', label: t('Repos'), icon: <Code size={13} color="$soft" />, onPress: () => setPicking(true) },
+    ...(forge ? [{ id: 'branches', label: t('Branches'), icon: <GitBranch size={13} color="$soft" />, onPress: () => setBranching(true) }] : []),
+    { id: 'issues', label: t('Issues'), icon: <CircleDot size={13} color="$soft" />, onPress: screen('issues') },
+    { id: 'templates', label: t('Templates'), icon: <LayoutTemplate size={13} color="$soft" />, onPress: screen('templates') },
+  ]
+
+  const commands: Command[] = [
+    { id: 'run', label: t('Run'), keys: 'Ctrl+↵', icon: <Play size={14} color="$soft" />, disabled: !draft.trim(), run: () => void send() },
+    { id: 'issues', label: t('View issues'), icon: <CircleDot size={14} color="$soft" />, run: screen('issues') },
+    { id: 'templates', label: t('Browse templates'), icon: <LayoutTemplate size={14} color="$soft" />, run: screen('templates') },
+    { id: 'projects', label: t('Open projects'), icon: <Code size={14} color="$soft" />, run: screen('projects') },
+    { id: 'sync', label: t('Bring a repository from GitHub'), icon: <GitBranch size={14} color="$soft" />, run: screen('sync') },
+  ]
+
+  // The machines a run can go to, as the `+` menu's Devices: the same choice as the pill's.
   const devices = {
-    rows: placeItems.map((i) => ({ id: i.place.id || 'sandbox', label: i.label, note: i.hint, icon: <Device size={16} />, on: i.place.id === place.id })),
+    rows: placeItems.map((i) => ({ id: i.place.id || 'sandbox', label: i.label, note: i.hint, icon: <Monitor size={16} />, on: i.place.id === place.id })),
     pick: (id: string) => set({ place: id === 'sandbox' ? '' : id }),
     loading: places.loading,
     error: places.error?.message ?? null,
   }
 
   return (
-    // The question and the field that answers it sit together in the middle of the
-    // page, as they do on claude.ai; a run's own page keeps its composer at the foot.
-    // Chat's opening, the same: the heading set as Chat's, the composer as wide as the text.
-    <YStack flex={1} minH={0} minW={0} items="center" justify="center" pb="$10" overflowY="auto" overflowX="hidden">
-      <YStack width="100%" maxW={MEASURE} gap="$3">
+    // The composer is fixed to the foot of the view, as Chat's and a run's are; the
+    // question sits above it, and what is under it is the room it leaves.
+    <YStack flex={1} minH={0} minW={0} items="center" overflowX="hidden" data-slot="new">
+      <YStack flex={1} minH={0} width="100%" maxW={MEASURE} justify="flex-end" pb="$3" overflowY="auto">
         <SizableText render="h1" fontSize="$7" lineHeight="$7" fontWeight="700" color="$ink" style={{ textAlign: 'center' }}>
           {t('Build what’s next.')}
         </SizableText>
+      </YStack>
+      <YStack width="100%" maxW={MEASURE} gap="$2" pb={12} shrink={0}>
         <YStack gap="$2">
           {stranger ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" role="alert">
@@ -502,14 +490,15 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
               {note || unhonoured(mode, place.id, t) || mind.note}
             </SizableText>
           ) : null}
-          <Prompt
+          <Composer
+            column
             framed
             value={draft}
             onChange={setDraft}
             onSend={() => void send()}
             busy={busy}
+            placeholder={t('Ask, build, or run anything…')}
             label={t('Describe a task or ask a question')}
-            head={head}
             plus={{
               upload: () => pick(files, setFiles, setNote, t),
               skills: carry.skills,
@@ -518,14 +507,15 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
               devices,
               memory: { on: carry.gear.gear.memory, set: (on) => carry.gear.set({ memory: on }) },
             }}
-            on={carry.on}
+            carried={[...carry.on, ...carrying(files, setFiles)]}
             slash={carry.skills}
             at={carry.plugins}
-            mode={carry.mode}
-            where={where}
-            below={<Suggestions rows={hints.rows} onAct={act} onDismiss={hints.dismiss} />}
-            model={host.models ? mind : null}
-            effort={mind}
+            pills={pills}
+            chips={chips}
+            commands={commands}
+            starters={<Suggestions rows={hints.rows} onAct={act} onDismiss={hints.dismiss} />}
+            mind={mind}
+            effort={pacing(mind)}
             limits={limits}
             onUpgrade={() => host.go(path({ kind: 'screen', screen: 'plans' }))}
             voice={voice}

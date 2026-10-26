@@ -74,7 +74,7 @@ import {
   type PreviewHandle,
   type Verdict,
 } from '@hanzo/ui/agents'
-import { Message } from '@hanzo/ui/chat'
+import { Composer, Message } from '@hanzo/ui/chat'
 import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useDictation, useVoice } from '@hanzo/voice'
@@ -93,13 +93,13 @@ import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Merge } from './git.tsx'
 import { Gutter } from './gutter.tsx'
 import { useHost, useTarget } from './host.tsx'
-import { level, useMind } from './mind.ts'
+import { MODES } from './gear.ts'
+import { level, pacing, useMind } from './mind.ts'
 import { Out } from './out.tsx'
-import { Prompt, useEar } from './prompt.tsx'
-import { useSpoken } from './voice.ts'
+import { useEar, useSpoken } from './voice.ts'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
-import { compose, Files, pick, type Attached } from './tools.tsx'
+import { carrying, compose, pick, type Attached } from './tools.tsx'
 
 type ViewId = 'preview' | 'files' | 'code' | 'layers'
 
@@ -597,12 +597,8 @@ export function Project({ at }: { at: Where }) {
           </SizableText>
         ) : null}
         {picked.length ? <Attachments items={picked} onRemove={() => setPicked([])} /> : null}
-        {attached.length ? (
-          <XStack gap={6} flexWrap="wrap">
-            <Files files={attached} onFiles={setAttached} />
-          </XStack>
-        ) : null}
-        <Prompt
+        <Composer
+          column
           framed
           value={draft}
           onChange={setDraft}
@@ -620,9 +616,10 @@ export function Project({ at }: { at: Where }) {
           placeholder={running ? t('Steer this run') : t('Ask Hanzo for edits')}
           label={t('Ask Hanzo for edits')}
           plus={{ upload: () => pick(attached, setAttached, setNote, t) }}
-          mode={running ? null : { value: mode === 'plan' ? 'plan' : 'auto', set: (m) => setMode(m === 'plan' ? 'plan' : 'build'), items: ['auto', 'plan'] }}
-          model={running || !host.models ? null : mind}
-          effort={running ? null : mind}
+          carried={carrying(attached, setAttached)}
+          mode={running ? null : { value: mode === 'plan' ? 'plan' : 'auto', set: (m) => setMode(m === 'plan' ? 'plan' : 'build'), items: MODES.filter((m) => m.id !== 'manual') }}
+          mind={running ? null : mind}
+          effort={running ? null : pacing(mind)}
           voice={voice}
         />
       </YStack>

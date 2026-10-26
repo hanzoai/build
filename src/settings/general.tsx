@@ -16,7 +16,8 @@ import { told } from '../api/call.ts'
 import type { Motion, Patch, Text, Theme } from '../api/pref.ts'
 import { useHost } from '../host.tsx'
 import { usePrefs } from '../prefs.tsx'
-import { LANGUAGES, spoken } from '../voice.ts'
+import { LANGUAGES } from '@hanzo/ui/chat/pure'
+import { spoken } from '../voice.ts'
 import { Card, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
 /** The choices, each word English and marked (`phrase`): drawn through `t`. */

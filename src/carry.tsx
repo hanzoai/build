@@ -26,11 +26,10 @@ import { active, authored, document, nameOf as skillOf } from './api/skills.ts'
 import { brand, brands } from './api/studio.ts'
 import { useRead } from './data.ts'
 import { said as designSaid } from './design.ts'
-import { DEV_MODES, useGear, type GearState, type Mode } from './gear.ts'
+import { DEV_MODES, MODES, useGear, type GearState, type Mode } from './gear.ts'
 import type { Composer, Prep, Turn } from './plugin.ts'
 import { active as lighted, prep, shelf as pluginShelf, usePlugins } from './plugins/index.ts'
-import type { Shelf } from './plus.tsx'
-import type { Chip, PromptOptions } from './prompt.tsx'
+import type { Carried, Modes, Shelf } from '@hanzo/ui/chat'
 
 /** The most of each skill a message carries. */
 const SKILL_MAX = 16_000
@@ -55,9 +54,9 @@ export interface Carry {
   /** What the plugins that are on add to the message about to go. */
   prep: (turn: Omit<Turn, 'design'>, signal: AbortSignal) => Promise<Prep>
   /** The chips after `+`: the skills on, Research, and Plan. */
-  on: Chip[]
+  on: Carried[]
   /** The mode pill: this surface's modes, the conversation's choice among them. */
-  mode: NonNullable<PromptOptions['mode']>
+  mode: Modes<Mode>
   /** Whether `what` may run: in Manual the person is asked (once, always in this conversation, or not); else yes. */
   allow: (what: Asked) => Promise<boolean>
   /** The words the gear adds to every message, '' when none. */
@@ -195,7 +194,7 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
   }
   const lit = lighted(found.plugins, gear.gear)
 
-  const on: Chip[] = [
+  const on: Carried[] = [
     ...skills.map((n) => ({ id: `skill:${n}`, label: n, icon: <ScrollText size={14} />, onRemove: () => gear.toggle('skills', n) })),
     ...(research ? [{ id: 'research', label: say('Research'), icon: <BookOpen size={14} />, onRemove: () => gear.set({ research: false }) }] : []),
     ...(mode === 'plan' ? [{ id: 'plan', label: say('Plan'), icon: <ListChecks size={14} />, onRemove: () => gear.set({ mode: 'auto' }) }] : []),
@@ -244,7 +243,7 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
 
   return {
     gear,
-    mode: { value: mode, set: (m) => gear.set({ mode: m }), items: modes },
+    mode: { value: mode, set: (m) => gear.set({ mode: m }), items: MODES.filter((x) => modes.includes(x.id)) },
     allow,
     skills: shelf,
     plugins,

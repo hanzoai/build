@@ -12,17 +12,19 @@ import '@hanzo/font/css'
 import '@hanzo/ui/theme.css'
 import '@hanzo/ui/styles/motion.css'
 import '@hanzo/i18n/rtl.css'
-import { I18nProvider } from '@hanzo/i18n/react'
+import { I18nProvider, useI18n } from '@hanzo/i18n/react'
 import { Hanzo, XStack, YStack } from '@hanzo/ui'
 import { useDictation, useTalk, useVoice } from '@hanzo/voice'
 import { useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import type { Target } from '../api/call.ts'
-import { CHAT_MODES, type Mode } from '../gear.ts'
-import { useMind } from '../mind.ts'
+import { Composer } from '@hanzo/ui/chat'
+
+import { CHAT_MODES, MODES, type Mode } from '../gear.ts'
+import { pacing, useMind } from '../mind.ts'
 import { PanelToggle } from '../panel.tsx'
-import { Prompt, useEar } from '../prompt.tsx'
+import { useEar } from '../voice.ts'
 import { STARTERS } from '../suggest.ts'
 import { Suggestions } from '../suggestions.tsx'
 
@@ -44,6 +46,7 @@ window.went = []
 const TOKEN = `x.${btoa(JSON.stringify({ owner: 'acme', sub: 'u1' })).replace(/=+$/, '')}.x`
 
 function Page() {
+  const { t: say } = useI18n()
   const t: Target = useMemo(() => ({ api: window.location.origin, token: () => TOKEN, org: 'acme' }), [])
   const [draft, setDraft] = useState('')
   const [mode, setMode] = useState<Mode>('auto')
@@ -58,23 +61,26 @@ function Page() {
         <PanelToggle open={false} onToggle={() => window.went.push('"tabs"')} />
       </XStack>
       <YStack flex={1} />
-      <Prompt
+      <Composer
+        column
         value={draft}
         onChange={setDraft}
         onSend={() => window.went.push(JSON.stringify({ sent: draft }))}
         label="Message"
+        placeholder={say('Type / for skills')}
         plus={{
           upload: () => window.went.push('"upload"'),
           skills: { rows: [], pick: () => {} },
           research: { on: research, set: setResearch },
           memory: { on: memory, set: setMemory },
         }}
-        model={mind}
-        effort={mind}
-        mode={{ value: mode, set: setMode, items: CHAT_MODES }}
+        mind={mind}
+        effort={pacing(mind)}
+        defaults={{ model: true }}
+        mode={{ value: mode, set: (m) => setMode(m as Mode), items: MODES.filter((m) => CHAT_MODES.includes(m.id)) }}
         voice={voice}
         talk={talk}
-        below={<Suggestions rows={STARTERS} onAct={(act) => window.went.push(JSON.stringify(act))} onDismiss={() => {}} />}
+        starters={<Suggestions rows={STARTERS} onAct={(act) => window.went.push(JSON.stringify(act))} onDismiss={() => {}} />}
       />
     </YStack>
   )

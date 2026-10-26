@@ -19,11 +19,10 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Button } from '@hanzo/ui'
 import { Feedback, type Verdict } from '@hanzo/ui/agents'
-import { Code, Message, Step, Thread } from '@hanzo/ui/chat'
+import { Code, GAP, MEASURE, Message, Step, Thread } from '@hanzo/ui/chat'
 import { useState, type ReactNode } from 'react'
 
 import type { Card, Ran } from './api/turn.ts'
-import { GAP, MEASURE } from './prompt.tsx'
 import { Prose } from './prose.tsx'
 import { artifacts, lead, Reply, type Artifact, type Listen } from './reply.tsx'
 

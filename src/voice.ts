@@ -1,18 +1,20 @@
 /**
- * The language dictation listens in. The microphone itself is the composer's
- * (prompt.tsx, @hanzo/voice): heard by the platform, never by a browser's
- * built-in recognizer, which ships the audio to its vendor.
+ * The language dictation listens in, and the platform's ear. The microphone
+ * itself is the composer's (@hanzo/ui/chat, @hanzo/voice): heard by the
+ * platform, never by a browser's built-in recognizer, which ships the audio to
+ * its vendor.
  */
+import { LANGUAGES } from '@hanzo/ui/chat/pure'
+import { speech, type Speech } from '@hanzo/voice'
+import { useMemo } from 'react'
+
+import type { Target } from './api/call.ts'
 import { usePrefs } from './prefs.tsx'
 
-export const LANGUAGES = [
-  { id: 'en', label: 'English' },
-  { id: 'es', label: 'Español' },
-  { id: 'fr', label: 'Français' },
-  { id: 'de', label: 'Deutsch' },
-  { id: 'ja', label: '日本語' },
-  { id: 'zh', label: '中文' },
-]
+/** The platform's ear and voice for a target: dictation, talk and Listen all hear through it. */
+export function useEar(t: Target): Speech {
+  return useMemo(() => speech({ baseUrl: t.api, token: t.token, ...(t.org ? { org: t.org } : {}) }), [t])
+}
 
 /** The language this browser is set to, when it is one dictation offers; English otherwise. */
 export function spoken(): string {

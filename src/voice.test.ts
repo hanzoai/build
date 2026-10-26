@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { LANGUAGES, spoken } from './voice.ts'
+import { spoken } from './voice.ts'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -17,10 +17,5 @@ describe('the language dictation listens in', () => {
     expect(spoken()).toBe('en')
     vi.stubGlobal('navigator', undefined)
     expect(spoken()).toBe('en')
-  })
-
-  it('offers each language once, by its own name', () => {
-    expect(LANGUAGES.map((l) => l.id)).toEqual(['en', 'es', 'fr', 'de', 'ja', 'zh'])
-    expect(LANGUAGES.find((l) => l.id === 'de')?.label).toBe('Deutsch')
   })
 })

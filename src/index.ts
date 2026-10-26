@@ -46,16 +46,14 @@ export { href, parse, path, PLACES, route, SESSION, SLUG, type Route, type Scree
 
 /**
  * What Chat draws the same way (@hanzo/rooms imports these): the model and
- * effort (`useMind`, one choice kept for both, changed by `Tune`), the composer
- * (`prompt`), the row under an answer (`Reply`), and the side panel (`Panel`
- * over a `Deck` of tabs).
+ * effort (`useMind`, one choice kept for both), the row under an answer
+ * (`Reply`), and the side panel (`Panel` over a `Deck` of tabs). The composer is
+ * @hanzo/ui/chat's, for Chat and Dev alike.
  */
-export { catalog, EFFORTS, FIRST, FREE, grants, isFree, keep, kept, nameOf, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
-export { ASK, cut, GAP, MEASURE, measure, Prompt, prompt, ROUND, trigger, Tune, useEar, useMention, useUpload, type Chip, type PromptOptions } from './prompt.tsx'
-export { Plus, type Link, type PlusProps, type Row as ShelfRow, type Shelf, type Switch } from './plus.tsx'
+export { catalog, EFFORTS, FIRST, FREE, grants, isFree, keep, kept, level, nameOf, pacing, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
+export { useEar } from './voice.ts'
 export { BARE, CHAT_MODES, DEV_MODES, gearOf, MODES, useGear, useLanguage, type Gear, type GearState, type Mode as GearMode } from './gear.ts'
 export { useCarry, type Carry } from './carry.tsx'
-export { Dictation } from './mic.tsx'
 export { artifacts, blob, lead, renders, Reply, Served, speakable, speaker, type Artifact, type Listen } from './reply.tsx'
 export { frames, Page, Panel, PanelToggle, type Kind, type PageProps, type PanelProps, type Suggestion } from './panel.tsx'
 export { SideProvider, useSplit, type Split } from './side.tsx'

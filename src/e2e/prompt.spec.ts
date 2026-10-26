@@ -1,9 +1,11 @@
 /**
- * The one composer (prompt.tsx) and the one model and effort (mind.ts), at a
- * laptop and a phone: the frame is as wide as the text above it, the chip
- * starts on Enso at Medium, a choice made on New is the choice a run's
- * follow-up shows (one key, `hanzo.mind`, the one Chat reads), a premium pick
- * holds for its screen and is never kept, and Send carries the choice.
+ * The one composer (@hanzo/ui/chat) and the one model and effort (mind.ts), at
+ * a laptop and a phone: the frame is as wide as the text above it, the effort
+ * starts on Auto and the model is named only where the person turned the model
+ * selector on (`hanzo.composer`, Settings → Appearance), a choice made on New is
+ * the choice a run's follow-up shows (one key, `hanzo.mind`, the one Chat
+ * reads), a premium pick holds for its screen and is never kept, and Send
+ * carries the choice.
  */
 import type { Locator, Page } from '@playwright/test'
 
@@ -52,10 +54,12 @@ const HOLDING = {
 }
 
 const frame = (p: Page) => p.locator('[data-slot="composer"]').first()
-const chip = (p: Page) => p.locator('[data-slot="mind"]')
-const tune = (p: Page) => p.getByRole('dialog', { name: 'Model and effort' })
+const model = (p: Page) => p.locator('[data-slot="mind"] [role="button"]')
+const effort = (p: Page) => p.getByRole('button', { name: /^Effort: / })
 const field = (p: Page, name: string) => p.getByRole('textbox', { name })
 const kept = (p: Page) => p.evaluate(() => JSON.parse(localStorage.getItem('hanzo.mind') ?? 'null'))
+/** The person turned the model selector on. */
+const SELECTOR = { 'hanzo.composer': { model: true } }
 
 /** An element's box, left and right, px. */
 const edges = async (l: Locator) => {
@@ -80,6 +84,9 @@ const near = (a: { left: number; right: number }, b: { left: number; right: numb
   expect(Math.abs(a.right - b.right), `right ${a.right} vs ${b.right}`).toBeLessThanOrEqual(1)
 }
 
+/** Choose a row of an open picker by its name. */
+const choose = (p: Page, list: string, name: RegExp | string) => p.getByRole('listbox', { name: list }).getByRole('option', { name }).click()
+
 test.describe('at 1440', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
@@ -102,12 +109,10 @@ test.describe('at 1440', () => {
     // At the reading measure less the column's gutters (48rem − 1.5rem), centred under the heading.
     expect(Math.round(box.right - box.left)).toBe(768 - 24)
     expect(Math.abs((box.left + box.right) / 2 - (heading.left + heading.right) / 2)).toBeLessThanOrEqual(1)
-    // What the run is sent with lines up with the field's edge.
-    near({ left: (await edges(p.locator('[data-slot="prompt-head"]'))).left, right: box.right }, box)
     await shot(p, '1440-new.png')
   })
 
-  test('at rest the composer is two rows, one line of text and the tools, and grows with the text to its ceiling', async ({ page: p }) => {
+  test('at rest the composer is three rows, the pills, one line of text and the tools, and grows with the text to its ceiling', async ({ page: p }) => {
     await platform(p, HOLDING)
     await p.goto('/')
     const ask = field(p, 'Describe a task or ask a question')
@@ -118,8 +123,8 @@ test.describe('at 1440', () => {
     expect(rest).toBeGreaterThanOrEqual(24)
     expect(rest).toBeLessThan(36)
     const tall = (await frame(p).boundingBox())!.height
-    // The text's row and the tools' row: no third row of air.
-    expect(tall).toBeLessThan(rest + 70)
+    // The pills' row, the text's row and the tools' row: no fourth row of air.
+    expect(tall).toBeLessThan(rest + 110)
     await shot(p, '1440-new-rest.png')
     await ask.fill(['one', 'two', 'three', 'four'].join('\n'))
     await expect.poll(line).toBeGreaterThan(rest + 60)
@@ -130,25 +135,31 @@ test.describe('at 1440', () => {
     await expect.poll(line).toBeLessThan(36)
   })
 
-  test('the chip starts on Enso at Medium; High and a model chosen on New are kept and shown by a run’s follow-up, and Send carries them', async ({ page: p }) => {
+  test('the effort starts on Auto and the model is not named; the selector, once on, names it, and a choice is kept and shown by a run’s follow-up, and Send carries it', async ({ page: p }) => {
     const { sent } = await platform(p, HOLDING)
     await p.goto('/')
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Enso, Medium', { timeout: 45_000 })
-    await chip(p).click()
-    await expect(tune(p).getByRole('button', { name: /^Medium/ })).toHaveAttribute('aria-pressed', 'true')
-    await expect(tune(p).getByText('Enso picks the model for each message and step. Pick one to use it instead.')).toBeVisible()
-    await shot(p, '1440-new-tune.png')
-    await tune(p).getByRole('button', { name: /^High/ }).click()
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Enso, High')
-    await chip(p).click()
-    await tune(p).getByRole('button', { name: /^Model: / }).click()
-    await p.getByRole('listbox', { name: 'Model' }).getByRole('option', { name: /^Zen 6,/ }).click()
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Zen 6, High')
+    await expect(effort(p)).toHaveAccessibleName('Effort: Auto', { timeout: 45_000 })
+    await expect(model(p)).toHaveCount(0)
+    await effort(p).click()
+    await shot(p, '1440-new-effort.png')
+    await choose(p, 'Effort', /^High/)
+    await expect(effort(p)).toHaveAccessibleName('Effort: High')
+
+    // The person turns the model selector on (Settings → Appearance); every composer reads it.
+    await p.evaluate(() => {
+      localStorage.setItem('hanzo.composer', JSON.stringify({ model: true }))
+      window.dispatchEvent(new Event('hanzo:composer'))
+    })
+    await expect(model(p)).toHaveAccessibleName('Model: Enso')
+    await model(p).click()
+    await choose(p, 'Model', /^Zen 6,/)
+    await expect(model(p)).toHaveAccessibleName('Model: Zen 6')
     expect(await kept(p)).toEqual({ model: 'zen6', effort: 'high' })
 
     // The same choice on a run: one store, read by every composer.
     await p.goto(`/${SESSION}`)
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Zen 6, High', { timeout: 45_000 })
+    await expect(effort(p)).toHaveAccessibleName('Effort: High', { timeout: 45_000 })
+    await expect(model(p)).toHaveAccessibleName('Model: Zen 6')
     await shot(p, '1440-run-kept.png')
 
     await p.goto('/')
@@ -158,45 +169,54 @@ test.describe('at 1440', () => {
     expect(to(sent, 'POST', '/v1/agent/coding').at(-1)?.body).toMatchObject({ prompt: 'Build a todo app', model: 'zen6', effort: 'high' })
   })
 
-  test('a premium pick holds for its screen and is never kept; Use Enso goes back to the router', async ({ page: p }) => {
-    const { sent } = await platform(p, { ...HOLDING, 'hanzo.mind': { model: 'zen6', effort: 'low' } })
+  test('a premium pick holds for its screen and is never kept; Enso goes back to the router', async ({ page: p }) => {
+    const { sent } = await platform(p, { ...HOLDING, ...SELECTOR, 'hanzo.mind': { model: 'zen6', effort: 'high' } })
     await p.goto('/')
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Zen 6, Low', { timeout: 45_000 })
-    await chip(p).click()
-    await tune(p).getByRole('button', { name: /^Model: / }).click()
-    await p.getByRole('listbox', { name: 'Model' }).getByRole('option', { name: /^Opus,/ }).click()
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Opus, Low')
-    expect(await kept(p)).toEqual({ model: 'zen6', effort: 'low' })
+    await expect(model(p)).toHaveAccessibleName('Model: Zen 6', { timeout: 45_000 })
+    await model(p).click()
+    await choose(p, 'Model', /^Opus,/)
+    await expect(model(p)).toHaveAccessibleName('Model: Opus')
+    expect(await kept(p)).toEqual({ model: 'zen6', effort: 'high' })
     await field(p, 'Describe a task or ask a question').fill('Review the cart')
     await p.getByRole('button', { name: 'Send' }).click()
     await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
-    expect(to(sent, 'POST', '/v1/agent/coding').at(-1)?.body).toMatchObject({ model: 'opus', effort: 'low' })
+    expect(to(sent, 'POST', '/v1/agent/coding').at(-1)?.body).toMatchObject({ model: 'opus', effort: 'high' })
 
     await p.goto('/')
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Zen 6, Low', { timeout: 45_000 })
-    await chip(p).click()
-    await tune(p).getByRole('button', { name: 'Use Enso' }).click()
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Enso, Low')
-    expect(await kept(p)).toEqual({ model: 'enso-auto', effort: 'low' })
+    await expect(model(p)).toHaveAccessibleName('Model: Zen 6', { timeout: 45_000 })
+    await model(p).click()
+    await choose(p, 'Model', /^Enso/)
+    await expect(model(p)).toHaveAccessibleName('Model: Enso')
+    expect(await kept(p)).toEqual({ model: 'enso-auto', effort: 'high' })
   })
 
-  test('a model the catalog lists as not reasoning offers no effort', async ({ page: p }) => {
-    await platform(p, { 'hanzo.mind': { model: 'zen6-flash', effort: 'high' } })
+  test('the effort is offered whatever the model, and the person’s key sends: Enter by default, Ctrl+Enter once chosen', async ({ page: p }) => {
+    const { sent } = await platform(p, { ...HOLDING, ...SELECTOR, 'hanzo.mind': { model: 'zen6-flash', effort: 'high' } })
     await p.goto('/')
-    await expect(chip(p)).toHaveAccessibleName('Model: Zen 6 Flash', { timeout: 45_000 })
-    await chip(p).click()
-    await expect(tune(p).getByRole('button', { name: /^High/ })).toHaveAttribute('aria-disabled', 'true')
-    await expect(tune(p).getByText('Zen 6 Flash answers every message and step, without an effort setting.')).toBeVisible()
+    await expect(model(p)).toHaveAccessibleName('Model: Zen 6 Flash', { timeout: 45_000 })
+    await expect(effort(p)).toHaveAccessibleName('Effort: High')
+
+    const ask = field(p, 'Describe a task or ask a question')
+    await p.evaluate(() => {
+      localStorage.setItem('hanzo.composer', JSON.stringify({ model: true, send: 'mod' }))
+      window.dispatchEvent(new Event('hanzo:composer'))
+    })
+    await ask.fill('Fix the footer')
+    await ask.press('Enter')
+    expect(to(sent, 'POST', '/v1/agent/coding')).toHaveLength(0)
+    await expect(ask).toHaveValue('Fix the footer\n')
+    await ask.press('Control+Enter')
+    await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   })
 })
 
 test.describe('at 390', () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
-  test('the composer fits a phone on New and on a run, the chip in it', async ({ page: p }) => {
-    await platform(p)
+  test('the composer fits a phone on New and on a run, the pills and the tools in it', async ({ page: p }) => {
+    await platform(p, { ...HOLDING, ...SELECTOR })
     await p.goto('/')
-    await expect(chip(p)).toHaveAccessibleName('Model and effort: Enso, Medium', { timeout: 45_000 })
+    await expect(model(p)).toHaveAccessibleName('Model: Enso', { timeout: 45_000 })
     let box = await edges(frame(p))
     expect(box.left).toBeGreaterThanOrEqual(0)
     expect(box.right).toBeLessThanOrEqual(390)
@@ -209,7 +229,7 @@ test.describe('at 390', () => {
     expect(box.left).toBeGreaterThanOrEqual(0)
     expect(box.right).toBeLessThanOrEqual(390)
     near(box, await words(p))
-    await expect(chip(p)).toBeVisible()
+    await expect(effort(p)).toBeVisible()
     expect(await cramped(p)).toEqual([])
     await shot(p, '390-run.png')
   })

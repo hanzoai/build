@@ -28,7 +28,7 @@ import { useI18n } from '@hanzo/i18n/react'
 import { ChevronDown, ChevronRight, Clock, Copy, ExternalLink, GitPullRequest, Globe, Pencil, Share } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type DropdownMenuProps } from '@hanzo/ui'
 import { Steer, type Command } from '@hanzo/ui/agents'
-import { Failure } from '@hanzo/ui/chat'
+import { Composer, Failure, measure } from '@hanzo/ui/chat'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -41,18 +41,17 @@ import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Desk, SEED } from './desk.tsx'
 import { useHost, useTarget } from './host.tsx'
-import { level, useMind } from './mind.ts'
+import { level, pacing, useMind } from './mind.ts'
 import { Out } from './out.tsx'
 import { Gutter } from './gutter.tsx'
 import { gap, pane } from './pane.ts'
-import { measure, Prompt, useEar } from './prompt.tsx'
-import { useSpoken } from './voice.ts'
+import { useEar, useSpoken } from './voice.ts'
 import { speaker, type Artifact } from './reply.tsx'
 import { PanelToggle } from './panel.tsx'
 import { schedule } from './scheduled.tsx'
 import { SideProvider, useSplit } from './side.tsx'
 import { PAGE, useDeck, useKey, usePanel } from './tabs.ts'
-import { compose, Files, pick, type Attached } from './tools.tsx'
+import { carrying, compose, pick, type Attached } from './tools.tsx'
 import { Transcript } from './transcript.tsx'
 
 const LIVE = new Set(['running', 'paused', ''])
@@ -574,7 +573,8 @@ export function Run({ id }: { id: string }) {
               </XStack>
             ) : null}
           </YStack>
-          <Prompt
+          <Composer
+            column
             framed
             value={draft}
             onChange={setDraft}
@@ -583,11 +583,11 @@ export function Run({ id }: { id: string }) {
             disabled={!signed || busy || waiting || !(running || finished)}
             placeholder={placeholder}
             label={steering ? say('Steer this run') : say('Follow up on this run')}
-            head={files.length ? <XStack gap="$1.5" flexWrap="wrap"><Files files={files} onFiles={setFiles} /></XStack> : undefined}
             plus={{ upload: () => pick(files, setFiles, setNote, say) }}
+            carried={carrying(files, setFiles)}
             // What a new run from here is made with; words that steer this run use neither.
-            model={signed && !steering && host.models ? mind : null}
-            effort={signed && !steering ? mind : null}
+            mind={signed && !steering ? mind : null}
+            effort={signed && !steering ? pacing(mind) : null}
             limits={limits}
             voice={voice}
           />

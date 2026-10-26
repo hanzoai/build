@@ -119,12 +119,13 @@ One of each, shared with Chat (@hanzo/rooms imports them):
 
 - `useMind` — the model and effort: `GET /v1/models` read once per platform,
   and the choice kept in this browser (`hanzo.mind`, Enso and Auto until
-  changed). `Tune` is the row that changes it: the effort (Auto, High, XHigh,
-  Max) always, the model chip only where the host shows it (`Host.models`, a
-  composer's `model`) — on hanzo.ai, Settings' model selector. Settings → Code
+  changed). The composer's row changes it: the effort (Auto, High, XHigh,
+  Max) always, the model chip only where the person turned the model selector
+  on (Settings → Appearance, `@hanzo/appearance` `composing`). Settings → Code
   writes the same choice. `@hanzo/build/mind` serves the store alone, without
-  the builder.
-- `prompt` / `Prompt` — the composer, as wide as the text above it (`measure`).
+  the builder. `pacing(mind)` is the effort as the composer reads it.
+- The composer is `@hanzo/ui/chat`'s `Composer`, once for Chat, Dev and Studio;
+  `useEar` is the platform's ear it dictates through.
 - `Reply` — copy, Listen and Open under an answer.
 - `Panel` over `useDeck` — the side panel and its kept tabs.
 - `useSplit` / `SideProvider` — the column the panel stands in: its edge (the
@@ -256,10 +257,12 @@ are any member's.
 (Cloud is the platform's sandbox with the codebase's environment; the org's
 machines follow under remote control, each linked with `hanzo link`), the
 codebase and the branch — the forge's repositories, filtered as you type, read
-again with Refresh list, and a way to Sync for a GitHub repository that is not
-there yet — then the ask, in the composer Chat draws too (`prompt`): the paperclip
-and Build or Plan at its start; the effort, the model where the host shows it
-(`Tune`), dictation and send at its end. A codebase can be added to a project. Opening a codebase or an
+again each time the list opens, and a way to bring a GitHub repository that is
+not there yet — then the ask, in the composer Chat draws too (`@hanzo/ui/chat`): the
+paperclip and Build or Plan at its start; the effort, the model where the person
+turned the selector on, dictation and send at its end. The three pills sit above
+the field (environment, repository with its All / Organization / GitHub tabs, branch),
+and Repos, Branches, Issues and Templates under it, each a press to its list. A codebase can be added to a project. Opening a codebase or an
 issue from its own screen lands here with that choice already made.
 
 **A run.** The transcript as it streams, drawn by what each part is: what the
@@ -373,7 +376,7 @@ src/
   prose.tsx     markdown, drawn as text (markdown.ts reads it)
   desk.tsx      the pane beside a run
   mind.ts       the model and effort, one choice with Chat
-  prompt.tsx    the composer, and Tune, the effort and model row
+  voice.ts      the language dictation listens in, and the platform's ear
   reply.tsx     the row under an answer
   panel.tsx     the side panel; tabs.ts its kept tabs
   side.tsx      the column it stands in: width, the middle column, full screen
