@@ -241,12 +241,14 @@ function Row({ row: kept, touch, onAct, onDismiss }: { row: Suggestion; touch: b
   // A starter in the reader's words, its prompt too: what is sent is what they pressed.
   const row = starter(kept) ? { ...kept, title: t(kept.title), act: 'prompt' in kept.act ? { ...kept.act, prompt: t(kept.act.prompt) } : kept.act } : kept
   const Mark = MARKS[row.icon]
+  const handleAct = () => onAct(row.act, row)
   const button = (
     <XStack
       render="button"
       data-act={row.act.kind}
       aria-label={row.title}
-      onPress={() => onAct(row.act, row)}
+      onPress={handleAct}
+      onClick={handleAct}
       flex={1}
       minW={0}
       self="stretch"
@@ -276,7 +278,7 @@ function Row({ row: kept, touch, onAct, onDismiss }: { row: Suggestion; touch: b
       onPointerEnter={() => setNear(true)}
       onPointerLeave={() => setNear(false)}
     >
-      {row.summary ? (
+      {row.summary && !touch ? (
         <HoverCard openDelay={300} closeDelay={150}>
           <HoverCardTrigger flex={1} minW={0} self="stretch" flexDirection="row">
             {button}
