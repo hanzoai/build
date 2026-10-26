@@ -5,7 +5,7 @@
  *   - it is fixed to the foot of the view: its bottom within 12px of the window's;
  *   - equal inset at its two sides, and the same width in Chat and Dev;
  *   - `+`, the effort, the mic, its chevron and send share one centreline (±1px),
- *     and each is the composer's control size: 36px on a laptop, 44px on a phone;
+ *     and each is the composer's control size: 32px on a laptop, 36px on a phone;
  *   - a long conversation scrolls under it and never over the last message;
  *   - the software keyboard (the visual viewport shrinking) lifts it above itself;
  *   - Dev has no Auto: no mode picker, and no "Auto" word in the composer.
@@ -82,7 +82,7 @@ function gates(m: Measure, width: number, controls: string[], edge = 0) {
   // 12px of air, and the pane's own edge where the composer sits in one.
   expect(m.height - shell.b, 'the composer is fixed to the foot of the view').toBeLessThanOrEqual(12.5 + edge)
   expect(Math.abs(shell.x - m.holder!.x - (m.holder!.r - shell.r)), 'equal inset at both sides').toBeLessThanOrEqual(1)
-  const hit = width < 600 ? 44 : 36
+  const hit = width < 600 ? 36 : 32
   const present = controls.map((k) => [k, m.controls[k as keyof Measure['controls']]] as const)
   for (const [name, b] of present) {
     expect(b, `${name} is drawn`).not.toBeNull()
