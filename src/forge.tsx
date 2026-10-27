@@ -46,7 +46,7 @@ import type { Screen } from './route.ts'
 import { path } from './route.ts'
 import { Customize } from './customize/index.tsx'
 import { Sync } from './sync.tsx'
-import { connect, connection, grants, syncIssues, type Connection } from './api/github.ts'
+import { connect, connection, grants, installations, linked, syncIssues, type Connection, type Installation } from './api/github.ts'
 import { here, useBack } from './back.ts'
 import { Out } from './out.tsx'
 import { ask, assemble, attach, closes, facets, handle, home, keyOf, matches, pickProjects, place, type Issue, type Project } from './merge.ts'
@@ -348,19 +348,26 @@ function Choice({ label, icon, says, onPress }: { label: string; icon: ReactNode
 }
 
 /**
- * The person's GitHub connection, in one line: who it is connected as and the
- * way to sync, or the one press that connects it. GitHub returns here, and this
- * page finishes the connect (../back.ts).
+ * The GitHub connection, in one line: who it is connected as and the way to
+ * sync, or the one press that connects it. The person's own connection, or else
+ * the accounts the org has bound the App on (`linked`), so an org that installed
+ * the App in onboarding does not read as unconnected here. GitHub returns here,
+ * and this page finishes the connect (../back.ts).
  */
 function GitHubLink({ onSync }: { onSync: () => void }) {
   const host = useHost()
   const target = useTarget()
   const { t } = useI18n()
   const me = useRead(() => connection(target), null as Connection | null, [target])
+  // An org whose installations cannot be read falls back to the person's own connection.
+  const installed = useRead(() => installations(target).catch(() => []), [] as Installation[], [target])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
-  useBack(target, true, setNote, me.reload)
-  const c = me.value
+  useBack(target, true, setNote, () => {
+    me.reload()
+    installed.reload()
+  })
+  const c = me.value ? linked(me.value, installed.value) : null
   // A connection that cannot be read says nothing here: Sync from GitHub above still works.
   if (me.error || !c || !c.configured) return note ? <Note>{note}</Note> : null
 

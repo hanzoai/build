@@ -204,6 +204,18 @@ export async function installations(t: Target): Promise<Installation[]> {
     .filter((i) => i.login)
 }
 
+/**
+ * Whether this page reaches GitHub at all, and as whom: the person's own
+ * connection first, else the accounts the org has bound the App on. An org that
+ * installed the App (onboarding's Connect GitHub) has its repositories to sync
+ * without the person connecting their own, so it reads as connected too.
+ */
+export function linked(me: Connection, installed: Installation[]): Connection {
+  if (me.connected) return me
+  const bound = installed.filter((i) => i.connected).map((i) => i.login)
+  return bound.length ? { configured: me.configured, connected: true, login: bound.join(', @') } : me
+}
+
 /** One repository the GitHub connection grants this organization. */
 export interface Grant {
   owner: string

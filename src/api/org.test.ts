@@ -392,6 +392,18 @@ describe('connectors', () => {
     expect(await github.installations(T)).toEqual([{ login: 'acme', type: 'Organization', grant: 'all', connected: true }])
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/provider/github/installations')
   })
+
+  it('reads as connected through the org’s App install when the person has not connected their own', () => {
+    const none = { configured: true, connected: false, login: '' }
+    const install = (login: string, connected = true) => ({ login, type: 'User', grant: 'all', connected })
+    expect(github.linked(none, [install('Darkhorse7stars')])).toEqual({ configured: true, connected: true, login: 'Darkhorse7stars' })
+    expect(github.linked(none, [install('acme'), install('gone', false), install('zoo')])).toEqual({ configured: true, connected: true, login: 'acme, @zoo' })
+    expect(github.linked(none, [install('gone', false)])).toEqual(none)
+    expect(github.linked(none, [])).toEqual(none)
+    // The person's own connection wins: it is who GitHub acts as.
+    const mine = { configured: true, connected: true, login: 'zeekay' }
+    expect(github.linked(mine, [install('acme')])).toBe(mine)
+  })
 })
 
 describe('webhooks', () => {
