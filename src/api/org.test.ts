@@ -371,7 +371,11 @@ describe('connectors', () => {
   it('disconnects, and lists the workspace’s channels', async () => {
     const seen = answer(200, { disconnected: true })
     await provider.disconnect(T, 'slack')
-    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/slack/disconnect' })
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/slack/disconnect', body: {} })
+    // One GitHub account, by its login; the org's other accounts stay.
+    const one = answer(200, { disconnected: true, accounts: ['Darkhorse7stars'], uninstalled: ['Darkhorse7stars'] })
+    await provider.disconnect(T, 'github', 'Darkhorse7stars')
+    expect(one[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/github/disconnect', body: { account: 'Darkhorse7stars' } })
     const more = answer(200, { channels: [{ id: 'C1', name: 'general', is_member: true }, { id: 'C2', name: 'ops', is_private: true }, { name: 'x' }], next_cursor: 'n2' })
     const r = await provider.channels(T, 'n1')
     expect(more[0].url).toBe('https://api.hanzo.ai/v1/provider/slack/channels?cursor=n1')

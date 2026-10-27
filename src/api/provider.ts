@@ -5,7 +5,7 @@
  *
  *   GET  /v1/provider/{id}              one connector and this org's connection to it
  *   POST /v1/provider/{id}/connect      {return} → {authorizeUrl}: the provider's own consent page (org admin)
- *   POST /v1/provider/{id}/disconnect   forget the org's connection (org admin)
+ *   POST /v1/provider/{id}/disconnect   {account?} → forget the org's connection, or one account of it (org admin)
  *   GET  /v1/provider/slack/channels    the connected workspace's channels, a page at a time
  *
  * Connecting leaves this page once, for the provider's consent screen, and only
@@ -96,8 +96,13 @@ export async function authorize(t: Target, id: string, back?: string): Promise<s
   return url
 }
 
-export async function disconnect(t: Target, id: string): Promise<void> {
-  await call<unknown>(t, 'POST', `/v1/provider/${seg(id)}/disconnect`, {})
+/**
+ * Forget the org's connection to a provider: every account, or the one `account`
+ * names (a GitHub login). For GitHub the platform also removes its App from an
+ * account no other org uses, so connecting that account again is a fresh install.
+ */
+export async function disconnect(t: Target, id: string, account?: string): Promise<void> {
+  await call<unknown>(t, 'POST', `/v1/provider/${seg(id)}/disconnect`, account ? { account } : {})
 }
 
 export interface Channel {

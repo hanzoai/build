@@ -46,7 +46,8 @@ import type { Screen } from './route.ts'
 import { path } from './route.ts'
 import { Customize } from './customize/index.tsx'
 import { Sync } from './sync.tsx'
-import { connect, connection, grants, installations, linked, syncIssues, type Connection, type Installation } from './api/github.ts'
+import { connect, connection, disconnect as unlink, grants, installations, linked, syncIssues, type Connection, type Installation } from './api/github.ts'
+import { disconnect } from './api/provider.ts'
 import { here, useBack } from './back.ts'
 import { Out } from './out.tsx'
 import { ask, assemble, attach, closes, facets, handle, home, keyOf, matches, pickProjects, place, type Issue, type Project } from './merge.ts'
@@ -353,6 +354,10 @@ function Choice({ label, icon, says, onPress }: { label: string; icon: ReactNode
  * the accounts the org has bound the App on (`linked`), so an org that installed
  * the App in onboarding does not read as unconnected here. GitHub returns here,
  * and this page finishes the connect (../back.ts).
+ *
+ * Disconnect lets go of it, so another account can be connected: the person's own
+ * link, or (for an org admin) the org's App accounts, which the platform also
+ * uninstalls on GitHub. It asks once before doing either.
  */
 function GitHubLink({ onSync }: { onSync: () => void }) {
   const host = useHost()
@@ -363,6 +368,7 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
   const installed = useRead(() => installations(target).catch(() => []), [] as Installation[], [target])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  const [asking, setAsking] = useState(false)
   useBack(target, true, setNote, () => {
     me.reload()
     installed.reload()
@@ -378,6 +384,25 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
       host.open(await connect(target, here()))
     } catch (e) {
       setNote((e as Error).message)
+      setBusy(false)
+    }
+  }
+
+  // The person's own link is theirs to drop; the org's App accounts are an org admin's.
+  const own = me.value?.connected === true
+  const leave = c.connected && (own || host.admin)
+  const drop = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      await (own ? unlink(target) : disconnect(target, 'github'))
+      setAsking(false)
+      setNote(t('GitHub is disconnected. Connect it again to choose another account.'))
+      me.reload()
+      installed.reload()
+    } catch (e) {
+      setNote((e as Error).message)
+    } finally {
       setBusy(false)
     }
   }
@@ -400,14 +425,34 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
           {c.connected ? t('GitHub connected as {login}', { login: `@${c.login}` }) : t('Connect GitHub to bring your repositories here')}
         </SizableText>
         <SizableText size="$1" color="$soft">
-          {note || (c.connected ? t('Choose repositories to mirror; each stays in step with GitHub.') : t('One step on GitHub, then pick the repositories to sync.'))}
+          {asking
+            ? own
+              ? t('Disconnect your GitHub from Hanzo?')
+              : t('Disconnect @{login}? Hanzo’s GitHub App is removed from it too, unless another organization uses it.', { login: c.login })
+            : note || (c.connected ? t('Choose repositories to mirror; each stays in step with GitHub.') : t('One step on GitHub, then pick the repositories to sync.'))}
         </SizableText>
       </YStack>
-      {c.connected ? (
-        <Button size="sm" variant="outline" onPress={onSync}>
-          <RefreshCw size={14} />
-          {t('Sync repositories')}
-        </Button>
+      {c.connected && asking ? (
+        <XStack gap="$2">
+          <Button size="sm" variant="outline" disabled={busy} onPress={() => setAsking(false)}>
+            {t('Cancel')}
+          </Button>
+          <Button size="sm" variant="primary" disabled={busy} onPress={() => void drop()}>
+            {busy ? t('Disconnecting…') : t('Disconnect')}
+          </Button>
+        </XStack>
+      ) : c.connected ? (
+        <XStack gap="$2">
+          <Button size="sm" variant="outline" onPress={onSync}>
+            <RefreshCw size={14} />
+            {t('Sync repositories')}
+          </Button>
+          {leave ? (
+            <Button size="sm" variant="outline" disabled={busy} onPress={() => setAsking(true)}>
+              {t('Disconnect')}
+            </Button>
+          ) : null}
+        </XStack>
       ) : (
         <Button size="sm" variant="primary" disabled={busy} onPress={() => void link()}>
           <Github size={14} />
