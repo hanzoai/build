@@ -133,9 +133,22 @@ export function Integrations() {
                 title={i.login}
                 detail={[i.type, i.grant === 'all' ? t('every repository') : i.grant === 'selected' ? t('selected repositories') : ''].filter(Boolean).join(' · ')}
                 trailing={
-                  <SizableText size="$1" color={i.connected ? '$ink' : '$soft'}>
-                    {i.connected ? t('Installed') : t('Removed on GitHub')}
-                  </SizableText>
+                  <XStack gap="$2" items="center">
+                    <SizableText size="$1" color={i.connected ? '$ink' : '$soft'}>
+                      {i.connected ? t('Installed') : t('Removed on GitHub')}
+                    </SizableText>
+                    {/* An org admin lets go of one account; the platform uninstalls the App there unless another organization uses it. */}
+                    {host.admin ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={working}
+                        onPress={() => void act(() => disconnect(target, 'github', i.login), t('@{login} is disconnected', { login: i.login }), installed.reload)}
+                      >
+                        {t('Disconnect')}
+                      </Button>
+                    ) : null}
+                  </XStack>
                 }
               />
             ))
