@@ -5,7 +5,11 @@
  *   - it is fixed to the foot of the view: its bottom within 12px of the window's;
  *   - equal inset at its two sides, and the same width in Chat and Dev;
  *   - `+`, the effort, the mic, its chevron and send share one centreline (±1px),
- *     and each is the composer's control size: 32px on a laptop, 36px on a phone;
+ *     and each is the composer's control size: 32px on a laptop, 36px on a phone,
+ *     a phone's under a finger too (a coarse pointer, where @hanzo/design floors a
+ *     button at 44px); on a phone every neighbour is one 4px gap from the next;
+ *   - Dev's pills stand as tall as the controls, on one centreline, one gap apart,
+ *     fully round with no fill, starting at the controls' edge;
  *   - a long conversation scrolls under it and never over the last message;
  *   - the software keyboard (the visual viewport shrinking) lifts it above itself;
  *   - Dev has no Auto: no mode picker, and no "Auto" word in the composer.
@@ -51,6 +55,9 @@ async function measured(p: Page) {
     const frame = document.querySelector('[data-slot="composer"]')
     const end = document.querySelector('[data-slot="composer-end"]')
     const last = end?.lastElementChild ?? null
+    // A group's controls in reading order: what a finger lands on.
+    const CONTROL = ':is([data-slot="plus"], [data-slot="composer-carried"], [data-slot="dial-button"], [data-slot="chip-select"], [data-slot="dictation"] button, [data-slot="composer-send"], [data-slot="composer-talk"])'
+    const row = (slot: string) => [...document.querySelectorAll(`[data-slot="${slot}"] ${CONTROL}`)].map((el) => box(el)!).sort((a, b) => a.x - b.x)
     return {
       width: window.innerWidth,
       height: window.innerHeight,
@@ -66,6 +73,12 @@ async function measured(p: Page) {
         chevron: box(document.querySelector('[data-slot="dictation-menu"]')),
         send: box(last),
       },
+      start: row('composer-start'),
+      end: row('composer-end'),
+      pills: [...document.querySelectorAll('[data-slot="composer-pills"] [data-slot="chip-select"]')].map((el) => {
+        const s = getComputedStyle(el)
+        return { ...box(el)!, radius: parseFloat(s.borderTopLeftRadius), bg: s.backgroundColor }
+      }),
       lastWords: (() => {
         const turns = [...document.querySelectorAll('[data-slot="message"], [data-slot="thread-column"] > *')]
         return box(turns.at(-1) ?? null)
@@ -82,15 +95,28 @@ function gates(m: Measure, width: number, controls: string[], edge = 0) {
   // 12px of air, and the pane's own edge where the composer sits in one.
   expect(m.height - shell.b, 'the composer is fixed to the foot of the view').toBeLessThanOrEqual(12.5 + edge)
   expect(Math.abs(shell.x - m.holder!.x - (m.holder!.r - shell.r)), 'equal inset at both sides').toBeLessThanOrEqual(1)
-  const hit = width < 600 ? 36 : 32
+  const phone = width < 600
+  const hit = phone ? 36 : 32
   const present = controls.map((k) => [k, m.controls[k as keyof Measure['controls']]] as const)
   for (const [name, b] of present) {
     expect(b, `${name} is drawn`).not.toBeNull()
-    expect(Math.round(b!.w), `${name} is ${hit}px wide`).toBe(hit)
+    // A phone's effort stands its level beside the gauge: as tall as the rest, as wide as the level.
+    if (phone && name === 'effort') expect(Math.round(b!.w), `${name} is at least ${hit}px wide`).toBeGreaterThanOrEqual(hit)
+    else expect(Math.round(b!.w), `${name} is ${hit}px wide`).toBe(hit)
     expect(Math.round(b!.h), `${name} is ${hit}px tall`).toBe(hit)
   }
   const mid = present[0]![1]!.cy
   for (const [name, b] of present) expect(Math.abs(b!.cy - mid), `${name} shares the centreline`).toBeLessThanOrEqual(1)
+  // Between the start and the end lies the field's free width; within each, one gap.
+  if (phone) for (const group of [m.start, m.end]) for (const [i, b] of group.slice(1).entries()) expect(Math.abs(b.x - group[i]!.r - 4), 'one gap between neighbours').toBeLessThanOrEqual(1)
+  for (const pill of m.pills) {
+    expect(Math.round(pill.h), 'a pill stands as tall as the controls').toBe(hit)
+    expect(Math.abs(pill.cy - m.pills[0]!.cy), 'the pills share a centreline').toBeLessThanOrEqual(1)
+    expect(pill.radius, 'a pill is fully round').toBeGreaterThanOrEqual(pill.h / 2 - 0.5)
+    expect(pill.bg, 'a pill has no fill').toBe('rgba(0, 0, 0, 0)')
+  }
+  for (const [i, b] of m.pills.slice(1).entries()) expect(Math.abs(b.x - m.pills[i]!.r - 4), 'one gap between pills').toBeLessThanOrEqual(1)
+  if (m.pills.length) expect(Math.abs(m.pills[0]!.x - m.start[0]!.x), 'the pills start at the controls’ edge').toBeLessThanOrEqual(1)
 }
 
 /** A window where the software keyboard covers `covered` px of the foot. */
@@ -114,10 +140,12 @@ async function keyboard(p: Page) {
 for (const [width, height] of [
   [1440, 900],
   [390, 844],
+  [440, 956],
 ] as const) {
   for (const scheme of ['dark', 'light'] as const) {
     test.describe(`${width}x${height} ${scheme}`, () => {
-      test.use({ viewport: { width, height }, colorScheme: scheme })
+      // A phone is a finger: a coarse pointer, as an iPhone's Safari reports.
+      test.use({ viewport: { width, height }, colorScheme: scheme, hasTouch: width < 600 })
 
       test('Dev: New is fixed to the foot, pills inside the frame, no Auto', async ({ page: p }) => {
         await keyboard(p)

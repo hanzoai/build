@@ -262,6 +262,8 @@ not there yet — then the ask, in the composer Chat draws too (`@hanzo/ui/chat`
 paperclip and Build or Plan at its start; the effort, the model where the person
 turned the selector on, dictation and send at its end. The three pills sit above
 the field (environment, repository with its All / Organization / GitHub tabs, branch),
+light round chips as tall as the composer's controls, on one centreline a gap apart
+(the composer stands every `ChipSelect` in its pills so, on a phone and a laptop alike),
 and Repos, Branches, Issues and Templates under it, each a press to its list. A codebase can be added to a project. Opening a codebase or an
 issue from its own screen lands here with that choice already made.
 
