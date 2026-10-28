@@ -448,15 +448,31 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   }
 
   return (
-    // The composer is fixed to the foot of the view, as Chat's and a run's are; the
-    // question sits above it, and what is under it is the room it leaves.
-    <YStack flex={1} minH={0} minW={0} items="center" overflowX="hidden" data-slot="new">
-      <YStack flex={1} minH={0} width="100%" maxW={MEASURE} justify="flex-end" pb="$3" overflowY="auto">
+    // The composer is fixed to the foot of the view, as Chat's and a run's are:
+    // the layout is a grid, track 1 holding the opening and track 2 the composer.
+    <YStack
+      display="grid"
+      gridTemplateRows="minmax(0, 1fr) auto"
+      items="center"
+      width="100%"
+      height="100%"
+      overflowX="hidden"
+      data-slot="new"
+    >
+      <YStack
+        display="grid"
+        gridTemplateRows="1fr auto"
+        width="100%"
+        maxW={MEASURE}
+        height="100%"
+        pb="$3"
+        overflowY="auto"
+      >
         <SizableText render="h1" fontSize="$7" lineHeight="$7" fontWeight="700" color="$ink" style={{ textAlign: 'center' }}>
           {t('Build what’s next.')}
         </SizableText>
       </YStack>
-      <YStack width="100%" maxW={MEASURE} gap="$2" pb={12} shrink={0}>
+      <YStack width="100%" maxW={MEASURE} gap="$2" pb={12}>
         <YStack gap="$2">
           {stranger ? (
             <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" role="alert">
