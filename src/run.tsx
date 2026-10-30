@@ -391,7 +391,7 @@ export function Run({ id }: { id: string }) {
 
   return (
     <XStack data-slot="run-split" display="grid" gridTemplateColumns="minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
-      <YStack data-slot="run" ref={split.main} style={split.mainStyle} {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
+      <YStack data-slot="run" ref={split.main} {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
         <XStack px="$4" pt="$3" pb="$2" gap="$2" items="center" minH={44}>
           <YStack flex={1} minW={0} items="flex-start">
             <DropdownMenu
@@ -604,7 +604,6 @@ export function Run({ id }: { id: string }) {
           position="relative"
           shrink={0}
           minH={0}
-          style={split.asideStyle}
         >
           {split.grip ? (
             // In the gutter between the two panes, measured inside the pane's edge.
