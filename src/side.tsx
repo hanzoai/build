@@ -16,9 +16,10 @@
  *   full    the panel over the whole window. Escape or the button returns.
  *
  * A DRAG NEVER DRAWS REACT. Each frame writes the panel's width and the middle
- * column's display on the two elements (`paint`), the same properties React
- * writes from the settled state (`look`), so the two never disagree; React
- * learns the width once, when the drag lets go. The room the two share is
+ * column's display on the two elements (`paint`), and the settled state is
+ * written by the same hand once React commits it (`look`, after layout, before
+ * paint), so the two never disagree and the host spreads no style of its own;
+ * React learns the width once, when the drag lets go. The room the two share is
  * measured by a ResizeObserver, after layout, so a frame never reads layout
  * it has just dirtied. A window narrowed under the panel is painted the same
  * way: the panel gives way, and the person's width comes back with the room.
@@ -28,7 +29,7 @@
  * (@hanzo/i18n `dir`), and the grip grows it rightwards.
  */
 import { useI18n } from '@hanzo/i18n/react'
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { usePrefs } from './prefs.tsx'
 
@@ -68,7 +69,7 @@ function look(width: number, hidden: boolean): Record<string, string> {
 }
 
 /** Over the whole window, opaque, above the frame and under the kit's menus. */
-const FULL = {
+const FULL: Record<string, string> = {
   position: 'fixed',
   inset: '0px',
   zIndex: '60',
@@ -88,12 +89,10 @@ const write = (el: HTMLElement | null, style: Record<string, string>) => {
 export interface Split {
   /** For `SideProvider`, around the middle column and the panel. */
   side: Side
-  /** The middle column's element and style. */
+  /** The middle column's element: its display is written on it. */
   main: (el: unknown) => void
-  mainStyle: CSSProperties
-  /** The panel's column's element and style. */
+  /** The panel's column's element: its width, and full screen, are written on it. */
   aside: (el: unknown) => void
-  asideStyle: CSSProperties
   /** The kit `Grip`'s props, but its label and its place; none while the panel is full screen. */
   grip: { side: 'left' | 'right'; span: number; floor: number; ceil: number; reset: number; onSpan: (n: number) => void; onKeep: (n: number) => void; onShut: () => void } | null
 }
@@ -225,12 +224,17 @@ export function useSplit(open: boolean, main: string, onShut: () => void): Split
   const asideRef = useCallback((el: unknown) => setEls((was) => (was.aside === el ? was : { ...was, aside: el instanceof HTMLElement ? el : null })), [])
 
   const across = room ? Math.max(FLOOR, Math.min(width, room - now.current.gap - MAIN)) : width
+  // The settled state, on the elements a drag paints. Leaving full screen
+  // clears what full screen set, so every key is written every time.
+  useLayoutEffect(() => {
+    const full = Object.fromEntries(Object.entries(FULL).map(([k, v]) => [k, side.full ? v : '']))
+    write(els.aside, { ...full, ...look(across, side.hidden), ...(side.full ? FULL : null) })
+    if (els.main) els.main.style.display = side.hidden ? 'none' : ''
+  }, [els, across, side.hidden, side.full])
   return {
     side,
     main: mainRef,
-    mainStyle: { display: side.hidden ? 'none' : '' },
     aside: asideRef,
-    asideStyle: (side.full ? { ...look(across, side.hidden), ...FULL } : look(across, side.hidden)) as CSSProperties,
     grip: side.full
       ? null
       : { side: dir === 'rtl' ? 'left' : 'right', span: side.hidden ? room : across, floor: FLOOR, ceil: Math.max(FLOOR, room), reset: WIDTH, onSpan: (n) => void paint(n), onKeep: keep, onShut },
