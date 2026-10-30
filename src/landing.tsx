@@ -461,7 +461,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     >
       <YStack
         display="grid"
-        gridTemplateRows="1fr auto"
+        // One track, its question set at the track's foot, just above the composer: a
+        // second `auto` track left the question alone in the first, at the pane's top.
+        gridTemplateRows="minmax(0, 1fr)"
+        items="flex-end"
         width="100%"
         maxW={MEASURE}
         height="100%"
