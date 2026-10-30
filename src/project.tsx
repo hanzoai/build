@@ -599,7 +599,6 @@ export function Project({ at }: { at: Where }) {
         {picked.length ? <Attachments items={picked} onRemove={() => setPicked([])} /> : null}
         <Composer
           column
-          framed
           value={draft}
           onChange={setDraft}
           onSend={() => void (current && running ? steer(current) : send())}

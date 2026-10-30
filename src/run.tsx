@@ -575,7 +575,6 @@ export function Run({ id }: { id: string }) {
           </YStack>
           <Composer
             column
-            framed
             value={draft}
             onChange={setDraft}
             onSend={send}

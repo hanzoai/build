@@ -508,7 +508,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           ) : null}
           <Composer
             column
-            framed
             value={draft}
             onChange={setDraft}
             onSend={() => void send()}
