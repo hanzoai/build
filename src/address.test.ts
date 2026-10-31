@@ -27,8 +27,8 @@ describe('a pasted repository address', () => {
     expect(onGitHub('  https://GitHub.com/webby-ai/book.GIT \n')).toEqual(BOOK)
     expect(onGitHub('https://github.com/webby-ai/book?tab=readme-ov-file')).toEqual(BOOK)
     expect(onGitHub('https://github.com/webby-ai/book#readme')).toEqual(BOOK)
-    // A clone address copied with its token: the repository is read, and the token goes no further.
-    expect(onGitHub('https://x-access-token:ghs_abc@github.com/webby-ai/book.git')).toEqual(BOOK)
+    // A clone address copied with who it signs in as: the repository is read, and the rest goes no further.
+    expect(onGitHub('https://someone@github.com/webby-ai/book.git')).toEqual(BOOK)
   })
 
   it('keeps the names as GitHub spells them', () => {
