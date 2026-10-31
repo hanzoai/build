@@ -1,8 +1,9 @@
 /**
  * Codebases on the forge, the org's own git.
  *
- *   GET /v1/git/repos          {data: [repo]}   most recently updated first
- *   GET /v1/git/repos/{name}   one repo, with its branch names
+ *   GET    /v1/git/repos          {data: [repo]}   most recently updated first
+ *   GET    /v1/git/repos/{name}   one repo, with its branch names
+ *   DELETE /v1/git/repos/{name}   the repo and its history, gone
  *
  * A coding run addresses a repository by its name. The org is the tenant on
  * the request, so the name is the whole address — `owner/name` is a path the
@@ -122,4 +123,12 @@ export async function codebases(t: Target, q = ''): Promise<Codebase[]> {
 export async function one(t: Target, name: string): Promise<Codebase | null> {
   const raw = await call<unknown>(t, 'GET', `/v1/git/repos/${seg(name)}`)
   return codebase(raw, t.org ?? '')
+}
+
+/**
+ * Delete a codebase from the forge, and its history with it. Nothing else goes:
+ * a link that syncs into it, or a project built from it, is dropped on its own.
+ */
+export async function remove(t: Target, name: string): Promise<void> {
+  await call<unknown>(t, 'DELETE', `/v1/git/repos/${seg(name)}`)
 }

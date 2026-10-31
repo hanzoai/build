@@ -31,14 +31,17 @@ import {
   LayoutTemplate,
   RefreshCw,
   Settings,
+  Trash2,
 } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input } from '@hanzo/ui'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { ago } from './ago.ts'
-import { codebases, type Codebase } from './api/codebases.ts'
+import { codebases, remove as removeRepo, type Codebase } from './api/codebases.ts'
+import { unlink as removeLink } from './api/links.ts'
+import { remove as removeProject } from './api/projects.ts'
 import { Scheduled } from './scheduled.tsx'
-import { boards, everything, sources, type Board, type Sources } from './api/work.ts'
+import { boards, everything, sources, UNREAD, type Board, type Sources } from './api/work.ts'
 import { boardKey, pinRepo, readPending, writePending } from './choice.ts'
 import { useKept, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
@@ -51,6 +54,7 @@ import { disconnect } from './api/provider.ts'
 import { here, useBack } from './back.ts'
 import { Out } from './out.tsx'
 import { ask, assemble, attach, closes, facets, handle, home, keyOf, matches, pickProjects, place, type Issue, type Project } from './merge.ts'
+import { removal, stopped, type Removal, type Step } from './removal.ts'
 
 function Note({ children }: { children: string }) {
   return (
@@ -84,6 +88,10 @@ const PAGE = 25
  * of two ways — linked from GitHub, or started from a template. A project is a
  * repository; opening one opens its workspace at `<org>/<repo>`, and every run
  * there works on that repository. There is no project without one.
+ *
+ * Remove takes one away (../removal.ts): Hanzo's copy of a GitHub repository
+ * stops syncing and goes, with its project, and GitHub's is never touched; the
+ * forge's own goes with its history. It asks once, on the row, saying which.
  */
 function Projects() {
   const host = useHost()
@@ -161,6 +169,45 @@ function Projects() {
   const link = () => host.go(path({ kind: 'screen', screen: 'sync' }))
   const template = () => host.go(path({ kind: 'screen', screen: 'templates' }))
 
+  // What each repository is tied to on Hanzo — the links into it, GitHub's names
+  // for the copies it made, the projects built from it — read for Remove alone.
+  const made = useRead(signed ? () => sources(target) : null, NONE, [target, signed, landed])
+  const [asking, setAsking] = useState('')
+  const [removing, setRemoving] = useState(false)
+  const [said, setSaid] = useState('')
+  // A plan stands on the links, the forge and the projects all having answered:
+  // one that missed a link leaves a copy that syncs back, and one that missed a
+  // project leaves its site up. GitHub's grants only say which copies GitHub made.
+  const whole = !made.loading && made.value.missing.every((m) => m === UNREAD.hub)
+  // Any member may: the sync app, the forge and the projects app each confine a
+  // delete to the caller's own org and ask no more (cloud apps/sync delete,
+  // apps/git deleteRepo, apps/projects del). A row still syncing in is not
+  // offered, since its import would bring it back.
+  const plan = (c: Codebase): Removal | null =>
+    signed && whole && !syncing.has(c.name)
+      ? removal(c.name, { granted: made.value.hub, linked: made.value.linked, held: made.value.held, sites: made.value.sites }, t)
+      : null
+  const drop = (s: Step): Promise<void> =>
+    s.kind === 'link' ? removeLink(target, s.id) : s.kind === 'mirror' ? removeRepo(target, s.name) : removeProject(target, s.slug)
+  // One step at a time, in order, stopping at the first refusal: nothing is left half-removed unsaid.
+  const remove = async (r: Removal) => {
+    setRemoving(true)
+    setSaid('')
+    let at = 0
+    try {
+      for (; at < r.steps.length; at++) await drop(r.steps[at])
+      setSaid(t('{repo} is removed from Hanzo.', { repo: r.repo }))
+    } catch (e) {
+      setSaid(stopped(r, at, (e as Error).message, t))
+    } finally {
+      setRemoving(false)
+      setAsking('')
+      // Read again either way: what went leaves the list, and the next plan names only what is left.
+      list.reload()
+      made.reload()
+    }
+  }
+
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4' }}>
       <YStack width="100%" maxW={1040} mx="auto" gap="$4">
@@ -187,6 +234,7 @@ function Projects() {
           </XStack>
         </XStack>
         {signed ? <GitHubLink onSync={link} /> : null}
+        {said ? <Note>{said}</Note> : null}
         {list.error ? (
           <Note>{list.error.message}</Note>
         ) : !signed ? (
@@ -239,53 +287,97 @@ function Projects() {
                     </SizableText>
                     {sort === 'updated' ? <ChevronDown size={12} /> : null}
                   </XStack>
+                  {/* Remove's column, so every row's columns stand under their names whether it offers one or not. */}
+                  <YStack width={28} shrink={0} />
                 </XStack>
-                {slice.map((c) => (
-                  <XStack
-                    key={`${c.org}/${c.name}`}
-                    render="button"
-                    aria-label={t('Open {repo}', { repo: `${c.org ? `${c.org}/` : ''}${c.name}` })}
-                    onPress={() => open(c)}
-                    $platform-web={{ textAlign: 'start' }}
-                    items="center"
-                    gap="$3"
-                    px="$3"
-                    py="$2.5"
-                    borderTopWidth={1}
-                    borderColor="$borderColor"
-                    hoverStyle={{ bg: '$hover' }}
-                    focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
-                  >
-                    <FolderGit2 size={15} color="$soft" />
-                    <YStack flex={1} minW={0}>
-                      {/* `org/name` is an address: it keeps its own order in a right-to-left page. */}
-                      <XStack minW={0} items="baseline" self="flex-start" {...{ 'data-i18n-ltr': '' }}>
-                        {c.org ? (
-                          <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
-                            {`${c.org}/`}
+                {slice.map((c) => {
+                  const key = `${c.org}/${c.name}`
+                  const named = `${c.org ? `${c.org}/` : ''}${c.name}`
+                  const r = plan(c)
+                  const asked = r !== null && asking === key
+                  return (
+                    <YStack key={key} borderTopWidth={1} borderColor="$borderColor">
+                      <XStack items="center" gap="$3" paddingInlineEnd="$3" hoverStyle={{ bg: '$hover' }}>
+                        <XStack
+                          render="button"
+                          aria-label={t('Open {repo}', { repo: named })}
+                          onPress={() => open(c)}
+                          $platform-web={{ textAlign: 'start' }}
+                          flex={1}
+                          minW={0}
+                          items="center"
+                          gap="$3"
+                          paddingInlineStart="$3"
+                          py="$2.5"
+                          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+                        >
+                          <FolderGit2 size={15} color="$soft" />
+                          <YStack flex={1} minW={0}>
+                            {/* `org/name` is an address: it keeps its own order in a right-to-left page. */}
+                            <XStack minW={0} items="baseline" self="flex-start" {...{ 'data-i18n-ltr': '' }}>
+                              {c.org ? (
+                                <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
+                                  {`${c.org}/`}
+                                </SizableText>
+                              ) : null}
+                              <SizableText size="$2" color="$ink" fontWeight="500" numberOfLines={1} shrink={1}>
+                                {c.name}
+                              </SizableText>
+                            </XStack>
+                            {c.description ? (
+                              <SizableText size="$1" color="$soft" numberOfLines={1}>
+                                {c.description}
+                              </SizableText>
+                            ) : null}
+                          </YStack>
+                          <XStack width={120} items="center" gap="$1.5" minW={0} $max-md={{ display: 'none' }}>
+                            <GitBranch size={12} color="$soft" />
+                            <SizableText size="$1" color="$soft" numberOfLines={1}>
+                              {c.branch}
+                            </SizableText>
+                          </XStack>
+                          <SizableText size="$1" color="$soft" width={120} text="end">
+                            {syncing.has(c.name) ? t('Syncing…') : ago(c.updated)}
                           </SizableText>
-                        ) : null}
-                        <SizableText size="$2" color="$ink" fontWeight="500" numberOfLines={1} shrink={1}>
-                          {c.name}
-                        </SizableText>
+                        </XStack>
+                        <XStack width={28} shrink={0} justify="center">
+                          {r && !asked ? (
+                            <XStack
+                              render="button"
+                              aria-label={t('Remove {repo}', { repo: named })}
+                              disabled={removing}
+                              onPress={() => setAsking(key)}
+                              width={28}
+                              height={28}
+                              items="center"
+                              justify="center"
+                              rounded="$2"
+                              hoverStyle={{ bg: '$raised' }}
+                              focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+                            >
+                              <Trash2 size={14} color="$soft" />
+                            </XStack>
+                          ) : null}
+                        </XStack>
                       </XStack>
-                      {c.description ? (
-                        <SizableText size="$1" color="$soft" numberOfLines={1}>
-                          {c.description}
-                        </SizableText>
+                      {asked && r ? (
+                        <XStack items="center" gap="$3" px="$3" pb="$2.5" flexWrap="wrap">
+                          <SizableText flex={1} minW={200} size="$2" color="$ink">
+                            {r.says}
+                          </SizableText>
+                          <XStack gap="$2">
+                            <Button size="sm" variant="outline" disabled={removing} onPress={() => setAsking('')}>
+                              {t('Cancel')}
+                            </Button>
+                            <Button size="sm" variant="destructive" disabled={removing} onPress={() => void remove(r)}>
+                              {removing ? t('Removing…') : t('Remove')}
+                            </Button>
+                          </XStack>
+                        </XStack>
                       ) : null}
                     </YStack>
-                    <XStack width={120} items="center" gap="$1.5" minW={0} $max-md={{ display: 'none' }}>
-                      <GitBranch size={12} color="$soft" />
-                      <SizableText size="$1" color="$soft" numberOfLines={1}>
-                        {c.branch}
-                      </SizableText>
-                    </XStack>
-                    <SizableText size="$1" color="$soft" width={120} text="end">
-                      {syncing.has(c.name) ? t('Syncing…') : ago(c.updated)}
-                    </SizableText>
-                  </XStack>
-                ))}
+                  )
+                })}
                 <XStack px="$3" py="$2" justify="space-between" items="center" borderTopWidth={1} borderColor="$borderColor">
                   <SizableText size="$1" color="$soft">
                     {t('Showing {from}–{to} of {total}', { from, to, total: shown.length })}
