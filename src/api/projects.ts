@@ -2,7 +2,7 @@
  * The org's projects: what it has built, and where each one is served.
  *
  *   GET    /v1/project                     → Project[]
- *   PATCH  /v1/project/{slug}              rename it, or make it public or private
+ *   PATCH  /v1/project/{slug}              rename it, make it public or private, or change its repository
  *   DELETE /v1/project/{slug}              delete it and take its site down
  *   GET    /v1/project/{slug}/deployments  → Deployment[], newest first
  *
@@ -14,6 +14,7 @@
  */
 import { phrase } from '@hanzo/i18n'
 
+import { ADDRESS, clone, onGitHub } from '../address.ts'
 import { call, seg, type Target } from './call.ts'
 
 export interface Project {
@@ -90,15 +91,35 @@ export async function projects(t: Target): Promise<Project[]> {
     .sort((a, b) => b.updated - a.updated)
 }
 
-/** Change a project's name or who can see it; what is not sent is left as it is. */
-export async function change(t: Target, slug: string, what: { name?: string; visibility?: Visibility }): Promise<Project> {
-  const body: { name?: string; visibility?: Visibility } = {}
+/**
+ * Change a project's name, who can see it, or the repository it builds from;
+ * what is not sent is left as it is.
+ *
+ * `repo` is the repository's address as a person gives it (../address.ts) and
+ * the branch whose pushes rebuild it — left out, the platform takes `main`. It
+ * is a GitHub repository, by any address GitHub hands out, and goes as its https
+ * clone address; any other is refused before anything is sent. The platform may
+ * still refuse to move a site that a repository in another account would serve
+ * from elsewhere (409), and says why.
+ */
+export async function change(
+  t: Target,
+  slug: string,
+  what: { name?: string; visibility?: Visibility; repo?: { url: string; branch?: string } },
+): Promise<Project> {
+  const body: { name?: string; visibility?: Visibility; repo?: { url: string; branch?: string } } = {}
   if (what.name !== undefined) {
     const n = what.name.trim()
     if (!n) throw new Error(phrase('A project needs a name'))
     body.name = n
   }
   if (what.visibility !== undefined) body.visibility = what.visibility
+  if (what.repo !== undefined) {
+    const at = onGitHub(what.repo.url)
+    if (!at) throw new Error(ADDRESS)
+    const branch = what.repo.branch?.trim()
+    body.repo = branch ? { url: clone(at), branch } : { url: clone(at) }
+  }
   return project(await call<unknown>(t, 'PATCH', `/v1/project/${seg(slug)}`, body))
 }
 

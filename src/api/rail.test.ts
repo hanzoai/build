@@ -1,8 +1,8 @@
 /**
  * The clients behind the rail's Artifacts and the Code settings: a project's
- * rename, visibility and delete; the org's machines and their claim keys; and a
- * person's API keys. Exact addresses and bodies, thin rows read as empty values,
- * and what is refused before anything is sent.
+ * rename, repository, visibility and delete; the org's machines and their claim
+ * keys; and a person's API keys. Exact addresses and bodies, thin rows read as
+ * empty values, and what is refused before anything is sent.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -51,6 +51,32 @@ describe('projects', () => {
     const seen = answer(200, {})
     await expect(change(T, 'site', { name: '  ' })).rejects.toThrow('A project needs a name')
     expect(seen).toHaveLength(0)
+  })
+
+  it('changes the repository with only the repository: GitHub’s clone address, and the branch when one is given', async () => {
+    let seen = answer(200, { slug: 'site', repo: { url: 'https://github.com/webby-ai/book.git', branch: 'trunk' } })
+    const p = await change(T, 'site', { repo: { url: 'git@github.com:webby-ai/book.git', branch: ' trunk ' } })
+    expect(seen[0]).toEqual({ method: 'PATCH', url: 'https://api.hanzo.ai/v1/project/site', body: { repo: { url: 'https://github.com/webby-ai/book.git', branch: 'trunk' } } })
+    expect(p).toMatchObject({ repo: 'https://github.com/webby-ai/book.git', branch: 'trunk' })
+    // No branch, or a blank one, is the platform's to choose.
+    for (const branch of [undefined, '  ']) {
+      seen = answer(200, { slug: 'site' })
+      await change(T, 'site', { repo: { url: 'https://github.com/webby-ai/book', branch } })
+      expect(seen[0].body).toEqual({ repo: { url: 'https://github.com/webby-ai/book.git' } })
+    }
+  })
+
+  it('refuses a repository that is not on GitHub before sending, saying what it takes', async () => {
+    const seen = answer(200, {})
+    for (const url of ['https://gitlab.com/webby-ai/book', 'webby-ai/book', '']) {
+      await expect(change(T, 'site', { repo: { url } })).rejects.toThrow('Paste a GitHub repository’s address')
+    }
+    expect(seen).toHaveLength(0)
+  })
+
+  it('says the platform’s reason when it will not move the site to the repository’s account', async () => {
+    answer(409, { error: { code: 'conflict', message: 'site has releases, whose rows name acme/site; a site with releases does not move to webby-ai' } })
+    await expect(change(T, 'site', { repo: { url: 'https://github.com/webby-ai/book' } })).rejects.toMatchObject({ status: 409, message: expect.stringContaining('does not move') })
   })
 
   it('says the platform’s reason when private is not paid for', async () => {

@@ -98,6 +98,18 @@ export function pinRepo(org: string | null, p: Project, ask = '', issue = 0, whe
 }
 
 /**
+ * Point New at a repository on GitHub, by GitHub's address: the one Sync just
+ * brought in (sync.tsx), so the next run works on it and not on whatever was
+ * chosen before. It is GitHub's address and not its forge copy's, because the
+ * copy is still on its way there. A draft or an issue handed over with the
+ * last choice was that repository's, and goes with it.
+ */
+export function pinHub(org: string | null, r: { owner: string; name: string; private: boolean; branch: string }): void {
+  const repo = asHub({ owner: r.owner, name: r.name, full_name: `${r.owner}/${r.name}`, private: r.private, default_branch: r.branch, pushed_at: '', installation_id: 0 })
+  write(org, { ...read(org), repo, branch: repo.default_branch, ask: '', issue: 0 })
+}
+
+/**
  * A repository on GitHub, chosen from the org's installation: the run works there.
  * Its `full_name` is GitHub's address, `github.com/owner/name` — what the list
  * shows, so a forge codebase of the same name is never mistaken for it, and what
@@ -112,6 +124,13 @@ export interface HubRepo {
   pushed_at: string
   installation_id: number
   github: true
+  /**
+   * Given by its address (address.ts), not chosen from a list. It is the
+   * person's word for where the run works, so no list is asked whether it is
+   * still there: a public repository is on no list, and GitHub admits a run on
+   * it all the same.
+   */
+  given?: boolean
 }
 
 export const isHub = (repo: { github?: boolean; full_name?: string } | null): repo is HubRepo =>
@@ -122,6 +141,47 @@ export const asHub = (r: Omit<HubRepo, 'github'>): HubRepo => ({ ...r, full_name
 
 export const isForge = (repo: { forge?: boolean; name?: string } | null): repo is ForgeRepo =>
   Boolean(repo && repo.forge === true && repo.name)
+
+/**
+ * What New can offer now, read to judge the repository it kept. Each is null
+ * when it was not read — refused, let go, or still being read — and null
+ * judges nothing.
+ */
+export interface Offered {
+  /** Every name a run can address on the forge: the forge's own repositories (GET /v1/git/repos) and every linked copy (GET /v1/sync). */
+  forge: readonly string[] | null
+  /** A page of GitHub's listing (GET /v1/provider/github/repos), with what it says stands behind it. */
+  github: { repos: readonly { owner: string; name: string }[]; next: string; unread: readonly string[] } | null
+}
+
+/**
+ * Whether the repository New kept is gone from what it can offer: a GitHub
+ * repository GitHub no longer lists — let go there, or GitHub disconnected,
+ * which lists nothing — or a codebase the forge no longer holds. Left kept, it
+ * is where every next run would go, whatever was linked or synced since.
+ *
+ * Only a WHOLE answer says a repository is missing. A GitHub page with another
+ * after it, or with an installation it could not read, is not the whole list,
+ * and a list that was not read is no list, so a refused or slow read never
+ * loses a good choice. An address the person gave is theirs, and no list is
+ * asked about it.
+ */
+export function gone(repo: { forge?: boolean; github?: boolean; name?: string; full_name?: string; given?: boolean } | null, now: Offered): boolean {
+  if (!repo || repo.given) return false
+  if (isHub(repo)) {
+    const listed = now.github
+    if (!listed || listed.next || listed.unread.length) return false
+    // Each row by the address `asHub` gives it, which is the one New keeps.
+    const want = repo.full_name.toLowerCase()
+    return !listed.repos.some((r) => `github.com/${r.owner}/${r.name}`.toLowerCase() === want)
+  }
+  if (isForge(repo)) {
+    if (!now.forge) return false
+    const want = repo.name.toLowerCase()
+    return !now.forge.some((n) => n.toLowerCase() === want)
+  }
+  return false
+}
 
 /** A repository queued onto the forge and not reported landed yet. */
 export interface Pending {

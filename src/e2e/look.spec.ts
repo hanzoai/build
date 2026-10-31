@@ -131,7 +131,7 @@ for (const width of [1440, 390]) {
         await expect(p.locator('[data-slot="composer-chip"]')).toHaveText(['Repos', 'Branches', 'Issues', 'Templates'])
         await ask.focus()
         await p.keyboard.press('Control+k')
-        await expect(p.getByRole('listbox', { name: 'Commands' }).getByRole('option')).toHaveText([/Run/, /View issues/, /Browse templates/, /Open projects/, /Bring a repository from GitHub/])
+        await expect(p.getByRole('listbox', { name: 'Commands' }).getByRole('option')).toHaveText([/Run/, /View issues/, /Browse templates/, /Open projects/, /Bring a repository from GitHub/, /Use a git URL/])
         await inside(p, '[data-slot="chip-select-panel"]')
         await shot(p, `look-dev-${width}-${scheme}-commands.png`)
         await p.keyboard.press('Escape')
