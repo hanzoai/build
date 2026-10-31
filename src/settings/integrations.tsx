@@ -7,7 +7,9 @@
  * and the platform's callback brings the person back here with the answer
  * (../back.ts), which this page finishes and reports. Anyone connects their own
  * GitHub; installing the App and connecting Slack are an org admin's, which is
- * the platform's rule.
+ * the platform's rule. A GitHub change made here, on Projects or in the Hanzo
+ * app's Quick setup is said on the window (../api/github.ts `changed`), and
+ * this page reads GitHub again.
  *
  * Its words are the reader's language (@hanzo/i18n `t`); an account's,
  * a channel's and a provider's names, and the platform's own notes, are drawn
@@ -17,10 +19,10 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Github, Hash, Lock, Megaphone, Slack } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { told } from '../api/call.ts'
-import { connect, connection, disconnect as unlinkGithub, installations, type Connection, type Installation } from '../api/github.ts'
+import { changed, connect, connection, disconnect as unlinkGithub, heard, installations, type Connection, type Installation } from '../api/github.ts'
 import { authorize, channels, disconnect, read, SOCIAL, type Channels, type Connector } from '../api/provider.ts'
 import { here, useBack } from '../back.ts'
 import { useRead } from '../data.ts'
@@ -40,9 +42,17 @@ export function Integrations() {
   const social = useSocial(signed, SOCIAL.map((p) => p.id))
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
+  const { reload: readMine } = mine
+  const { reload: readInstalled } = installed
+  useEffect(
+    () =>
+      heard(() => {
+        readMine()
+        readInstalled()
+      }),
+    [readMine, readInstalled],
+  )
   useBack(target, signed, setNote, () => {
-    mine.reload()
-    installed.reload()
     slack.reload()
     social.reload()
   })
@@ -112,7 +122,7 @@ export function Integrations() {
             trailing={
               me?.configured ? (
                 me.connected ? (
-                  <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => unlinkGithub(target), t('Your GitHub is disconnected'), mine.reload)}>
+                  <Button size="sm" variant="outline" disabled={working} onPress={() => void act(() => unlinkGithub(target), t('Your GitHub is disconnected'), changed)}>
                     {t('Disconnect')}
                   </Button>
                 ) : (
@@ -143,7 +153,7 @@ export function Integrations() {
                         size="sm"
                         variant="outline"
                         disabled={working}
-                        onPress={() => void act(() => disconnect(target, 'github', i.login), t('@{login} is disconnected', { login: i.login }), installed.reload)}
+                        onPress={() => void act(() => disconnect(target, 'github', i.login), t('@{login} is disconnected', { login: i.login }), changed)}
                       >
                         {t('Disconnect')}
                       </Button>

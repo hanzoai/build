@@ -408,6 +408,26 @@ describe('connectors', () => {
     const mine = { configured: true, connected: true, login: 'zeekay' }
     expect(github.linked(mine, [install('acme')])).toBe(mine)
   })
+
+  it('says a GitHub change on the window, where every surface showing GitHub hears it', () => {
+    // No window (a server render): nothing to say it on.
+    expect(() => github.changed()).not.toThrow()
+    const page = new EventTarget()
+    vi.stubGlobal('window', page)
+    let reads = 0
+    const stop = github.heard(() => {
+      reads += 1
+    })
+    github.changed()
+    expect(reads).toBe(1)
+    // The name the Hanzo app's Quick setup (@hanzo/app Setup) says and hears.
+    expect(github.CHANGED).toBe('hanzo:github')
+    page.dispatchEvent(new Event('hanzo:github'))
+    expect(reads).toBe(2)
+    stop()
+    github.changed()
+    expect(reads).toBe(2)
+  })
 })
 
 describe('webhooks', () => {

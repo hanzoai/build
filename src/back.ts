@@ -10,14 +10,16 @@
  *   ?error=<provider>&reason=<why>      either, refused
  *
  * `useBack` reads that answer once, takes it off the address so a reload does
- * not replay it, finishes a GitHub grant, and says what happened.
+ * not replay it, finishes a GitHub grant, and says what happened. GitHub
+ * connected either way is said on the window too (`changed`), so every surface
+ * showing GitHub reads it again, the Hanzo app's Quick setup among them.
  */
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
 import { useEffect } from 'react'
 
 import type { Target } from './api/call.ts'
-import { complete } from './api/github.ts'
+import { changed, complete } from './api/github.ts'
 
 /** The query keys a return carries its answer in. */
 export const ANSWER = ['complete', 'grant', 'connected', 'account', 'error', 'reason'] as const
@@ -71,9 +73,10 @@ export const named = (id: string): string => NAMES[id] ?? (id ? id[0].toUpperCas
 
 /**
  * Finish what a return carried, once a person is signed in: `say` gets the
- * sentence, and `after` runs once something was connected.
+ * sentence, and `after` runs once something was connected. GitHub's own
+ * readers hear `changed` instead (api/github.ts `heard`).
  */
-export function useBack(t: Target, signed: boolean, say: (note: string) => void, after: () => void): void {
+export function useBack(t: Target, signed: boolean, say: (note: string) => void, after?: () => void): void {
   const { t: words } = useI18n()
   useEffect(() => {
     if (!signed) return
@@ -93,14 +96,17 @@ export function useBack(t: Target, signed: boolean, say: (note: string) => void,
           ? words('{provider} is connected as {account}', { provider: words(named(l.provider)), account: l.account })
           : words('{provider} is connected', { provider: words(named(l.provider)) }),
       )
-      after()
+      // The org's App, installed on a GitHub account.
+      if (l.provider === 'github') changed()
+      after?.()
       return
     }
     if (l.provider !== 'github') return
     complete(t, l.grant).then(
       (c) => {
         say(c.connected ? words('Connected as @{login}', { login: c.login }) : words('GitHub did not connect; connect again'))
-        after()
+        changed()
+        after?.()
       },
       (e: unknown) => say((e as Error).message),
     )
