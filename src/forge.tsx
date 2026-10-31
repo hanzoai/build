@@ -46,7 +46,7 @@ import type { Screen } from './route.ts'
 import { path } from './route.ts'
 import { Customize } from './customize/index.tsx'
 import { Sync } from './sync.tsx'
-import { connect, connection, disconnect as unlink, grants, installations, linked, syncIssues, type Connection, type Installation } from './api/github.ts'
+import { changed, connect, connection, disconnect as unlink, grants, heard, installations, linked, syncIssues, type Connection, type Installation } from './api/github.ts'
 import { disconnect } from './api/provider.ts'
 import { here, useBack } from './back.ts'
 import { Out } from './out.tsx'
@@ -358,6 +358,9 @@ function Choice({ label, icon, says, onPress }: { label: string; icon: ReactNode
  * Disconnect lets go of it, so another account can be connected: the person's own
  * link, or (for an org admin) the org's App accounts, which the platform also
  * uninstalls on GitHub. It asks once before doing either.
+ *
+ * A change made here, in Settings or in the Hanzo app's Quick setup is said on
+ * the window (api/github.ts `changed`), and this line reads it again.
  */
 function GitHubLink({ onSync }: { onSync: () => void }) {
   const host = useHost()
@@ -369,10 +372,17 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [asking, setAsking] = useState(false)
-  useBack(target, true, setNote, () => {
-    me.reload()
-    installed.reload()
-  })
+  const { reload: readMe } = me
+  const { reload: readInstalled } = installed
+  useEffect(
+    () =>
+      heard(() => {
+        readMe()
+        readInstalled()
+      }),
+    [readMe, readInstalled],
+  )
+  useBack(target, true, setNote)
   const c = me.value ? linked(me.value, installed.value) : null
   // A connection that cannot be read says nothing here: Sync from GitHub above still works.
   if (me.error || !c || !c.configured) return note ? <Note>{note}</Note> : null
@@ -398,8 +408,7 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
       await (own ? unlink(target) : disconnect(target, 'github'))
       setAsking(false)
       setNote(t('GitHub is disconnected. Connect it again to choose another account.'))
-      me.reload()
-      installed.reload()
+      changed()
     } catch (e) {
       setNote((e as Error).message)
     } finally {

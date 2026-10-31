@@ -184,6 +184,26 @@ export async function disconnect(t: Target): Promise<void> {
   await call<unknown>(t, 'POST', '/v1/provider/github/user/disconnect')
 }
 
+/**
+ * Said on the window when this page changes the GitHub connection (a connect
+ * finished, a link or an App account let go), so every surface showing it
+ * reads it again: Projects' line, Settings' Integrations, and the Hanzo app's
+ * Quick setup (@hanzo/app Setup), which says it too. A name the two packages
+ * agree on, so neither imports the other.
+ */
+export const CHANGED = 'hanzo:github'
+
+/** Say the GitHub connection changed. */
+export function changed(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CHANGED))
+}
+
+/** Run `again` each time the GitHub connection changed; the answer stops it. */
+export function heard(again: () => void): () => void {
+  window.addEventListener(CHANGED, again)
+  return () => window.removeEventListener(CHANGED, again)
+}
+
 /** A GitHub account the platform's App is installed on, as this org sees it. */
 export interface Installation {
   login: string
