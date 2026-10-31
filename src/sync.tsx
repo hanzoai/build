@@ -4,7 +4,8 @@
  * The list is GET /v1/provider/github/repos. The queue is POST
  * /v1/provider/github/repos/import, which mirrors `owner/name` into this
  * organization's forge in the background. An account named unread and holding
- * no repositories is shown as needing an organization admin.
+ * no repositories is shown as needing an organization admin. One repository
+ * brought in becomes the one New starts the next run on (choice.ts `pinHub`).
  *
  * Its words are the reader's language (@hanzo/i18n `t`); account and
  * repository names, and Forge, the forge's own name, are drawn as given.
@@ -19,7 +20,7 @@ import { here, useBack } from './back.ts'
 import { Refusal } from './api/call.ts'
 import { accounts, bring, grants, type Grant, type Grants } from './api/github.ts'
 import { authorize } from './api/provider.ts'
-import { readPending, writePending, type Pending } from './choice.ts'
+import { pinHub, readPending, writePending, type Pending } from './choice.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { path } from './route.ts'
@@ -92,6 +93,9 @@ export function Sync() {
         ...chosen.map((r) => ({ fullName: r.fullName, name: queued.codebases[r.fullName.toLowerCase()] || r.codebase || r.name })),
       ]
       writePending(host.org, next)
+      // One repository brought in is the one the person means to work on next, so
+      // New opens on it rather than on what it held before. Several say no one.
+      if (picked.length === 1 && chosen.length === 1) pinHub(host.org, chosen[0])
       setSyncing(true)
     } catch (e) {
       setError((e as Error).message)

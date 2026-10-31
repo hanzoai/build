@@ -13,8 +13,9 @@ import { Boxes, ExternalLink, Globe, Lock, MoreHorizontal } from '@hanzogui/luci
 import { Button, DropdownMenu } from '@hanzo/ui'
 import { useState } from 'react'
 
-import { change, fork, remove, templates, type Project, type Template } from './api/projects.ts'
-import { Confirm, Rename } from './ask.tsx'
+import { clone } from './address.ts'
+import { address, change, fork, remove, templates, type Project, type Template } from './api/projects.ts'
+import { Address, Confirm, Rename } from './ask.tsx'
 import { useProjects, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { Out } from './out.tsx'
@@ -106,9 +107,13 @@ function edited(s: number, say: Say): string {
 /**
  * What this org has deployed: a few starters to make something new from, then
  * every site under the month it was last edited, whether it is public or
- * private, and its rename, visibility and delete. A site belongs to the org and
- * names no author, so the list does not split yours from a colleague's — which
- * is why it is a section of its own under the Library's items, which are yours.
+ * private, and its rename, repository, visibility and delete. A site belongs to
+ * the org and names no author, so the list does not split yours from a
+ * colleague's — which is why it is a section of its own under the Library's
+ * items, which are yours.
+ *
+ * Its repository is the one its builds are cut from, by a GitHub address in any
+ * form GitHub hands out (address.ts), with the branch whose pushes rebuild it.
  */
 export function Sites() {
   const { t: say } = useI18n()
@@ -118,6 +123,7 @@ export function Sites() {
   const starters = useRead(() => templates(t), [] as Template[], [t.api])
   const { busy, failed, take } = useFork()
   const [renaming, setRenaming] = useState<Project | null>(null)
+  const [relinking, setRelinking] = useState<Project | null>(null)
   const [deleting, setDeleting] = useState<Project | null>(null)
   const [note, setNote] = useState('')
 
@@ -233,6 +239,7 @@ export function Sites() {
                         }
                         items={[
                           { key: 'rename', label: say('Rename'), onSelect: () => setRenaming(p) },
+                          { key: 'repo', label: say('Change repository'), onSelect: () => setRelinking(p) },
                           { key: 'visibility', label: p.visibility === 'private' ? say('Make public') : say('Make private'), onSelect: () => void flip(p) },
                           { type: 'separator' },
                           { key: 'delete', label: say('Delete'), destructive: true, onSelect: () => setDeleting(p) },
@@ -255,6 +262,22 @@ export function Sites() {
           run={async (name) => {
             await change(t, renaming.slug, { name })
             setNote(say('Renamed to {name}', { name }))
+            list.reload()
+          }}
+        />
+      ) : null}
+      {relinking ? (
+        <Address
+          open
+          onOpenChange={(o) => !o && setRelinking(null)}
+          title={say('Change repository')}
+          says={say('The GitHub repository {name} is built from. A push to its branch builds it again.', { name: relinking.name })}
+          act={say('Save')}
+          address={relinking.repo}
+          branch={relinking.branch || 'main'}
+          run={async (at, branch) => {
+            const next = await change(t, relinking.slug, { repo: { url: clone(at), branch } })
+            setNote(say('{name} is built from {repo} now', { name: relinking.name, repo: address(next.repo) || `${at.owner}/${at.name}` }))
             list.reload()
           }}
         />

@@ -1,12 +1,15 @@
 /**
- * Asking one thing before an act: to confirm one that cannot be undone, or the
- * new name for something. A refusal is said in the dialog, which stays open, so
- * the reason is read where the act was asked for.
+ * Asking one thing before an act: to confirm one that cannot be undone, the
+ * new name for something, or the address of the repository it works on. A
+ * refusal is said in the dialog, which stays open, so the reason is read where
+ * the act was asked for.
  */
-import { SizableText, XStack } from '@hanzo/gui'
+import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
+
+import { ADDRESS, onGitHub, type At } from './address.ts'
 
 /** One act in flight, and what refused it. */
 function useAct(onDone: () => void) {
@@ -132,6 +135,105 @@ export function Rename({
           </Button>
           <Button size="sm" disabled={working} onPress={save}>
             {t('Save')}
+          </Button>
+        </XStack>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * The repository something works on, by the address a person has for it:
+ * GitHub's page, its clone address, or either without the scheme (address.ts).
+ * Anything else is refused here, in the dialog, with the forms it takes, before
+ * anything is sent. With a `branch`, the branch is asked beside it.
+ */
+export function Address({
+  open,
+  onOpenChange,
+  title,
+  says,
+  act,
+  address,
+  branch,
+  run,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  title: string
+  /** What the address decides, stated plainly. */
+  says: string
+  /** The button's word: Use, Save. */
+  act: string
+  /** The address it has now, or ''. */
+  address: string
+  /** The branch it has now. Left out, no branch is asked. */
+  branch?: string
+  run: (at: At, branch: string) => Promise<void>
+}) {
+  const { t } = useI18n()
+  const id = useId()
+  const [value, setValue] = useState(address)
+  const [ref, setRef] = useState(branch ?? '')
+  const { working, note, setNote, go } = useAct(() => onOpenChange(false))
+  useEffect(() => {
+    if (!open) return
+    setValue(address)
+    setRef(branch ?? '')
+  }, [open, address, branch])
+  const close = (o: boolean) => {
+    if (working) return
+    setNote('')
+    onOpenChange(o)
+  }
+  const save = () => {
+    const text = value.trim()
+    const next = ref.trim()
+    // Nothing changed is nothing to send.
+    if (text && text === address.trim() && next === (branch ?? '').trim()) return close(false)
+    const at = onGitHub(text)
+    if (!at) return setNote(t(ADDRESS))
+    void go(() => run(at, next))
+  }
+  const enter = (e: { key?: string }) => {
+    if (e.key === 'Enter') save()
+  }
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent maxW={480} showCloseButton={false}>
+        <DialogTitle>{title}</DialogTitle>
+        <SizableText size="$2" color="$soft">
+          {says}
+        </SizableText>
+        <YStack gap="$1.5">
+          <SizableText render="label" size="$2" color="$soft" htmlFor={`${id}-address`}>
+            {t('Repository')}
+          </SizableText>
+          <Input
+            id={`${id}-address`}
+            autoFocus
+            value={value}
+            onChangeText={setValue}
+            placeholder={t('https://github.com/owner/name')}
+            aria-label={t('Repository')}
+            onKeyDown={enter}
+          />
+        </YStack>
+        {branch !== undefined ? (
+          <YStack gap="$1.5">
+            <SizableText render="label" size="$2" color="$soft" htmlFor={`${id}-branch`}>
+              {t('Branch')}
+            </SizableText>
+            <Input id={`${id}-branch`} value={ref} onChangeText={setRef} placeholder="main" aria-label={t('Branch')} onKeyDown={enter} />
+          </YStack>
+        ) : null}
+        <Said note={note} />
+        <XStack gap="$2" justify="flex-end">
+          <Button size="sm" variant="ghost" disabled={working} onPress={() => close(false)}>
+            {t('Cancel')}
+          </Button>
+          <Button size="sm" disabled={working} onPress={save}>
+            {act}
           </Button>
         </XStack>
       </DialogContent>

@@ -242,15 +242,16 @@ test.describe('New’s offer to set a codebase up', () => {
     await expect(p.getByRole('button', { name: 'Set up environment' })).toHaveCount(0)
   })
 
-  test('a board’s key held as the codebase is said to be none of the org’s, and the dialog sets up only one of its repositories', async ({ page: p }, info) => {
+  test('a board’s key held as the codebase is let go once the org’s whole list does not hold it, and Send asks for a repository', async ({ page: p }, info) => {
     const sent = await setup(p, STRANGER)
     await p.goto('/')
-    await expect(p.getByText('HCC is not one of this organization’s repositories.')).toBeVisible()
+    // The forge and the links both answered, without HCC: New holds no repository now.
+    await expect.poll(() => p.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null')?.repo ?? null, `hanzo.build.new.${ORG}`)).toBeNull()
     // No environment is offered or read for a name that is not a repository.
     await expect(p.getByRole('button', { name: 'Set up environment' })).toHaveCount(0)
     expect(sent.some((s) => s.path === '/v1/environment/HCC')).toBe(false)
     await p.getByRole('textbox', { name: 'Describe a task or ask a question' }).press('Enter')
-    await expect(p.getByText('HCC is not one of this organization’s repositories. Choose one, or leave it empty to start a new project.')).toBeVisible()
+    await expect(p.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
     expect(to(sent, 'POST', '/v1/agent/coding')).toHaveLength(0)
     await p.screenshot({ path: info.outputPath('stranger.png') })
   })

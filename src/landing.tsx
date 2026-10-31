@@ -10,7 +10,9 @@
  * repository — the org's on the forge, or one its GitHub grants — so a run
  * names one, and an ask with none chosen opens the picker rather than making a
  * project up from its words. The choices a person made here are kept in this
- * browser, per org, so the next New starts where the last one did.
+ * browser, per org, so the next New starts where the last one did — and a kept
+ * repository New can no longer offer is let go, so the next run is not sent
+ * back to it. A repository can also be given by its address (Use a git URL).
  *
  * Its words are the reader's language (@hanzo/i18n `t`, the target is
  * `target`); a codebase's, a machine's and a branch's names are drawn as given.
@@ -18,7 +20,7 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { CircleDot, Cloud, Code, GitBranch, LayoutTemplate, Monitor, Play } from '@hanzogui/lucide-icons-2'
+import { CircleDot, Cloud, Code, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { Composer, MEASURE, type Chip, type Command } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
@@ -28,13 +30,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
-import { repos as githubRepos } from './api/github.ts'
+import { heard, repos as githubRepos } from './api/github.ts'
 import { plain, read, SETUP, unset, type Environment } from './api/environment.ts'
 import { homes as readHomes, type Home, type Homes } from './api/work.ts'
 import { SetupDialog } from './environment.tsx'
 import { limits as readLimits } from './api/models.ts'
 import { ready, SANDBOX, type Place } from './api/places.ts'
-import { asHub, isForge, isHub, settle, type HubRepo } from './choice.ts'
+import type { At } from './address.ts'
+import { Address } from './ask.tsx'
+import { asHub, gone, isForge, isHub, settle, type HubRepo } from './choice.ts'
 import { useCached, useKept, usePlaces, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { level, pacing, useMind } from './mind.ts'
@@ -57,7 +61,8 @@ export const MODES = [
 
 /** What a person chose last time, per org. */
 interface Kept {
-  repo: (RowRepo & { forge?: boolean; github?: boolean; clone?: string }) | null
+  /** `given` marks a GitHub repository given by its address (choice.ts `HubRepo`). */
+  repo: (RowRepo & { forge?: boolean; github?: boolean; clone?: string; given?: boolean }) | null
   branch: string
   place: string
   mode: Mode
@@ -138,6 +143,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState<Source | null>(null)
   const [offering, setOffering] = useState(false)
+  // Asking for a repository's address, for one the lists do not show.
+  const [giving, setGiving] = useState(false)
   // The repository and branch lists are read again each time they open.
   const [picking, setPicking] = useState(false)
   const [branching, setBranching] = useState(false)
@@ -190,6 +197,53 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   // A read kept from the codebase before is not this one's.
   const env = { ...found, value: found.value && found.value.repo === codebase && !stranger ? found.value : null }
   const place: Place = places.value.find((p) => p.id === kept.place) ?? SANDBOX
+
+  // The kept repository is checked against what New can offer now (choice.ts
+  // `gone`): on arrival, and again each time the GitHub connection changes
+  // anywhere on the page (api/github.ts `heard`). One that is gone is let go with
+  // its branch and the issue it would close, so the composer holds none and Send
+  // opens the picker — a repository let go on GitHub, or a GitHub disconnected,
+  // is not where the next run goes.
+  const address = isHub(kept.repo) ? kept.repo.full_name : ''
+  const given = kept.repo?.given === true
+  // The choice as it is when an answer lands, so nothing chosen while it was read is written back over.
+  const latest = useRef(kept)
+  latest.current = kept
+  const drop = useCallback(() => {
+    setIssue(0)
+    keep({ ...latest.current, repo: null, branch: '' })
+  }, [keep])
+  const [looks, look] = useState(0)
+  const { reload: readHomesAgain } = homes
+  useEffect(
+    () =>
+      heard(() => {
+        look((n) => n + 1)
+        readHomesAgain()
+      }),
+    [readHomesAgain],
+  )
+  // A codebase is judged by the org's list above. That list is drawn at once from
+  // what this page read before, so only its own answer on this visit judges: read
+  // to the end, neither refused nor let go as slow, and from both of its sources.
+  const fresh = !homes.loading && homes.error === null && homes.value !== NOHOMES && homes.value.whole
+  const forgeNames = useMemo(() => (fresh ? homes.value.homes.map((h) => h.name) : null), [fresh, homes.value])
+  useEffect(() => {
+    if (codebase && gone(latest.current.repo, { forge: forgeNames, github: null })) drop()
+  }, [codebase, forgeNames, drop])
+  // A GitHub repository, by GitHub's listing narrowed to its own address, so one
+  // page is the whole answer for it however many the connection grants. A read
+  // refused is no list; one this page has moved on from is not heard.
+  useEffect(() => {
+    if (!signed || !address || given) return
+    const ctl = new AbortController()
+    void githubRepos(target, { q: address.slice('github.com/'.length), limit: 100 }, ctl.signal)
+      .catch(() => null)
+      .then((github) => {
+        if (!ctl.signal.aborted && gone(latest.current.repo, { forge: null, github })) drop()
+      })
+    return () => ctl.abort()
+  }, [signed, target, address, given, looks, drop])
 
   const known = useRef(new Map<string, ForgeRepo>())
   const hubs = useRef(new Map<string, HubRepo>())
@@ -348,6 +402,23 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     set({ repo: row, branch: row.default_branch })
   }
 
+  /**
+   * The repository at an address the person gave, chosen as GitHub's — as a row
+   * of the GitHub list is, so the run clones, pushes and proposes there — and
+   * kept as given. One the list has shown keeps the branch and privacy it said;
+   * any other starts from its default branch.
+   */
+  const give = (at: At) => {
+    const listed = hubs.current.get(`github.com/${at.owner}/${at.name}`.toLowerCase())
+    const row: HubRepo = {
+      ...(listed ?? asHub({ owner: at.owner, name: at.name, full_name: `${at.owner}/${at.name}`, private: false, default_branch: '', pushed_at: '', installation_id: 0 })),
+      given: true,
+    }
+    setIssue(0)
+    setNote('')
+    set({ repo: row, branch: row.default_branch })
+  }
+
   // Cloud is the sandbox, set up by the chosen codebase's environment; the rest are the org's machines.
   const placeItems = useMemo(
     () =>
@@ -437,6 +508,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     { id: 'templates', label: t('Browse templates'), icon: <LayoutTemplate size={14} color="$soft" />, run: screen('templates') },
     { id: 'projects', label: t('Open projects'), icon: <Code size={14} color="$soft" />, run: screen('projects') },
     { id: 'sync', label: t('Bring a repository from GitHub'), icon: <GitBranch size={14} color="$soft" />, run: screen('sync') },
+    { id: 'address', label: t('Use a git URL'), icon: <Link2 size={14} color="$soft" />, run: () => setGiving(true) },
   ]
 
   // The machines a run can go to, as the `+` menu's Devices: the same choice as the pill's.
@@ -544,6 +616,15 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         </YStack>
       </YStack>
       <Publish source={adding} onClose={() => setAdding(null)} />
+      <Address
+        open={giving}
+        onOpenChange={setGiving}
+        title={t('Use a git URL')}
+        says={t('Runs work on the GitHub repository at this address until you choose another. A private one needs GitHub connected.')}
+        act={t('Use')}
+        address=""
+        run={async (at) => give(at)}
+      />
       {carry.dialog}
       {codebase ? (
         <SetupDialog

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Codebase } from './api/codebases.ts'
-import { asHub, boardKey, isForge, isHub, pinBoard, pinCodebase, pinRepo, readPending, settle, writePending } from './choice.ts'
+import { asHub, boardKey, gone, isForge, isHub, pinBoard, pinCodebase, pinHub, pinRepo, readPending, settle, writePending, type Offered } from './choice.ts'
 
 /** Web Storage as a browser has it. */
 function area(seed: Record<string, string> = {}) {
@@ -116,6 +116,73 @@ describe('pointing New at a project', () => {
   it('refuses one that is neither, rather than pinning a name the platform would refuse', () => {
     browser()
     expect(() => pinRepo('acme', { ...P, linked: false })).toThrow('hanzoai/build is neither on the forge nor linked from GitHub')
+  })
+})
+
+describe('pointing New at a repository just brought from GitHub', () => {
+  it('replaces the repository, its branch and any handed-over draft, and keeps the mode, model and machine', () => {
+    const was = { repo: asHub({ owner: 'webby-ai', name: 'intel-hub', full_name: 'webby-ai/intel-hub', private: true, default_branch: 'main', pushed_at: '', installation_id: 7 }), branch: 'dev', mode: 'plan', model: 'zen5', place: 'tgt_1', ask: 'Fix the hub', issue: 4 }
+    const { local } = browser(area({ 'hanzo.build.new.acme': JSON.stringify(was) }))
+    pinHub('acme', { owner: 'webby-ai', name: 'book', private: false, branch: 'trunk' })
+    const kept = JSON.parse(local.getItem('hanzo.build.new.acme')!)
+    expect(kept).toEqual({
+      mode: 'plan',
+      model: 'zen5',
+      place: 'tgt_1',
+      repo: { owner: 'webby-ai', name: 'book', full_name: 'github.com/webby-ai/book', private: false, default_branch: 'trunk', pushed_at: '', installation_id: 0, github: true },
+      branch: 'trunk',
+      ask: '',
+      issue: 0,
+    })
+    expect(isHub(kept.repo)).toBe(true)
+  })
+
+  it('does nothing it cannot keep in a browser that refuses storage', () => {
+    refusing()
+    expect(() => pinHub('acme', { owner: 'webby-ai', name: 'book', private: true, branch: 'main' })).not.toThrow()
+  })
+})
+
+describe('a kept repository that is gone', () => {
+  const HUB = asHub({ owner: 'webby-ai', name: 'intel-hub', full_name: 'webby-ai/intel-hub', private: true, default_branch: 'main', pushed_at: '', installation_id: 7 })
+  const FORGE = { owner: 'acme', name: 'widget', full_name: 'acme/widget', private: true, default_branch: 'main', pushed_at: '', installation_id: 0, forge: true as const, clone: '' }
+  const page = (repos: { owner: string; name: string }[], more: Partial<NonNullable<Offered['github']>> = {}): Offered['github'] => ({ repos, next: '', unread: [], ...more })
+  const UNREAD: Offered = { forge: null, github: null }
+
+  it('is a GitHub repository the whole listing no longer has: let go on GitHub, or GitHub disconnected', () => {
+    expect(gone(HUB, { forge: null, github: page([{ owner: 'webby-ai', name: 'book' }]) })).toBe(true)
+    // A disconnected GitHub answers an empty, whole page.
+    expect(gone(HUB, { forge: null, github: page([]) })).toBe(true)
+  })
+
+  it('is not one the listing still has, whatever case it spells it in', () => {
+    expect(gone(HUB, { forge: null, github: page([{ owner: 'Webby-AI', name: 'Intel-Hub' }]) })).toBe(false)
+  })
+
+  it('is never judged from a GitHub answer that is not the whole list', () => {
+    expect(gone(HUB, { forge: null, github: page([], { next: 'cursor' }) })).toBe(false)
+    expect(gone(HUB, { forge: null, github: page([], { unread: ['webby-ai'] }) })).toBe(false)
+  })
+
+  it('is a codebase the forge no longer holds, by its own name or a linked copy’s', () => {
+    expect(gone(FORGE, { forge: ['site', 'acme_widgets'], github: null })).toBe(true)
+    expect(gone(FORGE, { forge: [], github: null })).toBe(true)
+    expect(gone(FORGE, { forge: ['site', 'Widget'], github: null })).toBe(false)
+  })
+
+  it('is never judged from a list that was refused, let go or is still being read', () => {
+    expect(gone(HUB, UNREAD)).toBe(false)
+    expect(gone(FORGE, UNREAD)).toBe(false)
+    // The forge's answer says nothing about a GitHub repository, nor GitHub's about a codebase.
+    expect(gone(HUB, { forge: [], github: null })).toBe(false)
+    expect(gone(FORGE, { forge: null, github: page([]) })).toBe(false)
+  })
+
+  it('is never an address the person gave, nor no repository at all', () => {
+    expect(gone({ ...HUB, given: true }, { forge: [], github: page([]) })).toBe(false)
+    expect(gone(null, { forge: [], github: page([]) })).toBe(false)
+    // Neither a forge row nor a GitHub one: New offers it as nothing already.
+    expect(gone({ name: 'widget', full_name: 'acme/widget' }, { forge: [], github: page([]) })).toBe(false)
   })
 })
 

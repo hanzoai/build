@@ -113,7 +113,6 @@ const signedIn: State[] = [
   { name: 'new', path: '/', platform: stub.landing, says: /What.s up next\?/ },
   { name: 'new-place', path: '/', platform: stub.landing, says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Where the run runs: Cloud' }).click(), over: true },
   { name: 'new-setup', path: '/', platform: stub.setup, says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Set up environment' }).click(), over: true },
-  { name: 'new-stranger', path: '/', platform: (p) => stub.setup(p, stub.STRANGER), says: /HCC is not one of this organization.s repositories/ },
   { name: 'issues-which', path: '/-/issues', platform: forge, says: /Console billing page/, act: (p) => p.getByRole('button', { name: 'Build LINEAR-5' }).click(), over: true },
   { name: 'find', path: '/', platform: (p) => stub.session(p), says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Search runs' }).locator('visible=true').first().click(), over: true },
   { name: 'account-menu', path: '/', platform: rail, says: /What.s up next\?/, act: inRail('Account: Dave · acme'), over: true },
