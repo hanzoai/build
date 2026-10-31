@@ -196,8 +196,8 @@ describe('what projects are made from', () => {
     expect(got).toMatchObject({ next: 'c2', unread: ['hanzo-labs'], owners: ['hanzoai', 'luxfi'], missing: [] })
     expect(got.hub.map((r) => r.codebase)).toEqual(['hanzoai_build'])
     expect(got.linked).toEqual([
-      { owner: 'hanzoai', name: 'cloud', forge: 'cloud', synced: '2026-10-06T00:00:00Z', status: 'synced', branch: 'main', direction: 'pull' },
-      { owner: 'luxfi', name: 'node', forge: 'node', synced: '', status: '', branch: '', direction: 'pull' },
+      { id: 's1', owner: 'hanzoai', name: 'cloud', forge: 'cloud', synced: '2026-10-06T00:00:00Z', status: 'synced', branch: 'main', direction: 'pull' },
+      { id: 's3', owner: 'luxfi', name: 'node', forge: 'node', synced: '', status: '', branch: '', direction: 'pull' },
     ])
     expect(got.held).toEqual([{ org: 'hanzo', name: 'hanzoai_build', description: '', branch: 'main', public: false, updated: '2026-10-02T00:00:00Z' }])
     expect(got.sites).toEqual([

@@ -10,6 +10,7 @@ import { call, query, Refusal, type Target } from './call.ts'
 import * as coding from './coding.ts'
 import * as git from './git.ts'
 import * as github from './github.ts'
+import * as links from './links.ts'
 import { places, SANDBOX } from './places.ts'
 import * as platform from './platform.ts'
 import * as sandbox from './sandbox.ts'
@@ -207,6 +208,25 @@ describe('github', () => {
     const seen = answer(200, { disconnected: true })
     await github.disconnect(T)
     expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/provider/github/user/disconnect' })
+  })
+})
+
+describe('links', () => {
+  it('reads each link by the id it is dropped by, and drops one, escaped, saying a refusal in the sync app’s words', async () => {
+    // apps/sync syncView: a repository link and an account link, which is left out.
+    answer(200, {
+      data: [
+        { id: 'sync_7', kind: 'git', scope: 'repo', source: { provider: 'github', locator: 'https://github.com/hanzoai/cloud.git' }, target: { provider: 'hanzo-git', locator: 'cloud' }, direction: 'both' },
+        { id: 'sync_8', kind: 'git', scope: 'account', source: { provider: 'github', locator: 'https://github.com/hanzoai' }, target: { provider: 'hanzo-git', locator: '*' }, direction: 'both' },
+      ],
+    })
+    expect((await links.links(T)).map((l) => [l.id, `${l.owner}/${l.name}`])).toEqual([['sync_7', 'hanzoai/cloud']])
+    const seen = answer(204, undefined)
+    await links.unlink(T, 'sync 7')
+    expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/sync/sync%207', body: undefined })
+    expect(seen[0].headers.get('x-org-id')).toBe('hanzo')
+    answer(404, { detail: 'sync not found' })
+    await expect(links.unlink(T, 'sync_7')).rejects.toMatchObject({ status: 404, message: 'sync not found' })
   })
 })
 
@@ -438,6 +458,15 @@ describe('forge', () => {
     const { one } = await import('./codebases.ts')
     const got = await one(T, 'cloud')
     expect(got?.branches).toEqual(['main', 'agent/1'])
+  })
+
+  it('deletes a codebase by its name, escaped, and says a refusal in the forge’s words', async () => {
+    const seen = answer(204, undefined)
+    const { remove } = await import('./codebases.ts')
+    await remove(T, 'hanzoai_intel hub')
+    expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/git/repos/hanzoai_intel%20hub', body: undefined })
+    answer(404, { detail: 'repo not found' })
+    await expect(remove(T, 'gone')).rejects.toMatchObject({ status: 404, message: 'repo not found' })
   })
 
   it('lists boards and every board\'s issues from the forge', async () => {

@@ -3,7 +3,8 @@
  * holds them: one link per repository (an account link declares one for every
  * repository its account holds), each with its copy on the forge.
  *
- *   GET /v1/sync   {data: [syncView]}   apps/sync sync_api.go
+ *   GET    /v1/sync        {data: [syncView]}   apps/sync sync_api.go
+ *   DELETE /v1/sync/{id}   drop one link
  *
  * A repository link's source is GitHub's https clone address; its target is the
  * forge, by the bare name the copy has there. `updatedAt` is bumped by every
@@ -14,10 +15,16 @@
  *
  * Every link the sync app holds is also a row of GET /v1/project (apps/sync
  * project.go), so this list is the org's linked projects and not a copy of them.
+ *
+ * Dropping a link stops the sync both ways: the sync app withdraws the push
+ * back to GitHub as it deletes the link. The copy on the forge and the project
+ * are left as they are, so a removal that wants them gone asks for each.
  */
-import { call, type Target } from './call.ts'
+import { call, seg, type Target } from './call.ts'
 
 export interface Link {
+  /** The link's handle, which dropping it takes. */
+  id: string
   /** The GitHub account. */
   owner: string
   /** The repository; '' for an account link. */
@@ -62,6 +69,7 @@ export function link(raw: unknown): Link | null {
   if (!at) return null
   const native = o.native ? obj(o.native) : null
   return {
+    id: str(o.id),
     owner: at.owner,
     name: str(o.scope) === 'account' ? '' : at.name,
     forge: str(target.provider) === 'hanzo-git' ? str(target.locator) : '',
@@ -78,4 +86,9 @@ export async function links(t: Target, signal?: AbortSignal): Promise<Link[]> {
   return (Array.isArray(raw.data) ? raw.data : [])
     .map(link)
     .filter((l): l is Link => l !== null && l.name !== '')
+}
+
+/** Drop one link: GitHub stops syncing into its copy, and its copy stops pushing back. */
+export async function unlink(t: Target, id: string): Promise<void> {
+  await call<unknown>(t, 'DELETE', `/v1/sync/${seg(id)}`)
 }

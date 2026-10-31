@@ -22,8 +22,8 @@
 import { call, seg, type Target } from './call.ts'
 import { codebases } from './codebases.ts'
 import { installations, repos as granted, type Repo } from './github.ts'
-import { assemble, canon, issues as merged, owners, type Held, type Issue, type Linked, type Site, type Source } from '../merge.ts'
-import { links } from './links.ts'
+import { assemble, canon, issues as merged, owners, type Held, type Issue, type Site, type Source } from '../merge.ts'
+import { links, type Link } from './links.ts'
 import { projects as built } from './projects.ts'
 
 export interface Board {
@@ -127,8 +127,8 @@ export async function everything(t: Target, signal?: AbortSignal): Promise<Issue
 export interface Sources {
   /** GitHub's grants to the org's connection, every page read so far: empty for anyone it does not answer. */
   hub: Repo[]
-  /** The repositories linked from GitHub. */
-  linked: Linked[]
+  /** The repositories linked from GitHub, each with the id dropping its link takes. */
+  linked: Link[]
   /** The forge's repositories. */
   held: Held[]
   /** The org's projects that build from a repository. */
@@ -142,6 +142,12 @@ export interface Sources {
   /** Sources that did not answer, as a reader names them. */
   missing: string[]
 }
+
+/**
+ * What `missing` calls each source. A reader that cannot stand without one — a
+ * removal that missed a link would leave a copy that comes back — asks by these.
+ */
+export const UNREAD = { hub: 'GitHub', linked: 'the linked repositories', forge: 'the forge', sites: 'the projects' } as const
 
 export interface SourceQuery {
   /** Searched by GitHub; the rest are searched where they are drawn. */
@@ -169,10 +175,10 @@ export async function sources(t: Target, p: SourceQuery = {}, signal?: AbortSign
     })
   const first = !p.after
   const [hub, linked, forge, sites, accounts] = await Promise.all([
-    soft('GitHub', granted(t, { q: p.q, owner: p.owner, limit: 100, after: p.after }, signal)),
-    first ? soft('the linked repositories', links(t, signal)) : null,
-    first ? soft('the forge', codebases(t)) : null,
-    first ? soft('the projects', built(t)) : null,
+    soft(UNREAD.hub, granted(t, { q: p.q, owner: p.owner, limit: 100, after: p.after }, signal)),
+    first ? soft(UNREAD.linked, links(t, signal)) : null,
+    first ? soft(UNREAD.forge, codebases(t)) : null,
+    first ? soft(UNREAD.sites, built(t)) : null,
     first ? installations(t).catch(() => []) : [],
   ])
   return {

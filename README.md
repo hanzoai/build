@@ -145,7 +145,7 @@ One of each, shared with Chat (@hanzo/rooms imports them):
 | `-/automations/<id>` | one task's editor and runs; `new` writes one |
 | `-/customize` · `-/customize/connectors` · `/plugins` · `/agents` | Customize: skills, connectors, plugins, agents |
 | `-/mcp` | Connectors → Browse with the fleet's native MCP servers listed |
-| `-/projects` | the org's projects: its repositories on the forge |
+| `-/projects` | the org's projects: its repositories on the forge; Remove takes one away |
 | `-/sync` | link repositories from GitHub onto the forge |
 | `-/issues` | every project's issues, merged: the forge's and the task index's |
 | `-/artifacts` | the Library: everything you made in Chat, Dev and Studio; `?item=<id>` opens one; the org's sites at its foot |
@@ -324,8 +324,8 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `POST /v1/sandbox/{id}/screen/ticket` · `…/terminal/ticket` | the run's desktop and shell, framed with a single-use ticket |
 | `POST /v1/sandbox/read` | the run's working tree, live |
 | `GET /v1/provider/github/repos` · `POST /v1/provider/github/repos/import` | granted repositories, and bringing them onto the forge |
-| `GET /v1/git/repos` · `GET /v1/git/repos/{name}` | the codebase chip, and its branches |
-| `GET /v1/sync` | the repositories linked from GitHub, each with its forge copy and when it last synced |
+| `GET /v1/git/repos` · `GET`/`DELETE /v1/git/repos/{name}` | the codebase chip, and its branches; a repository removed from Projects |
+| `GET /v1/sync` · `DELETE /v1/sync/{id}` | the repositories linked from GitHub, each with its forge copy and when it last synced; a link dropped by Remove |
 | `GET /v1/task/projects` · `GET /v1/task/board` · `GET /v1/task/projects/{key}/issues` | boards, and every issue and pull request: the forge's and the task index's |
 | `GET /v1/provider/github/repos` · `…/{owner}/{repo}/branches` | kept for a host that still asks GitHub |
 | `POST /v1/provider/github/user/connect` | connect a person's GitHub |
