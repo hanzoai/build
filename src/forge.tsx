@@ -539,7 +539,7 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
             {t('Cancel')}
           </Button>
           <Button size="sm" variant="primary" disabled={busy} onPress={() => void drop()}>
-            {busy ? t('Disconnecting…') : t('Disconnect')}
+            {busy ? t('Disconnecting…') : t('Confirm disconnect')}
           </Button>
         </XStack>
       ) : c.connected ? (

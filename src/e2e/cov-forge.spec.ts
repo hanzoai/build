@@ -161,6 +161,10 @@ async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kep
       return { json: { repos: b.repo ? 1 : 3, issues: mirrored.length, created: mirrored.length, updated: 0, failed: 0 } }
     }
     if (path === '/v1/provider/github/user/connect') return { json: { authorizeUrl: 'https://github.com/apps/hanzo/installations/new?state=signed' } }
+    if (path === '/v1/provider/github/user/disconnect') {
+      world.github = { configured: true, connected: false }
+      return { json: {} }
+    }
     if (path === '/v1/task/projects') return { json: { data: world.boards } }
     if (path === '/v1/task/board') return { json: { data: world.issues } }
     const board = path.match(/^\/v1\/task\/projects\/([^/]+)\/issues$/)?.[1]
@@ -662,6 +666,22 @@ test.describe('Projects', () => {
     await expect(page.getByText('GitHub connected as @dave')).toBeVisible()
     await own(page, 'Sync repositories').click()
     await expect(page).toHaveURL(new URL('/-/sync', baseURL).href)
+  })
+
+  test('the GitHub line asks before it disconnects, and the answer says it confirms', async ({ page }) => {
+    const { sent } = await forge(page, { repos: REPOS().slice(0, 2), github: { configured: true, connected: true, login: 'dave' } })
+    await page.goto('/-/projects')
+    await expect(page.getByText('GitHub connected as @dave')).toBeVisible()
+    await own(page, 'Disconnect').click()
+    await expect(page.getByText('Disconnect your GitHub from Hanzo?')).toBeVisible()
+    // The question's answer is not a second Disconnect: it says what pressing it does.
+    await expect(own(page, 'Disconnect')).toHaveCount(0)
+    await own(page, 'Cancel').click()
+    expect(posted(sent, '/v1/provider/github/user/disconnect')).toHaveLength(0)
+    await own(page, 'Disconnect').click()
+    await own(page, 'Confirm disconnect').click()
+    await expect(page.getByText('GitHub is disconnected. Connect it again to choose another account.')).toBeVisible()
+    expect(posted(sent, '/v1/provider/github/user/disconnect')).toHaveLength(1)
   })
 
   test('says it is reading, and says why a read was refused', async ({ page }) => {
