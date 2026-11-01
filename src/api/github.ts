@@ -306,8 +306,15 @@ export function accounts(g: Grants): Account[] {
     })
 }
 
-/** How many of GitHub's pages a full read takes at most: a hundred rows each. */
-const PAGES = 20
+/**
+ * How many of the platform's pages a full read takes at most: a hundred rows
+ * each, so the twenty thousand one view holds (apps/provider github_index.go
+ * maxViewRepos). The listing is most-recently-pushed first, so a smaller bound
+ * drops whole accounts whose newest push is older than the rest: twenty pages
+ * left out a person's own account behind their organizations' 2,000 newer
+ * repositories, whatever they granted it on GitHub.
+ */
+const PAGES = 200
 
 /**
  * Every repository the GitHub connection grants, every page, with whether the

@@ -182,6 +182,30 @@ describe('github', () => {
     ])
   })
 
+  it('reads every page the platform holds, so an account whose newest push is the oldest is still there', async () => {
+    const pages = 25
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const u = new URL(url)
+        let body: unknown = {}
+        if (u.pathname === '/v1/provider/github/repos') {
+          const n = Number(u.searchParams.get('after') || '0')
+          const owner = n === pages - 1 ? 'Darkhorse7stars' : 'hanzoai'
+          const repos = Array.from({ length: 100 }, (_, i) => ({ owner, name: `r${n}-${i}`, full_name: `${owner}/r${n}-${i}` }))
+          body = { repos, next: n + 1 < pages ? String(n + 1) : '', connected: true }
+        }
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+      }),
+    )
+    const page = await github.grants(T)
+    expect(page.repos).toHaveLength(2500)
+    expect(github.accounts(page)).toEqual([
+      { name: 'Darkhorse7stars', count: 100, blocked: false },
+      { name: 'hanzoai', count: 2400, blocked: false },
+    ])
+  })
+
   it('queues a mirror by owner and name, and says the name each takes on the forge', async () => {
     const seen = answer(202, { queued: 2, repos: ['hanzoai/cloud', 'hanzoai/ai'], codebases: ['hanzoai_cloud', 'hanzoai_ai'] })
     expect(await github.bring(T, ['hanzoai/cloud', ' hanzoai/ai '])).toEqual({ queued: 2, codebases: { 'hanzoai/cloud': 'hanzoai_cloud', 'hanzoai/ai': 'hanzoai_ai' } })
