@@ -450,7 +450,11 @@ export function Run({ id }: { id: string }) {
               <Failure onRetry={busy ? undefined : () => void act(() => carry(again, 'retry'))}>
                 {end.problem
                   ? say('This run stopped before it finished.')
-                  : `${say('This run stopped with an error.')} ${say('Its work so far is on its branch.')}`}
+                  : // Only a run that pushed has work on its branch (turn.ts settled): one that failed before it
+                    // changed anything left no branch, and Try again starts over from where it began.
+                    kept.pushed
+                    ? `${say('This run stopped with an error.')} ${say('Its work so far is on its branch.')}`
+                    : `${say('This run stopped with an error.')} ${say('It saved nothing to its branch, so Try again starts over.')}`}
               </Failure>
             ) : null
           }

@@ -213,6 +213,27 @@ test('a failed run opens its error, ends on Chat’s failure, and Try again star
   expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Add the widget', repo: 'hanzoai/universe', after: SESSION, mode: 'plan' })
 })
 
+for (const changed of [false, true]) {
+  test(`a failed run that ${changed ? 'pushed' : 'pushed nothing'} says ${changed ? 'its work is on its branch' : 'it saved nothing there'}`, async ({ page: p }) => {
+    await rig(p, {
+      record: { ...finished(), status: 'error', branch: 'agent/ab12' },
+      events: [
+        ev('status', { status: 'started', repo: 'universe', base: 'main' }),
+        ev('status', { status: 'error', error: 'coding: clone: exit 128: fatal: Remote branch agent/cd34 not found in upstream origin', ...(changed ? { changed: true } : {}) }),
+      ],
+    })
+    await p.goto(`/${SESSION}`)
+    const failure = p.getByLabel('Transcript').getByRole('alert')
+    await expect(failure).toBeVisible({ timeout: 45_000 })
+    if (changed) {
+      await expect(failure).toContainText('This run stopped with an error. Its work so far is on its branch.')
+    } else {
+      await expect(failure).toContainText('This run stopped with an error. It saved nothing to its branch, so Try again starts over.')
+      await expect(failure).not.toContainText('Its work so far is on its branch.')
+    }
+  })
+}
+
 test('a run the feed says paused before its record is read cannot be carried on yet, and its verdicts name no project', async ({ page: p }) => {
   const frames = [ev('event', { type: 'item.completed', item: { id: 'i0', type: 'agent_message', text: 'Half done.' } }), ev('status', { status: 'paused', changed: false })]
   const { sent } = await rig(p, { record: running(), frames: frames.map((e) => `event: event\ndata: ${JSON.stringify({ event: e })}\n\n`).join('') })
