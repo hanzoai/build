@@ -859,6 +859,25 @@ test.describe('Sync', () => {
     await expect(page).toHaveURL(new URL('/-/artifacts', baseURL).href)
   })
 
+  test('an organization with no GitHub account of its own is told why a repository cannot come in, and is offered the install', async ({ page }) => {
+    const { sent } = await forge(page, {
+      grants: GRANTS(),
+      holds: { 'POST /v1/provider/github/repos/import': [{ status: 409, detail: 'github is not connected for this organization' }] },
+    })
+    await page.route('https://github.com/**', (r) => r.fulfill({ body: 'GitHub' }))
+    await page.goto('/-/sync')
+    await page.getByRole('button', { name: `Open ${ORG}` }).click()
+    await page.getByRole('button', { name: 'Select api' }).click()
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('button', { name: `Sync 1 repository to ${ORG}` }).click()
+    await expect(page.getByText(`${ORG} has no GitHub account of its own to bring them in through`, { exact: false })).toBeVisible()
+    // Not the platform's bare "not connected", beside a line that says GitHub is connected.
+    await expect(page.getByText('github is not connected for this organization')).toHaveCount(0)
+    const [away] = await Promise.all([page.waitForRequest(/^https:\/\/github\.com\//), page.getByRole('button', { name: 'Add organization' }).click()])
+    expect(away.url()).toBe('https://github.com/apps/hanzo/installations/new?state=signed')
+    expect(posted(sent, '/v1/provider/github/connect')).toHaveLength(1)
+  })
+
   test('what the platform refuses is said: a queue and a GitHub connection; a granted one goes to GitHub', async ({ page, baseURL }) => {
     const { sent } = await forge(page, {
       grants: GRANTS(),

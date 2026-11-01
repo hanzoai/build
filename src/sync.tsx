@@ -39,6 +39,8 @@ export function Sync() {
   const [busy, setBusy] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
+  // The import was refused because this organization holds no GitHub account of its own (the list is the person's).
+  const [unbound, setUnbound] = useState(false)
   const list = useRead(signed ? () => grants(target) : null, EMPTY, [target, signed])
   const rows = list.value.repos
   const orgs = useMemo(() => accounts(list.value), [list.value])
@@ -85,6 +87,7 @@ export function Sync() {
   const send = async () => {
     setBusy(true)
     setError('')
+    setUnbound(false)
     try {
       const queued = await bring(target, picked)
       // Each waits under the name it takes on the forge, as the import says it, else as GitHub's listing says it will.
@@ -98,7 +101,17 @@ export function Sync() {
       if (picked.length === 1 && chosen.length === 1) pinHub(host.org, chosen[0])
       setSyncing(true)
     } catch (e) {
-      setError((e as Error).message)
+      // The list can be the person's own GitHub, which reaches accounts this organization has not connected; the
+      // import goes through the organization's own, and the platform's 409 says only "not connected".
+      if (e instanceof Refusal && e.status === 409) {
+        setUnbound(true)
+        setError(
+          t(
+            'Your GitHub lists these repositories, but {place} has no GitHub account of its own to bring them in through. Add organization installs the Hanzo app on one for {place}; an account another Hanzo workspace uses has to be disconnected there first.',
+            { place: dest },
+          ),
+        )
+      } else setError((e as Error).message)
     } finally {
       setBusy(false)
     }
@@ -306,6 +319,12 @@ export function Sync() {
             </>
           ) : null}
           {error ? <Soft>{error}</Soft> : null}
+          {unbound && step === 'access' ? (
+            <Button width="100%" variant="outline" onPress={() => void addOrg()}>
+              <Plus size={14} />
+              {t('Add organization')}
+            </Button>
+          ) : null}
           {step === 'pick' ? (
             <Button width="100%" disabled={!owner || picked.length === 0} onPress={() => setStep('access')}>
               {t('Continue')}
