@@ -526,6 +526,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       display="grid"
       gridTemplateRows="minmax(0, 1fr) auto"
       items="center"
+      // The tracks span the pane and each child stops at the measure, so a grid child
+      // sits at the start of its track unless the grid says where: the middle, as Chat's
+      // opening is. `items` is the other axis.
+      $platform-web={{ justifyItems: 'center' }}
       width="100%"
       height="100%"
       overflowX="hidden"
