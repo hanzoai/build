@@ -1,7 +1,35 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('@hanzo/gui', () => ({ SizableText: () => null, XStack: () => null }))
-vi.mock('@hanzogui/lucide-icons-2', () => ({ Check: () => null, Copy: () => null, PanelRight: () => null, Square: () => null, Volume2: () => null }))
+vi.mock('@hanzo/gui', () => ({ SizableText: () => null, XStack: () => null, YStack: () => null }))
+vi.mock('@hanzo/ui', () => ({
+  Dialog: () => null,
+  DialogContent: () => null,
+  DialogTitle: () => null,
+  DropdownMenu: () => null,
+  DropdownMenuContent: () => null,
+  DropdownMenuItem: () => null,
+  DropdownMenuLabel: () => null,
+  DropdownMenuSeparator: () => null,
+  DropdownMenuTrigger: () => null,
+  Input: () => null,
+}))
+vi.mock('@hanzogui/lucide-icons-2', () => ({
+  ArrowUp: () => null,
+  Check: () => null,
+  Copy: () => null,
+  GitBranch: () => null,
+  Globe: () => null,
+  Lightbulb: () => null,
+  Link2: () => null,
+  MoreHorizontal: () => null,
+  PanelRight: () => null,
+  RefreshCw: () => null,
+  Share: () => null,
+  Square: () => null,
+  ThumbsDown: () => null,
+  ThumbsUp: () => null,
+  Volume2: () => null,
+}))
 vi.mock('@hanzo/voice', () => ({ mouth: () => null, speech: () => null }))
 
 const { artifacts, renders } = await import('./reply.tsx')
