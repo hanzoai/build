@@ -437,7 +437,7 @@ export function Reply({
           <YStack
             p="$3.5"
             rounded="$4"
-            bg="$surface"
+            bg="$panel"
             borderWidth={1}
             borderColor="$borderColor"
             maxH={220}
