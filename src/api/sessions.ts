@@ -159,9 +159,23 @@ export async function list(t: Target, q: ListQuery = {}): Promise<Session[]> {
 
 export async function get(t: Target, id: string): Promise<Detail> {
   const raw = obj(await call<unknown>(t, 'GET', `/v1/agent/sessions/${seg(id)}`))
+  let recent = (Array.isArray(raw.recentEvents) ? raw.recentEvents : []).map(event)
+  // The detail carries the 50 most recent events; when a long run has scrolled
+  // past seq 1, read the opening turns so the person's full multi-line ask stays
+  // at the head of the transcript and in Try again.
+  if (recent.length > 0 && recent[0]!.seq > 1) {
+    try {
+      const head = obj(await call<unknown>(t, 'GET', `/v1/agent/sessions/${seg(id)}/events?limit=2`))
+      const first = (Array.isArray(head.events) ? head.events : []).map(event)
+      const have = new Set(recent.map((e) => e.seq))
+      recent = [...first.filter((e) => e.seq > 0 && !have.has(e.seq)), ...recent].sort((a, b) => a.seq - b.seq)
+    } catch {
+      /* keep the tail */
+    }
+  }
   return {
     ...session(raw),
-    recent: (Array.isArray(raw.recentEvents) ? raw.recentEvents : []).map(event),
+    recent,
   }
 }
 
