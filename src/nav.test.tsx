@@ -7,7 +7,7 @@ import { route } from './route.ts'
 // The marks are react-native-svg drawings, which a node test cannot load; what a place is and where it goes is plain data.
 vi.mock('@hanzogui/lucide-icons-2', () =>
   Object.fromEntries(
-    ['AudioLines', 'Bell', 'BookOpen', 'Bot', 'Box', 'Brain', 'CircleDot', 'Clock', 'Code', 'Container', 'Cpu', 'CreditCard', 'File', 'FileText', 'FolderGit2', 'Gauge', 'Image', 'Key', 'LayoutTemplate', 'Library', 'Plug', 'Plus', 'Presentation', 'Puzzle', 'Settings', 'Shield', 'SlidersHorizontal', 'Sparkles', 'SquarePen', 'Upload', 'User', 'Users', 'Video'].map((n) => [n, () => null]),
+    ['AudioLines', 'Bell', 'BookOpen', 'Bot', 'Box', 'Brain', 'CircleDot', 'Clock', 'Code', 'Container', 'Cpu', 'CreditCard', 'File', 'FileText', 'FolderGit2', 'Gauge', 'Globe', 'Image', 'Key', 'LayoutTemplate', 'Library', 'Plug', 'Plus', 'Presentation', 'Puzzle', 'Settings', 'Shield', 'SlidersHorizontal', 'Sparkles', 'SquarePen', 'Upload', 'User', 'Users', 'Video'].map((n) => [n, () => null]),
   ),
 )
 vi.mock('./foot.tsx', () => ({ DOCS: 'https://docs.hanzo.ai/docs/dev' }))
@@ -128,7 +128,7 @@ describe('the Library’s sidebar', () => {
   it('is Upload, then every kind, the one in the address lit, each moving to its own address', () => {
     const seen: string[] = []
     const groups = library(host('-/artifacts/image'), (p) => seen.push(p))
-    expect(groups.map((g) => g.links.map((l) => l.label))).toEqual([['Upload'], ['All', 'Images', 'Videos', 'Audio', 'Documents', 'Slides', '3D', 'Code', 'Files']])
+    expect(groups.map((g) => g.links.map((l) => l.label))).toEqual([['Upload'], ['All', 'Images', 'Videos', 'Audio', 'Documents', 'Slides', '3D', 'Code', 'Files', 'Sites']])
     expect(groups[1]!.links.filter((l) => l.active).map((l) => l.label)).toEqual(['Images'])
     for (const l of groups[1]!.links) l.onPress?.()
     expect(seen.slice(0, 3)).toEqual(['-/artifacts', '-/artifacts/image', '-/artifacts/video'])

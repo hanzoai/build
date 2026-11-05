@@ -64,8 +64,8 @@ export type Route =
   | { kind: 'repo'; org: string; name: string }
   | { kind: 'automation'; id: string }
 
-/** The kinds the Library narrows to by address (api/library.ts KIND_IDS). */
-export const OF = ['image', 'video', 'audio', 'document', 'slides', 'type', 'model', 'code', 'file'] as const
+/** The kinds the Library narrows to by address (api/library.ts KIND_IDS, plus `sites`). */
+export const OF = ['image', 'video', 'audio', 'document', 'slides', 'type', 'model', 'code', 'file', 'sites'] as const
 export type Of = (typeof OF)[number]
 
 export const SESSION = /^sess_[0-9a-f]{32}$/

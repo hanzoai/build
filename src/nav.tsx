@@ -11,7 +11,7 @@
  * The rows' words are the reader's language when the caller hands in its
  * @hanzo/i18n `t` (English without one); a task's name is the person's own.
  */
-import { AudioLines, Bell, BookOpen, Bot, Box, Brain, CircleDot, Clock, Code, Container, Cpu, CreditCard, File, FileText, FolderGit2, Gauge, Image, Key, LayoutTemplate, Library, Plug, Plus, Presentation, Puzzle, Settings, Shield, SlidersHorizontal, Sparkles, SquarePen, Upload, User, Users, Video } from '@hanzogui/lucide-icons-2'
+import { AudioLines, Bell, BookOpen, Bot, Box, Brain, CircleDot, Clock, Code, Container, Cpu, CreditCard, File, FileText, FolderGit2, Gauge, Globe, Image, Key, LayoutTemplate, Library, Plug, Plus, Presentation, Puzzle, Settings, Shield, SlidersHorizontal, Sparkles, SquarePen, Upload, User, Users, Video } from '@hanzogui/lucide-icons-2'
 import { phrase } from '@hanzo/i18n'
 import { useI18n, type Say } from '@hanzo/i18n/react'
 import type { RailLink } from '@hanzo/ui/chat'
@@ -153,6 +153,7 @@ const KIND_ICON: Record<string, ReactNode> = {
   model: <Box size={16} />,
   code: <Code size={16} />,
   file: <File size={16} />,
+  sites: <Globe size={16} />,
 }
 
 /** Fired on `window` once the sidebar's Upload has kept its files, for the Library to read again. */
@@ -186,13 +187,22 @@ export function library(host: Host, go: (path: string) => void, t: Say = english
     {
       id: 'library-kinds',
       label: '',
-      links: KINDS.map((k) => ({
-        id: `kind-${k.id || 'all'}`,
-        label: t(k.label),
-        icon: KIND_ICON[k.id],
-        onPress: () => go(path({ kind: 'screen', screen: 'artifacts', ...(k.id ? { of: k.id } : {}) })),
-        active: at === k.id,
-      })),
+      links: [
+        ...KINDS.map((k) => ({
+          id: `kind-${k.id || 'all'}`,
+          label: t(k.label),
+          icon: KIND_ICON[k.id],
+          onPress: () => go(path({ kind: 'screen', screen: 'artifacts', ...(k.id ? { of: k.id } : {}) })),
+          active: at === k.id,
+        })),
+        {
+          id: 'kind-sites',
+          label: t('Sites'),
+          icon: KIND_ICON.sites,
+          onPress: () => go(path({ kind: 'screen', screen: 'artifacts', of: 'sites' })),
+          active: at === 'sites',
+        },
+      ],
     },
   ]
 }
