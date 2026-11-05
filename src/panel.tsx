@@ -24,7 +24,7 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Maximize2, Minimize2, Minus, MoreHorizontal, PanelLeftOpen, Pin, Plus, RotateCcw, RotateCw, SquarePlus, X } from '@hanzogui/lucide-icons-2'
+import { ArrowLeft, ArrowRight, ChevronRight, Columns2, ExternalLink, Globe, Maximize2, Minimize2, Minus, MoreHorizontal, PanelLeftOpen, Pin, Plus, RotateCcw, RotateCw, X } from '@hanzogui/lucide-icons-2'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -123,7 +123,7 @@ export function PanelToggle({ open, onToggle }: { open: boolean; onToggle: () =>
       height={32}
       {...quiet()}
     >
-      <SquarePlus size={16} />
+      <Plus size={16} />
     </XStack>
   )
 }

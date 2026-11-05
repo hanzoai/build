@@ -22,7 +22,7 @@ import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
 import { CircleDot, Cloud, Code, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
-import { Composer, MEASURE, type Chip, type Command } from '@hanzo/ui/chat'
+import { Composer, MEASURE, type Command } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useTalk, useVoice } from '@hanzo/voice'
@@ -494,14 +494,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     </>
   )
 
-  // Where a run goes from here: its repositories, branches, issues and templates, each one press away.
-  const chips: Chip[] = [
-    { id: 'repos', label: t('Repos'), icon: <Code size={13} color="$soft" />, onPress: () => setPicking(true) },
-    ...(forge ? [{ id: 'branches', label: t('Branches'), icon: <GitBranch size={13} color="$soft" />, onPress: () => setBranching(true) }] : []),
-    { id: 'issues', label: t('Issues'), icon: <CircleDot size={13} color="$soft" />, onPress: screen('issues') },
-    { id: 'templates', label: t('Templates'), icon: <LayoutTemplate size={13} color="$soft" />, onPress: screen('templates') },
-  ]
-
   const commands: Command[] = [
     { id: 'run', label: t('Run'), keys: 'Ctrl+↵', icon: <Play size={14} color="$soft" />, disabled: !draft.trim(), run: () => void send() },
     { id: 'issues', label: t('View issues'), icon: <CircleDot size={14} color="$soft" />, run: screen('issues') },
@@ -605,7 +597,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             slash={carry.skills}
             at={carry.plugins}
             pills={pills}
-            chips={chips}
             commands={commands}
             starters={<Suggestions rows={hints.rows} onAct={act} onDismiss={hints.dismiss} />}
             mind={mind}

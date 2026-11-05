@@ -131,38 +131,95 @@ function Rows({ section, done, details = false }: { section: Section; done?: () 
 /**
  * The summary, from the outline mark in a header. `onOpen` runs after a row is
  * pressed, for the host to show the panel the row opened a tab in.
+ *
+ * When `docked` is true (wide viewports where space allows), the header mark
+ * toggles `open` via `onOpenChange` without opening a floating popover, and a
+ * second `<Summary sections={sections} onOpen={...} pane />` docks the summary
+ * inline on the right edge of the inner pane, shifting the main content left so
+ * it stays open while toggled.
  */
-export function Summary({ sections, onOpen, label: named }: { sections: readonly Section[]; onOpen?: () => void; label?: string }) {
+export function Summary({
+  sections,
+  onOpen,
+  label: named,
+  open: controlledOpen,
+  onOpenChange,
+  docked = false,
+  pane = false,
+}: {
+  sections: readonly Section[]
+  onOpen?: () => void
+  label?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  docked?: boolean
+  pane?: boolean
+}) {
   const { t } = useI18n()
   const label = named ?? t('Summary')
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = onOpenChange ?? setUncontrolledOpen
+
+  if (pane) {
+    return (
+      <YStack
+        data-slot="summary"
+        role="complementary"
+        aria-label={label}
+        width={280}
+        shrink={0}
+        minH={0}
+        self="stretch"
+        borderLeftWidth={1}
+        borderColor="$borderColor"
+        p={8}
+        overflowY="auto"
+        overflowX="hidden"
+      >
+        {sections.map((s, i) => (
+          <YStack key={s.id}>
+            {i ? <XStack height={1} bg="$borderColor" my={4} mx={4} /> : null}
+            <Head action={s.action}>{s.title}</Head>
+            <Rows section={s} done={onOpen} details />
+          </YStack>
+        ))}
+      </YStack>
+    )
+  }
+
+  const toggle = (
+    <XStack
+      render="button"
+      data-slot="summary-toggle"
+      aria-label={label}
+      aria-haspopup={docked ? undefined : 'dialog'}
+      aria-expanded={open}
+      {...({ title: label } as object)}
+      onPress={docked ? () => setOpen(!open) : undefined}
+      width={32}
+      height={32}
+      rounded="$3"
+      items="center"
+      justify="center"
+      cursor="pointer"
+      bg={open ? '$hover' : 'transparent'}
+      hoverStyle={{ bg: '$hover' }}
+      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+    >
+      <ListTodo size={16} aria-hidden />
+    </XStack>
+  )
+
+  if (docked) return toggle
+
   const done = () => {
     setOpen(false)
     onOpen?.()
   }
   return (
     <Popover open={open} onOpenChange={setOpen} allowFlip>
-      <PopoverTrigger>
-        <XStack
-          render="button"
-          data-slot="summary-toggle"
-          aria-label={label}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          {...({ title: label } as object)}
-          width={32}
-          height={32}
-          rounded="$3"
-          items="center"
-          justify="center"
-          cursor="pointer"
-          bg={open ? '$hover' : 'transparent'}
-          hoverStyle={{ bg: '$hover' }}
-          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
-        >
-          <ListTodo size={16} aria-hidden />
-        </XStack>
-      </PopoverTrigger>
+      <PopoverTrigger>{toggle}</PopoverTrigger>
       {/* The kit's panel as the composer's popovers draw it, 8px clear of the mark and flush with its end. */}
       <PopoverContent solid align="end" sideOffset={8} p={4} width={288} maxW="calc(100vw - 24px)">
         <YStack data-slot="summary" role="dialog" aria-label={label} self="stretch" width="100%" maxH="min(70dvh, 520px)" overflowY="auto" overflowX="hidden">
