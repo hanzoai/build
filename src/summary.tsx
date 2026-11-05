@@ -171,15 +171,12 @@ export function Summary({
         shrink={0}
         minH={0}
         self="stretch"
-        borderLeftWidth={1}
-        borderColor="$borderColor"
         p={8}
         overflowY="auto"
         overflowX="hidden"
       >
         {sections.map((s, i) => (
-          <YStack key={s.id}>
-            {i ? <XStack height={1} bg="$borderColor" my={4} mx={4} /> : null}
+          <YStack key={s.id} pt={i ? 8 : 0}>
             <Head action={s.action}>{s.title}</Head>
             <Rows section={s} done={onOpen} details />
           </YStack>
@@ -224,8 +221,7 @@ export function Summary({
       <PopoverContent solid align="end" sideOffset={8} p={4} width={288} maxW="calc(100vw - 24px)">
         <YStack data-slot="summary" role="dialog" aria-label={label} self="stretch" width="100%" maxH="min(70dvh, 520px)" overflowY="auto" overflowX="hidden">
           {sections.map((s, i) => (
-            <YStack key={s.id}>
-              {i ? <XStack height={1} bg="$borderColor" my={4} mx={4} /> : null}
+            <YStack key={s.id} pt={i ? 8 : 0}>
               <Head action={s.action}>{s.title}</Head>
               <Rows section={s} done={done} />
             </YStack>
