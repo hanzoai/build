@@ -35,6 +35,26 @@ const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 /** What a thought is about: its first line, without the markdown that bolds it. */
 const firstLine = (text: string): string => text.trim().split('\n')[0]!.replace(/[*_#`]/g, '').slice(0, 120)
 
+function UserSaid({ text }: { text: string }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const long = text.length > 180 || text.includes('\n')
+  return (
+    <YStack gap="$1">
+      <YStack {...(long && !open ? { maxHeight: 72, overflow: 'hidden' } : null)}>
+        <Prose text={text} />
+      </YStack>
+      {long ? (
+        <XStack render="button" aria-expanded={open} onPress={() => setOpen((v) => !v)} self="flex-start" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+          <SizableText size="$1" color="$soft">
+            {open ? t('Show less') : t('Show more')}
+          </SizableText>
+        </XStack>
+      ) : null}
+    </YStack>
+  )
+}
+
 export function Transcript({
   cards,
   live,
@@ -82,7 +102,7 @@ export function Transcript({
             if (c.who === 'person')
               return (
                 <Message key={c.key} role="user">
-                  <Prose text={c.text} />
+                  <UserSaid text={c.text} />
                 </Message>
               )
             const made = artifacts(c.text)

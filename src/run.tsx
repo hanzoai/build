@@ -92,6 +92,7 @@ export function Run({ id }: { id: string }) {
   const [name, setName] = useState('')
   const [copied, setCopied] = useState('')
   const [unfolded, setUnfolded] = useState(false)
+  const [titleOpen, setTitleOpen] = useState(false)
   // The model and effort a run started here uses: the one choice Chat and New share.
   const mind = useMind(t)
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
@@ -394,17 +395,36 @@ export function Run({ id }: { id: string }) {
       <YStack data-slot="run" ref={split.main} {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
         <XStack px="$4" pt="$3" pb="$2" gap="$2" items="center" minH={44}>
           <YStack flex={1} minW={0} items="flex-start">
-            <DropdownMenu
-              trigger={
-                <XStack render="button" aria-label={say('Manage this run')} items="center" gap="$1.5" maxW="100%" px="$1.5" mx="$-1.5" py="$0.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-                  <SizableText render="h1" size="$5" color="$ink" numberOfLines={1} minW={0}>
-                    {title}
-                  </SizableText>
-                  <ChevronDown size={14} />
-                </XStack>
-              }
-              items={manage}
-            />
+            <XStack items="flex-start" gap="$1" maxW="100%" minW={0}>
+              <XStack
+                render="button"
+                aria-label={titleOpen ? say('Collapse title') : say('Expand title')}
+                aria-expanded={titleOpen}
+                items="flex-start"
+                gap="$1.5"
+                maxW="100%"
+                minW={0}
+                px="$1.5"
+                mx="$-1.5"
+                py="$0.5"
+                rounded="$2"
+                hoverStyle={{ bg: '$hover' }}
+                onPress={() => setTitleOpen((v) => !v)}
+              >
+                <SizableText render="h1" size="$5" color="$ink" numberOfLines={titleOpen ? undefined : 1} minW={0}>
+                  {title}
+                </SizableText>
+                <ChevronDown size={14} style={titleOpen ? { transform: 'rotate(180deg)' } : undefined} />
+              </XStack>
+              <DropdownMenu
+                trigger={
+                  <XStack render="button" aria-label={say('Manage this run')} items="center" p="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+                    <Pencil size={14} />
+                  </XStack>
+                }
+                items={manage}
+              />
+            </XStack>
             <SizableText size="$1" color="$soft" numberOfLines={1} maxW="100%">
               {[state ? say(STATUS[state] ?? state) : detail.loading ? say('reading') : '', record?.repo, record?.branch, record?.published ? say('shared') : ''].filter(Boolean).join(' · ')}
             </SizableText>
