@@ -135,7 +135,7 @@ export interface Earlier {
 export function headline(title: string, repo: string): string {
   const name = repo.split('/').filter(Boolean).pop() ?? ''
   const t = title.trim()
-  for (const lead of [name, 'new project']) if (lead && t.startsWith(`${lead}: `)) return t.slice(lead.length + 2).trim()
+  for (const lead of [name, 'new project', 'workspace']) if (lead && t.startsWith(`${lead}: `)) return t.slice(lead.length + 2).trim()
   return t
 }
 
@@ -148,11 +148,12 @@ export function headline(title: string, repo: string): string {
  */
 function from(e: Earlier): Omit<Ask, 'prompt'> {
   const place = e.environment && e.environment !== 'sandbox' ? e.environment : undefined
+  const base = e.base && !e.base.startsWith('agent/') ? e.base : undefined
   return {
     repo: e.repo || undefined,
     project: e.project || undefined,
     targetId: place,
-    ...(!place || e.pushed ? { after: e.id } : { base: e.base || undefined }),
+    ...(!place || e.pushed ? { after: e.id } : { base }),
   }
 }
 
@@ -191,7 +192,16 @@ export function approve(e: Earlier, plan: string): Ask {
  * with none recorded, its title's.
  */
 export function retry(e: Earlier, ask: string): Ask {
-  return { ...from(e), prompt: ask.trim() || headline(e.title, e.repo), mode: modeOf(e.mode) }
+  const place = e.environment && e.environment !== 'sandbox' ? e.environment : undefined
+  const base = e.base && !e.base.startsWith('agent/') ? e.base : undefined
+  return {
+    repo: e.repo || undefined,
+    project: e.project || undefined,
+    targetId: place,
+    ...(e.pushed ? { after: e.id } : { base }),
+    prompt: ask.trim() || headline(e.title, e.repo),
+    mode: modeOf(e.mode),
+  }
 }
 
 /** What a run left: a changed file, the whole change as a patch, or a link. */

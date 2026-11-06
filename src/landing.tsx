@@ -17,10 +17,10 @@
  * Its words are the reader's language (@hanzo/i18n `t`, the target is
  * `target`); a codebase's, a machine's and a branch's names are drawn as given.
  */
-import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { CircleDot, Cloud, Code, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
+import { CircleDot, Cloud, Code, Ghost, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { Composer, MEASURE, type Command } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
@@ -47,6 +47,8 @@ import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
 import { useCarry } from './carry.tsx'
 import { DEV_MODES } from './gear.ts'
+import { Panel, PanelToggle } from './panel.tsx'
+import { PAGE, useDeck, useKey } from './tabs.ts'
 import { book, hand, Suggestions, taken, useSuggestions } from './suggestions.tsx'
 import type { Act } from './suggest.ts'
 import { want } from './library.tsx'
@@ -124,6 +126,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const host = useHost()
   const target = useTarget()
   const { t } = useI18n()
+  const media = useMedia()
+  const wide = Boolean(media.md)
   const signed = Boolean(host.person)
   const { prefs, save: savePrefs } = usePrefs()
   const [stored, keep] = useKept<Partial<Kept> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
@@ -143,6 +147,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState<Source | null>(null)
   const [offering, setOffering] = useState(false)
+  const [forgetful, setForgetful] = useState(false)
+  const [desk, setDesk] = useState(false)
+  const deck = useDeck('dev-new', { tabs: [{ id: 'tab-1', kind: PAGE, title: '' }], at: 'tab-1' })
+  useKey(() => setDesk((d) => !d))
+  const [browserTabs, setBrowserTabs] = useState(false)
+  const [webSearch, setWebSearch] = useState(false)
+  const [research, setResearch] = useState(false)
   // Asking for a repository's address, for one the lists do not show.
   const [giving, setGiving] = useState(false)
   // The repository and branch lists are read again each time they open.
@@ -229,8 +240,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const fresh = !homes.loading && homes.error === null && homes.value !== NOHOMES && homes.value.whole
   const forgeNames = useMemo(() => (fresh ? homes.value.homes.map((h) => h.name) : null), [fresh, homes.value])
   useEffect(() => {
-    if (codebase && gone(latest.current.repo, { forge: forgeNames, github: null })) drop()
-  }, [codebase, forgeNames, drop])
+    if ((codebase && gone(latest.current.repo, { forge: forgeNames, github: null })) || stranger) drop()
+  }, [codebase, forgeNames, stranger, drop])
   // A GitHub repository, by GitHub's listing narrowed to its own address, so one
   // page is the whole answer for it however many the connection grants. A read
   // refused is no list; one this page has moved on from is not heard.
@@ -285,7 +296,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     }
     const repo = isForge(kept.repo) ? kept.repo : null
     const hub = isHub(kept.repo) ? kept.repo : null
-    if (!repo && !hub) {
+    if (!repo && !hub && place.id) {
       setNote(t('Choose the project this run works on: a repository of this organization, or one on its GitHub.'))
       setPicking(true)
       return
@@ -294,11 +305,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     const why = unhonoured(mode, place.id, t)
     if (why) {
       setNote(why)
-      return
-    }
-    if (stranger) {
-      setNote(t('{repo} is not one of this organization’s repositories. Choose one, or leave it empty to start a new project.', { repo: codebase }))
-      setPicking(true)
       return
     }
     setBusy(true)
@@ -512,129 +518,155 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   }
 
   return (
-    // The composer is fixed to the foot of the view, as Chat's and a run's are:
-    // the layout is a grid, track 1 holding the opening and track 2 the composer.
-    <YStack
-      display="grid"
-      gridTemplateRows="minmax(0, 1fr) auto"
-      items="center"
-      // The tracks span the pane and each child stops at the measure, so a grid child
-      // sits at the start of its track unless the grid says where: the middle, as Chat's
-      // opening is. `items` is the other axis.
-      $platform-web={{ justifyItems: 'center' }}
-      width="100%"
-      height="100%"
-      overflowX="hidden"
-      data-slot="new"
-    >
-      <YStack
-        display="grid"
-        // One track, its question set at the track's foot, just above the composer: a
-        // second `auto` track left the question alone in the first, at the pane's top.
-        gridTemplateRows="minmax(0, 1fr)"
-        items="flex-end"
-        width="100%"
-        maxW={MEASURE}
-        height="100%"
-        pb="$3"
-        overflowY="auto"
-      >
-        <SizableText render="h1" fontSize="$7" lineHeight="$7" fontWeight="700" color="$ink" style={{ textAlign: 'center' }}>
-          {t('Build what’s next.')}
-        </SizableText>
-      </YStack>
-      <YStack width="100%" maxW={MEASURE} gap="$2" pb={12}>
-        <YStack gap="$2">
-          {stranger ? (
-            <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" role="alert">
-              <SizableText size="$2" color="$ink" flex={1} minW={0}>
-                {t('{repo} is not one of this organization’s repositories.', { repo: codebase })}
-              </SizableText>
-              <Button size="sm" variant="outline" onPress={() => setPicking(true)}>
-                {t('Choose a repository')}
-              </Button>
+    <XStack flex={1} width="100%" height="100%" minW={0} minH={0} overflow="hidden">
+      <YStack flex={1} minW={0} minH={0} height="100%" overflow="hidden">
+        <XStack data-slot="conversation-head" shrink={0} items="center" justify="space-between" gap="$2" px="$3" height={36} $max-md={{ display: 'none' }}>
+          <XStack items="center" gap="$2" minW={0} flex={1} />
+          <XStack data-slot="conversation-controls" items="center" gap="$1" shrink={0}>
+            <XStack
+              render="button"
+              data-slot="header-private-chat"
+              aria-label={t('Private chat')}
+              aria-pressed={forgetful}
+              onPress={() => setForgetful((f) => !f)}
+              width={32}
+              height={32}
+              rounded="$3"
+              items="center"
+              justify="center"
+              bg={forgetful ? '$hover' : 'transparent'}
+              hoverStyle={{ bg: '$hover' }}
+              cursor="pointer"
+            >
+              <Ghost size={16} color={forgetful ? 'var(--foreground)' : 'var(--muted-foreground)'} aria-hidden />
             </XStack>
-          ) : env.value && (env.value.state === 'proposed' || unset(env.value)) && !place.id ? (
-            <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
-              <SizableText size="$2" color="$ink" flex={1} minW={0}>
-                {env.value.state === 'proposed'
-                  ? t('A proposed environment for {repo} is waiting for review.', { repo: codebase })
-                  : t('{repo} has no environment yet, so every run starts it bare.', { repo: codebase })}
-              </SizableText>
-              {env.value.state === 'proposed' && env.value.session ? (
-                <Button size="sm" variant="outline" onPress={() => host.go(env.value!.session)}>
-                  {t('Review')}
-                </Button>
-              ) : (
-                <Button size="sm" onPress={() => setOffering(true)}>
-                  {t('Set up environment')}
-                </Button>
-              )}
-            </XStack>
-          ) : null}
-          {note || unhonoured(mode, place.id, t) || mind.note ? (
-            <SizableText size="$1" color="$soft" role="status">
-              {note || unhonoured(mode, place.id, t) || mind.note}
+            {wide ? <PanelToggle open={desk} onToggle={() => setDesk((d) => !d)} /> : null}
+          </XStack>
+        </XStack>
+        <YStack
+          display="grid"
+          gridTemplateRows={wide ? '1fr auto auto 1fr' : 'minmax(0, 1fr) auto'}
+          items="center"
+          $platform-web={{ justifyItems: 'center' }}
+          width="100%"
+          flex={1}
+          minH={0}
+          overflowX="hidden"
+          data-slot="new"
+        >
+          {wide ? <YStack /> : null}
+          <YStack
+            display="grid"
+            // One track, its question set at the track's foot, just above the composer: a
+            // second `auto` track left the question alone in the first, at the pane's top.
+            gridTemplateRows="minmax(0, 1fr)"
+            items="flex-end"
+            width="100%"
+            maxW={MEASURE}
+            height={wide ? undefined : '100%'}
+            pb={wide ? '$5' : '$3'}
+            overflowY="auto"
+          >
+            <SizableText render="h1" fontSize="$7" lineHeight="$7" fontWeight="700" color="$ink" style={{ textAlign: 'center' }}>
+              {t('Build what’s next.')}
             </SizableText>
-          ) : null}
-          <Composer
-            column
-            value={draft}
-            onChange={setDraft}
-            onSend={() => void send()}
-            busy={busy}
-            placeholder={t('Ask, build, or run anything…')}
-            label={t('Describe a task or ask a question')}
-            plus={{
-              upload: () => pick(files, setFiles, setNote, t),
-              skills: carry.skills,
-              design: carry.design,
-              plugins: carry.plugins,
-              devices,
-              memory: { on: carry.gear.gear.memory, set: (on) => carry.gear.set({ memory: on }) },
-            }}
-            carried={[...carry.on, ...carrying(files, setFiles)]}
-            slash={carry.skills}
-            at={carry.plugins}
-            pills={pills}
-            commands={commands}
-            starters={<Suggestions rows={hints.rows} onAct={act} onDismiss={hints.dismiss} />}
-            mind={mind}
-            effort={pacing(mind)}
-            limits={limits}
-            onUpgrade={() => host.go(path({ kind: 'screen', screen: 'plans' }))}
-            voice={voice}
-            language={prefs.language ?? null}
-            onLanguage={(id) => void savePrefs({ language: id })}
-            talk={talk}
+          </YStack>
+          <YStack width="100%" maxW={MEASURE} gap="$2" pb={12}>
+            <YStack gap="$2">
+              {env.value && (env.value.state === 'proposed' || unset(env.value)) && !place.id ? (
+                <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
+                  <SizableText size="$2" color="$ink" flex={1} minW={0}>
+                    {env.value.state === 'proposed'
+                      ? t('A proposed environment for {repo} is waiting for review.', { repo: codebase })
+                      : t('{repo} has no environment yet, so every run starts it bare.', { repo: codebase })}
+                  </SizableText>
+                  {env.value.state === 'proposed' && env.value.session ? (
+                    <Button size="sm" variant="outline" onPress={() => host.go(env.value!.session)}>
+                      {t('Review')}
+                    </Button>
+                  ) : (
+                    <Button size="sm" onPress={() => setOffering(true)}>
+                      {t('Set up environment')}
+                    </Button>
+                  )}
+                </XStack>
+              ) : null}
+              {note || unhonoured(mode, place.id, t) || mind.note ? (
+                <SizableText size="$1" color="$soft" role="status">
+                  {note || unhonoured(mode, place.id, t) || mind.note}
+                </SizableText>
+              ) : null}
+              <Composer
+                column
+                value={draft}
+                onChange={setDraft}
+                onSend={() => void send()}
+                busy={busy}
+                {...({ forgetful } as Record<string, unknown>)}
+                placeholder={t('Ask, build, or run anything…')}
+                label={t('Describe a task or ask a question')}
+                plus={{
+                  upload: () => pick(files, setFiles, setNote, t),
+                  ...({
+                    browserTabs: { on: browserTabs, set: setBrowserTabs },
+                    webSearch: { on: webSearch, set: setWebSearch },
+                  } as Record<string, unknown>),
+                  research: { on: research, set: setResearch },
+                  skills: carry.skills,
+                  design: carry.design,
+                  plugins: carry.plugins,
+                  devices,
+                  memory: { on: carry.gear.gear.memory, set: (on) => carry.gear.set({ memory: on }) },
+                }}
+                carried={[...carry.on, ...carrying(files, setFiles)]}
+                slash={carry.skills}
+                at={carry.plugins}
+                pills={pills}
+                commands={commands}
+                mind={mind}
+                effort={pacing(mind)}
+                limits={limits}
+                onUpgrade={() => host.go(path({ kind: 'screen', screen: 'plans' }))}
+                voice={voice}
+                language={prefs.language ?? null}
+                onLanguage={(id) => void savePrefs({ language: id })}
+                talk={talk}
+              />
+            </YStack>
+          </YStack>
+          {wide ? <YStack /> : null}
+          <Publish source={adding} onClose={() => setAdding(null)} />
+          <Address
+            open={giving}
+            onOpenChange={setGiving}
+            title={t('Use a git URL')}
+            says={t('Runs work on the GitHub repository at this address until you choose another. A private one needs GitHub connected.')}
+            act={t('Use')}
+            address=""
+            run={async (at) => give(at)}
           />
+          {carry.dialog}
+          {codebase ? (
+            <SetupDialog
+              repo={codebase}
+              homes={homes}
+              open={offering}
+              onOpenChange={setOffering}
+              onStart={setup}
+              onRepo={choose}
+              onSaved={() => {
+                setOffering(false)
+                env.reload()
+              }}
+            />
+          ) : null}
         </YStack>
       </YStack>
-      <Publish source={adding} onClose={() => setAdding(null)} />
-      <Address
-        open={giving}
-        onOpenChange={setGiving}
-        title={t('Use a git URL')}
-        says={t('Runs work on the GitHub repository at this address until you choose another. A private one needs GitHub connected.')}
-        act={t('Use')}
-        address=""
-        run={async (at) => give(at)}
-      />
-      {carry.dialog}
-      {codebase ? (
-        <SetupDialog
-          repo={codebase}
-          homes={homes}
-          open={offering}
-          onOpenChange={setOffering}
-          onStart={setup}
-          onRepo={choose}
-          onSaved={() => {
-            setOffering(false)
-            env.reload()
-          }}
-        />
+      {desk && wide ? (
+        <YStack width={440} shrink={0} height="100%" borderLeftWidth={1} borderColor="$borderColor" bg="$background" minW={0} minH={0} overflow="hidden">
+          <Panel side={deck} kinds={[]} onHide={() => setDesk(false)} label={t('Tabs')} />
+        </YStack>
       ) : null}
-    </YStack>
+    </XStack>
   )
 }

@@ -397,29 +397,6 @@ export function Reply({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Act slot="reply-more" label={say('More options')}>
-            <MoreHorizontal size={15} />
-          </Act>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" minW={196} data-slot="reply-more-menu">
-          <DropdownMenuLabel>
-            <SizableText size="$1" color="$hint">
-              {stamp}
-            </SizableText>
-          </DropdownMenuLabel>
-          <DropdownMenuItem data-slot="reply-branch" onSelect={() => onBranch?.()}>
-            <XStack items="center" gap="$2">
-              <GitBranch size={15} />
-              <SizableText size="$2" color="$ink">
-                {say('Branch in new chat')}
-              </SizableText>
-            </XStack>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       {onOpen ? (
         <Act slot="reply-open" label={say('Open in the side panel')} onPress={onOpen}>
           <PanelRight size={14} />

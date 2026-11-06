@@ -168,7 +168,7 @@ function keep(host: Host, say: Say): void {
     const t = { api: host.api, token: host.token, org: host.org }
     for (const f of Array.from(input.files ?? [])) {
       try {
-        await upload(t, { name: f.name, type: f.type, bytes: new Uint8Array(await f.arrayBuffer()) }, { source: 'chat' })
+        await upload(t, { name: f.name, type: f.type, blob: f }, { source: 'chat' })
       } catch (e) {
         window.alert(e instanceof Error ? e.message : say('{file} was not kept', { file: f.name }))
       }
