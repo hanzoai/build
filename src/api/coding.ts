@@ -2,6 +2,7 @@
  * Starting a coding run, and what it left.
  *
  *   POST /v1/agent/coding → 202 {sessionId, repo, branch, routed, targetId}
+ *   POST /v1/agent/coding/{session}/steer {text}       202 {ok}
  *   GET  /v1/agent/coding/{session}/artifacts          {session, saved, artifacts}
  *   GET  /v1/agent/coding/{session}/artifacts/{name}   one stored artifact's bytes
  *
@@ -109,6 +110,19 @@ export async function start(t: Target, ask: Ask): Promise<Run> {
     routed: r?.routed === true,
     target: s('targetId'),
   }
+}
+
+/**
+ * New words for a sandbox run that is working. The run takes its task on its
+ * command line and reads nothing after (apps/coding steer.go), so the platform
+ * stops it with its work kept on its branch and starts a follow-up from there
+ * with the words; the follow-up's session arrives on this run's own stream as
+ * its `followed` status (turn.ts `followed`).
+ */
+export async function steer(t: Target, session: string, text: string): Promise<void> {
+  const words = text.trim()
+  if (!words) throw new Refusal(400, phrase('Say something to the run'))
+  await call(t, 'POST', `/v1/agent/coding/${seg(session)}/steer`, { text: words })
 }
 
 /** A run a follow-up continues, as its record states it. */
