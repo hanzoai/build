@@ -11,7 +11,8 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n, type Say } from '@hanzo/i18n/react'
-import { Download, ExternalLink, File, FileDiff, Folder, Globe, GitBranch, GitPullRequest, Layers, MonitorPlay, Rocket, Settings2 } from '@hanzogui/lucide-icons-2'
+import { Download, ExternalLink, File, FileDiff, Folder, Globe, GitBranch, GitPullRequest, Layers, MonitorPlay, Rocket, Search, Settings2 } from '@hanzogui/lucide-icons-2'
+import { Input } from '@hanzo/ui'
 import { useState, type ReactNode } from 'react'
 
 import { blob, tree } from './api/changes.ts'
@@ -169,8 +170,24 @@ function Listing({
   body: string
 }) {
   const { t } = useI18n()
+  const [filter, setFilter] = useState('')
+  const needle = filter.replace(/^\?/, '').trim().toLowerCase()
+  const shown = needle ? rows.filter((r) => r.name.toLowerCase().includes(needle)) : rows
   return (
     <YStack gap="$2">
+      <XStack items="center" gap="$1.5" px="$2.5" py="$1" rounded="$3" borderWidth={1} borderColor="$borderColor">
+        <Search size={13} opacity={0.6} />
+        <Input
+          unstyled
+          flex={1}
+          minW={0}
+          value={filter}
+          onChangeText={setFilter}
+          placeholder={t('Filter, or ? to search in files')}
+          aria-label={t('Filter, or ? to search in files')}
+          style={{ fontSize: 12, outlineStyle: 'none', background: 'transparent' }}
+        />
+      </XStack>
       <XStack gap="$2" items="center">
         {up ? (
           <XStack render="button" aria-label={t('Up one directory')} onPress={up} px="$1" py="$1">
@@ -191,12 +208,12 @@ function Listing({
         <SizableText size="$2" color="$soft">
           {t('Reading…')}
         </SizableText>
-      ) : rows.length === 0 ? (
+      ) : shown.length === 0 ? (
         <SizableText size="$2" color="$soft">
-          {t('This directory is empty.')}
+          {needle ? t('No matching files.') : t('This directory is empty.')}
         </SizableText>
       ) : (
-        rows.map((r) => (
+        shown.map((r) => (
           <XStack
             key={r.key}
             render="button"

@@ -94,7 +94,7 @@ describe('library', () => {
       body: { name: 'note.txt', mime: 'text/plain', data: 'aGVsbG8=', source: 'chat', ref: 'thread_1', origin: '/chat?thread=thread_1', key: 'thread_1/m1/0' },
     })
     await expect(library.upload(T, { name: 'empty', type: '', bytes: new Uint8Array() }, { source: 'chat' })).rejects.toThrow('empty')
-    await expect(library.upload(T, { name: 'big', type: '', bytes: new Uint8Array(library.INLINE + 1) }, { source: 'chat' })).rejects.toThrow('larger than 10 MB')
+    await expect(library.upload(T, { name: 'big', type: '', blob: { size: library.MAX + 1 } as Blob }, { source: 'chat' })).rejects.toThrow('larger than 2 GB')
   })
 
   it('renames, shares and moves by PATCH, deletes by DELETE, and escapes the id', async () => {

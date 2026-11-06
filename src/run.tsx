@@ -25,8 +25,43 @@
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { ChevronDown, ChevronRight, Clock, Copy, ExternalLink, GitPullRequest, Globe, Pencil, Share } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, type DropdownMenuProps } from '@hanzo/ui'
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Copy,
+  ExternalLink,
+  FileDiff,
+  Folder,
+  GitPullRequest,
+  Globe,
+  Layers,
+  MessageSquare,
+  MoreHorizontal,
+  Pencil,
+  Share,
+  SlidersHorizontal,
+  SquareTerminal,
+} from '@hanzogui/lucide-icons-2'
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+  Input,
+  Switch,
+  type DropdownMenuProps,
+} from '@hanzo/ui'
 import { Steer, type Command } from '@hanzo/ui/agents'
 import { Composer, Failure, measure } from '@hanzo/ui/chat'
 import { useLimits } from '@hanzo/ui/product/useLimits'
@@ -52,7 +87,7 @@ import { schedule } from './scheduled.tsx'
 import { SideProvider, useSplit } from './side.tsx'
 import { PAGE, useDeck, useKey, usePanel } from './tabs.ts'
 import { carrying, compose, pick, type Attached } from './tools.tsx'
-import { Transcript } from './transcript.tsx'
+import { Transcript, type QueuedMessage, type TranscriptView } from './transcript.tsx'
 
 const LIVE = new Set(['running', 'paused', ''])
 
@@ -92,7 +127,14 @@ export function Run({ id }: { id: string }) {
   const [name, setName] = useState('')
   const [copied, setCopied] = useState('')
   const [unfolded, setUnfolded] = useState(false)
-  const [titleOpen, setTitleOpen] = useState(false)
+  const [transcriptView, setTranscriptView] = useKept<TranscriptView>('hanzo.build.transcript.view', 'normal')
+  const [outputStyle, setOutputStyle] = useKept<string>('hanzo.build.output.style', 'default')
+  const [envColumn, setEnvColumn] = useState(false)
+  const [splitPanes, setSplitPanes] = useState<string[]>([])
+  const [queued, setQueued] = useState<QueuedMessage[]>([])
+  const [keepAwake, setKeepAwake] = useState(false)
+  const wakeLockRef = useRef<{ release?: () => Promise<void> } | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
   // The model and effort a run started here uses: the one choice Chat and New share.
   const mind = useMind(t)
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
@@ -340,6 +382,91 @@ export function Run({ id }: { id: string }) {
         ]
       : []
 
+  const sendQueued = (qid: string) => {
+    const item = queued.find((q) => q.id === qid)
+    if (!item) return
+    setQueued((prev) => prev.filter((q) => q.id !== qid))
+    if (steering) {
+      void act(async () => {
+        await message(t, id, item.text)
+        return say('Sent — recorded on this run')
+      })
+      return
+    }
+    void act(() => carry(item.text))
+  }
+
+  const enqueue = () => {
+    const words = compose(draft.trim(), files)
+    if (!words) return
+    setQueued((prev) => [...prev, { id: `q-${Date.now()}-${prev.length}`, text: words }])
+    setDraft('')
+    setFiles([])
+  }
+
+  useEffect(() => {
+    if (!running || paused) return
+    const timer = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [running, paused])
+
+  const toggleKeepAwake = async (on: boolean) => {
+    setKeepAwake(on)
+    try {
+      const nav = navigator as unknown as { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }
+      if (on && nav.wakeLock) {
+        wakeLockRef.current = await nav.wakeLock.request('screen')
+      } else if (!on && wakeLockRef.current?.release) {
+        await wakeLockRef.current.release()
+        wakeLockRef.current = null
+      }
+    } catch {
+      /* WakeLock API optional */
+    }
+  }
+
+  const toggleDockPane = (kind: 'terminal' | 'preview' | 'diff' | 'files', label: string) => {
+    if (!desk) setDesk(true)
+    setSplitPanes((prev) => {
+      if (prev.includes(kind)) {
+        const next = prev.filter((k) => k !== kind)
+        if (next.length === 1) {
+          const single = next[0]!
+          side.open({ kind: single, title: say(single.charAt(0).toUpperCase() + single.slice(1)) })
+        }
+        return next
+      }
+      const activeKind = side.tabs.find((x) => x.id === side.at)?.kind ?? ''
+      const base = prev.length === 0 && activeKind && ['terminal', 'preview', 'diff', 'files'].includes(activeKind) && activeKind !== kind ? [activeKind] : prev
+      const next = [...base, kind]
+      if (next.length === 1) side.open({ kind, title: label })
+      return next
+    })
+  }
+
+  const elapsedSec = useMemo(() => {
+    const startMs = record?.createdAt ? Date.parse(record.createdAt) : NaN
+    if (!Number.isFinite(startMs)) return 0
+    return Math.max(1, Math.floor((nowMs - startMs) / 1000))
+  }, [record?.createdAt, nowMs])
+
+  const elapsedLabel = useMemo(() => {
+    const mins = Math.floor(elapsedSec / 60)
+    const secs = elapsedSec % 60
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+  }, [elapsedSec])
+
+  const tokenLabel = useMemo(() => {
+    const chars = events.reduce((sum, e) => sum + JSON.stringify(e.payload ?? '').length, 0)
+    const tok = Math.max(100, Math.round(chars / 4))
+    return tok >= 1000 ? `${(tok / 1000).toFixed(1)}k tokens` : `${tok} tokens`
+  }, [events])
+
+  const bgTaskCount = useMemo(
+    () => shown.filter((c) => (c.kind === 'shell' || c.kind === 'step') && c.ran === 'running' && running).length,
+    [shown, running],
+  )
+
   const save = () =>
     void act(async () => {
       await rename(t, id, name)
@@ -387,43 +514,238 @@ export function Run({ id }: { id: string }) {
       side={side}
       sheet={sheet}
       onHide={() => setDesk(false)}
+      envColumn={envColumn}
+      splitPanes={splitPanes}
+      onCloseSplitPane={(pid) => setSplitPanes((prev) => prev.filter((k) => k !== pid))}
+      onExpandSplitPane={(pid) => {
+        setSplitPanes([])
+        side.open({ kind: pid, title: say(pid.charAt(0).toUpperCase() + pid.slice(1)) })
+      }}
     />
+  )
+
+  const triggerButton = (
+    <XStack
+      render="button"
+      aria-label={say('Manage this run')}
+      items="center"
+      gap="$1.5"
+      maxW="100%"
+      minW={0}
+      px="$1.5"
+      mx="$-1.5"
+      py="$0.5"
+      rounded="$2"
+      hoverStyle={{ bg: '$hover' }}
+    >
+      <SizableText render="h1" size="$5" color="$ink" numberOfLines={1} minW={0}>
+        {title}
+      </SizableText>
+      <ChevronDown size={14} opacity={0.7} />
+    </XStack>
   )
 
   return (
     <XStack data-slot="run-split" display="grid" gridTemplateColumns="minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
       <YStack data-slot="run" ref={split.main} {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
-        <XStack px="$4" pt="$3" pb="$2" gap="$2" items="center" minH={44}>
+        <XStack px="$4" pt="$3" pb="$2" gap="$1.5" items="center" minH={44}>
           <YStack flex={1} minW={0} items="flex-start">
-            <XStack items="flex-start" gap="$1" maxW="100%" minW={0}>
-              <XStack
-                render="button"
-                aria-label={titleOpen ? say('Collapse title') : say('Expand title')}
-                aria-expanded={titleOpen}
-                items="flex-start"
-                gap="$1.5"
-                maxW="100%"
-                minW={0}
-                px="$1.5"
-                mx="$-1.5"
-                py="$0.5"
-                rounded="$2"
-                hoverStyle={{ bg: '$hover' }}
-                onPress={() => setTitleOpen((v) => !v)}
-              >
-                <SizableText render="h1" size="$5" color="$ink" numberOfLines={titleOpen ? undefined : 1} minW={0}>
-                  {title}
-                </SizableText>
-                <ChevronDown size={14} style={titleOpen ? { transform: 'rotate(180deg)' } : undefined} />
-              </XStack>
-              <DropdownMenu
-                trigger={
-                  <XStack render="button" aria-label={say('Manage this run')} items="center" p="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-                    <Pencil size={14} />
-                  </XStack>
-                }
-                items={manage}
-              />
+            <XStack items="center" gap="$1" maxW="100%" minW={0}>
+              {signed && record ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" minW={210}>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <SizableText size="$2" color="$ink" flex={1}>
+                          {say('Open in')}
+                        </SizableText>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent minW={170}>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            window.open(`vscode://file/home/z/work/${record.repo.split('/').pop() || ''}`, '_blank')
+                          }}
+                        >
+                          <SizableText size="$2" color="$ink">
+                            VS Code
+                          </SizableText>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            window.open(`cursor://file/home/z/work/${record.repo.split('/').pop() || ''}`, '_blank')
+                          }}
+                        >
+                          <SizableText size="$2" color="$ink">
+                            Cursor
+                          </SizableText>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            side.open({ kind: 'terminal', title: say('Terminal') })
+                            setDesk(true)
+                          }}
+                        >
+                          <SizableText size="$2" color="$ink">
+                            {say('Terminal')}
+                          </SizableText>
+                        </DropdownMenuItem>
+                        {record.repo ? (
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              window.open(pr.href || `https://github.com/${record.repo}`, '_blank', 'noopener,noreferrer')
+                            }}
+                          >
+                            <SizableText size="$2" color="$ink">
+                              GitHub
+                            </SizableText>
+                          </DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuItem onSelect={() => void copy('path', record.repo || id)}>
+                          <SizableText size="$2" color="$ink">
+                            {say('Copy path')}
+                          </SizableText>
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuItem
+                      aria-label={say('Rename')}
+                      onSelect={() => {
+                        setName(title)
+                        setNaming(true)
+                      }}
+                    >
+                      <SizableText size="$2" color="$ink" flex={1}>
+                        {say('Rename')}
+                      </SizableText>
+                      <DropdownMenuShortcut>R</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      aria-label={say('Fork')}
+                      onSelect={() => {
+                        void act(() => carry(again || headline(record.title, record.repo), 'follow'))
+                      }}
+                    >
+                      <SizableText size="$2" color="$ink" flex={1}>
+                        {say('Fork')}
+                      </SizableText>
+                      <DropdownMenuShortcut>F</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <SizableText size="$2" color="$ink" flex={1}>
+                          {say('Transcript view')}
+                        </SizableText>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent minW={160}>
+                        {(
+                          [
+                            ['normal', say('Normal')],
+                            ['thinking', say('Thinking')],
+                            ['verbose', say('Verbose')],
+                          ] as const
+                        ).map(([val, label]) => (
+                          <DropdownMenuItem key={val} onSelect={() => setTranscriptView(val)}>
+                            <SizableText size="$2" color="$ink" flex={1}>
+                              {label}
+                            </SizableText>
+                            {transcriptView === val ? <Check size={14} color="$blue10" /> : null}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <SizableText size="$2" color="$ink" flex={1}>
+                          {say('Output style')}
+                        </SizableText>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent minW={170}>
+                        {(
+                          [
+                            ['default', say('Default')],
+                            ['proactive', say('Proactive')],
+                            ['concise', say('Concise')],
+                            ['explanatory', say('Explanatory')],
+                            ['learning', say('Learning')],
+                          ] as const
+                        ).map(([val, label]) => (
+                          <DropdownMenuItem key={val} onSelect={() => setOutputStyle(val)}>
+                            <SizableText size="$2" color="$ink" flex={1}>
+                              {label}
+                            </SizableText>
+                            {outputStyle === val ? <Check size={14} color="$blue10" /> : null}
+                          </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setOutputStyle('custom')}>
+                          <SizableText size="$2" color="$ink" flex={1}>
+                            {say('New style...')}
+                          </SizableText>
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuItem onSelect={() => void copy('id', id)}>
+                      <SizableText size="$2" color="$ink" flex={1}>
+                        {copied === 'id' ? say('Copied') : say('Copy run id')}
+                      </SizableText>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        const first = shown.find((c) => c.kind === 'said' && c.who === 'person')
+                        schedule(first && 'text' in first ? first.text : headline(record.title, record.repo), host.go)
+                      }}
+                    >
+                      <SizableText size="$2" color="$ink" flex={1}>
+                        {say('Schedule this')}
+                      </SizableText>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuItem
+                      aria-label={say('Archive')}
+                      onSelect={() => {
+                        if (running) void stop(t, id, 'Archived').catch(() => undefined)
+                        host.go('')
+                      }}
+                    >
+                      <SizableText size="$2" color="$ink" flex={1}>
+                        {say('Archive')}
+                      </SizableText>
+                      <DropdownMenuShortcut>A</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      aria-label={say('Delete')}
+                      variant="destructive"
+                      onSelect={() => {
+                        if (running) void stop(t, id, 'Deleted').catch(() => undefined)
+                        host.go('')
+                      }}
+                    >
+                      <SizableText size="$2" color="$red10" flex={1}>
+                        {say('Delete')}
+                      </SizableText>
+                      <DropdownMenuShortcut>D</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <DropdownMenu trigger={triggerButton} items={manage} />
+              )}
             </XStack>
             <SizableText size="$1" color="$soft" numberOfLines={1} maxW="100%">
               {[state ? say(STATUS[state] ?? state) : detail.loading ? say('reading') : '', record?.repo, record?.branch, record?.published ? say('shared') : ''].filter(Boolean).join(' · ')}
@@ -454,11 +776,135 @@ export function Run({ id }: { id: string }) {
               items={sharing}
             />
           ) : null}
+          {wide ? (
+            <XStack items="center" gap="$0.5">
+              <XStack
+                render="button"
+                aria-label={say('Toggle environment column')}
+                aria-pressed={envColumn}
+                onPress={() => {
+                  if (!desk) setDesk(true)
+                  setEnvColumn((v) => !v)
+                }}
+                p="$1.5"
+                rounded="$2"
+                bg={envColumn ? '$hover' : 'transparent'}
+                hoverStyle={{ bg: '$hover' }}
+              >
+                <SlidersHorizontal size={15} opacity={envColumn ? 1 : 0.7} />
+              </XStack>
+              <XStack
+                render="button"
+                aria-label={say('Toggle terminal pane')}
+                aria-pressed={splitPanes.includes('terminal')}
+                onPress={() => toggleDockPane('terminal', say('Terminal'))}
+                p="$1.5"
+                rounded="$2"
+                bg={splitPanes.includes('terminal') ? '$hover' : 'transparent'}
+                hoverStyle={{ bg: '$hover' }}
+              >
+                <SquareTerminal size={15} opacity={splitPanes.includes('terminal') ? 1 : 0.7} />
+              </XStack>
+              <XStack
+                render="button"
+                aria-label={say('Toggle diff pane')}
+                aria-pressed={splitPanes.includes('diff')}
+                onPress={() => toggleDockPane('diff', say('Diff'))}
+                p="$1.5"
+                rounded="$2"
+                bg={splitPanes.includes('diff') ? '$hover' : 'transparent'}
+                hoverStyle={{ bg: '$hover' }}
+              >
+                <FileDiff size={15} opacity={splitPanes.includes('diff') ? 1 : 0.7} />
+              </XStack>
+              <XStack
+                render="button"
+                aria-label={say('Toggle browser pane')}
+                aria-pressed={splitPanes.includes('preview')}
+                onPress={() => toggleDockPane('preview', say('Preview'))}
+                p="$1.5"
+                rounded="$2"
+                bg={splitPanes.includes('preview') ? '$hover' : 'transparent'}
+                hoverStyle={{ bg: '$hover' }}
+              >
+                <Globe size={15} opacity={splitPanes.includes('preview') ? 1 : 0.7} />
+              </XStack>
+              <XStack
+                render="button"
+                aria-label={say('Toggle files pane')}
+                aria-pressed={splitPanes.includes('files')}
+                onPress={() => toggleDockPane('files', say('Files'))}
+                p="$1.5"
+                rounded="$2"
+                bg={splitPanes.includes('files') ? '$hover' : 'transparent'}
+                hoverStyle={{ bg: '$hover' }}
+              >
+                <Folder size={15} opacity={splitPanes.includes('files') ? 1 : 0.7} />
+              </XStack>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <XStack render="button" aria-label={say('More workspace options')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+                    <MoreHorizontal size={15} opacity={0.7} />
+                  </XStack>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" minW={220}>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      if (!desk) setDesk(true)
+                      setEnvColumn((v) => !v)
+                    }}
+                  >
+                    <MessageSquare size={15} />
+                    <SizableText size="$2" color="$ink" flex={1}>
+                      {say('Side chat')}
+                    </SizableText>
+                    <DropdownMenuShortcut>Ctrl+;</DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      if (!desk) setDesk(true)
+                      setEnvColumn(true)
+                    }}
+                  >
+                    <Layers size={15} />
+                    <SizableText size="$2" color="$ink" flex={1}>
+                      {say('Background tasks')}
+                    </SizableText>
+                    <XStack px="$1.5" py="$0.5" rounded={99} bg="$hover">
+                      <SizableText size="$1" color="$soft">
+                        {String(bgTaskCount)}
+                      </SizableText>
+                    </XStack>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    preventCloseOnSelect
+                    onSelect={() => {
+                      void toggleKeepAwake(!keepAwake)
+                    }}
+                  >
+                    <YStack flex={1} minW={0}>
+                      <SizableText size="$2" color="$ink">
+                        {say('Keep computer awake')}
+                      </SizableText>
+                      <SizableText size="$1" color="$soft">
+                        {say('Only for this session')}
+                      </SizableText>
+                    </YStack>
+                    <Switch checked={keepAwake} onCheckedChange={(v) => void toggleKeepAwake(v)} size="sm" aria-label={say('Keep computer awake')} />
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </XStack>
+          ) : null}
           <PanelToggle open={desk} onToggle={() => setDesk(!desk)} />
         </XStack>
 
         <Transcript
           cards={shown}
+          view={transcriptView}
+          queued={queued}
+          onSendQueued={sendQueued}
           onOpen={look}
           onDiff={() => {
             side.open({ kind: 'diff', title: say('Diff') })
@@ -571,6 +1017,16 @@ export function Run({ id }: { id: string }) {
               </YStack>
             ) : null}
             {setup && running && !seen ? <Onboarding onDone={() => setSeen(true)} /> : null}
+            {running && !paused ? (
+              <XStack items="center" gap="$2" px="$1">
+                <SizableText size="$1" color="$orange10">
+                  •·
+                </SizableText>
+                <SizableText size="$1" color="$soft">
+                  {`${elapsedLabel} · ${tokenLabel} · ${say('Thinking')}`}
+                </SizableText>
+              </XStack>
+            ) : null}
             {running ? (
               <XStack items="center" gap="$2" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" flexWrap="wrap" rowGap="$1">
                 <SizableText size="$2" color="$ink" flex={1} minW={160}>
@@ -606,6 +1062,14 @@ export function Run({ id }: { id: string }) {
             disabled={!signed || busy || waiting || !(running || finished)}
             placeholder={placeholder}
             label={steering ? say('Steer this run') : say('Follow up on this run')}
+            field={{
+              onKeyDown: (e: { key?: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault?: () => void }) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && steering && draft.trim()) {
+                  e.preventDefault?.()
+                  enqueue()
+                }
+              },
+            }}
             plus={{ upload: () => pick(files, setFiles, setNote, say) }}
             carried={carrying(files, setFiles)}
             // What a new run from here is made with; words that steer this run use neither.

@@ -55,6 +55,13 @@ function UserSaid({ text }: { text: string }) {
   )
 }
 
+export interface QueuedMessage {
+  id: string
+  text: string
+}
+
+export type TranscriptView = 'normal' | 'thinking' | 'verbose'
+
 export function Transcript({
   cards,
   live,
@@ -67,6 +74,9 @@ export function Transcript({
   onDiff,
   listen,
   end,
+  view = 'normal',
+  queued = [],
+  onSendQueued,
 }: {
   cards: Card[]
   /** The run is still working: a card still running shows it; otherwise it was cut off. */
@@ -86,16 +96,24 @@ export function Transcript({
   listen?: Listen
   /** After the last card: how the run ended, when it ended on an error. */
   end?: ReactNode
+  /** How much of the agent's internal reasoning and tool output is unfolded by default. */
+  view?: TranscriptView
+  /** Messages queued with Ctrl+Enter while the run works, waiting to be sent. */
+  queued?: QueuedMessage[]
+  /** Send a queued message immediately. */
+  onSendQueued?: (id: string) => void
 }) {
   const { t } = useI18n()
   // A card the run never finished is cut off once the run has ended, not still going.
   const state = (ran: Ran): Ran => (ran === 'running' && !live ? 'cancelled' : ran)
   // The answer still arriving: the last thing the agent said while the run works.
   const last = live ? [...cards].reverse().find((c) => c.kind === 'said' && c.who === 'agent')?.key : undefined
+  const expandThink = view === 'thinking' || view === 'verbose'
+  const expandVerbose = view === 'verbose'
   return (
     <Thread gap={GAP} column={{ maxW: MEASURE }} aria-label={t('Transcript')}>
       {header}
-      {cards.length === 0 ? <YStack py="$2">{empty}</YStack> : null}
+      {cards.length === 0 && queued.length === 0 ? <YStack py="$2">{empty}</YStack> : null}
       {cards.map((c) => {
         switch (c.kind) {
           case 'said': {
@@ -122,7 +140,7 @@ export function Transcript({
           }
           case 'think':
             return (
-              <Step key={c.key} name={t('Thought')} detail={firstLine(c.text)} status="done" aria-label={t('Thought')}>
+              <Step key={`${c.key}:${view}`} name={t('Thought')} detail={firstLine(c.text)} status="done" defaultOpen={expandThink} aria-label={t('Thought')}>
                 <Prose text={c.text} />
               </Step>
             )
@@ -143,7 +161,7 @@ export function Transcript({
             )
           case 'shell':
             return (
-              <Step key={c.key} name={t('Shell')} detail={c.command} status={state(c.ran)} aria-label={t('Command {command}', { command: c.command })}>
+              <Step key={`${c.key}:${view}`} name={t('Shell')} detail={c.command} status={state(c.ran)} defaultOpen={expandVerbose} aria-label={t('Command {command}', { command: c.command })}>
                 <Code language="shell" value={c.output ? `$ ${c.command}\n${c.output}` : `$ ${c.command}`}>
                   {c.output ? `$ ${c.command}\n${tail(c.output)}` : `$ ${c.command}`}
                 </Code>
@@ -152,10 +170,11 @@ export function Transcript({
           case 'edit':
             return (
               <Step
-                key={c.key}
+                key={`${c.key}:${view}`}
                 name={c.files.length === 1 ? t('Edited') : c.files.length ? t('Edited {n} files', { n: c.files.length }) : t('Edited files')}
                 detail={c.files.join(', ')}
                 status={state(c.ran)}
+                defaultOpen={expandVerbose}
                 aria-label={c.files.length ? t('Edited {files}', { files: c.files.join(', ') }) : t('Edited files')}
               >
                 <YStack gap="$2" items="flex-start">
@@ -174,7 +193,7 @@ export function Transcript({
             return (
               // The run's own error opens by default: it is the reason, and the line above it only says what to do.
               // A step's name is ours (Error, Search) or a tool's; ours is said in the reader's language.
-              <Step key={c.key} name={t(c.name)} detail={c.detail} status={state(c.ran)} defaultOpen={c.name === 'Error'} aria-label={`${t(c.name)} ${c.detail}`.trim()}>
+              <Step key={`${c.key}:${view}`} name={t(c.name)} detail={c.detail} status={state(c.ran)} defaultOpen={c.name === 'Error' || expandVerbose} aria-label={`${t(c.name)} ${c.detail}`.trim()}>
                 {c.name === 'Error' ? (
                   // The reason is read whole, wrapped, never scrolled sideways.
                   <SizableText size="$2" color="$ink" style={{ ...mono, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
@@ -213,6 +232,28 @@ export function Transcript({
             )
         }
       })}
+      {queued.map((q) => (
+        <YStack key={q.id} gap="$1" items="flex-end">
+          <Message role="user">
+            <UserSaid text={q.text} />
+          </Message>
+          {onSendQueued ? (
+            <XStack
+              render="button"
+              aria-label={t('Send now')}
+              onPress={() => onSendQueued(q.id)}
+              px="$2"
+              py="$0.5"
+              rounded="$2"
+              hoverStyle={{ bg: '$hover' }}
+            >
+              <SizableText size="$1" color="$soft">
+                {t('Send now')}
+              </SizableText>
+            </XStack>
+          ) : null}
+        </YStack>
+      ))}
       {end}
     </Thread>
   )
