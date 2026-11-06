@@ -8,8 +8,10 @@
  * by sequence. A reconnect after a drop re-reads the detail — the platform drops
  * a subscriber that falls behind, and frames missed then are only in the read.
  *
- * Steering is a queue the run drains between steps: a press is confirmed as
- * RECORDED, and the status is left to the feed to correct.
+ * Steering a machine's run is a queue it drains between steps: a press is
+ * confirmed as RECORDED, and the status is left to the feed to correct. A
+ * sandbox run is steered through `POST /v1/agent/coding/{session}/steer`, which
+ * stops it with its work kept and opens a follow-up with the words.
  *
  * A sandbox run is one agent invocation that takes its task on its command line
  * (apps/coding steer.go), so what continues it is a new run: a paused run is
@@ -68,10 +70,10 @@ import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { approve, followUp, headline, retry, start, type Ask, type Earlier } from './api/coding.ts'
+import { approve, followUp, headline, retry, start, steer, type Ask, type Earlier } from './api/coding.ts'
 import { limits as readLimits } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
-import { answer, cards, outcome, pull, settled, steps } from './api/turn.ts'
+import { answer, cards, followed, outcome, pull, settled, steps } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Desk, SEED } from './desk.tsx'
@@ -123,6 +125,8 @@ export function Run({ id }: { id: string }) {
   const split = useSplit(desk && wide, 'run', () => setDesk(false))
   // Stop was pressed here: the run keeps its work after it answers, and says so with its status.
   const [stopping, setStopping] = useState(false)
+  // The working sandbox run words were said to here: its follow-up opens once it starts.
+  const [steered, setSteered] = useState('')
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
   const [copied, setCopied] = useState('')
@@ -152,6 +156,7 @@ export function Run({ id }: { id: string }) {
   const end = outcome(events)
   const plan = useMemo(() => steps(events), [events])
   const kept = useMemo(() => settled(events), [events])
+  const next = useMemo(() => followed(events), [events])
   const state = status || end.status
   // Where the run's work is published: its project's own address, read again when
   // the run says it went live, never an address an event names.
@@ -281,15 +286,37 @@ export function Run({ id }: { id: string }) {
     return ''
   }
 
+  /**
+   * Words for the run while it works. A machine drains them between steps; a
+   * sandbox run reads nothing after it starts, so the platform stops it with its
+   * work kept and a follow-up takes the words on (api/coding.ts `steer`).
+   */
+  const tell = async (words: string): Promise<string> => {
+    if (held) {
+      await steer(t, id, words)
+      setSteered(id)
+      return say('Sent — the run stops with its work kept, and a follow-up takes it from here')
+    }
+    await message(t, id, words)
+    return say('Sent — recorded on this run')
+  }
+
+  // The follow-up the words said here started: it is where the run goes on.
+  useEffect(() => {
+    if (steered === id && next) host.go(next)
+    // On the follow-up's arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [steered, id, next])
+
   // The composer sends words, with any files fenced after them, and only while it is enabled.
   const send = () => {
     const words = compose(draft.trim(), files)
     if (steering) {
       void act(async () => {
-        await message(t, id, words)
+        const said = await tell(words)
         setDraft('')
         setFiles([])
-        return say('Sent — recorded on this run')
+        return said
       })
       return
     }
@@ -387,10 +414,7 @@ export function Run({ id }: { id: string }) {
     if (!item) return
     setQueued((prev) => prev.filter((q) => q.id !== qid))
     if (steering) {
-      void act(async () => {
-        await message(t, id, item.text)
-        return say('Sent — recorded on this run')
-      })
+      void act(() => tell(item.text))
       return
     }
     void act(() => carry(item.text))
