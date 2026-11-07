@@ -85,4 +85,22 @@ describe('a template', () => {
   it('reads a run as its profile lists it', () => {
     expect(run({ id: 'run_1', status: 'ok', model: 'enso', input: 'hi', output: 'hello', durationMs: 12, createdAt: '2026-10-20T00:00:00Z' })).toEqual({ id: 'run_1', status: 'ok', model: 'enso', input: 'hi', output: 'hello', error: '', ms: 12, at: '2026-10-20T00:00:00Z' })
   })
+
+  it('elects a preset to run autonomously 24/7, proactively on a schedule, and event-driven', async () => {
+    const sent = api([])
+    const a = await use(t, EINSTEIN, 'https://hanzo.ai/dev/customize', {
+      executionMode: 'long-running',
+      schedule: '*/15 * * * *',
+      triggers: ['webhook', 'git', 'channel', 'watch'],
+    })
+    expect(a.executionMode).toBe('long-running')
+    expect(a.schedule).toBe('*/15 * * * *')
+    expect(a.triggers).toEqual(['webhook', 'git', 'channel', 'watch'])
+    expect(sent[0]).toMatchObject({
+      name: 'Einstein',
+      executionMode: 'long-running',
+      schedule: '*/15 * * * *',
+      triggers: ['webhook', 'git', 'channel', 'watch'],
+    })
+  })
 })

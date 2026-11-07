@@ -24,6 +24,21 @@ import { call, seg, type Target } from './call.ts'
 export type Period = 'day' | 'week' | 'month'
 export const PERIODS: readonly Period[] = ['day', 'week', 'month']
 
+export type Mode = 'one-shot' | 'long-running'
+export const MODES: readonly Mode[] = ['one-shot', 'long-running']
+
+export type Trigger = 'webhook' | 'git' | 'channel' | 'watch'
+export const TRIGGERS: readonly Trigger[] = ['webhook', 'git', 'channel', 'watch']
+
+export const SCHEDULES: readonly { cron: string; label: string }[] = [
+  { cron: '*/5 * * * *', label: phrase('Every 5 min') },
+  { cron: '*/15 * * * *', label: phrase('Every 15 min') },
+  { cron: '0 * * * *', label: phrase('Hourly') },
+  { cron: '0 9 * * *', label: phrase('Daily 9am') },
+  { cron: '0 9 * * 1-5', label: phrase('Weekdays 9am') },
+  { cron: '0 9 * * 1', label: phrase('Weekly Mon 9am') },
+]
+
 export interface Agent {
   id: string
   name: string
@@ -42,6 +57,12 @@ export interface Agent {
   /** Its picture: an https link or a data URL; '' draws its emoji or initial. */
   avatar: string
   emoji: string
+  /** How the agent runs: 'long-running' runs autonomously 24/7 on its schedule and triggers. */
+  executionMode?: Mode
+  /** 5-field cron schedule for proactive execution (required when executionMode is 'long-running'). */
+  schedule?: string
+  /** Event-driven triggers that wake the agent proactively. */
+  triggers?: Trigger[]
 }
 
 export interface Preset {
@@ -62,6 +83,9 @@ export interface Draft {
   period: Period
   /** Sent on create only: an https link or a data URL. */
   avatar: string
+  executionMode?: Mode
+  schedule?: string
+  triggers?: Trigger[]
 }
 
 /** An agent's name, as the handler takes it. */
@@ -82,6 +106,9 @@ export const dollars = (m: number): string => (m ? String(m / 1_000_000) : '')
 export function agent(raw: unknown): Agent {
   const o = obj(raw)
   const period = str(o.period) as Period
+  const mode = str(o.executionMode || o.execution_mode) as Mode
+  const schedule = str(o.schedule)
+  const triggers = rows(o.triggers).map(str).filter((x): x is Trigger => TRIGGERS.includes(x as Trigger))
   return {
     id: str(o.id),
     name: str(o.name),
@@ -97,6 +124,9 @@ export function agent(raw: unknown): Agent {
     period: PERIODS.includes(period) ? period : '',
     avatar: str(o.avatar),
     emoji: str(o.emoji),
+    ...(MODES.includes(mode) ? { executionMode: mode } : {}),
+    ...(schedule ? { schedule } : {}),
+    ...(triggers.length ? { triggers } : {}),
   }
 }
 
@@ -112,6 +142,9 @@ export function draft(a: Agent): Draft {
     task: dollars(a.task),
     period: a.period || 'month',
     avatar: a.avatar,
+    ...(a.executionMode ? { executionMode: a.executionMode } : {}),
+    ...(a.schedule ? { schedule: a.schedule } : {}),
+    ...(a.triggers?.length ? { triggers: a.triggers } : {}),
   }
 }
 
@@ -129,6 +162,7 @@ const OVER: Record<Period, string> = {
 export function refuse(d: Draft): string {
   if (!NAME.test(d.name)) return phrase('A name is letters, digits, . _ or -, starting with a letter or digit')
   if (new TextEncoder().encode(d.instructions).length > MAX) return phrase('Instructions are at most 32 KB')
+  if (d.executionMode === 'long-running' && !d.schedule?.trim()) return phrase('A 24/7 autonomous agent requires a schedule (5-field cron)')
   const cap = micros(d.cap)
   const task = micros(d.task)
   if (!(cap > 0)) return UNSET[d.period]
@@ -184,6 +218,12 @@ export interface Cast {
   /** Its face, an address of the host. */
   avatar?: string
   tools?: string[]
+  /** How the preset runs when elected (e.g. 'long-running' for 24/7 autonomous bots). */
+  executionMode?: Mode
+  /** Default 5-field cron schedule for proactive execution. */
+  schedule?: string
+  /** Default event-driven triggers. */
+  triggers?: Trigger[]
 }
 
 /** What an agent made from a template may spend until its owner says otherwise, in dollars: each month, and one run. */
@@ -225,9 +265,31 @@ export const link = (at: string | undefined, base: string): string => {
  * free (read now, so it is never one that exists), with its instructions read
  * and its face linked. The template is not touched.
  */
-export async function use(t: Target, c: Cast, base: string): Promise<Agent> {
+export async function use(
+  t: Target,
+  c: Cast,
+  base: string,
+  overrides?: Partial<Pick<Draft, 'executionMode' | 'schedule' | 'triggers' | 'model' | 'tools' | 'cap' | 'task' | 'period'>>,
+): Promise<Agent> {
   const [have, instructions] = await Promise.all([agents(t), c.read ? c.read() : c.instructions])
-  return create(t, { ...EMPTY, name: free(handle(c.name), have), description: c.description, model: c.model, instructions, tools: c.tools ?? [], cap: CAST_CAP, task: CAST_TASK, avatar: link(c.avatar, base) })
+  const executionMode = overrides?.executionMode ?? c.executionMode
+  const schedule = overrides?.schedule ?? c.schedule
+  const triggers = overrides?.triggers ?? c.triggers
+  return create(t, {
+    ...EMPTY,
+    name: free(handle(c.name), have),
+    description: c.description,
+    model: overrides?.model ?? c.model,
+    instructions,
+    tools: overrides?.tools ?? c.tools ?? [],
+    cap: overrides?.cap ?? CAST_CAP,
+    task: overrides?.task ?? CAST_TASK,
+    period: overrides?.period ?? 'month',
+    avatar: link(c.avatar, base),
+    ...(executionMode ? { executionMode } : {}),
+    ...(schedule ? { schedule } : {}),
+    ...(triggers?.length ? { triggers } : {}),
+  })
 }
 
 /** Anyone as a template: their name, who they are, and writing of theirs to take the voice from. */
@@ -251,6 +313,9 @@ export async function create(t: Target, d: Draft): Promise<Agent> {
   }
   if (d.model) body.model = d.model
   if (d.avatar) body.avatar = d.avatar
+  if (d.executionMode) body.executionMode = d.executionMode
+  if (d.schedule?.trim()) body.schedule = d.schedule.trim()
+  if (d.triggers?.length) body.triggers = d.triggers
   return agent(await call<unknown>(t, 'POST', '/v1/agent', body))
 }
 
@@ -264,6 +329,9 @@ export function changes(was: Agent, d: Draft): Record<string, unknown> {
   if (micros(d.cap) !== was.cap) out.cap_micro_usd = micros(d.cap)
   if (micros(d.task) !== was.task) out.max_task_micro_usd = micros(d.task)
   if (d.period !== was.period) out.period = d.period
+  if ((d.executionMode ?? '') !== (was.executionMode ?? '') && d.executionMode) out.executionMode = d.executionMode
+  if ((d.schedule ?? '').trim() !== (was.schedule ?? '')) out.schedule = (d.schedule ?? '').trim()
+  if ((d.triggers ?? []).join('\n') !== (was.triggers ?? []).join('\n')) out.triggers = d.triggers ?? []
   return out
 }
 

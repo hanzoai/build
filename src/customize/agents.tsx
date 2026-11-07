@@ -27,7 +27,7 @@ import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { ModelPicker } from '@hanzo/ui/models'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { agents, ALL, create, draft, EMPTY, fromPreset, one, PERIODS, person, presets, profile, remove, update, use, type Agent, type Cast, type Draft, type Period, type Preset, type Run } from '../api/agents.ts'
+import { agents, ALL, CAST_CAP, CAST_TASK, create, draft, EMPTY, fromPreset, one, PERIODS, person, presets, profile, remove, SCHEDULES, TRIGGERS, update, use, type Agent, type Cast, type Draft, type Period, type Preset, type Run, type Trigger } from '../api/agents.ts'
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useHost, useTarget } from '../host.tsx'
@@ -37,8 +37,15 @@ import { say } from './say.ts'
 import { Add, Choice, Confirm, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
 
 /** How many cards Browse draws at a time. */
-const PAGE = 60
+const PAGE = 120
 const ANY = phrase('All')
+
+const TRIGGER_LABELS: Record<Trigger, { title: string; detail: string }> = {
+  webhook: { title: phrase('Webhook & API events'), detail: phrase('Wake immediately when an inbound webhook or API event fires.') },
+  git: { title: phrase('Git, PR & CI events'), detail: phrase('React proactively to pushes, pull requests, and build failures.') },
+  channel: { title: phrase('Channel & message events'), detail: phrase('Listen and respond to Slack, Discord, Telegram, and team channels.') },
+  watch: { title: phrase('Proactive anomaly watch'), detail: phrase('Continuously monitor metrics, queues, and alerts 24/7.') },
+}
 
 /** Categories as Browse offers them: the default agents' and presets' first, as listed, then the rest by how many each holds. */
 export function kinds(first: readonly Cast[], rest: readonly Cast[]): string[] {
@@ -93,6 +100,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const [more, setMore] = useState(PAGE)
   const [using, setUsing] = useState<Cast | null>(null)
   const [making, setMaking] = useState<'self' | 'person' | null>(null)
+  const [electing, setElecting] = useState<Cast | null>(null)
   useEffect(() => setMore(PAGE), [q, kind])
 
   const opened = (a: Agent) => host.go(path({ kind: 'agent', name: a.name }))
@@ -124,7 +132,37 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
     const first = [...(host.cast ?? []), ...offered.value.map(fromPreset)]
     const all = [...first, ...figures.value]
     const shown = all.filter((c) => (kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category))
+    const topAgents = kind === ANY ? shown.filter((c) => c.category !== 'Bot') : shown
+    const botPresets = kind === ANY ? shown.filter((c) => c.category === 'Bot') : []
     const failed = figures.error ?? offered.error
+    const card = (c: Cast) => (
+      <Tile
+        key={`${c.category}/${c.name}/${c.title}`}
+        title={c.title}
+        detail={c.description === c.title || c.description === c.category ? undefined : c.description}
+        meta={[category(c.category, t), c.executionMode === 'long-running' ? t('24/7 · Proactive · Event-driven') : '', c.schedule].filter(Boolean).join(' · ')}
+        mark={<Mark name={c.title} size={40} logo={c.avatar || (c.name === 'create' ? '/agents/creative.png' : undefined)} />}
+        onOpen={signed ? () => setElecting(c) : undefined}
+        action={
+          signed ? (
+            <XStack items="center" gap="$1.5">
+              <XStack $max-sm={{ display: 'none' }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={using !== null}
+                  aria-label={t('Elect {name} to run 24/7', { name: c.title })}
+                  onPress={() => setElecting(c)}
+                >
+                  {t('24/7')}
+                </Button>
+              </XStack>
+              <Add name={c.title} use added={false} busy={using !== null} onPress={() => void take(c)} />
+            </XStack>
+          ) : undefined
+        }
+      />
+    )
     return (
       <YStack gap="$3">
         {signed ? (
@@ -138,6 +176,11 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
             <Button size="sm" variant="outline" onPress={() => setMaking('person')}>
               {t('Create from a person')}
             </Button>
+            {first.length ? (
+              <Button size="sm" variant="outline" onPress={() => setElecting(first[0]!)}>
+                {t('Elect 24/7 preset')}
+              </Button>
+            ) : null}
           </XStack>
         ) : null}
         <XStack overflowX="auto" overflowY="hidden" pb="$1">
@@ -145,22 +188,27 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
         </XStack>
         <Line>{note}</Line>
         {shown.length ? (
-          <Grid label={t('Agents to start from')}>
-            {shown.slice(0, more).map((c) => (
-              <Tile
-                key={`${c.category}/${c.name}/${c.title}`}
-                title={c.title}
-                detail={c.description === c.title || c.description === c.category ? undefined : c.description}
-                meta={category(c.category, t)}
-                mark={<Mark name={c.title} size={40} logo={c.avatar} />}
-                action={signed ? <Add name={c.title} use added={false} busy={using !== null} onPress={() => void take(c)} /> : undefined}
-              />
-            ))}
-          </Grid>
+          <YStack gap="$5">
+            {topAgents.length ? (
+              <Grid label={kind === 'Bot' ? t('Bots to start from') : t('Agents to start from')}>
+                {topAgents.slice(0, more).map(card)}
+              </Grid>
+            ) : null}
+            {botPresets.length ? (
+              <Part
+                title={t('Bots')}
+                detail={t('Autonomous 24/7, proactive and event-driven workers. Select and elect any agent or bot preset to run continuously on a schedule or when events fire.')}
+              >
+                <Grid label={t('Bots to start from')}>
+                  {botPresets.slice(0, more).map(card)}
+                </Grid>
+              </Part>
+            ) : null}
+          </YStack>
         ) : figures.loading || offered.loading ? null : (
           <Soft>{t('No agent matches “{q}”.', { q: q.trim() })}</Soft>
         )}
-        {shown.length > more ? (
+        {topAgents.length > more || botPresets.length > more ? (
           <XStack>
             <Button size="sm" variant="ghost" onPress={() => setMore(more + PAGE)}>
               {t('More')}
@@ -170,6 +218,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
         {failed ? <Failed error={failed} onRetry={figures.error ? figures.reload : offered.reload} /> : figures.loading || offered.loading ? <Soft>{t('Loading…')}</Soft> : null}
         {editor}
         {making ? <Person self={making === 'self'} onClose={() => setMaking(null)} onMade={opened} /> : null}
+        {electing ? <Elect preset={electing} all={first} onClose={() => setElecting(null)} onElected={opened} /> : null}
       </YStack>
     )
   }
@@ -205,6 +254,8 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
               detail={a.description || t('No description.')}
               meta={[
                 a.model,
+                a.executionMode === 'long-running' ? t('24/7') : '',
+                a.schedule || '',
                 a.runs === 1 ? t('1 run') : t('{n} runs', { n: a.runs }),
                 reach(a, t),
                 a.cap ? t(SPENT[a.period], { spent: money(a.spent), cap: money(a.cap) }) : '',
@@ -219,6 +270,167 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
       )}
       {editor}
     </YStack>
+  )
+}
+
+/** Elect an agent or bot preset to run autonomously 24/7, proactively on a schedule, and event-driven. */
+function Elect({
+  preset,
+  all,
+  onClose,
+  onElected,
+}: {
+  preset: Cast
+  all: readonly Cast[]
+  onClose: () => void
+  onElected: (a: Agent) => void
+}) {
+  const { t } = useI18n()
+  const target = useTarget()
+  const [picked, setPicked] = useState<Cast>(preset)
+  const [autonomous, setAutonomous] = useState(true)
+  const [schedule, setSchedule] = useState(preset.schedule || '*/15 * * * *')
+  const [triggers, setTriggers] = useState<Trigger[]>(preset.triggers?.length ? preset.triggers : ['webhook', 'git', 'channel', 'watch'])
+  const [cap, setCap] = useState(CAST_CAP)
+  const [task, setTask] = useState(CAST_TASK)
+  const [period, setPeriod] = useState<Period>('month')
+  const [working, setWorking] = useState(false)
+  const [note, setNote] = useState('')
+
+  const selectPreset = (c: Cast) => {
+    setPicked(c)
+    setSchedule(c.schedule || '*/15 * * * *')
+    setTriggers(c.triggers?.length ? c.triggers : ['webhook', 'git', 'channel', 'watch'])
+  }
+
+  const toggleTrigger = (tr: Trigger, yes: boolean) => {
+    setTriggers((prev) => (yes ? [...new Set([...prev, tr])] : prev.filter((x) => x !== tr)))
+  }
+
+  const save = async () => {
+    setWorking(true)
+    setNote('')
+    try {
+      const created = await use(target, picked, window.location.href, {
+        executionMode: autonomous ? 'long-running' : 'one-shot',
+        schedule: autonomous ? schedule.trim() || '*/15 * * * *' : undefined,
+        triggers: autonomous ? triggers : undefined,
+        cap,
+        task,
+        period,
+      })
+      onElected(created)
+    } catch (e) {
+      setNote(say(e, t))
+      setWorking(false)
+    }
+  }
+
+  return (
+    <Sheet title={t('Elect 24/7 autonomous preset')} open onOpenChange={(o) => !o && onClose()} width={680}>
+      <XStack items="center" gap="$3" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor">
+        <Mark name={picked.title} size={44} logo={picked.avatar || (picked.name === 'create' ? '/agents/creative.png' : undefined)} />
+        <YStack flex={1} minW={0}>
+          <SizableText size="$3" color="$ink">
+            {picked.title}
+          </SizableText>
+          <SizableText size="$1" color="$soft" numberOfLines={2}>
+            {picked.description || picked.category}
+          </SizableText>
+        </YStack>
+      </XStack>
+      {all.length > 1 ? (
+        <Field label={t('Preset')} hint={t('Select any Agent or Bot preset to elect as an autonomous 24/7 worker.')}>
+          <XStack gap="$1.5" flexWrap="wrap" maxH={136} overflow="scroll" p="$1" borderWidth={1} borderColor="$borderColor" rounded="$3">
+            {all.map((c) => {
+              const active = c.name === picked.name && c.category === picked.category
+              return (
+                <Button key={`${c.category}/${c.name}`} size="sm" variant={active ? 'primary' : 'ghost'} onPress={() => selectPreset(c)}>
+                  {c.title}
+                </Button>
+              )
+            })}
+          </XStack>
+        </Field>
+      ) : null}
+      <XStack items="center" gap="$3" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor">
+        <YStack flex={1} minW={0}>
+          <SizableText size="$2" color="$ink">
+            {t('Run autonomously 24/7')}
+          </SizableText>
+          <SizableText size="$1" color="$soft">
+            {t('Stays active continuously (long-running), waking proactively on its schedule and when events fire.')}
+          </SizableText>
+        </YStack>
+        <Switch checked={autonomous} onCheckedChange={setAutonomous} aria-label={t('Run autonomously 24/7')} />
+      </XStack>
+      {autonomous ? (
+        <>
+          <Field label={t('Proactive schedule')} hint={t('Choose how often this agent wakes proactively, or enter any 5-field cron expression.')}>
+            <YStack gap="$2">
+              <XStack gap="$1.5" flexWrap="wrap">
+                {SCHEDULES.map((s) => (
+                  <Button key={s.cron} size="sm" variant={schedule.trim() === s.cron ? 'primary' : 'outline'} onPress={() => setSchedule(s.cron)}>
+                    {t(s.label)}
+                  </Button>
+                ))}
+              </XStack>
+              <Input value={schedule} onChangeText={setSchedule} placeholder="*/15 * * * *" aria-label={t('Proactive schedule')} />
+            </YStack>
+          </Field>
+          <YStack gap="$2">
+            <SizableText size="$2" color="$ink">
+              {t('Event-driven triggers')}
+            </SizableText>
+            <YStack borderWidth={1} borderColor="$borderColor" rounded="$3">
+              {TRIGGERS.map((tr, i) => (
+                <XStack key={tr} items="center" gap="$3" px="$3" py="$2" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
+                  <YStack flex={1} minW={0}>
+                    <SizableText size="$2" color="$ink">
+                      {t(TRIGGER_LABELS[tr].title)}
+                    </SizableText>
+                    <SizableText size="$1" color="$soft">
+                      {t(TRIGGER_LABELS[tr].detail)}
+                    </SizableText>
+                  </YStack>
+                  <Switch checked={triggers.includes(tr)} onCheckedChange={(v: boolean) => toggleTrigger(tr, v)} aria-label={t(TRIGGER_LABELS[tr].title)} />
+                </XStack>
+              ))}
+            </YStack>
+          </YStack>
+        </>
+      ) : null}
+      <YStack gap="$2">
+        <SizableText size="$2" color="$ink">
+          {t('Budget')}
+        </SizableText>
+        <XStack gap="$3" flexWrap="wrap" rowGap="$2" items="flex-end">
+          <YStack gap="$1" width={140}>
+            <SizableText size="$1" color="$soft">
+              {t(EACH[period])}
+            </SizableText>
+            <Input value={cap} onChangeText={setCap} placeholder="10" aria-label={t('Budget each period')} inputMode="decimal" />
+          </YStack>
+          <YStack gap="$1" width={140}>
+            <SizableText size="$1" color="$soft">
+              {t('One run, USD')}
+            </SizableText>
+            <Input value={task} onChangeText={setTask} placeholder="1" aria-label={t('Budget for one run')} inputMode="decimal" />
+          </YStack>
+          <Choice label={t('Period')} value={period} options={PERIODS.map((p) => ({ id: p, label: t(PERIOD[p]) }))} onChange={(p: Period) => setPeriod(p)} />
+        </XStack>
+      </YStack>
+      <Line>{note}</Line>
+      <XStack gap="$2" items="center">
+        <XStack flex={1} />
+        <Button size="sm" variant="ghost" onPress={onClose}>
+          {t('Cancel')}
+        </Button>
+        <Button size="sm" disabled={working || (autonomous && !schedule.trim())} onPress={() => void save()}>
+          {autonomous ? t('Elect & Run 24/7') : t('Create')}
+        </Button>
+      </XStack>
+    </Sheet>
   )
 }
 
@@ -342,6 +554,16 @@ export function Profile({ name }: { name: string }) {
               </Button>
             </XStack>
             <Part title={t('Model')} detail={a.model || t('The deployment’s default')} />
+            <Part
+              title={t('Autonomous & Event-Driven')}
+              detail={
+                a.executionMode === 'long-running'
+                  ? [t('Runs autonomously 24/7'), a.schedule ? `${t('Schedule')}: ${a.schedule}` : '', a.triggers?.length ? `${t('Triggers')}: ${a.triggers.join(', ')}` : '']
+                      .filter(Boolean)
+                      .join(' · ')
+                  : t('One-shot (on-demand). Edit to enable 24/7 proactive and event-driven execution.')
+              }
+            />
             <Part title={t('Instructions')} detail={a.instructions ? '' : t('None written: it runs on its model alone.')}>
               {a.instructions ? (
                 <YStack p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" maxH={320} overflow="scroll">
@@ -535,6 +757,64 @@ function Editor({
                 </YStack>
               </>
             )}
+          </YStack>
+          <YStack gap="$2">
+            <XStack items="center" gap="$3">
+              <YStack flex={1} minW={0}>
+                <SizableText size="$2" color="$ink">
+                  {t('Autonomous & Event-Driven (24/7)')}
+                </SizableText>
+                <SizableText size="$1" color="$soft">
+                  {d.executionMode === 'long-running'
+                    ? t('Runs autonomously 24/7 on its proactive schedule and event triggers.')
+                    : t('One-shot (on-demand). Turn on to run autonomously 24/7.')}
+                </SizableText>
+              </YStack>
+              <Switch
+                checked={d.executionMode === 'long-running'}
+                onCheckedChange={(v: boolean) =>
+                  set(
+                    v
+                      ? { executionMode: 'long-running', schedule: d.schedule || '*/15 * * * *', triggers: d.triggers?.length ? d.triggers : ['webhook', 'git', 'channel', 'watch'] }
+                      : { executionMode: undefined, schedule: undefined, triggers: undefined },
+                  )
+                }
+                aria-label={t('Run autonomously 24/7')}
+              />
+            </XStack>
+            {d.executionMode === 'long-running' ? (
+              <YStack gap="$2" p="$3" borderWidth={1} borderColor="$borderColor" rounded="$3">
+                <SizableText size="$1" color="$soft">
+                  {t('Proactive schedule (5-field cron)')}
+                </SizableText>
+                <XStack gap="$1.5" flexWrap="wrap">
+                  {SCHEDULES.map((s) => (
+                    <Button key={s.cron} size="sm" variant={(d.schedule ?? '').trim() === s.cron ? 'primary' : 'outline'} onPress={() => set({ schedule: s.cron })}>
+                      {t(s.label)}
+                    </Button>
+                  ))}
+                </XStack>
+                <Input value={d.schedule ?? ''} onChangeText={(v: string) => set({ schedule: v })} placeholder="*/15 * * * *" aria-label={t('Proactive schedule')} />
+                <SizableText size="$1" color="$soft">
+                  {t('Event-driven triggers')}
+                </SizableText>
+                <XStack gap="$1.5" flexWrap="wrap">
+                  {TRIGGERS.map((tr) => {
+                    const active = (d.triggers ?? []).includes(tr)
+                    return (
+                      <Button
+                        key={tr}
+                        size="sm"
+                        variant={active ? 'primary' : 'outline'}
+                        onPress={() => set({ triggers: active ? (d.triggers ?? []).filter((x) => x !== tr) : [...(d.triggers ?? []), tr] })}
+                      >
+                        {t(TRIGGER_LABELS[tr].title)}
+                      </Button>
+                    )
+                  })}
+                </XStack>
+              </YStack>
+            ) : null}
           </YStack>
           <YStack gap="$2">
             <SizableText size="$2" color="$ink">
