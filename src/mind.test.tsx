@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Target } from './api/call.ts'
 import { ENSO } from './api/models.ts'
-import { catalog, EFFORTS, FIRST, keep, kept, level, nameOf, useMind } from './mind.ts'
+import { catalog, EFFORTS, FIRST, grants, keep, kept, level, nameOf, useMind } from './mind.ts'
 
 /** A browser's storage and events, enough for the store: what was written, and who heard. */
 function browser(seed: Record<string, string> = {}) {
@@ -105,8 +105,8 @@ describe('the kept choice', () => {
 })
 
 describe('the catalog', () => {
-  it('names a model as the catalog does, and the router as Enso', () => {
-    expect(nameOf(ENSO, [])).toBe('Enso')
+  it('names a model as the catalog does, and the router as Enso Auto', () => {
+    expect(nameOf(ENSO, [])).toBe('Enso Auto')
     expect(nameOf('zen6', CATALOG)).toBe('Zen 6')
   })
 
@@ -142,5 +142,29 @@ describe('the catalog', () => {
     renderToString(<Reads />)
     expect(seen).toMatchObject({ model: ENSO, effort: 'auto', loading: false, error: null })
     expect(seen!.models).toHaveLength(4)
+  })
+})
+
+describe('the Free plan', () => {
+  it('grants Enso Auto alone; every other plan grants every model', () => {
+    expect(grants(true, ENSO)).toBe(true)
+    for (const id of ['zen6', 'opus', 'enso-flash']) expect(grants(true, id)).toBe(false)
+    for (const id of [ENSO, 'zen6', 'opus']) expect(grants(false, id)).toBe(true)
+  })
+
+  it('answers on Enso Auto, and a pick of another model is not kept', async () => {
+    const { items } = browser({ 'hanzo.mind': JSON.stringify({ model: 'zen6', effort: 'auto' }) })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: CATALOG }), { status: 200 })))
+    const t: Target = { api: 'https://api.free', token: () => 'tok', org: null }
+    await catalog(t)
+    let seen: ReturnType<typeof useMind> | null = null
+    const Reads = () => {
+      seen = useMind(t, 'free')
+      return null
+    }
+    renderToString(<Reads />)
+    expect(seen).toMatchObject({ model: ENSO, free: true })
+    seen!.pick('opus')
+    expect(JSON.parse(items.get('hanzo.mind')!).model).toBe('zen6')
   })
 })

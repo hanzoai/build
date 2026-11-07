@@ -391,7 +391,6 @@ test.describe('a host that draws its own rail', () => {
       'EFFORTS',
       'Editor',
       'FIRST',
-      'FREE',
       'Grip',
       'Gutter',
       'HostProvider',

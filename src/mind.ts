@@ -45,10 +45,7 @@ export interface Choice {
 
 export const FIRST: Choice = { model: ENSO, effort: 'auto' }
 
-/** What Free answers on: the catalog's free lane, Enso's first. `free` is an alias of it. */
-export const FREE = 'enso-free'
-
-/** Whether a plan grants only the free lane. An unknown plan is not taken for Free. */
+/** Whether a plan grants only Enso Auto. An unknown plan is not taken for Free. */
 export const isFree = (plan: string | null | undefined): boolean => plan === 'free'
 
 const KEY = 'hanzo.mind'
@@ -118,10 +115,9 @@ export function useChoice(): readonly [Choice, (patch: Partial<Choice>) => void]
   return [useSyncExternalStore(subscribe, kept, () => FIRST), keep] as const
 }
 
-/** A model's name as the catalog spells it; Enso for the router. */
+/** A model's name as the catalog spells it; Enso Auto for the router. */
 export function nameOf(model: string, catalog: readonly Model[]): string {
-  if (model === ENSO) return 'Enso'
-  if (model === 'free') return nameOf(FREE, catalog)
+  if (model === ENSO) return 'Enso Auto'
   const row = catalog.find((m) => m.id === model)
   return row?.name ?? spelled(model)
 }
@@ -137,7 +133,7 @@ export function spelled(id: string): string {
 }
 
 /** The ids that are the router under another name: the picker's Enso row stands for all of them. */
-export const ROUTER_IDS: ReadonlySet<string> = new Set([ENSO, 'enso', 'hanzo/enso', 'free'])
+export const ROUTER_IDS: ReadonlySet<string> = new Set([ENSO, 'enso', 'hanzo/enso'])
 
 // The catalog, once per platform for the page: Chat and Dev read the same list.
 const catalogs = new Map<string, Promise<Model[]>>()
@@ -146,8 +142,8 @@ const settled = new Map<string, Model[]>()
 /** Where this browser keeps the last list it read. */
 const LAST = 'hanzo.build.models'
 
-/** The router alone: what a chooser offers before any list was ever read, so it reads "Enso" and not an id. */
-const ROUTER: Model[] = parseModels([{ id: ENSO, name: 'Enso', family: 'enso', class: 'ours' }])
+/** The router alone: what a chooser offers before any list was ever read, so it reads "Enso Auto" and not an id. */
+const ROUTER: Model[] = parseModels([{ id: ENSO, name: 'Enso Auto', family: 'enso', class: 'ours' }])
 
 /** The last list this browser read, or none. */
 function last(): Model[] {
@@ -232,10 +228,9 @@ export function useCatalog(t: Target): Catalog {
   }
 }
 
-/** Whether `model` is one this plan may send: on Free, the catalog's free class alone. */
-export function grants(free: boolean, model: string, catalog: readonly Model[]): boolean {
-  if (!free) return true
-  return catalog.find((m) => m.id === model)?.class === 'free'
+/** Whether `model` is one this plan may send: on Free, Enso Auto alone (commerce's `allowedModels`). */
+export function grants(free: boolean, model: string): boolean {
+  return !free || model === ENSO
 }
 
 /** The effort as the composer reads it: the one in force, its list, and the way to change it. */
@@ -250,7 +245,7 @@ export interface Mind {
   error: string | null
   /** A list shown from before, because this read failed. */
   note: string
-  /** The plan grants only the free lane: anything else is an upgrade, never a pick. */
+  /** The plan grants only Enso Auto: anything else is an upgrade, never a pick. */
   free: boolean
   /** A premium pick holds for this screen; any other is kept. */
   pick: (id: string) => void
@@ -259,15 +254,15 @@ export interface Mind {
 
 /**
  * The model and effort for the plan `plan` names (`GET /v1/ai/limits` `plan`).
- * On Free the default is `FREE` and a kept pick outside the free lane is set
- * aside rather than sent — it comes back once the plan grants it.
+ * On Free the model is Enso Auto, and a kept pick of any other is set aside
+ * rather than sent — it comes back once the plan grants it.
  */
 export function useMind(t: Target, plan?: string | null): Mind {
   const [choice, change] = useChoice()
   const { models, list, loading, error, note } = useCatalog(t)
   const free = isFree(plan)
   const [picked, pick] = usePick(choice.model, (id) => change({ model: id }), list)
-  const model = free && !grants(true, picked, models) ? FREE : picked
+  const model = grants(free, picked) ? picked : ENSO
   return {
     model,
     effort: choice.effort,
@@ -277,7 +272,7 @@ export function useMind(t: Target, plan?: string | null): Mind {
     note,
     free,
     pick: (id) => {
-      if (grants(free, id, models)) pick(id)
+      if (grants(free, id)) pick(id)
     },
     pace: (effort) => change({ effort }),
   }
