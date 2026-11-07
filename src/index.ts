@@ -50,7 +50,7 @@ export { href, parse, path, PLACES, route, SESSION, SLUG, type Route, type Scree
  * (`Reply`), and the side panel (`Panel` over a `Deck` of tabs). The composer is
  * @hanzo/ui/chat's, for Chat and Dev alike.
  */
-export { catalog, EFFORTS, FIRST, FREE, grants, isFree, keep, kept, level, nameOf, pacing, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
+export { catalog, EFFORTS, FIRST, grants, isFree, keep, kept, level, nameOf, pacing, useCatalog, useChoice, useMind, type Choice, type Effort, type Mind } from './mind.ts'
 export { useEar } from './voice.ts'
 export { BARE, CHAT_MODES, DEV_MODES, gearOf, MODES, useGear, useLanguage, type Gear, type GearState, type Mode as GearMode } from './gear.ts'
 export { useCarry, type Carry } from './carry.tsx'
