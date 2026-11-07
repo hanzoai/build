@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { parse } from './api/limits.ts'
 import { kind, label, said, share, spent, ways, when } from './plan.ts'
-import { left, rows } from './standing.ts'
+import { left, rows, stand } from './standing.ts'
 
 describe('label', () => {
   it('names the family and keeps the rung as a small tag', () => {
@@ -37,6 +37,14 @@ describe('label', () => {
       expect(said(l)).not.toContain(id)
     }
     expect(label('3f2b8c1e-9d4a-4b7e-8c2f-1a2b3c4d5e6f', 'pro')).toEqual({ name: 'Pro', tag: '' })
+  })
+
+  it('names a plan by the name billing gives it, whatever the slug', () => {
+    expect(label('unlimited', 'pro', 'Unlimited')).toEqual({ name: 'Unlimited', tag: '' })
+    expect(label('', 'pro', 'Unlimited')).toEqual({ name: 'Unlimited', tag: '' })
+    expect(label('plan_abc123def', 'pro', ' Unlimited ')).toEqual({ name: 'Unlimited', tag: '' })
+    expect(label('', 'pro', '')).toEqual({ name: 'Pro', tag: '' })
+    expect(label('max-20x', 'pro', null)).toEqual({ name: 'Max', tag: '20x' })
   })
 
   it('falls back to the tier class with no rung, and is null with no plan at all', () => {
@@ -157,5 +165,27 @@ describe('left', () => {
     expect(left({ plan: 'free', limit: 20, used: 25, spent: true, window: 'day', resets: '', pooled: true, pool: null })).toBe(0)
     expect(left({ plan: 'max', limit: 0, used: 0, spent: false, window: '', resets: '', pooled: false, pool: null })).toBeNull()
     expect(left(null)).toBeNull()
+  })
+})
+
+describe('stand', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  /** Answers each read by its path; an unlisted path is refused. */
+  const answer = (bodies: Record<string, unknown>) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const body = bodies[new URL(url).pathname]
+        return body === undefined ? new Response(null, { status: 404 }) : new Response(JSON.stringify(body), { status: 200 })
+      }),
+    )
+  const T = { api: 'https://api.hanzo.ai', token: () => 'tok', org: 'acme' }
+
+  it('labels the plan by the tier answer’s planName, and by the slug without one', async () => {
+    answer({ '/v1/billing/tier': { plan: 'unlimited', planName: 'Unlimited', tier: { name: 'pro' } }, '/v1/billing/balance': { available: 0 } })
+    expect((await stand(T)).label).toEqual({ name: 'Unlimited', tag: '' })
+    answer({ '/v1/billing/tier': { plan: 'max-20x', tier: { name: 'pro' } }, '/v1/billing/balance': { available: 0 } })
+    expect((await stand(T)).label).toEqual({ name: 'Max', tag: '20x' })
   })
 })
