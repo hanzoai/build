@@ -59,11 +59,6 @@ export const LISTINGS = [
   },
 ]
 
-export const PRESETS = [
-  { id: 'create', title: 'Product & Fashion Create', systemPrompt: 'You are Hanzo Create, a render assistant.', serverExecuted: true },
-  { id: 'graph', title: 'Studio Graph Copilot', systemPrompt: 'You read a graph.', serverExecuted: false },
-]
-
 /** The fleet's native MCP servers, as `/v1/mcp` lists them. */
 const NATIVE = {
   jsonrpc: '2.0',
@@ -165,7 +160,6 @@ export function customize(page: Page, seed: Record<string, unknown>[] = []) {
       return { json: { deleted: path.split('/').pop() } }
     }
     if (path === '/v1/tool/plugins') return { json: MOUNTED }
-    if (path === '/v1/agent/chat/presets') return { json: { presets: PRESETS } }
     if (path === '/v1/agent' && method === 'POST') {
       const a = { ...b, id: `agent_${agents.length + 1}`, model: b.model ?? 'zen5.8', status: 'ready', runs: 0, consumed_micro_usd: 0 }
       agents.push(a)
@@ -962,7 +956,6 @@ export async function visitor(page: Page) {
       const list = LISTINGS.filter((l) => !q || `${l.title} ${l.description}`.toLowerCase().includes(q))
       return { json: { catalog: list, total: list.length, limit: 48, offset: 0 } }
     }
-    if (path === '/v1/agent/chat/presets') return { json: { presets: PRESETS } }
     if (path === '/v1/tool/plugins') return { json: MOUNTED }
     return { status: 401, json: { status: 401, title: 'Unauthorized', detail: 'Sign in to use this.' } }
   })

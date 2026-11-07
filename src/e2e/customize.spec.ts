@@ -254,14 +254,12 @@ test('agents: create one with a budget, change only its instructions, and delete
   expect(sentTo(sent, 'DELETE', '/v1/agent/agent_1')).toHaveLength(1)
 })
 
-test('agents: Use makes the org its own agent from a preset and opens it', async ({ page, baseURL }, info) => {
+test('agents: Browse offers the host’s agents and nothing of the platform’s chat presets', async ({ page }, info) => {
   const sent = await open(page, '/-/customize/agents')
-  await expect(page.getByText('Product & Fashion Create', { exact: true })).toBeVisible()
-  await expect(page.getByText('Studio Graph Copilot')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Start from scratch' })).toBeVisible()
   await page.screenshot({ path: info.outputPath('agents-browse.png') })
-  await page.getByRole('button', { name: 'Use Product & Fashion Create' }).click()
-  await expect(page).toHaveURL(new URL('/-/customize/agents/create', baseURL).href)
-  expect(sentTo(sent, 'POST', '/v1/agent').at(-1)?.body).toMatchObject({ name: 'create', description: 'Product & Fashion Create', instructions: 'You are Hanzo Create, a render assistant.', cap_micro_usd: 10_000_000, max_task_micro_usd: 1_000_000, period: 'month' })
+  expect(sentTo(sent, 'GET', '/v1/agent/chat/presets')).toHaveLength(0)
+  await expect(page.getByText('Product & Fashion Create')).toHaveCount(0)
 })
 
 for (const tab of ['skills', 'connectors', 'plugins', 'agents']) {

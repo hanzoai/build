@@ -274,17 +274,4 @@ describe('agents', () => {
     await agents.remove(T, 'agent_1')
     expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/agent/agent_1' })
   })
-
-  it('offers the presets whose tool calls run on the platform', async () => {
-    const seen = answer(200, {
-      presets: [
-        { id: 'create', title: 'Product & Fashion Create', systemPrompt: 'You are Hanzo Create.', serverExecuted: true },
-        { id: 'graph', title: 'Studio Graph Copilot', systemPrompt: 'You read a graph.', serverExecuted: false },
-      ],
-    })
-    const list = await agents.presets(T)
-    expect(list).toEqual([{ id: 'create', title: 'Product & Fashion Create', prompt: 'You are Hanzo Create.' }])
-    expect(seen[0].url).toBe('https://api.hanzo.ai/v1/agent/chat/presets')
-    expect(agents.fromPreset(list[0])).toMatchObject({ name: 'create', description: 'Product & Fashion Create', instructions: 'You are Hanzo Create.', category: 'Preset' })
-  })
 })
