@@ -124,8 +124,8 @@ export function tabs(host: Host, go: (path: string) => void, t: Say = english): 
   return [{ id: 'customize', label: '', links: TABS.map((tab) => ({ id: tab, label: t(TAB_LABEL[tab]), icon: TAB_ICON[tab], onPress: () => go(path({ kind: 'customize', tab })), active: tab === at })) }]
 }
 
-const TAB_LABEL: Record<Tab, string> = { agents: phrase('Agents'), skills: phrase('Skills'), connectors: phrase('Connectors'), plugins: phrase('Plugins') }
-const TAB_ICON: Record<Tab, ReactNode> = { agents: <Bot size={16} />, skills: <BookOpen size={16} />, connectors: <Plug size={16} />, plugins: <Puzzle size={16} /> }
+const TAB_LABEL: Record<Tab, string> = { agents: phrase('Agents'), bots: phrase('Bots'), skills: phrase('Skills'), connectors: phrase('Connectors'), plugins: phrase('Plugins') }
+const TAB_ICON: Record<Tab, ReactNode> = { agents: <Users size={16} />, bots: <Bot size={16} />, skills: <BookOpen size={16} />, connectors: <Plug size={16} />, plugins: <Puzzle size={16} /> }
 const SECTION_ICON: Record<Section, ReactNode> = {
   general: <Settings size={16} />,
   account: <User size={16} />,

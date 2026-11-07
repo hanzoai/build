@@ -41,7 +41,7 @@ describe('the builder’s places, once for every rail', () => {
     const work = nav(host(), () => {}, t)[0]!
     expect([work.label, work.links.map((l) => l.label)]).toEqual(['Travail', ['Nouvelle exécution', 'Projets', 'Issues', 'Templates']])
     expect(own(host(), () => {}, t)[0]!.label).toBe('Travail')
-    expect(tabs(host(), () => {}, t)[0]!.links.map((l) => l.label)).toEqual(['Agents', 'Compétences', 'Connectors', 'Plugins'])
+    expect(tabs(host(), () => {}, t)[0]!.links.map((l) => l.label)).toEqual(['Agents', 'Bots', 'Compétences', 'Connectors', 'Plugins'])
     expect(library(host(), () => {}, t)[0]!.links[0]!.label).toBe('Importer')
   })
 
@@ -117,6 +117,7 @@ describe('a host’s sidebar for Dev, Settings and Customize', () => {
     const groups = tabs(host('-/customize/agents/dev'), () => {})
     expect(groups[0]!.links.map((l) => [l.label, Boolean(l.active)])).toEqual([
       ['Agents', true],
+      ['Bots', false],
       ['Skills', false],
       ['Connectors', false],
       ['Plugins', false],

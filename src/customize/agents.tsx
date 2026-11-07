@@ -46,11 +46,32 @@ const TRIGGER_LABELS: Record<Trigger, { title: string; detail: string }> = {
   watch: { title: phrase('Proactive anomaly watch'), detail: phrase('Continuously monitor metrics, queues, and alerts 24/7.') },
 }
 
+const FAST_BOTS = new Set(['dev', 'qa', 'cyber', 'it', 'auto', 'sal', 'mark', 'rev', 'biz', 'cust', 'com', 'su'])
+const GIT_BOTS = new Set(['dev', 'qa', 'cyber', 'it', 'auto', 'sci', 'data'])
+
+/** Any real agent preset configured to operate as a 24/7 autonomous, proactive, and event-driven bot. */
+function asBot(c: Cast): Cast {
+  const key = c.name.toLowerCase()
+  const schedule = c.schedule || (FAST_BOTS.has(key) ? '*/15 * * * *' : '0 9 * * 1-5')
+  const triggers: Trigger[] = c.triggers?.length
+    ? c.triggers
+    : GIT_BOTS.has(key)
+      ? ['git', 'webhook', 'watch']
+      : ['channel', 'webhook', 'watch']
+  return {
+    ...c,
+    category: 'Bot',
+    executionMode: 'long-running',
+    schedule,
+    triggers,
+  }
+}
+
 /** Categories as Browse offers them: the default agents' first, as listed, then the rest by how many each holds. */
 export function kinds(first: readonly Cast[], rest: readonly Cast[]): string[] {
-  const lead = [...new Set(first.map((c) => c.category))]
+  const lead = [...new Set(first.map((c) => c.category).filter((cat) => cat !== 'Bot'))]
   const count = new Map<string, number>()
-  for (const c of rest) if (!lead.includes(c.category)) count.set(c.category, (count.get(c.category) ?? 0) + 1)
+  for (const c of rest) if (c.category !== 'Bot' && !lead.includes(c.category)) count.set(c.category, (count.get(c.category) ?? 0) + 1)
   return [ANY, ...lead, ...[...count.keys()].sort((a, b) => count.get(b)! - count.get(a)! || a.localeCompare(b))]
 }
 
@@ -84,29 +105,47 @@ const SO_FAR: Record<Period | '', string> = {
 const EACH: Record<Period, string> = { day: phrase('Each day, USD'), week: phrase('Each week, USD'), month: phrase('Each month, USD') }
 const PERIOD: Record<Period, string> = { day: phrase('Day'), week: phrase('Week'), month: phrase('Month') }
 
-export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
+export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'agents' }: Pane & { mode?: 'agents' | 'bots' }) {
   const { t } = useI18n()
   const host = useHost()
   const target = useTarget()
   const signed = Boolean(host.person)
   const browsing = view === 'discover'
+  const botsMode = mode === 'bots'
   const mine = useLoad(signed ? () => agents(target) : null, [] as Agent[], [target, signed])
-  const figures = useLoad(browsing && host.personas ? host.personas : null, [] as readonly Cast[], [view])
-  useCount(mine.value.length, onCount)
+  const figures = useLoad(browsing && !botsMode && host.personas ? host.personas : null, [] as readonly Cast[], [view, botsMode])
+  const yoursList = useMemo(
+    () => (botsMode ? mine.value.filter((a) => a.executionMode === 'long-running') : mine.value.filter((a) => a.executionMode !== 'long-running')),
+    [mine.value, botsMode],
+  )
+  useCount(yoursList.length, onCount)
   const [note, setNote] = useState('')
   const [kind, setKind] = useState(ANY)
   const [more, setMore] = useState(PAGE)
   const [using, setUsing] = useState<Cast | null>(null)
   const [making, setMaking] = useState<'self' | 'person' | null>(null)
   const [electing, setElecting] = useState<Cast | null>(null)
-  useEffect(() => setMore(PAGE), [q, kind])
+  useEffect(() => setMore(PAGE), [q, kind, botsMode])
 
   const opened = (a: Agent) => host.go(path({ kind: 'agent', name: a.name }))
   const take = async (c: Cast) => {
     setUsing(c)
     setNote('')
     try {
-      opened(await use(target, c, window.location.href))
+      opened(
+        await use(
+          target,
+          c,
+          window.location.href,
+          botsMode
+            ? {
+                executionMode: 'long-running',
+                schedule: c.schedule || '*/15 * * * *',
+                triggers: c.triggers?.length ? c.triggers : ['webhook', 'git', 'channel', 'watch'],
+              }
+            : undefined,
+        ),
+      )
     } catch (e) {
       setNote(say(e, t))
     } finally {
@@ -116,6 +155,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
 
   const editor = adding ? (
     <Editor
+      defaultBot={botsMode}
       onClose={() => onAdding(false)}
       onSaved={(a) => {
         onAdding(false)
@@ -127,33 +167,37 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
   ) : null
 
   if (browsing) {
-    const first = host.cast ?? []
-    const all = [...first, ...figures.value]
-    const shown = all.filter((c) => (kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category))
-    const topAgents = kind === ANY ? shown.filter((c) => c.category !== 'Bot') : shown
-    const botPresets = kind === ANY ? shown.filter((c) => c.category === 'Bot') : []
+    const allCast = host.cast ?? []
+    const isBotCast = (c: Cast) => c.category === 'Bot' || c.executionMode === 'long-running'
+    const explicitBots = allCast.filter(isBotCast)
+    const first = botsMode ? (explicitBots.length ? explicitBots : allCast.map(asBot)) : allCast.filter((c) => !isBotCast(c))
+    const rest = botsMode ? ([] as readonly Cast[]) : figures.value.filter((c) => !isBotCast(c))
+    const all = [...first, ...rest]
+    const shown = all.filter((c) => (botsMode || kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category))
     const card = (c: Cast) => (
       <Tile
         key={`${c.category}/${c.name}/${c.title}`}
         title={c.title}
         detail={c.description === c.title || c.description === c.category ? undefined : c.description}
-        meta={[category(c.category, t), c.executionMode === 'long-running' ? t('24/7 · Proactive · Event-driven') : '', c.schedule].filter(Boolean).join(' · ')}
+        meta={[botsMode ? t('Bot') : category(c.category, t), c.executionMode === 'long-running' ? t('24/7 · Proactive · Event-driven') : '', c.schedule].filter(Boolean).join(' · ')}
         mark={<Mark name={c.title} size={40} logo={c.avatar} />}
-        onOpen={signed ? () => setElecting(c) : undefined}
+        onOpen={signed && botsMode ? () => setElecting(c) : undefined}
         action={
           signed ? (
             <XStack items="center" gap="$1.5">
-              <XStack $max-sm={{ display: 'none' }}>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={using !== null}
-                  aria-label={t('Elect {name} to run 24/7', { name: c.title })}
-                  onPress={() => setElecting(c)}
-                >
-                  {t('24/7')}
-                </Button>
-              </XStack>
+              {botsMode ? (
+                <XStack $max-sm={{ display: 'none' }}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={using !== null}
+                    aria-label={t('Elect {name} to run 24/7', { name: c.title })}
+                    onPress={() => setElecting(c)}
+                  >
+                    {t('Configure 24/7')}
+                  </Button>
+                </XStack>
+              ) : null}
               <Add name={c.title} use added={false} busy={using !== null} onPress={() => void take(c)} />
             </XStack>
           ) : undefined
@@ -167,45 +211,42 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
             <Button size="sm" variant="outline" onPress={() => onAdding(true)}>
               {t('Start from scratch')}
             </Button>
-            <Button size="sm" variant="outline" onPress={() => setMaking('self')}>
-              {t('Clone yourself')}
-            </Button>
-            <Button size="sm" variant="outline" onPress={() => setMaking('person')}>
-              {t('Create from a person')}
-            </Button>
-            {first.length ? (
-              <Button size="sm" variant="outline" onPress={() => setElecting(first[0]!)}>
-                {t('Elect 24/7 preset')}
-              </Button>
-            ) : null}
+            {botsMode ? (
+              allCast.length ? (
+                <Button size="sm" variant="outline" onPress={() => setElecting((first[0] ?? allCast[0])!)}>
+                  {t('Elect 24/7 preset')}
+                </Button>
+              ) : null
+            ) : (
+              <>
+                <Button size="sm" variant="outline" onPress={() => setMaking('self')}>
+                  {t('Clone yourself')}
+                </Button>
+                <Button size="sm" variant="outline" onPress={() => setMaking('person')}>
+                  {t('Create from a person')}
+                </Button>
+              </>
+            )}
           </XStack>
         ) : null}
-        <XStack overflowX="auto" overflowY="hidden" pb="$1">
-          <Choice label={t('Category')} value={kind} options={kinds(first, figures.value).map((id) => ({ id, label: category(id, t) }))} onChange={setKind} />
-        </XStack>
+        {!botsMode ? (
+          <XStack overflowX="auto" overflowY="hidden" pb="$1">
+            <Choice label={t('Category')} value={kind} options={kinds(first, rest).map((id) => ({ id, label: category(id, t) }))} onChange={setKind} />
+          </XStack>
+        ) : null}
         <Line>{note}</Line>
         {shown.length ? (
-          <YStack gap="$5">
-            {topAgents.length ? (
-              <Grid label={kind === 'Bot' ? t('Bots to start from') : t('Agents to start from')}>
-                {topAgents.slice(0, more).map(card)}
-              </Grid>
-            ) : null}
-            {botPresets.length ? (
-              <Part
-                title={t('Bots')}
-                detail={t('Autonomous 24/7, proactive and event-driven workers. Select and elect any agent or bot preset to run continuously on a schedule or when events fire.')}
-              >
-                <Grid label={t('Bots to start from')}>
-                  {botPresets.slice(0, more).map(card)}
-                </Grid>
-              </Part>
-            ) : null}
-          </YStack>
-        ) : figures.loading ? null : (
+          <Grid label={botsMode ? t('Bots to start from') : t('Agents to start from')}>
+            {shown.slice(0, more).map(card)}
+          </Grid>
+        ) : figures.loading ? null : q.trim() ? (
+          <Soft>{t(botsMode ? 'No bot matches “{q}”.' : 'No agent matches “{q}”.', { q: q.trim() })}</Soft>
+        ) : botsMode ? (
+          <Soft>{t('Create a persistent 24/7 bot from scratch or elect any preset.')}</Soft>
+        ) : (
           <Soft>{t('No agent matches “{q}”.', { q: q.trim() })}</Soft>
         )}
-        {topAgents.length > more || botPresets.length > more ? (
+        {shown.length > more ? (
           <XStack>
             <Button size="sm" variant="ghost" onPress={() => setMore(more + PAGE)}>
               {t('More')}
@@ -215,35 +256,35 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
         {figures.error ? <Failed error={figures.error} onRetry={figures.reload} /> : figures.loading ? <Soft>{t('Loading…')}</Soft> : null}
         {editor}
         {making ? <Person self={making === 'self'} onClose={() => setMaking(null)} onMade={opened} /> : null}
-        {electing ? <Elect preset={electing} all={first} onClose={() => setElecting(null)} onElected={opened} /> : null}
+        {electing ? <Elect preset={electing} all={allCast} onClose={() => setElecting(null)} onElected={opened} /> : null}
       </YStack>
     )
   }
 
   if (!signed) {
-    return <Visitor>{t('Sign in to see your agents.')}</Visitor>
+    return <Visitor>{t(botsMode ? 'Sign in to see your bots.' : 'Sign in to see your agents.')}</Visitor>
   }
-  const shown = mine.value.filter((a) => matches(q, a.name, a.description, a.model))
+  const shown = yoursList.filter((a) => matches(q, a.name, a.description, a.model))
   return (
     <YStack gap="$3">
       <Line>{note}</Line>
-      {mine.error && !mine.value.length ? (
+      {mine.error && !yoursList.length ? (
         <Failed error={mine.error} onRetry={mine.reload} />
-      ) : mine.loading && !mine.value.length ? (
-        <Soft>{t('Loading your agents…')}</Soft>
-      ) : !mine.value.length ? (
-        <Empty title={t('No agents yet')} detail="">
+      ) : mine.loading && !yoursList.length ? (
+        <Soft>{t(botsMode ? 'Loading your bots…' : 'Loading your agents…')}</Soft>
+      ) : !yoursList.length ? (
+        <Empty title={t(botsMode ? 'No bots yet' : 'No agents yet')} detail="">
           <Button size="sm" variant="outline" onPress={() => onView('discover')}>
-            {t('Browse agents')}
+            {t(botsMode ? 'Browse bots' : 'Browse agents')}
           </Button>
           <Button size="sm" onPress={() => onAdding(true)}>
-            {t('New agent')}
+            {t(botsMode ? 'New bot' : 'New agent')}
           </Button>
         </Empty>
       ) : !shown.length ? (
-        <Soft>{t('No agent of yours matches “{q}”.', { q: q.trim() })}</Soft>
+        <Soft>{t(botsMode ? 'No bot of yours matches “{q}”.' : 'No agent of yours matches “{q}”.', { q: q.trim() })}</Soft>
       ) : (
-        <Grid label={t('Your agents')}>
+        <Grid label={t(botsMode ? 'Your bots' : 'Your agents')}>
           {shown.map((a) => (
             <Tile
               key={a.id || a.name}
@@ -517,15 +558,16 @@ export function Profile({ name }: { name: string }) {
   const target = useTarget()
   const got = useLoad(host.person ? () => profile(target, name) : null, null as { agent: Agent; runs: Run[] } | null, [target, name])
   const [editing, setEditing] = useState(false)
-  const back = () => host.go(path({ kind: 'customize', tab: 'agents' }))
   const a = got.value?.agent
+  const isBot = a?.executionMode === 'long-running'
+  const back = () => host.go(path({ kind: 'customize', tab: isBot ? 'bots' : 'agents' }))
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
       <YStack width="100%" maxW={880} mx="auto" gap="$5">
-        <XStack render="button" onPress={back} items="center" gap="$1.5" self="flex-start" cursor="pointer" aria-label={t('Back to agents')}>
+        <XStack render="button" onPress={back} items="center" gap="$1.5" self="flex-start" cursor="pointer" aria-label={t(isBot ? 'Back to bots' : 'Back to agents')}>
           <ArrowLeft size={14} color="$soft" {...{ 'data-i18n-mirror': '' }} />
           <SizableText size="$2" color="$soft">
-            {t('Agents')}
+            {t(isBot ? 'Bots' : 'Agents')}
           </SizableText>
         </XStack>
         {!host.person ? (
@@ -616,11 +658,13 @@ export function Profile({ name }: { name: string }) {
 /** Write a new agent, or change one; an existing agent is read whole first, for its instructions. */
 function Editor({
   agent,
+  defaultBot = false,
   onClose,
   onSaved,
   onDeleted,
 }: {
   agent?: Agent
+  defaultBot?: boolean
   onClose: () => void
   onSaved: (a: Agent) => void
   onDeleted?: () => void
@@ -630,7 +674,11 @@ function Editor({
   const full = useLoad(agent ? () => one(target, agent.id || agent.name) : null, null as Agent | null, [target, agent?.id])
   const catalog = useLoad(() => models(target), [] as Model[], [target])
   const on = useLoad(() => tools(target, { activated: true }), [] as Tool[], [target])
-  const [d, setD] = useState<Draft>(EMPTY)
+  const [d, setD] = useState<Draft>(() =>
+    defaultBot
+      ? { ...EMPTY, executionMode: 'long-running', schedule: '*/15 * * * *', triggers: ['webhook', 'git', 'channel', 'watch'] }
+      : EMPTY,
+  )
   const [ready, setReady] = useState(!agent)
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
@@ -671,7 +719,7 @@ function Editor({
   const pick = (name: string, yes: boolean) => set({ tools: yes ? [...d.tools, name] : d.tools.filter((n) => n !== name) })
 
   return (
-    <Sheet title={agent ? agent.name : t('New agent')} open onOpenChange={(o) => !o && onClose()} width={680}>
+    <Sheet title={agent ? agent.name : t(defaultBot ? 'New bot' : 'New agent')} open onOpenChange={(o) => !o && onClose()} width={680}>
       {agent && full.error && !full.value ? (
         <Failed error={full.error} onRetry={full.reload} />
       ) : !ready ? (

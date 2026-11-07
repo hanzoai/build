@@ -14,7 +14,7 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { BookOpen, Bot, Plug, Plus, Puzzle } from '@hanzogui/lucide-icons-2'
+import { BookOpen, Bot, Plug, Plus, Puzzle, Users } from '@hanzogui/lucide-icons-2'
 import { Button, Input } from '@hanzo/ui'
 import { useCallback, useState, type ReactNode } from 'react'
 
@@ -60,6 +60,14 @@ const LABEL: Record<Tab, { title: string; says: string; add: string; find: strin
     add: phrase('New agent'),
     find: phrase('Search agents'),
     typing: phrase('Search agents…'),
+    icon: <Users size={15} />,
+  },
+  bots: {
+    title: phrase('Bots'),
+    says: phrase('Persistent 24/7 agents that run continuously on a schedule or when events fire.'),
+    add: phrase('New bot'),
+    find: phrase('Search bots'),
+    typing: phrase('Search bots…'),
     icon: <Bot size={15} />,
   },
 }
@@ -163,8 +171,10 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
           <Connectors {...pane} />
         ) : tab === 'plugins' ? (
           <Plugins {...pane} />
+        ) : tab === 'bots' ? (
+          <Agents {...pane} mode="bots" />
         ) : (
-          <Agents {...pane} />
+          <Agents {...pane} mode="agents" />
         )}
       </YStack>
     </YStack>

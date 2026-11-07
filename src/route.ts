@@ -49,8 +49,8 @@ export const SECTIONS = [
 ] as const
 export type Section = (typeof SECTIONS)[number]
 
-/** Customize, one tab each: what the agent brings to a run, yours and to discover. Agents first. */
-export const TABS = ['agents', 'skills', 'connectors', 'plugins'] as const
+/** Customize, one tab each: what the agent brings to a run, yours and to discover. Agents first, then Bots. */
+export const TABS = ['agents', 'bots', 'skills', 'connectors', 'plugins'] as const
 export type Tab = (typeof TABS)[number]
 
 export type Route =
