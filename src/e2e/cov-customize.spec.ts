@@ -63,7 +63,7 @@ const yours = (page: Page) => page.getByRole('button', { name: /^Yours/ })
 /** What a 5xx is said as, wherever it lands. */
 const DOWN = 'Hanzo could not answer just now. Try again.'
 
-test('a visitor reads the catalogue, the fleet’s servers and the presets, and is asked to sign in for the rest', async ({ page }, info) => {
+test('a visitor reads the catalogue and the fleet’s servers, and is asked to sign in for the rest', async ({ page }, info) => {
   await visitor(page)
   await mounted(page, { path: '-/customize', org: null, admin: false, person: null, signIn: true })
 
@@ -96,7 +96,7 @@ test('a visitor reads the catalogue, the fleet’s servers and the presets, and 
   await expect(page.getByText('Sign in to see your plugins.')).toBeVisible()
 
   await page.getByRole('tab', { name: 'Agents' }).click()
-  await expect(page.getByText('Product & Fashion Create', { exact: true })).toBeVisible()
+  await expect(page.getByText('Product & Fashion Create')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /^(Add|Use) / })).toHaveCount(0)
   await yours(page).click()
   await expect(page.getByText('Sign in to see your agents.')).toBeVisible()
@@ -1119,80 +1119,7 @@ test('agents: the tools that are on while read, refused, and none, and a model c
   expect(body).toEqual({ name: 'plain', description: 'Plain and simple', instructions: '', tools: [], cap_micro_usd: 1_000_000, max_task_micro_usd: 1_000_000, period: 'month' })
 })
 
-test('agents: presets while read, refused, none, one with no title, one already added, and a search that matches none', async ({ page }) => {
-  const first = held()
-  let mode: 'held' | 'none' | 'rows' = 'held'
-  await catalogue(page)
-  await customize(page)
-  await over(page, async ({ path }) => {
-    if (path !== '/v1/agent/chat/presets') return undefined
-    if (mode === 'none') return { json: { presets: [] } }
-    if (mode === 'rows') {
-      return {
-        json: {
-          presets: [
-            { id: 'scout', serverExecuted: true },
-            { id: 'helper', title: 'Helper', systemPrompt: 'Answer questions.', serverExecuted: true },
-          ],
-        },
-      }
-    }
-    await first.until
-    return refused(503, 'the presets are unavailable')
-  })
-  await page.goto('/-/customize/agents')
-  const again = async () => {
-    await yours(page).click()
-    await browse(page).click()
-  }
-  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByText('Loading presets…')).toBeVisible()
-  first.release()
-  await expect(page.getByText(DOWN)).toBeVisible()
-  await expect(page.getByText('the presets are unavailable')).toHaveCount(0)
-
-  mode = 'none'
-  await again()
-  await expect(page.getByText('There are no presets yet. Start from a blank agent with New agent.')).toBeVisible()
-
-  mode = 'rows'
-  await again()
-  const presets = page.getByRole('list', { name: 'Presets' })
-  // A preset named by its id alone, and one the org already has an agent of.
-  await expect(presets.getByRole('listitem').filter({ hasText: 'scout' })).toHaveText(/^scout\s*Preset scout\s*Use$/)
-  await expect(page.getByLabel('Helper is added')).toBeVisible()
-  await page.getByRole('button', { name: 'Use scout' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New agent' })
-  await expect(dialog.getByLabel('Name')).toHaveValue('scout')
-  await expect(dialog.getByLabel('Description')).toHaveValue('')
-  await dialog.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.getByRole('dialog')).toHaveCount(0)
-  await page.getByLabel('Search agents').fill('zzz')
-  await expect(page.getByText('No preset matches “zzz”.')).toBeVisible()
-})
-
 // Slow, and empty.
-
-test('a read that hangs gives up after fifteen seconds, says so plainly, and asks again', async ({ page }) => {
-  let hang = true
-  await catalogue(page)
-  await customize(page)
-  await over(page, async ({ path }) => {
-    if (path !== '/v1/agent/chat/presets' || !hang) return undefined
-    await new Promise(() => {})
-    return undefined
-  })
-  await page.clock.install()
-  await page.goto('/-/customize/agents')
-  await expect(page.getByText('Loading presets…')).toBeVisible()
-  await page.clock.runFor(14_000)
-  await expect(page.getByText('Loading presets…')).toBeVisible()
-  await page.clock.runFor(2_000)
-  await expect(page.getByText('Hanzo is taking too long to answer. Try again.')).toBeVisible()
-  hang = false
-  await page.getByRole('button', { name: 'Try again' }).click()
-  await expect(page.getByText('Product & Fashion Create', { exact: true })).toBeVisible()
-})
 
 test('an org with nothing of its own is shown what to add first, and each empty Yours names the next step', async ({ page }, info) => {
   await catalogue(page)

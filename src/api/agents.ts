@@ -1,21 +1,18 @@
 /**
  * Agents: the org's own — a model, instructions, the tools it may call, a
- * budget and a face — and the templates one is made from.
+ * budget and a face — and how one is made from a template.
  *
  *   GET    /v1/agent                 {agents: [agent]}, without instructions
  *   POST   /v1/agent                 create → 201 agent
  *   GET    /v1/agent/{ref}           one, with its instructions
  *   PATCH  /v1/agent/{ref}           the fields sent change, the rest stay → agent
  *   DELETE /v1/agent/{ref}           removes it and every run recorded against it → 204
- *   GET    /v1/agent/chat/presets    {presets: [{id, title, systemPrompt, serverExecuted}]}
  *
  * A ref is the agent's id or its name. A budget is required: the most it may
  * spend in a period and in one run, in micro-USD, and the period — day, week or
  * month. Tools are names from the tool plane; none grants none, and `*` is
  * whatever the fleet's MCP server serves when it runs. An omitted model is the
- * deployment's default. A preset whose tool calls run on the platform
- * (`serverExecuted`) makes a working agent; the others hand their calls back to
- * the client that asked, so they are not offered here.
+ * deployment's default.
  */
 import { phrase } from '@hanzo/i18n'
 
@@ -63,12 +60,6 @@ export interface Agent {
   schedule?: string
   /** Event-driven triggers that wake the agent proactively. */
   triggers?: Trigger[]
-}
-
-export interface Preset {
-  id: string
-  title: string
-  prompt: string
 }
 
 /** The fields a person edits. Money is in dollars here and micro-USD on the wire. */
@@ -202,7 +193,7 @@ export async function profile(t: Target, ref: string): Promise<{ agent: Agent; r
   return { agent: agent(raw), runs: rows(obj(raw).recentRuns).map(run).filter((r) => r.id) }
 }
 
-/** An agent to start from: a default agent, a persona or a preset. */
+/** An agent to start from: a default agent or a persona. */
 export interface Cast {
   /** The name it is made under. */
   name: string
@@ -347,16 +338,3 @@ export async function remove(t: Target, ref: string): Promise<void> {
   await call<unknown>(t, 'DELETE', `/v1/agent/${seg(ref)}`)
 }
 
-/** The presets that make a working agent. */
-export async function presets(t: Target): Promise<Preset[]> {
-  return rows(obj(await call<unknown>(t, 'GET', '/v1/agent/chat/presets')).presets)
-    .map(obj)
-    .filter((p) => p.serverExecuted === true)
-    .map((p) => ({ id: str(p.id), title: str(p.title), prompt: str(p.systemPrompt) }))
-    .filter((p) => p.id)
-}
-
-/** A preset as a template. */
-export function fromPreset(p: Preset): Cast {
-  return { name: p.id, title: p.title || p.id, description: p.title, category: phrase('Preset'), model: '', instructions: p.prompt }
-}

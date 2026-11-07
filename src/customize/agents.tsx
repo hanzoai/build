@@ -3,8 +3,7 @@
  * what it may spend.
  *
  * Browse is every agent there is to start from: the host's default agents
- * (`cast`) and personas (`personas`), and the platform's presets whose tool
- * calls run on the platform, by name and category. Use makes the org's own
+ * (`cast`) and personas (`personas`), by name and category. Use makes the org's own
  * agent from one and opens it; nothing is added any other way, so an org starts
  * with none. An agent is also made from scratch, from the person signed in
  * (Clone yourself) or from anyone named. Yours lists the org's agents. Opening one is its profile page
@@ -27,7 +26,7 @@ import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { ModelPicker } from '@hanzo/ui/models'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { agents, ALL, CAST_CAP, CAST_TASK, create, draft, EMPTY, fromPreset, one, PERIODS, person, presets, profile, remove, SCHEDULES, TRIGGERS, update, use, type Agent, type Cast, type Draft, type Period, type Preset, type Run, type Trigger } from '../api/agents.ts'
+import { agents, ALL, CAST_CAP, CAST_TASK, create, draft, EMPTY, one, PERIODS, person, profile, remove, SCHEDULES, TRIGGERS, update, use, type Agent, type Cast, type Draft, type Period, type Run, type Trigger } from '../api/agents.ts'
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useHost, useTarget } from '../host.tsx'
@@ -47,7 +46,7 @@ const TRIGGER_LABELS: Record<Trigger, { title: string; detail: string }> = {
   watch: { title: phrase('Proactive anomaly watch'), detail: phrase('Continuously monitor metrics, queues, and alerts 24/7.') },
 }
 
-/** Categories as Browse offers them: the default agents' and presets' first, as listed, then the rest by how many each holds. */
+/** Categories as Browse offers them: the default agents' first, as listed, then the rest by how many each holds. */
 export function kinds(first: readonly Cast[], rest: readonly Cast[]): string[] {
   const lead = [...new Set(first.map((c) => c.category))]
   const count = new Map<string, number>()
@@ -57,8 +56,8 @@ export function kinds(first: readonly Cast[], rest: readonly Cast[]): string[] {
 
 const money = (m: number): string => `$${(m / 1_000_000).toFixed(m % 10_000 ? 4 : 2).replace(/\.?0+$/, '')}`
 
-/** A category as Browse names it: All, and the platform's presets and people, in the reader's words; the rest are the host's, as given. */
-const category = (c: string, t: Say): string => (c === ANY || c === 'Preset' || c === 'Person' ? t(c) : c)
+/** A category as Browse names it: All and people, in the reader's words; the rest are the host's, as given. */
+const category = (c: string, t: Say): string => (c === ANY || c === 'Person' ? t(c) : c)
 
 /**
  * A budget's sentences by its period ('' where the agent names none): whole
@@ -92,7 +91,6 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const signed = Boolean(host.person)
   const browsing = view === 'discover'
   const mine = useLoad(signed ? () => agents(target) : null, [] as Agent[], [target, signed])
-  const offered = useLoad(browsing ? () => presets(target) : null, [] as Preset[], [target, view])
   const figures = useLoad(browsing && host.personas ? host.personas : null, [] as readonly Cast[], [view])
   useCount(mine.value.length, onCount)
   const [note, setNote] = useState('')
@@ -129,19 +127,18 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
   ) : null
 
   if (browsing) {
-    const first = [...(host.cast ?? []), ...offered.value.map(fromPreset)]
+    const first = host.cast ?? []
     const all = [...first, ...figures.value]
     const shown = all.filter((c) => (kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category))
     const topAgents = kind === ANY ? shown.filter((c) => c.category !== 'Bot') : shown
     const botPresets = kind === ANY ? shown.filter((c) => c.category === 'Bot') : []
-    const failed = figures.error ?? offered.error
     const card = (c: Cast) => (
       <Tile
         key={`${c.category}/${c.name}/${c.title}`}
         title={c.title}
         detail={c.description === c.title || c.description === c.category ? undefined : c.description}
         meta={[category(c.category, t), c.executionMode === 'long-running' ? t('24/7 · Proactive · Event-driven') : '', c.schedule].filter(Boolean).join(' · ')}
-        mark={<Mark name={c.title} size={40} logo={c.avatar || (c.name === 'create' ? '/agents/creative.png' : undefined)} />}
+        mark={<Mark name={c.title} size={40} logo={c.avatar} />}
         onOpen={signed ? () => setElecting(c) : undefined}
         action={
           signed ? (
@@ -205,7 +202,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
               </Part>
             ) : null}
           </YStack>
-        ) : figures.loading || offered.loading ? null : (
+        ) : figures.loading ? null : (
           <Soft>{t('No agent matches “{q}”.', { q: q.trim() })}</Soft>
         )}
         {topAgents.length > more || botPresets.length > more ? (
@@ -215,7 +212,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount }: Pane) {
             </Button>
           </XStack>
         ) : null}
-        {failed ? <Failed error={failed} onRetry={figures.error ? figures.reload : offered.reload} /> : figures.loading || offered.loading ? <Soft>{t('Loading…')}</Soft> : null}
+        {figures.error ? <Failed error={figures.error} onRetry={figures.reload} /> : figures.loading ? <Soft>{t('Loading…')}</Soft> : null}
         {editor}
         {making ? <Person self={making === 'self'} onClose={() => setMaking(null)} onMade={opened} /> : null}
         {electing ? <Elect preset={electing} all={first} onClose={() => setElecting(null)} onElected={opened} /> : null}
@@ -329,7 +326,7 @@ function Elect({
   return (
     <Sheet title={t('Elect 24/7 autonomous preset')} open onOpenChange={(o) => !o && onClose()} width={680}>
       <XStack items="center" gap="$3" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor">
-        <Mark name={picked.title} size={44} logo={picked.avatar || (picked.name === 'create' ? '/agents/creative.png' : undefined)} />
+        <Mark name={picked.title} size={44} logo={picked.avatar} />
         <YStack flex={1} minW={0}>
           <SizableText size="$3" color="$ink">
             {picked.title}

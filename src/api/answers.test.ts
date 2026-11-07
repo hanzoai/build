@@ -227,13 +227,6 @@ describe('agents', () => {
     await expect(agents.update(T, was, { ...agents.draft(was), task: '3' })).rejects.toThrow('One run cannot spend more than the whole day')
     expect(seen).toEqual([])
   })
-
-  it('offers no preset from an answer without presets, or one without an id', async () => {
-    answer(200, { presets: [{ title: 'Nameless', serverExecuted: true }, 'create'] })
-    expect(await agents.presets(T)).toEqual([])
-    answer(200, [])
-    expect(await agents.presets(T)).toEqual([])
-  })
 })
 
 describe('automations', () => {
