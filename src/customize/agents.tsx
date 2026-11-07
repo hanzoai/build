@@ -36,7 +36,7 @@ import { say } from './say.ts'
 import { Add, Choice, Confirm, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
 
 /** How many cards Browse draws at a time. */
-const PAGE = 120
+const PAGE = 36
 const ANY = phrase('All')
 
 const TRIGGER_LABELS: Record<Trigger, { title: string; detail: string }> = {
@@ -169,8 +169,9 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
   if (browsing) {
     const allCast = host.cast ?? []
     const isBotCast = (c: Cast) => c.category === 'Bot' || c.executionMode === 'long-running'
-    const explicitBots = allCast.filter(isBotCast)
-    const first = botsMode ? (explicitBots.length ? explicitBots : allCast.map(asBot)) : allCast.filter((c) => !isBotCast(c))
+    const first: readonly Cast[] = botsMode
+      ? allCast.map(asBot)
+      : allCast.map((c): Cast => (isBotCast(c) ? { ...c, category: 'Team', executionMode: undefined, schedule: undefined, triggers: undefined } : c))
     const rest = botsMode ? ([] as readonly Cast[]) : figures.value.filter((c) => !isBotCast(c))
     const all = [...first, ...rest]
     const shown = all.filter((c) => (botsMode || kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category))

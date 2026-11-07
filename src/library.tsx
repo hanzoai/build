@@ -109,14 +109,18 @@ function glyph(kind: ItemKind, n = 18): ReactNode {
   }
 }
 
-/** Known same-origin agent and bot stills shelved by Dev, used if the signed store URL is unreachable. */
-const AGENT_STILLS = new Set(['antje.jpg', 'creative.png', 'des.png', 'dev.png', 'einstein.png', 'feynman.png', 'leo.png', 'maya.png', 'nora.png', 'vi.png', 'zach.jpg'])
-const BOT_STILLS = new Set(['chief.png', 'expense-manager.png', 'inbox-manager.png', 'offsite-crew.png', 'sales-outbound.png', 'talent-scout.png'])
+/** Known same-origin agent stills shelved by Dev, used if the signed store URL is unreachable. */
+const AGENT_STILLS = new Set([
+  'antje.jpg', 'art.png', 'audit.png', 'auto.png', 'biz.png', 'com.png', 'comp.png', 'corp.png',
+  'creative.png', 'cust.png', 'cyber.png', 'data.png', 'des.png', 'dev.png', 'doc.png', 'edu.png',
+  'fin.png', 'gov.png', 'huma.png', 'it.png', 'lang.png', 'law.png', 'mana.png', 'mark.png',
+  'mu.png', 'opera.png', 'proc.png', 'qa.png', 'rev.png', 'risk.png', 'sal.png', 'sci.png',
+  'su.png', 'supply.png', 'vi.png', 'vid.png', 'zach.jpg',
+])
 
 function localStill(x: Item): string {
   const name = x.name.trim().toLowerCase()
   if (AGENT_STILLS.has(name)) return `/agents/${name}`
-  if (BOT_STILLS.has(name)) return `/bots/${name}`
   return ''
 }
 
