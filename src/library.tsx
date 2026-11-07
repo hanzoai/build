@@ -111,11 +111,10 @@ function glyph(kind: ItemKind, n = 18): ReactNode {
 
 /** Known same-origin agent stills shelved by Dev, used if the signed store URL is unreachable. */
 const AGENT_STILLS = new Set([
-  'antje.jpg', 'art.png', 'audit.png', 'auto.png', 'biz.png', 'com.png', 'comp.png', 'corp.png',
-  'creative.png', 'cust.png', 'cyber.png', 'data.png', 'des.png', 'dev.png', 'doc.png', 'edu.png',
-  'fin.png', 'gov.png', 'huma.png', 'it.png', 'lang.png', 'law.png', 'mana.png', 'mark.png',
-  'mu.png', 'opera.png', 'proc.png', 'qa.png', 'rev.png', 'risk.png', 'sal.png', 'sci.png',
-  'su.png', 'supply.png', 'vi.png', 'vid.png', 'zach.jpg',
+  'antje.jpg', 'art.png', 'biz.png', 'creative.png', 'cyber.png', 'data.png', 'des.png', 'dev.png',
+  'doc.png', 'ed.png', 'edu.png', 'fin.png', 'gov.png', 'huma.png', 'lang.png', 'law.png', 'mana.png',
+  'mark.png', 'mo.png', 'mu.png', 'opera.png', 'rev.png', 'sal.png', 'sci.png', 'su.png', 'vi.png',
+  'vid.png', 'zach.jpg',
 ])
 
 function localStill(x: Item): string {

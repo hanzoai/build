@@ -46,8 +46,8 @@ const TRIGGER_LABELS: Record<Trigger, { title: string; detail: string }> = {
   watch: { title: phrase('Proactive anomaly watch'), detail: phrase('Continuously monitor metrics, queues, and alerts 24/7.') },
 }
 
-const FAST_BOTS = new Set(['dev', 'qa', 'cyber', 'it', 'auto', 'sal', 'mark', 'rev', 'biz', 'cust', 'com', 'su'])
-const GIT_BOTS = new Set(['dev', 'qa', 'cyber', 'it', 'auto', 'sci', 'data'])
+const FAST_BOTS = new Set(['dev', 'cyber', 'sal', 'mark', 'rev', 'biz', 'su', 'data'])
+const GIT_BOTS = new Set(['dev', 'cyber', 'sci', 'data', 'doc', 'lang'])
 
 /** Any real agent preset configured to operate as a 24/7 autonomous, proactive, and event-driven bot. */
 function asBot(c: Cast): Cast {
