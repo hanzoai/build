@@ -208,6 +208,8 @@ export interface Cast {
   read?: () => Promise<string>
   /** Its face, an address of the host. */
   avatar?: string
+  /** Who it is drawn from, by the names Browse prints: "Ogilvy", "Bernbach", "Burnett". */
+  after?: readonly string[]
   tools?: string[]
   /** How the preset runs when elected (e.g. 'long-running' for 24/7 autonomous bots). */
   executionMode?: Mode

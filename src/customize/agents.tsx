@@ -174,12 +174,12 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
       : allCast.map((c): Cast => (isBotCast(c) ? { ...c, category: 'Team', executionMode: undefined, schedule: undefined, triggers: undefined } : c))
     const rest = botsMode ? ([] as readonly Cast[]) : figures.value.filter((c) => !isBotCast(c))
     const all = [...first, ...rest]
-    const shown = all.filter((c) => (botsMode || kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category))
+    const shown = all.filter((c) => (botsMode || kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category, ...(c.after ?? [])))
     const card = (c: Cast) => (
       <Tile
         key={`${c.category}/${c.name}/${c.title}`}
         title={c.title}
-        detail={c.description === c.title || c.description === c.category ? undefined : c.description}
+        detail={[c.description === c.title || c.description === c.category ? '' : c.description, c.after?.length ? t('after {names}', { names: c.after.join(', ') }) : ''].filter(Boolean).join(' · ') || undefined}
         meta={[botsMode ? t('Bot') : category(c.category, t), c.executionMode === 'long-running' ? t('24/7 · Proactive · Event-driven') : '', c.schedule].filter(Boolean).join(' · ')}
         mark={<Mark name={c.title} size={40} logo={c.avatar} />}
         onOpen={signed && botsMode ? () => setElecting(c) : undefined}
