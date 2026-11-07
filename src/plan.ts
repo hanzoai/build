@@ -5,7 +5,9 @@
  * family — Free, Go, Pro, Max, Team, Agency, Enterprise — with the rung inside
  * it as a small tag (`20x`). A slug outside the families reads as words
  * (`growth-plus` is Growth Plus); one that is an id is never printed, and reads
- * as the tier it is served under.
+ * as the tier it is served under. Where billing names the plan the subscription
+ * is on (`GET /v1/billing/tier` `planName`, `Unlimited`), that name is the
+ * label, whatever the slug.
  *
  * MEASURED IN SHARES. `GET /v1/ai/limits` (cloud apps/ai/limits_ops.go) answers
  * every window as a percent used, its state and when it starts over — the
@@ -56,11 +58,14 @@ const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-|[0-9a-f]{12,}|^[a-z]+_[0-9a-z]{6,}$|^\d+$/
 const word = (w: string): string => (/^\d+x$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))
 
 /**
- * A plan as a person reads it, from the slug billing serves (`max-20x`) and the
- * tier class beside it (`pro`). Null where neither names a plan: no slug and a
+ * A plan as a person reads it: the plan's display name where billing gives one
+ * (`Unlimited`), else from the slug billing serves (`max-20x`) and the tier
+ * class beside it (`pro`). Null where none names a plan: no name, no slug and a
  * free or trial tier, which is no plan at all.
  */
-export function label(slug?: string | null, tier?: string | null): Label | null {
+export function label(slug?: string | null, tier?: string | null, name?: string | null): Label | null {
+  const named = (name ?? '').trim()
+  if (named) return { name: named, tag: '' }
   const raw = (slug ?? '').trim().toLowerCase()
   const fallback = (): Label | null => {
     const t = TIER[(tier ?? '').trim().toLowerCase()]

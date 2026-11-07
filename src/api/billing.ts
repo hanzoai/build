@@ -426,15 +426,20 @@ export async function grants(t: Target): Promise<Grant[]> {
     .filter((g) => g.id)
 }
 
-/** The rung an organization is served as (`max-20x`, '' with none) and the tier class it is served under (`pro`). */
+/**
+ * The rung an organization is served as (`max-20x`, '' with none), the tier
+ * class it is served under (`pro`), and the display name of the plan its
+ * subscription is on (`planName`, `Unlimited`; '' with none).
+ */
 export interface Tier {
   plan: string
   tier: string
+  name: string
 }
 
 export async function tier(t: Target): Promise<Tier> {
   const r = obj(await call<unknown>(t, 'GET', '/v1/billing/tier'))
-  return { plan: str(r.plan), tier: str(obj(r.tier).name) }
+  return { plan: str(r.plan), tier: str(obj(r.tier).name), name: str(r.planName) }
 }
 
 /** Auto-reload: top the balance up by `amount` whenever it falls below `threshold`, charging the card on file. */

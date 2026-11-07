@@ -41,7 +41,7 @@ export async function stand(t: Target): Promise<Standing> {
   const k = kind(slug, money, billed?.tier)
   return {
     kind: k,
-    label: k === 'plan' ? label(slug, billed?.tier) : k === 'free' ? { name: phrase('Free'), tag: '' } : { name: phrase('Pay as you go'), tag: '' },
+    label: k === 'plan' ? label(slug, billed?.tier, billed?.name) : k === 'free' ? { name: phrase('Free'), tag: '' } : { name: phrase('Pay as you go'), tag: '' },
     limits: used,
     allowance: free,
     balance: money,
