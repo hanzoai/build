@@ -7,7 +7,7 @@ import { route } from './route.ts'
 // The marks are react-native-svg drawings, which a node test cannot load; what a place is and where it goes is plain data.
 vi.mock('@hanzogui/lucide-icons-2', () =>
   Object.fromEntries(
-    ['AudioLines', 'Bell', 'BookOpen', 'Bot', 'Box', 'Brain', 'CircleDot', 'Clock', 'Code', 'Container', 'Cpu', 'CreditCard', 'File', 'FileText', 'FolderGit2', 'Gauge', 'Globe', 'Image', 'Key', 'LayoutTemplate', 'Library', 'Plug', 'Plus', 'Presentation', 'Puzzle', 'Settings', 'Shield', 'SlidersHorizontal', 'Sparkles', 'SquarePen', 'Upload', 'User', 'Users', 'Video'].map((n) => [n, () => null]),
+    ['AudioLines', 'Bell', 'BookOpen', 'Bot', 'Box', 'Brain', 'CircleDot', 'Clapperboard', 'Clock', 'Code', 'CodeXml', 'Container', 'Cpu', 'CreditCard', 'File', 'FileText', 'FolderGit2', 'Gauge', 'Globe', 'Image', 'Key', 'LayoutTemplate', 'Library', 'MessageSquare', 'Plug', 'Plus', 'Presentation', 'Puzzle', 'Settings', 'Shield', 'SlidersHorizontal', 'Sparkles', 'SquarePen', 'SquareTerminal', 'Upload', 'User', 'Users', 'Video', 'WandSparkles'].map((n) => [n, { [n]: () => null }[n]]),
   ),
 )
 vi.mock('./foot.tsx', () => ({ DOCS: 'https://docs.hanzo.ai/docs/dev' }))

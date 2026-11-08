@@ -11,7 +11,8 @@
  * The rows' words are the reader's language when the caller hands in its
  * @hanzo/i18n `t` (English without one); a task's name is the person's own.
  */
-import { AudioLines, Bell, BookOpen, Bot, Box, Brain, CircleDot, Clock, Code, Container, Cpu, CreditCard, File, FileText, FolderGit2, Gauge, Globe, Image, Key, LayoutTemplate, Library, Plug, Plus, Presentation, Puzzle, Settings, Shield, SlidersHorizontal, Sparkles, SquarePen, Upload, User, Users, Video } from '@hanzogui/lucide-icons-2'
+import { AudioLines, Bell, BookOpen, Bot, Box, Brain, CircleDot, Code, Container, Cpu, CreditCard, File, FileText, FolderGit2, Gauge, Globe, Image, Key, LayoutTemplate, Library, Plug, Plus, Presentation, Puzzle, Settings, Shield, Sparkles, Upload, User, Users, Video } from '@hanzogui/lucide-icons-2'
+import { MARKS } from './marks.tsx'
 import { phrase } from '@hanzo/i18n'
 import { useI18n, type Say } from '@hanzo/i18n/react'
 import type { RailLink } from '@hanzo/ui/chat'
@@ -47,7 +48,7 @@ export function nav(host: Host, go: (path: string) => void, t: Say = english): G
       id: 'work',
       label: t('Work'),
       links: [
-        { id: NEW, label: t('New run'), icon: <SquarePen size={16} />, onPress: to(''), active: r.kind === 'new' },
+        { id: NEW, label: t('New run'), icon: <MARKS.dev.make size={16} />, onPress: to(''), active: r.kind === 'new' },
         // A project is a repository: its list, linking one from GitHub, and one's workspace.
         {
           id: 'projects',
@@ -73,8 +74,8 @@ export function nav(host: Host, go: (path: string) => void, t: Say = english): G
       id: 'make',
       label: t('Make'),
       links: [
-        { id: 'artifacts', label: t('Library'), icon: <Library size={16} />, onPress: to(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
-        { id: 'automations', label: t('Scheduled tasks'), icon: <Clock size={16} />, onPress: to(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' || r.kind === 'automation' },
+        { id: 'artifacts', label: t('Library'), icon: <MARKS.library.icon size={16} />, onPress: to(path({ kind: 'screen', screen: 'artifacts' })), active: screen === 'artifacts' },
+        { id: 'automations', label: t('Scheduled tasks'), icon: <MARKS.scheduled.icon size={16} />, onPress: to(path({ kind: 'screen', screen: 'automations' })), active: screen === 'automations' || r.kind === 'automation' },
       ],
     },
     {
@@ -89,7 +90,7 @@ export function nav(host: Host, go: (path: string) => void, t: Say = english): G
       id: 'setup',
       label: t('Setup'),
       links: [
-        { id: 'customize', label: t('Customize'), icon: <SlidersHorizontal size={16} />, onPress: to(path({ kind: 'customize', tab: 'agents' })), active: r.kind === 'customize' || r.kind === 'agent' || screen === 'mcp' },
+        { id: 'customize', label: t('Customize'), icon: <MARKS.customize.icon size={16} />, onPress: to(path({ kind: 'customize', tab: 'agents' })), active: r.kind === 'customize' || r.kind === 'agent' || screen === 'mcp' },
         { id: 'docs', label: t('Docs'), icon: <BookOpen size={16} />, onPress: () => window.open(DOCS, '_blank', 'noopener,noreferrer') },
       ],
     },
@@ -223,7 +224,7 @@ export function useScheduled(host: Host, go: (path: string) => void, on: boolean
     {
       id: 'scheduled-tasks',
       label: list.value.length ? say('Tasks') : '',
-      links: list.value.map((a) => ({ id: a.id, label: a.name || say('Untitled task'), icon: <Clock size={16} />, onPress: () => go(path({ kind: 'automation', id: a.id })), active: at === a.id })),
+      links: list.value.map((a) => ({ id: a.id, label: a.name || say('Untitled task'), icon: <MARKS.scheduled.icon size={16} />, onPress: () => go(path({ kind: 'automation', id: a.id })), active: at === a.id })),
     },
   ]
 }
