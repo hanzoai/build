@@ -5,6 +5,7 @@
  *   sess_<32 hex>   one run
  *   -/<screen>      a builder screen
  *   -/artifacts/<kind>      the Library narrowed to one kind (image, video, document, …)
+ *   -/artifacts/new         the Library, making something new from a gallery template
  *   -/automations/<id>      one automation's editor and runs; `new` writes one
  *   -/settings[/<section>]  a section of Settings
  *   -/customize[/<tab>]     agents, skills, connectors and plugins: what the agent brings to a run
@@ -64,8 +65,8 @@ export type Route =
   | { kind: 'repo'; org: string; name: string }
   | { kind: 'automation'; id: string }
 
-/** The kinds the Library narrows to by address (api/library.ts KIND_IDS, plus `sites`). */
-export const OF = ['image', 'video', 'audio', 'document', 'slides', 'type', 'model', 'code', 'file', 'sites'] as const
+/** What the Library's address names: a kind it narrows to (api/library.ts KIND_IDS, plus `sites`), or `new`, its template picker. */
+export const OF = ['image', 'video', 'audio', 'document', 'slides', 'type', 'model', 'code', 'file', 'sites', 'new'] as const
 export type Of = (typeof OF)[number]
 
 export const SESSION = /^sess_[0-9a-f]{32}$/

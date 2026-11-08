@@ -179,12 +179,19 @@ function keep(host: Host, say: Say): void {
   input.click()
 }
 
-/** The Library's sidebar: Upload, then every kind it narrows to, the one in the address lit. */
+/** The Library's sidebar: Make something new and Upload, then every kind it narrows to, the one in the address lit. */
 export function library(host: Host, go: (path: string) => void, t: Say = english): Group[] {
   const r = route(host.path)
   const at = r.kind === 'screen' && r.screen === 'artifacts' ? (r.of ?? '') : null
   return [
-    { id: 'library-do', label: '', links: [{ id: 'upload', label: t('Upload'), icon: <Upload size={16} />, onPress: () => keep(host, t) }] },
+    {
+      id: 'library-do',
+      label: '',
+      links: [
+        { id: 'make', label: t('Make something new'), icon: <Plus size={16} />, onPress: () => go(path({ kind: 'screen', screen: 'artifacts', of: 'new' })), active: at === 'new' },
+        { id: 'upload', label: t('Upload'), icon: <Upload size={16} />, onPress: () => keep(host, t) },
+      ],
+    },
     {
       id: 'library-kinds',
       label: '',

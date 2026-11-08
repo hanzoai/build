@@ -36,13 +36,13 @@ describe('the builder’s places, once for every rail', () => {
   })
 
   it('says each place in the caller’s language, and English with no caller', () => {
-    const FR: Record<string, string> = { Work: 'Travail', 'New run': 'Nouvelle exécution', Projects: 'Projets', Docs: 'Docs', Agents: 'Agents', Skills: 'Compétences', Upload: 'Importer' }
+    const FR: Record<string, string> = { Work: 'Travail', 'New run': 'Nouvelle exécution', Projects: 'Projets', Docs: 'Docs', Agents: 'Agents', Skills: 'Compétences', Upload: 'Importer', 'Make something new': 'Créer quelque chose' }
     const t = ((source: string) => FR[source] ?? source) as Parameters<typeof nav>[2]
     const work = nav(host(), () => {}, t)[0]!
     expect([work.label, work.links.map((l) => l.label)]).toEqual(['Travail', ['Nouvelle exécution', 'Projets', 'Issues', 'Templates']])
     expect(own(host(), () => {}, t)[0]!.label).toBe('Travail')
     expect(tabs(host(), () => {}, t)[0]!.links.map((l) => l.label)).toEqual(['Agents', 'Bots', 'Compétences', 'Connectors', 'Plugins'])
-    expect(library(host(), () => {}, t)[0]!.links[0]!.label).toBe('Importer')
+    expect(library(host(), () => {}, t)[0]!.links.map((l) => l.label)).toEqual(['Créer quelque chose', 'Importer'])
   })
 
   it('moves to an address the grammar reads back as that place', () => {
@@ -126,13 +126,21 @@ describe('a host’s sidebar for Dev, Settings and Customize', () => {
 })
 
 describe('the Library’s sidebar', () => {
-  it('is Upload, then every kind, the one in the address lit, each moving to its own address', () => {
+  it('is Make something new and Upload, then every kind, the one in the address lit, each moving to its own address', () => {
     const seen: string[] = []
     const groups = library(host('-/artifacts/image'), (p) => seen.push(p))
-    expect(groups.map((g) => g.links.map((l) => l.label))).toEqual([['Upload'], ['All', 'Images', 'Videos', 'Audio', 'Documents', 'Slides', '3D', 'Code', 'Files', 'Sites']])
+    expect(groups.map((g) => g.links.map((l) => l.label))).toEqual([['Make something new', 'Upload'], ['All', 'Images', 'Videos', 'Audio', 'Documents', 'Slides', '3D', 'Code', 'Files', 'Sites']])
     expect(groups[1]!.links.filter((l) => l.active).map((l) => l.label)).toEqual(['Images'])
     for (const l of groups[1]!.links) l.onPress?.()
     expect(seen.slice(0, 3)).toEqual(['-/artifacts', '-/artifacts/image', '-/artifacts/video'])
     expect(library(host('-/artifacts'), () => {})[1]!.links.filter((l) => l.active).map((l) => l.label)).toEqual(['All'])
+  })
+
+  it('opens the template picker at its own address, lit while it is open', () => {
+    const seen: string[] = []
+    library(host('-/artifacts'), (p) => seen.push(p))[0]!.links[0]!.onPress?.()
+    expect(seen.map(route)).toEqual([{ kind: 'screen', screen: 'artifacts', of: 'new' }])
+    const open = library(host('-/artifacts/new'), () => {})
+    expect(open.flatMap((g) => g.links).filter((l) => l.active).map((l) => l.id)).toEqual(['make'])
   })
 })

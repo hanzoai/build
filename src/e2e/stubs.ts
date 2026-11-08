@@ -8,6 +8,7 @@
  * share these, so a stub is written once.
  */
 import type { Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 
 import { ORG, REPO, SESSION, serve, signIn, type Reply, type Sent } from './signed.ts'
 
@@ -1046,6 +1047,10 @@ export async function library(page: Page, seed = ITEMS()) {
       return { json: {} }
     }
     if (path === '/v1/project') return { json: PROJECTS }
+    // Make something new: a site copied into a project, an agent made the org's own.
+    if (path === '/v1/project/fork' && method === 'POST') return { status: 201, json: { slug: (body as { slug: string }).slug, name: 'Copy', status: 'building' } }
+    if (path === '/v1/agent' && method === 'GET') return { json: { agents: [] } }
+    if (path === '/v1/agent' && method === 'POST') return { status: 201, json: { id: 'agt_1', ...(body as object) } }
     return undefined
   })
   await page.route(`${SIGNED}/**`, (r) => {
@@ -1056,6 +1061,20 @@ export async function library(page: Page, seed = ITEMS()) {
     return r.fulfill({ contentType: 'image/svg+xml', body: picture(a!, b!) })
   })
   return { sent, items }
+}
+
+/** gallery.hanzo.ai's catalogue as recorded (api/gallery.test.json), with an agent template beside its sites. */
+export const SCOUT = { slug: 'scout', kind: 'agent', displayName: 'Scout', description: 'Finds leads.', category: 'Sales', screenshotUrl: 'https://gallery.hanzo.ai/screenshots/scout.webp', instructions: 'You find leads.', model: 'zen5' }
+const RECORDED = JSON.parse(readFileSync(new URL('../api/gallery.test.json', import.meta.url), 'utf8')) as { templates: unknown[] }
+
+/** The gallery: its catalogue and its captures. `down`, it answers 503 until `up` is called. */
+export async function gallery(page: Page, o: { down?: boolean } = {}) {
+  let down = o.down ?? false
+  await page.route('https://gallery.hanzo.ai/templates.json', (r) =>
+    down ? r.fulfill({ status: 503, body: 'unavailable' }) : r.fulfill({ json: { ...RECORDED, templates: [...RECORDED.templates, SCOUT] } }),
+  )
+  await page.route('https://gallery.hanzo.ai/screenshots/**', (r) => r.fulfill({ contentType: 'image/svg+xml', body: picture('#a78bfa', '#22d3ee') }))
+  return { up: () => (down = false) }
 }
 
 const flow = (n: number) => `flow_${String(n).padStart(32, '0')}`

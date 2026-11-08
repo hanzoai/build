@@ -3,6 +3,7 @@
  * workflows — in one place, newest first (api/library.ts).
  *
  *   -/artifacts           the Library; `?item=<id>` opens one item's preview
+ *   -/artifacts/new       the Library under Make something new (make.tsx)
  *
  * A tile opens its item in the side panel (panel.tsx), one tab per item, so a
  * few can be read side by side; on a phone the panel is a sheet. Each item
@@ -30,6 +31,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Pencil,
+  Plus,
   Presentation,
   Search,
   Share2,
@@ -50,6 +52,7 @@ import { change, days, get, items as list, KINDS, remove, size, SOURCE, type Ite
 import { Confirm, Rename } from './ask.tsx'
 import { useKept, useProjects, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { Chip, Make } from './make.tsx'
 import { KEPT } from './nav.tsx'
 import { path, route } from './route.ts'
 import { Panel, type Kind } from './panel.tsx'
@@ -423,34 +426,6 @@ function Row({ x, onOpen, rows }: { x: Item; onOpen: () => void; rows: MenuItems
   )
 }
 
-/** A chip: one choice among a few, lit when chosen. */
-function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  return (
-    <XStack
-      render="button"
-      role="radio"
-      aria-checked={on}
-      aria-label={label}
-      onPress={onPress}
-      height={32}
-      px="$3"
-      items="center"
-      rounded="$10"
-      shrink={0}
-      borderWidth={1}
-      borderColor={on ? '$ink' : '$borderColor'}
-      bg={on ? '$ink' : 'transparent'}
-      hoverStyle={{ bg: on ? '$ink' : '$hover' }}
-      cursor="pointer"
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
-    >
-      <SizableText size="$2" color={on ? '$background' : '$ink'}>
-        {label}
-      </SizableText>
-    </XStack>
-  )
-}
-
 /** One item, read fresh so its signed URLs are live: the thing itself, then what it is. */
 export function Preview({ id, rows }: { id: string; rows?: (x: Item) => MenuItems }) {
   const { t } = useI18n()
@@ -668,8 +643,15 @@ export function Library() {
   // The kind is the address's (-/artifacts/<kind>), so the sidebar, a link and Back all name it.
   const at = route(host.path)
   const sitesOnly = at.kind === 'screen' && at.of === 'sites'
-  const kind: ItemKind | '' = at.kind === 'screen' && at.of && at.of !== 'sites' ? (at.of as ItemKind) : ''
-  const setKind = (k: ItemKind | 'sites' | '') => host.go(path({ kind: 'screen', screen: 'artifacts', ...(k ? { of: k } : {}) }))
+  const making = at.kind === 'screen' && at.of === 'new'
+  const kind: ItemKind | '' = at.kind === 'screen' && at.of && at.of !== 'sites' && at.of !== 'new' ? (at.of as ItemKind) : ''
+  const setKind = (k: ItemKind | 'sites' | 'new' | '') => host.go(path({ kind: 'screen', screen: 'artifacts', ...(k ? { of: k } : {}) }))
+  const make = (
+    <Button size="sm" onPress={() => setKind('new')}>
+      <Plus size={14} />
+      {t('Make something new')}
+    </Button>
+  )
   const [source, setSource] = useState<Source | ''>('')
   const [scope, setScope] = useState<Scope>('all')
   const [typed, setTyped] = useState('')
@@ -741,6 +723,8 @@ export function Library() {
             <SizableText render="h1" size="$7" fontWeight="600" color="$ink" flex={1}>
               {sitesOnly ? t('Sites') : KINDS.find((k) => k.id === kind)?.id ? t(KINDS.find((k) => k.id === kind)!.label) : t('Library')}
             </SizableText>
+            {/* A host whose sidebar lists the kinds has Make something new there. */}
+            {host.sections ? null : make}
             {sitesOnly ? null : (
               <XStack role="radiogroup" aria-label={t('View')} gap="$1">
                 <ViewMark label={t('Grid')} on={view === 'grid'} onPress={() => setView('grid')}>
@@ -819,7 +803,7 @@ export function Library() {
           ) : pages.loading && !pages.rows.length ? (
             <Said says={t('Reading…')} />
           ) : !pages.rows.length ? (
-            <Said says={narrowed ? t('Nothing matches.') : t('Nothing here yet. What you make in Chat, Dev and Studio lands here.')} />
+            <Said says={narrowed ? t('Nothing matches.') : t('Nothing here yet. What you make in Chat, Dev and Studio lands here.')}>{narrowed ? null : make}</Said>
           ) : (
             <YStack gap="$5">
               {/* The org's deployed sites are Dev's builds: shown on All while nothing narrows them away. */}
@@ -874,6 +858,7 @@ export function Library() {
         </YStack>
       ) : null}
       {acts.dialogs}
+      <Make open={making} onClose={() => host.go(path({ kind: 'screen', screen: 'artifacts' }), { replace: true })} />
     </XStack>
   )
 }
