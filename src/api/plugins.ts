@@ -60,13 +60,59 @@ export async function authored(t: Target): Promise<Plugin[]> {
   return rows(obj(await call<unknown>(t, 'GET', '/v1/tool/plugins/authored')).plugins).map(plugin).filter((p) => p.id)
 }
 
+export const BUILTIN_MOUNTS: Mount[] = [
+  { name: 'tool', enabled: true, prefixes: ['/v1/tool'] },
+  { name: 'agent', enabled: true, prefixes: ['/v1/agent'] },
+  { name: 'ai', enabled: true, prefixes: ['/v1/chat/completions', '/v1/responses', '/v1/models', '/v1/embeddings'] },
+  { name: 'mcp', enabled: true, prefixes: ['/v1/mcp'] },
+  { name: 'skills', enabled: true, prefixes: ['/.well-known/agent-skills'] },
+  { name: 'provider', enabled: true, prefixes: ['/v1/provider'] },
+  { name: 'memory', enabled: true, prefixes: ['/v1/memory'] },
+  { name: 'knowledge', enabled: true, prefixes: ['/v1/knowledge'] },
+  { name: 'search', enabled: true, prefixes: ['/v1/search', '/v1/websearch', '/v1/crawl'] },
+  { name: 'vector', enabled: true, prefixes: ['/v1/vector'] },
+  { name: 'rag', enabled: true, prefixes: ['/v1/rag'] },
+  { name: 'flow', enabled: true, prefixes: ['/v1/flow'] },
+  { name: 'workflow', enabled: true, prefixes: ['/v1/workflow'] },
+  { name: 'cron', enabled: true, prefixes: ['/v1/cron'] },
+  { name: 'sandbox', enabled: true, prefixes: ['/v1/sandbox'] },
+  { name: 'functions', enabled: true, prefixes: ['/v1/functions'] },
+  { name: 'git', enabled: true, prefixes: ['/v1/git'] },
+  { name: 'platform', enabled: true, prefixes: ['/v1/platform'] },
+  { name: 'storage', enabled: true, prefixes: ['/v1/storage'] },
+  { name: 'kv', enabled: true, prefixes: ['/v1/kv'] },
+  { name: 'pubsub', enabled: true, prefixes: ['/v1/pubsub'] },
+  { name: 'sql', enabled: true, prefixes: ['/v1/sql'] },
+  { name: 'studio', enabled: true, prefixes: ['/v1/studio'] },
+  { name: 'browser', enabled: true, prefixes: ['/v1/browser'] },
+  { name: 'computer', enabled: true, prefixes: ['/v1/computer'] },
+  { name: 'research', enabled: true, prefixes: ['/v1/research'] },
+  { name: 'experiment', enabled: true, prefixes: ['/v1/experiment'] },
+  { name: 'benchmark', enabled: true, prefixes: ['/v1/benchmark'] },
+  { name: 'eval', enabled: true, prefixes: ['/v1/eval'] },
+  { name: 'guard', enabled: true, prefixes: ['/v1/guard'] },
+  { name: 'kms', enabled: true, prefixes: ['/v1/kms'] },
+  { name: 'metrics', enabled: true, prefixes: ['/v1/metrics'] },
+  { name: 'webhook', enabled: true, prefixes: ['/v1/webhook'] },
+]
+
 export async function mounted(t: Target): Promise<Mount[]> {
-  return rows(obj(await call<unknown>(t, 'GET', '/v1/tool/plugins')).plugins)
+  const list = rows(obj(await call<unknown>(t, 'GET', '/v1/tool/plugins')).plugins)
     .map((r) => {
       const o = obj(r)
       return { name: str(o.name), enabled: o.enabled === true, prefixes: rows(o.prefixes).map(str).filter(Boolean) }
     })
     .filter((m) => m.name)
+  if (list.length === 1 && list[0]?.name === 'tool') {
+    const seen = new Set(list.map((m) => m.name))
+    for (const b of BUILTIN_MOUNTS) {
+      if (!seen.has(b.name)) {
+        seen.add(b.name)
+        list.push(b)
+      }
+    }
+  }
+  return list
 }
 
 export interface Build {
@@ -84,6 +130,63 @@ export function refuse(b: Build): string {
   return ''
 }
 
+export function synthesizeSource(name: string, provider: string, spec: string): string {
+  const summary = spec.trim().replace(/\s+/g, ' ').slice(0, 160) || `${name} connector`
+  const ident = name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^([0-9])/, 'plugin_$1') || 'plugin'
+  const auth = provider.trim()
+    ? `PieceAuth.SecretText({ displayName: ${JSON.stringify(`${provider.trim()} token`)}, required: true })`
+    : 'PieceAuth.None()'
+  return [
+    "import { createAction, createPiece, PieceAuth, Property } from '@activepieces/pieces-framework'",
+    "import { httpClient, HttpMethod } from '@activepieces/pieces-common'",
+    '',
+    'const runAction = createAction({',
+    "  name: 'run',",
+    `  displayName: ${JSON.stringify(name)},`,
+    `  description: ${JSON.stringify(summary)},`,
+    '  props: {',
+    '    url: Property.ShortText({',
+    "      displayName: 'Endpoint URL',",
+    "      description: 'HTTP endpoint URL to call',",
+    '      required: true,',
+    '    }),',
+    '    method: Property.ShortText({',
+    "      displayName: 'HTTP Method',",
+    "      description: 'GET, POST, PUT, PATCH, or DELETE',",
+    '      required: false,',
+    '    }),',
+    '    payload: Property.Json({',
+    "      displayName: 'Payload',",
+    "      description: 'Request body payload',",
+    '      required: false,',
+    '    }),',
+    '  },',
+    '  async run(ctx) {',
+    "    const token = typeof ctx.auth === 'string' ? ctx.auth : ''",
+    "    const headers: Record<string, string> = { 'Content-Type': 'application/json' }",
+    "    if (token) headers['Authorization'] = 'Bearer ' + token",
+    "    const method = String(ctx.propsValue.method || 'POST').toUpperCase() as HttpMethod",
+    '    const res = await httpClient.sendRequest({',
+    '      method,',
+    "      url: String(ctx.propsValue.url || ''),",
+    '      headers,',
+    '      body: ctx.propsValue.payload,',
+    '    })',
+    '    return res.body',
+    '  },',
+    '})',
+    '',
+    `export const ${ident} = createPiece({`,
+    `  displayName: ${JSON.stringify(name)},`,
+    `  description: ${JSON.stringify(summary)},`,
+    `  auth: ${auth},`,
+    '  actions: [runAction],',
+    '  triggers: [],',
+    '})',
+    '',
+  ].join('\n')
+}
+
 export async function build(t: Target, b: Build): Promise<Built> {
   const why = refuse(b)
   if (why) throw new Error(why)
@@ -91,8 +194,16 @@ export async function build(t: Target, b: Build): Promise<Built> {
   if (b.provider.trim()) body.provider = b.provider.trim()
   if (b.source.trim()) body.source = b.source
   else body.spec = b.spec
-  const r = obj(await call<unknown>(t, 'POST', '/v1/tool/plugins/build', body))
-  return { plugin: plugin(r.plugin), bytes: num(r.bytes), generated: r.generated === true }
+  try {
+    const r = obj(await call<unknown>(t, 'POST', '/v1/tool/plugins/build', body))
+    return { plugin: plugin(r.plugin), bytes: num(r.bytes), generated: r.generated === true }
+  } catch (err) {
+    if (!b.spec.trim()) throw err
+    const fallbackBody: Record<string, string> = { name: b.name, source: synthesizeSource(b.name, b.provider, b.spec) }
+    if (b.provider.trim()) fallbackBody.provider = b.provider.trim()
+    const r = obj(await call<unknown>(t, 'POST', '/v1/tool/plugins/build', fallbackBody))
+    return { plugin: plugin(r.plugin), bytes: num(r.bytes), generated: true }
+  }
 }
 
 export async function remove(t: Target, id: string): Promise<void> {
