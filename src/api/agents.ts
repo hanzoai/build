@@ -285,10 +285,10 @@ export async function use(
   })
 }
 
-/** Anyone as a template: their name, who they are, and writing of theirs to take the voice from. */
-export function person(name: string, about: string, writing: string, avatar = ''): Cast {
+/** Anyone as a template: their name, who they are, how they think and write (ocean.ts `nature`), and writing of theirs to take the voice from. */
+export function person(name: string, about: string, writing: string, avatar = '', nature = ''): Cast {
   const who = name.trim()
-  const lines = [`You are ${who}.`, about.trim(), writing.trim() && `Writing by ${who}:\n\n${writing.trim()}`]
+  const lines = [`You are ${who}.`, about.trim(), nature, writing.trim() && `Writing by ${who}:\n\n${writing.trim()}`]
   return { name: who, title: who, description: about.trim(), category: phrase('Person'), model: '', instructions: lines.filter(Boolean).join('\n\n'), avatar }
 }
 

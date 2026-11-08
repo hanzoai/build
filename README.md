@@ -250,8 +250,13 @@ are any member's.
   `-2`, `-3`), with its face, model and instructions, and opens its profile;
   nothing is added in bulk. Start from scratch, Clone yourself (the person
   signed in, with writing pasted or uploaded) and Create from a person make one
-  too. Yours is the org's own — model, instructions, tools, budget — created,
-  edited (only what changed is sent) and deleted.
+  too. Clone yourself also asks the Big Five: the IPIP 50-item markers or the
+  IPIP-NEO-120 with its 30 facets (`customize/ocean.ts`, public domain), one
+  statement a screen on a phone, kept in this browser (`hanzo.build.ocean.<email>`)
+  as it is answered. The raw 1-5 means, and a line for each domain at either
+  end, seed the instructions, shown to edit before the agent is made; the
+  answers stay in the browser. Yours is the org's own — model, instructions,
+  tools, budget — created, edited (only what changed is sent) and deleted.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
 (Cloud is the platform's sandbox with the codebase's environment; the org's
