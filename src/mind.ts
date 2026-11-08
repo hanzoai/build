@@ -22,9 +22,10 @@
  */
 import type { Modes } from '@hanzo/ui/chat'
 import { EFFORTS as EVERY } from '@hanzo/ui/chat/pure'
-import { parseModels } from '@hanzo/ui/models/catalog'
+import { parseModels, thirdParty } from '@hanzo/ui/models/catalog'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
+import { balance as readBalance } from './api/billing.ts'
 import { Refusal, type Target } from './api/call.ts'
 import { ENSO, models as read, type Model } from './api/models.ts'
 import { usePick } from './pick.ts'
@@ -233,6 +234,19 @@ export function grants(free: boolean, model: string): boolean {
   return !free || model === ENSO
 }
 
+/** Whole cents as dollars. */
+const dollars = (cents: number): string => `$${(cents / 100).toFixed(2)}`
+
+/**
+ * Whether the plan and the prepaid balance (cents, null where unknown) let `id` be
+ * sent: Hanzo's own models follow the plan; another maker's are paid from the balance
+ * on any plan, Free included.
+ */
+export function sendable(free: boolean, models: readonly Model[], cents: number | null, id: string): boolean {
+  const row = models.find((m) => m.id === id)
+  return grants(free, id) || Boolean(row && thirdParty(row) && cents !== null && cents > 0)
+}
+
 /** The effort as the composer reads it: the one in force, its list, and the way to change it. */
 export const pacing = (m: Pick<Mind, 'effort' | 'pace'>): Modes<Effort> => ({ value: m.effort, set: m.pace, items: EFFORTS })
 
@@ -250,6 +264,49 @@ export interface Mind {
   /** A premium pick holds for this screen; any other is kept. */
   pick: (id: string) => void
   pace: (effort: Effort) => void
+  /**
+   * Another maker's models are paid from the prepaid balance on any plan, so on Free
+   * they are not an upgrade. Present where the host can send a person to the top-up
+   * and the balance was read: whether the balance can pay for a model.
+   */
+  funded?: (id: string) => boolean
+  /** The balance, as the billing API states it, whole cents written as dollars. */
+  balance?: string
+  /** The way to the top-up, given the model that was chosen if one was. */
+  topUp?: (id?: string) => void
+}
+
+/** The prepaid balance in cents for a signed-in target, read once; null until it is, and where it could not be read. */
+function useBalance(t: Target, on: boolean): number | null {
+  const [cents, set] = useState<number | null>(null)
+  useEffect(() => {
+    if (!on || !t.token()) return
+    let live = true
+    readBalance(t).then(
+      (n) => live && set(n),
+      () => live && set(null),
+    )
+    return () => {
+      live = false
+    }
+    // The target is rebuilt each render; what it names is the key.
+  }, [on, t.api, t.org]) // eslint-disable-line react-hooks/exhaustive-deps
+  return cents
+}
+
+/** The model a top-up returned to, named in the address (`?model=`); read once, and left out of the address. */
+function returned(): string {
+  if (typeof window === 'undefined') return ''
+  const url = new URL(window.location.href)
+  return url.searchParams.get('model') ?? ''
+}
+
+function settleReturn(): void {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  if (!url.searchParams.has('model')) return
+  url.searchParams.delete('model')
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
 }
 
 /**
@@ -257,12 +314,25 @@ export interface Mind {
  * On Free the model is Enso Auto, and a kept pick of any other is set aside
  * rather than sent — it comes back once the plan grants it.
  */
-export function useMind(t: Target, plan?: string | null): Mind {
+export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) => void): Mind {
   const [choice, change] = useChoice()
   const { models, list, loading, error, note } = useCatalog(t)
   const free = isFree(plan)
   const [picked, pick] = usePick(choice.model, (id) => change({ model: id }), list)
-  const model = grants(free, picked) ? picked : ENSO
+  const cents = useBalance(t, topUp !== undefined)
+  // Another maker's model is paid from the balance on any plan; Hanzo's own follow the plan.
+  const funded = topUp !== undefined && cents !== null ? (_id: string): boolean => cents > 0 : undefined
+  const may = (id: string): boolean => sendable(free, models, cents, id)
+  const model = may(picked) ? picked : ENSO
+  // A top-up returns to this address with the model it was for: pick it once the balance can pay.
+  const [back] = useState(returned)
+  useEffect(() => {
+    if (!back || !models.length || cents === null) return
+    if (may(back)) pick(back)
+    settleReturn()
+    // Once, when the catalog and the balance are both here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [models.length, cents])
   return {
     model,
     effort: choice.effort,
@@ -272,8 +342,9 @@ export function useMind(t: Target, plan?: string | null): Mind {
     note,
     free,
     pick: (id) => {
-      if (grants(free, id)) pick(id)
+      if (may(id)) pick(id)
     },
     pace: (effort) => change({ effort }),
+    ...(funded && topUp ? { funded, balance: dollars(cents!), topUp } : {}),
   }
 }

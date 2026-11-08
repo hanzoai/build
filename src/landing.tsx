@@ -171,7 +171,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const places = usePlaces(target, signed)
   // The model and effort Chat shares, and dictation into the ask.
   const { limits } = useLimits(signed ? (signal) => readLimits(target, signal) : null, target)
-  const mind = useMind(target, (limits as { plan?: string } | null)?.plan)
+  const mind = useMind(target, (limits as { plan?: string } | null)?.plan, host.topUp)
   const voice = useVoice({ speech: useEar(target), language: useSpoken(), ...useDictation(draft, setDraft) })
   const talk = useTalk({ baseUrl: target.api, token: () => target.token(), ...(target.org ? { org: target.org } : {}) })
   // What the run carries beside the ask: skills, memory and the mode, as Chat's turns do.
