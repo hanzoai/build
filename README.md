@@ -255,8 +255,24 @@ are any member's.
   statement a screen on a phone, kept in this browser (`hanzo.build.ocean.<email>`)
   as it is answered. The raw 1-5 means, and a line for each domain at either
   end, seed the instructions, shown to edit before the agent is made; the
-  answers stay in the browser. Yours is the org's own — model, instructions,
-  tools, budget — created, edited (only what changed is sent) and deleted.
+  answers stay in the browser. Make with AI is one box above them: a name or a
+  description, drafted by Enso (`api/draft.ts`) into a name, role, instructions
+  and an opening line shown once, editable, with Save; a real historical figure
+  gets a public-domain or CC0 portrait from Wikimedia Commons where one is free
+  to use, any other agent the emoji the model chose. An agent's model is picked
+  from `scope="agent"`: text out, tools and reasoning not ruled out, in groups
+  by maker, with what cannot run one in a shut group at the end. Yours is the
+  org's own — model, instructions, tools, budget — created, edited (only what
+  changed is sent) and deleted.
+
+**Marks and models.** `MARKS` (`marks.tsx`) is the one icon for each product and
+place, and for what each starts (the pen in Chat, `</>` in Dev, the terminal in
+Tabs); the rail, the bar, the sidebars, the palette and the pages read it. The
+comparison vendor's models (`owned_by` typesafe, Jev) are in no picker. Another
+maker's models are paid from the prepaid balance on any plan: a host that sets
+`Host.topUp` gets `useMind`/`useFunds` reading `GET /v1/billing/balance`, so on
+Free they are selectable with a balance and say Top up without one, and a top-up
+returns to the page with `?model=`; Hanzo's own models follow the plan.
 
 **New.** "What's up next?", and at the foot the composer: where the run runs
 (Cloud is the platform's sandbox with the codebase's environment; the org's

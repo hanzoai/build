@@ -74,6 +74,8 @@ export interface Draft {
   period: Period
   /** Sent on create only: an https link or a data URL. */
   avatar: string
+  /** Sent on create only, and only when there is no avatar: one emoji. */
+  emoji?: string
   executionMode?: Mode
   schedule?: string
   triggers?: Trigger[]
@@ -306,6 +308,7 @@ export async function create(t: Target, d: Draft): Promise<Agent> {
   }
   if (d.model) body.model = d.model
   if (d.avatar) body.avatar = d.avatar
+  else if (d.emoji) body.emoji = d.emoji
   if (d.executionMode) body.executionMode = d.executionMode
   if (d.schedule?.trim()) body.schedule = d.schedule.trim()
   if (d.triggers?.length) body.triggers = d.triggers

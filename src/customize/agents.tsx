@@ -30,7 +30,9 @@ import { agents, ALL, CAST_CAP, CAST_TASK, create, draft, EMPTY, one, PERIODS, p
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useHost, useTarget } from '../host.tsx'
+import { useFunds } from '../mind.ts'
 import { path } from '../route.ts'
+import { Drafted } from './drafted.tsx'
 import { Inventory, Traits } from './inventory.tsx'
 import { useLoad } from './load.ts'
 import { keep, kept, nature, score, type Answers, type Form } from './ocean.ts'
@@ -209,6 +211,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
     )
     return (
       <YStack gap="$3">
+        {signed && !botsMode ? <Drafted onMade={opened} /> : null}
         {signed ? (
           <XStack gap="$2" flexWrap="wrap">
             <Button size="sm" variant="outline" onPress={() => onAdding(true)}>
@@ -721,9 +724,11 @@ function Editor({
   onDeleted?: () => void
 }) {
   const { t } = useI18n()
+  const host = useHost()
   const target = useTarget()
   const full = useLoad(agent ? () => one(target, agent.id || agent.name) : null, null as Agent | null, [target, agent?.id])
   const catalog = useLoad(() => models(target), [] as Model[], [target])
+  const funds = useFunds(target, host.topUp)
   const on = useLoad(() => tools(target, { activated: true }), [] as Tool[], [target])
   const [d, setD] = useState<Draft>(() =>
     defaultBot
@@ -790,7 +795,10 @@ function Editor({
                 name={t('Model')}
                 placeholder={t('The deployment’s default')}
                 models={catalog.value}
-                scope="chat"
+                scope="agent"
+                funded={funds.funded}
+                balance={funds.balance}
+                onTopUp={funds.topUp}
                 value={d.model || undefined}
                 onChange={(id) => set({ model: id })}
                 loading={catalog.loading}
