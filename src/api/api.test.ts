@@ -206,6 +206,50 @@ describe('github', () => {
     ])
   })
 
+  it('narrows the list to the accounts the organization added, each named once and listed before its repositories are', async () => {
+    let installs: unknown = {
+      installations: [
+        { login: 'HanzoAI', type: 'Organization', grant: 'all', connected: true },
+        { login: 'acme-labs', type: 'Organization', grant: 'all', connected: true },
+        // Installed, but in another workspace: a super admin is shown it, unconnected.
+        { login: 'hanzo-js', type: 'Organization', grant: 'all', connected: false },
+      ],
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const path = new URL(url).pathname
+        if (path === '/v1/provider/github/installations' && installs === null) return new Response('{}', { status: 502 })
+        const body =
+          path === '/v1/provider/github/repos'
+            ? {
+                repos: [
+                  { owner: 'hanzoai', name: 'cloud', full_name: 'hanzoai/cloud' },
+                  { owner: 'hanzo-js', name: 'sdk', full_name: 'hanzo-js/sdk' },
+                  { owner: 'Darkhorse7stars', name: 'notes', full_name: 'Darkhorse7stars/notes' },
+                ],
+                next: '',
+                unread: ['hanzo-js', 'acme-labs'],
+                connected: true,
+              }
+            : path === '/v1/provider/github/installations'
+              ? installs
+              : {}
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+      }),
+    )
+    const page = await github.added(T)
+    expect(page.repos.map((r) => r.fullName)).toEqual(['hanzoai/cloud'])
+    expect(page.unread).toEqual(['acme-labs'])
+    expect(github.accounts(page)).toEqual([
+      { name: 'acme-labs', count: 0, blocked: true },
+      { name: 'hanzoai', count: 1, blocked: false },
+    ])
+    // The organization's accounts unreadable: the person's list as it is.
+    installs = null
+    expect((await github.added(T)).repos).toHaveLength(3)
+  })
+
   it('queues a mirror by owner and name, and says the name each takes on the forge', async () => {
     const seen = answer(202, { queued: 2, repos: ['hanzoai/cloud', 'hanzoai/ai'], codebases: ['hanzoai_cloud', 'hanzoai_ai'] })
     expect(await github.bring(T, ['hanzoai/cloud', ' hanzoai/ai '])).toEqual({ queued: 2, codebases: { 'hanzoai/cloud': 'hanzoai_cloud', 'hanzoai/ai': 'hanzoai_ai' } })
