@@ -1,7 +1,9 @@
 /**
  * Bring repositories the GitHub connection already grants onto the forge.
  *
- * The list is GET /v1/provider/github/repos. The queue is POST
+ * The list is GET /v1/provider/github/repos, narrowed to the accounts this
+ * organization added (github.ts `added`): those are the only ones the import
+ * brings repositories in through. The queue is POST
  * /v1/provider/github/repos/import, which mirrors `owner/name` into this
  * organization's forge in the background. An account named unread and holding
  * no repositories is shown as needing an organization admin. One repository
@@ -18,7 +20,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { here, useBack } from './back.ts'
 import { Refusal } from './api/call.ts'
-import { accounts, bring, grants, type Grant, type Grants } from './api/github.ts'
+import { accounts, added, bring, grants, type Grant, type Grants } from './api/github.ts'
 import { authorize } from './api/provider.ts'
 import { pinHub, readPending, writePending, type Pending } from './choice.ts'
 import { useRead } from './data.ts'
@@ -41,7 +43,7 @@ export function Sync() {
   const [error, setError] = useState('')
   // The import was refused because this organization holds no GitHub account of its own (the list is the person's).
   const [unbound, setUnbound] = useState(false)
-  const list = useRead(signed ? () => grants(target) : null, EMPTY, [target, signed])
+  const list = useRead(signed ? () => added(target) : null, EMPTY, [target, signed])
   const rows = list.value.repos
   const orgs = useMemo(() => accounts(list.value), [list.value])
   const needle = q.trim().toLowerCase()
@@ -175,7 +177,8 @@ export function Sync() {
               </YStack>
               <Panel>
                 <Input value={q} onChangeText={setQ} placeholder={t('Search organizations')} aria-label={t('Search organizations')} disabled={!signed} />
-                {signed ? (
+                {/* No count while the first read is out: "0 organizations" then is not what this organization has. */}
+                {signed && !(list.loading && orgs.length === 0) ? (
                   <SizableText size="$1" color="$soft">
                     {orgs.length === 1 ? t('1 organization') : t('{n} organizations', { n: orgs.length })}
                   </SizableText>
@@ -185,8 +188,12 @@ export function Sync() {
                   <Soft>{t('Sign in to choose repositories the GitHub connection can read.')}</Soft>
                 ) : list.loading && rows.length === 0 && orgs.length === 0 ? (
                   <Soft>{t('Reading the connection…')}</Soft>
-                ) : shownOrgs.length === 0 ? (
-                  <Soft>{orgs.length === 0 ? t('No organizations on this connection yet.') : t('Nothing matches.')}</Soft>
+                ) : list.error && orgs.length === 0 ? null : shownOrgs.length === 0 ? (
+                  <Soft>
+                    {orgs.length === 0
+                      ? t('No GitHub account is added to {place} yet. Add organization installs the Hanzo app on one.', { place: dest })
+                      : t('Nothing matches.')}
+                  </Soft>
                 ) : (
                   shownOrgs.map((a) => (
                     <XStack

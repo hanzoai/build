@@ -7,7 +7,7 @@
  *   POST /v1/provider/github/user/connect      {return} → {authorizeUrl}
  *   POST /v1/provider/github/user/complete     {grant} → the connection
  *   POST /v1/provider/github/user/disconnect
- *   GET  /v1/provider/github/installations     the accounts this org has bound the App on
+ *   GET  /v1/provider/github/installations     the accounts this org has bound the App on (`added` narrows to them)
  *   POST /v1/provider/github/issues/backfill   {state, repo?} → mirror GitHub issues onto the board
  *
  * Paged by an opaque `after` cursor; `next` is the cursor for the page after
@@ -256,6 +256,8 @@ export interface Grants {
   repos: Grant[]
   /** Accounts the connection could not read. */
   unread: string[]
+  /** The accounts the organization added (`added`), each listed even before any of its repositories is. */
+  added?: string[]
 }
 
 export interface Account {
@@ -289,7 +291,7 @@ export function grant(raw: unknown): Grant | null {
   }
 }
 
-/** Accounts the grant names, plus any account that could not be read. */
+/** Accounts the grant names, plus any account that could not be read or that the organization added. */
 export function accounts(g: Grants): Account[] {
   const counts = new Map<string, number>()
   for (const r of g.repos) {
@@ -298,6 +300,13 @@ export function accounts(g: Grants): Account[] {
   }
   const unread = new Set(g.unread.filter(Boolean))
   const names = new Set<string>([...counts.keys(), ...unread])
+  // GitHub's logins are case-blind: an added account is named once, as its repositories spell it.
+  const seen = new Set([...names].map((n) => n.toLowerCase()))
+  for (const n of g.added ?? []) {
+    if (!n || seen.has(n.toLowerCase())) continue
+    names.add(n)
+    seen.add(n.toLowerCase())
+  }
   return [...names]
     .sort((a, b) => a.localeCompare(b))
     .map((name) => {
@@ -347,6 +356,23 @@ export async function grants(t: Target, signal?: AbortSignal): Promise<Grants> {
       }),
     unread: unread.filter(Boolean),
   }
+}
+
+/**
+ * The repositories this organization can bring in: `grants`, narrowed to the
+ * accounts the organization has added (`installations`, `connected`). The list
+ * is the person's own GitHub, which reaches accounts another Hanzo workspace
+ * added; the import goes through this organization's own, so it refuses every
+ * repository of those. With the organization's accounts unreadable, `grants` as
+ * it is: the import still says which it refuses.
+ */
+export async function added(t: Target, signal?: AbortSignal): Promise<Grants> {
+  const [g, mine] = await Promise.all([grants(t, signal), installations(t).catch(() => null)])
+  if (!mine) return g
+  const logins = mine.filter((i) => i.connected).map((i) => i.login)
+  const held = new Set(logins.map((l) => l.toLowerCase()))
+  const ours = (name: string) => held.has(name.toLowerCase())
+  return { repos: g.repos.filter((r) => ours(r.owner)), unread: g.unread.filter(ours), added: logins }
 }
 
 /** What an import queued: how many, and the name each takes on the forge, by `owner/name`. */
