@@ -188,6 +188,10 @@ describe('plugins', () => {
     seen = answer(200, { plugins: [{ name: 'tools', enabled: true, prefixes: ['/v1/tool'] }] })
     expect(await plugins.mounted(T)).toEqual([{ name: 'tools', enabled: true, prefixes: ['/v1/tool'] }])
     expect(seen[0].url).toBe('https://api.hanzo.ai/v1/tool/plugins')
+    seen = answer(200, { plugins: [{ name: 'tool', enabled: true, prefixes: ['/v1/tool'] }] })
+    const full = await plugins.mounted(T)
+    expect(full.length).toBeGreaterThanOrEqual(plugins.BUILTIN_MOUNTS.length)
+    expect(full.map((m) => m.name)).toContain('agent')
   })
 
   it('builds from source or from a spec, never both', async () => {
@@ -198,6 +202,7 @@ describe('plugins', () => {
     seen = answer(201, { bytes: 10, generated: true, plugin: { id: 'p2', name: 'acme' } })
     await plugins.build(T, { name: 'acme', provider: 'acme', source: '', spec: 'POST /v1/things creates a thing' })
     expect(seen[0].body).toEqual({ name: 'acme', provider: 'acme', spec: 'POST /v1/things creates a thing' })
+    expect(plugins.synthesizeSource('bestpluginever', '', 'build a bot to post 26x a week')).toContain('export const bestpluginever = createPiece(')
     await expect(plugins.build(T, { name: 'acme', provider: '', source: 'a', spec: 'b' })).rejects.toThrow(/one of the two/)
     await expect(plugins.build(T, { name: 'Acme', provider: '', source: 'a', spec: '' })).rejects.toThrow(/one lowercase word/)
   })
