@@ -12,7 +12,7 @@
  * picked for the screen it was picked on (`usePick`) and never kept, so the next
  * conversation or run opens on what was kept, Enso until something else is.
  *
- * The efforts are Auto, High, XHigh and Max, Chat's words (Hanzo's
+ * The efforts are Auto, High and Max, Chat's words (Hanzo's
  * ThinkingEffort), Auto until another is chosen. A coding run takes low, medium
  * or high (apps/coding `efforts`), so `level` is what a run names: medium for
  * Auto, what a run took before anyone chose, and high for the rest, the most it
@@ -30,10 +30,10 @@ import { Refusal, type Target } from './api/call.ts'
 import { ENSO, models as read, type Model } from './api/models.ts'
 import { usePick } from './pick.ts'
 
-export type Effort = 'auto' | 'high' | 'xhigh' | 'max'
+export type Effort = 'auto' | 'high' | 'max'
 
 /** The efforts a Dev run offers, in order: the composer's own list (Chat offers every one), less Low and Medium. Marked English, drawn through `t`. */
-export const EFFORTS = EVERY.filter((e): e is (typeof EVERY)[number] & { id: Effort } => ['auto', 'high', 'xhigh', 'max'].includes(e.id))
+export const EFFORTS = EVERY.filter((e): e is (typeof EVERY)[number] & { id: Effort } => ['auto', 'high', 'max'].includes(e.id))
 
 /** The effort a coding run names (apps/coding takes low, medium or high): medium for Auto, high for the rest. */
 export const level = (effort: Effort): 'medium' | 'high' => (effort === 'auto' ? 'medium' : 'high')
@@ -52,7 +52,8 @@ export const isFree = (plan: string | null | undefined): boolean => plan === 'fr
 const KEY = 'hanzo.mind'
 const CHANGE = 'hanzo:mind'
 
-const effortOf = (v: unknown): Effort => (EFFORTS.some((e) => e.id === v) ? (v as Effort) : FIRST.effort)
+/** An effort kept, read back: one the ladder still offers, XHigh (which Max replaced) as Max, else Auto. */
+const effortOf = (v: unknown): Effort => (v === 'xhigh' ? 'max' : EFFORTS.some((e) => e.id === v) ? (v as Effort) : FIRST.effort)
 
 /** The store, or null where the browser gives none (a server render, blocked site data). */
 function store(): Storage | null {
@@ -294,15 +295,31 @@ function useBalance(t: Target, on: boolean): number | null {
   return cents
 }
 
+/** What a picker needs to sell another maker's models from the balance: whether it can pay, what it holds, and the way to top it up. */
+export interface Funds {
+  /** The balance in cents; null until read, and where it could not be. */
+  cents: number | null
+  funded?: (id: string) => boolean
+  balance?: string
+  topUp?: (id?: string) => void
+}
+
+/** The prepaid balance for a picker, where the host offers a top-up (`Host.topUp`); with none, no funds are claimed. */
+export function useFunds(t: Target, topUp?: (id?: string) => void): Funds {
+  const cents = useBalance(t, topUp !== undefined)
+  if (topUp === undefined || cents === null) return { cents }
+  return { cents, funded: (_id: string): boolean => cents > 0, balance: dollars(cents), topUp }
+}
+
 /** The model a top-up returned to, named in the address (`?model=`); read once, and left out of the address. */
 function returned(): string {
-  if (typeof window === 'undefined') return ''
+  if (typeof window === 'undefined' || !window.location) return ''
   const url = new URL(window.location.href)
   return url.searchParams.get('model') ?? ''
 }
 
 function settleReturn(): void {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || !window.location) return
   const url = new URL(window.location.href)
   if (!url.searchParams.has('model')) return
   url.searchParams.delete('model')
@@ -319,9 +336,9 @@ export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) =
   const { models, list, loading, error, note } = useCatalog(t)
   const free = isFree(plan)
   const [picked, pick] = usePick(choice.model, (id) => change({ model: id }), list)
-  const cents = useBalance(t, topUp !== undefined)
   // Another maker's model is paid from the balance on any plan; Hanzo's own follow the plan.
-  const funded = topUp !== undefined && cents !== null ? (_id: string): boolean => cents > 0 : undefined
+  const funds = useFunds(t, topUp)
+  const cents = funds.cents
   const may = (id: string): boolean => sendable(free, models, cents, id)
   const model = may(picked) ? picked : ENSO
   // A top-up returns to this address with the model it was for: pick it once the balance can pay.
@@ -345,6 +362,6 @@ export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) =
       if (may(id)) pick(id)
     },
     pace: (effort) => change({ effort }),
-    ...(funded && topUp ? { funded, balance: dollars(cents!), topUp } : {}),
+    ...(funds.funded ? { funded: funds.funded, balance: funds.balance!, topUp: funds.topUp! } : {}),
   }
 }

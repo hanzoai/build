@@ -119,7 +119,7 @@ One of each, shared with Chat (@hanzo/rooms imports them):
 
 - `useMind` — the model and effort: `GET /v1/models` read once per platform,
   and the choice kept in this browser (`hanzo.mind`, Enso and Auto until
-  changed). The composer's row changes it: the effort (Auto, High, XHigh,
+  changed). The composer's row changes it: the effort (Auto, High,
   Max) always, the model chip only where the person turned the model selector
   on (Settings → Appearance, `@hanzo/appearance` `composing`). Settings → Code
   writes the same choice. `@hanzo/build/mind` serves the store alone, without
@@ -381,7 +381,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 `enso-auto`, never left out — and `issue`, the number a run started from an
 issue closes; the platform honours them where it does and nothing here
 simulates them. A run takes `low`, `medium` or `high`, so Auto names `medium`
-and High, XHigh and Max name `high` (`level`).
+and High and Max name `high` (`level`).
 
 ## Layout
 

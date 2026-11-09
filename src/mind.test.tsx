@@ -47,10 +47,10 @@ describe('the kept choice', () => {
   it('is kept under one key for Chat and Dev, and the change is announced', () => {
     const { items, heard } = browser()
     keep({ model: 'zen6' })
-    keep({ effort: 'xhigh' })
-    expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'xhigh' })
+    keep({ effort: 'max' })
+    expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'max' })
     expect(heard).toEqual(['hanzo:mind', 'hanzo:mind'])
-    expect(kept()).toEqual({ model: 'zen6', effort: 'xhigh' })
+    expect(kept()).toEqual({ model: 'zen6', effort: 'max' })
   })
 
   it('reads what another tab kept', () => {
@@ -95,12 +95,12 @@ describe('the kept choice', () => {
     expect(kept()).toEqual({ model: 'zen6', effort: 'auto' })
   })
 
-  it('offers Auto, High, XHigh and Max, in that order, and nothing else', () => {
-    expect(EFFORTS.map((e) => e.label)).toEqual(['Auto', 'High', 'XHigh', 'Max'])
+  it('offers Auto, High and Max, in that order, and nothing else', () => {
+    expect(EFFORTS.map((e) => e.label)).toEqual(['Auto', 'High', 'Max'])
   })
 
   it('names to a coding run only an effort it takes: medium for Auto, high for the rest', () => {
-    expect(EFFORTS.map((e) => level(e.id))).toEqual(['medium', 'high', 'high', 'high'])
+    expect(EFFORTS.map((e) => level(e.id))).toEqual(['medium', 'high', 'high'])
   })
 })
 
