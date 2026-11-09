@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Target } from './api/call.ts'
 import { ENSO } from './api/models.ts'
-import { catalog, EFFORTS, FIRST, grants, keep, kept, level, nameOf, useMind } from './mind.ts'
+import { catalog, EFFORTS, FIRST, grants, keep, kept, level, nameOf, sendable, useMind } from './mind.ts'
 
 /** A browser's storage and events, enough for the store: what was written, and who heard. */
 function browser(seed: Record<string, string> = {}) {
@@ -47,10 +47,10 @@ describe('the kept choice', () => {
   it('is kept under one key for Chat and Dev, and the change is announced', () => {
     const { items, heard } = browser()
     keep({ model: 'zen6' })
-    keep({ effort: 'xhigh' })
-    expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'xhigh' })
+    keep({ effort: 'max' })
+    expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'max' })
     expect(heard).toEqual(['hanzo:mind', 'hanzo:mind'])
-    expect(kept()).toEqual({ model: 'zen6', effort: 'xhigh' })
+    expect(kept()).toEqual({ model: 'zen6', effort: 'max' })
   })
 
   it('reads what another tab kept', () => {
@@ -95,12 +95,12 @@ describe('the kept choice', () => {
     expect(kept()).toEqual({ model: 'zen6', effort: 'auto' })
   })
 
-  it('offers Auto, High, XHigh and Max, in that order, and nothing else', () => {
-    expect(EFFORTS.map((e) => e.label)).toEqual(['Auto', 'High', 'XHigh', 'Max'])
+  it('offers Auto, High and Max, in that order, and nothing else', () => {
+    expect(EFFORTS.map((e) => e.label)).toEqual(['Auto', 'High', 'Max'])
   })
 
   it('names to a coding run only an effort it takes: medium for Auto, high for the rest', () => {
-    expect(EFFORTS.map((e) => level(e.id))).toEqual(['medium', 'high', 'high', 'high'])
+    expect(EFFORTS.map((e) => level(e.id))).toEqual(['medium', 'high', 'high'])
   })
 })
 
@@ -166,5 +166,25 @@ describe('the Free plan', () => {
     expect(seen).toMatchObject({ model: ENSO, free: true })
     seen!.pick('opus')
     expect(JSON.parse(items.get('hanzo.mind')!).model).toBe('zen6')
+  })
+})
+
+describe('another maker’s model on Free', () => {
+  const models = [...CATALOG, { id: 'openai/gpt-6-sol', name: 'GPT-6 Sol', class: 'premium' as const }]
+
+  it('is paid from the balance on any plan: sendable with a balance, not without', () => {
+    expect(sendable(true, models, 1240, 'openai/gpt-6-sol')).toBe(true)
+    expect(sendable(true, models, 0, 'openai/gpt-6-sol')).toBe(false)
+    expect(sendable(true, models, null, 'openai/gpt-6-sol')).toBe(false)
+  })
+
+  it('leaves Hanzo’s own models to the plan, balance or none', () => {
+    expect(sendable(true, models, 1240, 'zen6')).toBe(false)
+    expect(sendable(true, models, 1240, ENSO)).toBe(true)
+    expect(sendable(false, models, null, 'zen6')).toBe(true)
+  })
+
+  it('does not know a model the catalog does not list as another maker’s', () => {
+    expect(sendable(true, models, 1240, 'nobody/unknown')).toBe(false)
   })
 })

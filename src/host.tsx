@@ -98,6 +98,13 @@ export interface Host {
   }
   /** Open a host address in this window. hanzo.build keeps the window on its own origin. */
   open: (href: string) => void
+  /**
+   * Take the person to top the prepaid balance up, returning to this page with the
+   * model they chose (`?model=`) once paid. Another maker's models are paid from the
+   * balance on any plan, so a host that offers a top-up has them selectable on Free.
+   * Absent, they follow the plan as before.
+   */
+  topUp?: (model?: string) => void
   signIn?: () => void
   signOut?: () => void
   /** A page tab's remote address, shown by the host (Hanzo Desktop: a native webview). Absent, a browser frames what it may. */

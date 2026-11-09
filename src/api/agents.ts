@@ -74,6 +74,8 @@ export interface Draft {
   period: Period
   /** Sent on create only: an https link or a data URL. */
   avatar: string
+  /** Sent on create only, and only when there is no avatar: one emoji. */
+  emoji?: string
   executionMode?: Mode
   schedule?: string
   triggers?: Trigger[]
@@ -285,10 +287,10 @@ export async function use(
   })
 }
 
-/** Anyone as a template: their name, who they are, and writing of theirs to take the voice from. */
-export function person(name: string, about: string, writing: string, avatar = ''): Cast {
+/** Anyone as a template: their name, who they are, how they think and write (ocean.ts `nature`), and writing of theirs to take the voice from. */
+export function person(name: string, about: string, writing: string, avatar = '', nature = ''): Cast {
   const who = name.trim()
-  const lines = [`You are ${who}.`, about.trim(), writing.trim() && `Writing by ${who}:\n\n${writing.trim()}`]
+  const lines = [`You are ${who}.`, about.trim(), nature, writing.trim() && `Writing by ${who}:\n\n${writing.trim()}`]
   return { name: who, title: who, description: about.trim(), category: phrase('Person'), model: '', instructions: lines.filter(Boolean).join('\n\n'), avatar }
 }
 
@@ -306,6 +308,7 @@ export async function create(t: Target, d: Draft): Promise<Agent> {
   }
   if (d.model) body.model = d.model
   if (d.avatar) body.avatar = d.avatar
+  else if (d.emoji) body.emoji = d.emoji
   if (d.executionMode) body.executionMode = d.executionMode
   if (d.schedule?.trim()) body.schedule = d.schedule.trim()
   if (d.triggers?.length) body.triggers = d.triggers

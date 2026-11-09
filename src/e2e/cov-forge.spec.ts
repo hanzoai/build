@@ -51,6 +51,8 @@ interface World extends Holds {
   subs: Record<string, unknown>[]
   /** The person's own GitHub connection; none is a deployment that cannot connect. */
   github?: Record<string, unknown>
+  /** The GitHub accounts the org added (GET /v1/provider/github/installations); none is the stubs' acme alone. */
+  installed?: string[]
 }
 
 /** The forge's platform, holding `world` and changing it on every write. */
@@ -154,6 +156,9 @@ async function forge(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kep
     if (path === '/v1/provider/github/repos') return { json: { repos: world.grants.map((g) => granted(...owned(g), { private: g.private === true })), next: '', total: world.grants.length, unread: world.unread, connected: true } }
     if (path === '/v1/sync') return { json: { data: world.grants.filter((g) => g.imported).map((g) => linked(...owned(g), owned(g)[1], String(g.syncStatus ?? 'synced'))) } }
     if (path === '/v1/provider/github/connect') return { json: { authorizeUrl: 'https://github.com/apps/hanzo/installations/new?state=signed' } }
+    if (path === '/v1/provider/github/installations' && world.installed) {
+      return { json: { installations: world.installed.map((login) => ({ login, type: 'Organization', grant: 'all', connected: true })) } }
+    }
     if (path === '/v1/provider/github/user' && world.github) return { json: world.github }
     if (path === '/v1/provider/github/issues/backfill') {
       if (world.github?.connected === false) return refused(409, 'github is not connected for this organization')
@@ -759,11 +764,14 @@ test.describe('Sync', () => {
     { name: 'dotfiles', fullName: 'dave-gh/dotfiles' },
   ]
   const looks = (sent: Sent[]) => sent.filter((s) => s.path === '/v1/provider/github/repos').length
+  /** The forge for an organization that added acme, its own GitHub account, unless `seed` says which it added. */
+  const sync = (page: Page, seed: Partial<World> = {}, who?: Who) => forge(page, { installed: [ORG], ...seed }, who)
 
   test('an organization’s repositories are chosen, reviewed and queued, and it goes back once they land', async ({ page, baseURL }, info) => {
-    const { sent, world } = await forge(page, {
+    const { sent, world } = await sync(page, {
       grants: GRANTS(),
       unread: [`${ORG}-labs`, ORG],
+      installed: [ORG, `${ORG}-labs`, 'dave-gh'],
       holds: { 'GET /v1/provider/github/repos': [{}, { status: 500 }] },
     })
     // Queued earlier in this tab and still on its way: queuing more keeps it.
@@ -843,7 +851,7 @@ test.describe('Sync', () => {
 
   test('a look that answers after Sync is left does not move the page', async ({ page, baseURL }) => {
     // The first look after the queue is held, and answers "landed" once the page has moved on.
-    const { sent, world } = await forge(page, { grants: [{ name: 'widgets', fullName: `${ORG}/widgets` }], holds: { 'GET /v1/provider/github/repos': [{}, { wait: 4000 }] } })
+    const { sent, world } = await sync(page, { grants: [{ name: 'widgets', fullName: `${ORG}/widgets` }], holds: { 'GET /v1/provider/github/repos': [{}, { wait: 4000 }] } })
     await page.goto('/-/sync')
     await page.getByRole('button', { name: `Open ${ORG}` }).click()
     await page.getByRole('button', { name: 'Select widgets' }).click()
@@ -860,7 +868,7 @@ test.describe('Sync', () => {
   })
 
   test('an organization with no GitHub account of its own is told why a repository cannot come in, and is offered the install', async ({ page }) => {
-    const { sent } = await forge(page, {
+    const { sent } = await sync(page, {
       grants: GRANTS(),
       holds: { 'POST /v1/provider/github/repos/import': [{ status: 409, detail: 'github is not connected for this organization' }] },
     })
@@ -879,7 +887,7 @@ test.describe('Sync', () => {
   })
 
   test('what the platform refuses is said: a queue and a GitHub connection; a granted one goes to GitHub', async ({ page, baseURL }) => {
-    const { sent } = await forge(page, {
+    const { sent } = await sync(page, {
       grants: GRANTS(),
       holds: {
         'POST /v1/provider/github/repos/import': [{ status: 403, detail: 'Only an org admin brings repositories in' }],
@@ -910,7 +918,7 @@ test.describe('Sync', () => {
   })
 
   test('an install answering somewhere other than GitHub is not followed, and a member is told an admin installs it', async ({ page }) => {
-    await forge(page, { grants: GRANTS() })
+    await sync(page, { grants: GRANTS() })
     await page.route('**/v1/provider/github/connect', (r) => r.fulfill({ json: { authorizeUrl: 'https://evil.test/grant' } }))
     await page.goto('/-/sync')
     await page.getByRole('button', { name: 'Add organization' }).click()
@@ -918,7 +926,7 @@ test.describe('Sync', () => {
   })
 
   test('a member is told an organization admin installs the App, and nothing is asked of the platform', async ({ page }) => {
-    const { sent } = await forge(page, { grants: GRANTS() }, MEMBER)
+    const { sent } = await sync(page, { grants: GRANTS() }, MEMBER)
     await page.goto('/-/sync')
     await page.getByRole('button', { name: 'Add organization' }).click()
     await expect(page.getByText('An organization admin installs the GitHub App on another account.')).toBeVisible()
@@ -926,36 +934,63 @@ test.describe('Sync', () => {
   })
 
   test('coming back from the App’s install says what was connected and reads the list again', async ({ page }) => {
-    const { sent } = await forge(page, { grants: GRANTS() })
+    const { sent } = await sync(page, { grants: GRANTS() })
     await page.goto(`/-/sync?connected=github&account=${ORG}-labs`)
     await expect(page.getByText(`GitHub is connected as ${ORG}-labs`)).toBeVisible()
     await expect(page).toHaveURL(/\/-\/sync$/)
     await expect.poll(() => sent.filter((s) => s.path === '/v1/provider/github/repos').length).toBeGreaterThanOrEqual(2)
   })
 
-  test('says it is reading, why a read failed, and when the connection holds nothing', async ({ page }) => {
-    const { world } = await forge(page, { grants: [], slow: { 'GET /v1/provider/github/repos': 3000 } })
+  test('says it is reading, why a read failed, and when the organization has added no account', async ({ page }) => {
+    const { world } = await sync(page, { grants: [], installed: [], slow: { 'GET /v1/provider/github/repos': 3000 } })
     const again = async () => {
       await page.getByRole('button', { name: 'Back to projects' }).click()
       await own(page, 'Link a GitHub repo').first().click()
     }
     await page.goto('/-/sync')
     await expect(page.getByText('Reading the connection…')).toBeVisible()
-    await expect(page.getByText('No organizations on this connection yet.')).toBeVisible()
+    // While the first read is out there is no count: "0 organizations" then is not what the organization has.
+    await expect(page.getByText('0 organizations')).toHaveCount(0)
+    await expect(page.getByText(`No GitHub account is added to ${ORG} yet.`, { exact: false })).toBeVisible()
     await expect(page.getByText('0 organizations')).toBeVisible()
     world.slow = {}
     world.down['GET /v1/provider/github/repos'] = 'GitHub did not answer'
     await again()
     await expect(page.getByText('The GitHub connection could not be read right now.')).toBeVisible()
     await expect(page.getByText('GitHub did not answer')).toHaveCount(0)
+    // A read that failed says so, not that nothing was added.
+    await expect(page.getByText(`No GitHub account is added to ${ORG} yet.`, { exact: false })).toHaveCount(0)
     world.down = {}
+    world.installed = ['dave-gh']
     world.grants.push({ name: 'dotfiles', fullName: 'dave-gh/dotfiles' })
     await again()
     await expect(page.getByText('1 organization', { exact: true })).toBeVisible()
   })
 
+  test('only the accounts the organization added are offered, each even before its repositories are listed', async ({ page }) => {
+    // dave-gh is the person's own GitHub, which another workspace added: the import would refuse every repository of it.
+    const { world } = await sync(page, { grants: GRANTS(), installed: [ORG, `${ORG}-labs`] })
+    await page.goto('/-/sync')
+    await expect(page.getByText('2 organizations')).toBeVisible()
+    await expect(page.getByRole('button', { name: `Open ${ORG}` })).toBeVisible()
+    await expect(page.getByRole('button', { name: `Open ${ORG}-labs` })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open dave-gh' })).toHaveCount(0)
+    // GitHub's logins are case-blind: an account added as ACME is the acme the repositories name, listed once.
+    world.installed = [ORG.toUpperCase()]
+    await page.getByRole('button', { name: 'Back to projects' }).click()
+    await own(page, 'Link a GitHub repo').first().click()
+    await expect(page.getByText('1 organization', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: `Open ${ORG}` })).toBeVisible()
+    // The organization's accounts unreadable: the person's list as it is, and the import says which it refuses.
+    world.down['GET /v1/provider/github/installations'] = 'GitHub did not answer'
+    await page.getByRole('button', { name: 'Back to projects' }).click()
+    await own(page, 'Link a GitHub repo').first().click()
+    await expect(page.getByText('2 organizations')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Open dave-gh' })).toBeVisible()
+  })
+
   test('a member is asked in as a member', async ({ page }) => {
-    await forge(page, { grants: GRANTS() }, MEMBER)
+    await sync(page, { grants: GRANTS() }, MEMBER)
     await page.goto('/-/sync')
     await page.getByRole('button', { name: `Open ${ORG}` }).click()
     await page.getByRole('button', { name: 'Select widgets' }).click()
@@ -969,7 +1004,7 @@ test.describe('Sync', () => {
     [{ sub: 'solo/kim', orgs: [] }, 'You · You'],
   ] as [Who, string][]) {
     test(`someone in no organization, named by IAM as “${says}”, brings repositories to the forge`, async ({ page }) => {
-      await forge(page, { grants: [{ name: 'notes', fullName: 'sam/notes' }] }, who)
+      await sync(page, { grants: [{ name: 'notes', fullName: 'sam/notes' }], installed: ['sam'] }, who)
       await page.goto('/-/sync')
       await expect(page.getByText('Choose repositories to bring into Forge').first()).toBeVisible()
       await page.getByRole('button', { name: 'Open sam' }).click()

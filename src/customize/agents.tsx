@@ -30,8 +30,12 @@ import { agents, ALL, CAST_CAP, CAST_TASK, create, draft, EMPTY, one, PERIODS, p
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
 import { useHost, useTarget } from '../host.tsx'
+import { useFunds } from '../mind.ts'
 import { path } from '../route.ts'
+import { Drafted } from './drafted.tsx'
+import { Inventory, Traits } from './inventory.tsx'
 import { useLoad } from './load.ts'
+import { keep, kept, nature, score, type Answers, type Form } from './ocean.ts'
 import { say } from './say.ts'
 import { Add, Choice, Confirm, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
 
@@ -207,6 +211,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
     )
     return (
       <YStack gap="$3">
+        {signed && !botsMode ? <Drafted onMade={opened} /> : null}
         {signed ? (
           <XStack gap="$2" flexWrap="wrap">
             <Button size="sm" variant="outline" onPress={() => onAdding(true)}>
@@ -473,18 +478,36 @@ function Elect({
   )
 }
 
-/** Clone yourself, or anyone named: a name, who they are, and writing of theirs, pasted or uploaded. */
+/**
+ * Clone yourself, or anyone named: a name, who they are, and writing of theirs,
+ * pasted or uploaded. Yourself also takes the Big Five questionnaire, kept in
+ * this browser as it is answered; its result seeds the instructions, which are
+ * shown to edit before the agent is made.
+ */
 function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void; onMade: (a: Agent) => void }) {
   const { t } = useI18n()
   const host = useHost()
   const target = useTarget()
   const me = self ? host.person : null
+  const who = me?.email || me?.name || ''
   const [name, setName] = useState(me?.name ?? '')
   const [about, setAbout] = useState('')
   const [writing, setWriting] = useState('')
+  const [answers, setAnswers] = useState(() => kept(who))
+  const [taking, setTaking] = useState(false)
+  const [edited, setEdited] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
   const file = useRef<HTMLInputElement | null>(null)
+  const sheet = answers[answers.form]
+  const answered = sheet.filter(Boolean).length
+  const result = self && answered === sheet.length ? score(answers.form, sheet) : null
+  const cast = person(name, about, writing, me?.avatar, result ? nature(name.trim(), answers.form, result) : '')
+  const instructions = edited ?? cast.instructions
+  const answer = (a: Answers) => {
+    setAnswers(a)
+    keep(who, a)
+  }
   const read = async (files: FileList | null) => {
     const texts = await Promise.all([...(files ?? [])].map((f) => f.text()))
     setWriting((w) => [w.trim(), ...texts.map((x) => x.trim())].filter(Boolean).join('\n\n'))
@@ -493,50 +516,80 @@ function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void;
     setWorking(true)
     setNote('')
     try {
-      onMade(await use(target, person(name, about, writing, me?.avatar), window.location.href))
+      onMade(await use(target, { ...cast, instructions }, window.location.href))
     } catch (e) {
       setNote(say(e, t))
       setWorking(false)
     }
   }
   return (
-    <Sheet title={self ? t('Clone yourself') : t('Create from a person')} open onOpenChange={(o) => !o && onClose()}>
-      <Field label={t('Name')}>
-        <Input value={name} onChangeText={setName} aria-label={t('Name')} />
-      </Field>
-      <Field label={t('Description')}>
-        <Textarea value={about} onChangeText={setAbout} aria-label={t('Description')} rows={3} />
-      </Field>
-      <Field label={t('Writing')}>
-        <Textarea value={writing} onChangeText={setWriting} aria-label={t('Writing')} rows={6} />
-      </Field>
-      <XStack>
-        <Button size="sm" variant="ghost" onPress={() => file.current?.click()}>
-          <Upload size={14} /> {t('Upload')}
-        </Button>
-        <input
-          ref={file}
-          type="file"
-          multiple
-          accept=".txt,.md,.markdown,.csv,.json,.html,text/*"
-          hidden
-          aria-label={t('Upload writing')}
-          onChange={(e) => {
-            void read(e.currentTarget.files)
-            e.currentTarget.value = ''
-          }}
-        />
-      </XStack>
-      <Line>{note}</Line>
-      <XStack gap="$2" items="center">
-        <XStack flex={1} />
-        <Button size="sm" variant="ghost" onPress={onClose}>
-          {t('Cancel')}
-        </Button>
-        <Button size="sm" disabled={working || !name.trim()} onPress={() => void save()}>
-          {t('Create')}
-        </Button>
-      </XStack>
+    <Sheet title={self ? t('Clone yourself') : t('Create from a person')} open onOpenChange={(o) => !o && onClose()} full>
+      {taking ? (
+        <Inventory answers={answers} onChange={answer} onDone={() => setTaking(false)} />
+      ) : (
+        <>
+          <Field label={t('Name')}>
+            <Input value={name} onChangeText={setName} aria-label={t('Name')} />
+          </Field>
+          <Field label={t('Description')}>
+            <Textarea value={about} onChangeText={setAbout} aria-label={t('Description')} rows={3} />
+          </Field>
+          {self ? (
+            <Field label={t('Personality')}>
+              <YStack gap="$3">
+                <Choice
+                  label={t('Questionnaire')}
+                  value={answers.form}
+                  options={[
+                    { id: 'short', label: t('50 statements') },
+                    { id: 'long', label: t('120 statements') },
+                  ]}
+                  onChange={(form: Form) => answer({ ...answers, form })}
+                />
+                {result ? <Traits form={answers.form} score={result} /> : null}
+                <XStack>
+                  <Button size="sm" variant={result ? 'ghost' : 'outline'} onPress={() => setTaking(true)}>
+                    {result ? t('Change answers') : answered ? t('Resume, {n} of {total}', { n: answered, total: sheet.length }) : t('Start')}
+                  </Button>
+                </XStack>
+              </YStack>
+            </Field>
+          ) : null}
+          <Field label={t('Writing')}>
+            <Textarea value={writing} onChangeText={setWriting} aria-label={t('Writing')} rows={6} />
+          </Field>
+          <XStack>
+            <Button size="sm" variant="ghost" onPress={() => file.current?.click()}>
+              <Upload size={14} /> {t('Upload')}
+            </Button>
+            <input
+              ref={file}
+              type="file"
+              multiple
+              accept=".txt,.md,.markdown,.csv,.json,.html,text/*"
+              hidden
+              aria-label={t('Upload writing')}
+              onChange={(e) => {
+                void read(e.currentTarget.files)
+                e.currentTarget.value = ''
+              }}
+            />
+          </XStack>
+          <Field label={t('Instructions')}>
+            <Textarea value={instructions} onChangeText={setEdited} aria-label={t('Instructions')} rows={8} />
+          </Field>
+          <Line>{note}</Line>
+          <XStack gap="$2" items="center">
+            <XStack flex={1} />
+            <Button size="sm" variant="ghost" onPress={onClose}>
+              {t('Cancel')}
+            </Button>
+            <Button size="sm" disabled={working || !name.trim()} onPress={() => void save()}>
+              {t('Create')}
+            </Button>
+          </XStack>
+        </>
+      )}
     </Sheet>
   )
 }
@@ -671,9 +724,11 @@ function Editor({
   onDeleted?: () => void
 }) {
   const { t } = useI18n()
+  const host = useHost()
   const target = useTarget()
   const full = useLoad(agent ? () => one(target, agent.id || agent.name) : null, null as Agent | null, [target, agent?.id])
   const catalog = useLoad(() => models(target), [] as Model[], [target])
+  const funds = useFunds(target, host.topUp)
   const on = useLoad(() => tools(target, { activated: true }), [] as Tool[], [target])
   const [d, setD] = useState<Draft>(() =>
     defaultBot
@@ -740,7 +795,10 @@ function Editor({
                 name={t('Model')}
                 placeholder={t('The deployment’s default')}
                 models={catalog.value}
-                scope="chat"
+                scope="agent"
+                funded={funds.funded}
+                balance={funds.balance}
+                onTopUp={funds.topUp}
                 value={d.model || undefined}
                 onChange={(id) => set({ model: id })}
                 loading={catalog.loading}

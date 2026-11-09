@@ -9,12 +9,12 @@ import { call, type Target } from './call.ts'
 /** The quick model a plugin thinks with: planning a search, drafting a template. */
 export const QUICK = 'enso-flash'
 
-export async function ask(t: Target, system: string, user: string, signal?: AbortSignal, tokens = 800): Promise<string> {
+export async function ask(t: Target, system: string, user: string, signal?: AbortSignal, tokens = 800, model = QUICK): Promise<string> {
   const raw = await call<{ choices?: { message?: { content?: unknown } }[] }>(
     t,
     'POST',
     '/v1/chat/completions',
-    { model: QUICK, max_tokens: tokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
+    { model, max_tokens: tokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
     { signal },
   )
   const said = raw?.choices?.[0]?.message?.content

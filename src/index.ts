@@ -26,6 +26,8 @@ export { SOURCE, type Item, type Kind as ItemKind, type Source } from './api/lib
 export { Scheduled, schedule } from './scheduled.tsx'
 export { Editor } from './automations.tsx'
 export { library, nav, NEW, own, sections, tabs, useScheduled, type Group } from './nav.tsx'
+export { MARKS, type Icon, type Mark } from './marks.tsx'
+export { useFunds, type Funds } from './mind.ts'
 export { DevSection, DOTS, useSessions } from './section.tsx'
 export { HostProvider } from './host.tsx'
 export { Slack, useWho, Who } from './foot.tsx'

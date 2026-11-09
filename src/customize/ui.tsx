@@ -9,7 +9,7 @@
  * line or a label a tab hands them comes already said, since it may be a
  * name or a description that is drawn as given.
  */
-import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Check, Plus, X } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
@@ -186,17 +186,61 @@ export function Add({ name, added, busy, onPress, use = false }: { name: string;
   )
 }
 
-/** A dialog with a title, a close control and a body that scrolls inside the window. */
-export function Sheet({ title, open, onOpenChange, width = 560, children }: { title: string; open: boolean; onOpenChange: (o: boolean) => void; width?: number; children: ReactNode }) {
+/**
+ * A phone's whole screen, clear of the notch and the home bar: pinned to the
+ * viewport, since the `<dialog>` around it is inset by its padding and the
+ * page's scrollbar gutter, and out of @hanzo/ui's floating-card glass, which
+ * it draws on `[data-slot="dialog-content"]`.
+ */
+const SCREEN = {
+  'data-slot': 'dialog-screen',
+  position: 'fixed',
+  t: 0,
+  l: 0,
+  width: '100vw',
+  maxW: '100vw',
+  height: '100dvh',
+  maxH: '100dvh',
+  rounded: 0,
+  borderWidth: 0,
+  pt: 'max(16px, env(safe-area-inset-top))',
+  pr: 'max(16px, env(safe-area-inset-right))',
+  pb: 'max(16px, env(safe-area-inset-bottom))',
+  pl: 'max(16px, env(safe-area-inset-left))',
+} as const
+
+/**
+ * A dialog with a title, a close control and a body that scrolls inside the
+ * window; `full`, it is the whole screen on a phone. Opening a `<dialog>`
+ * focuses its first focusable element, so the dialog is that element
+ * (tabIndex -1, no ring): the close control wears the focus ring only once the
+ * keyboard moves to it.
+ */
+export function Sheet({ title, open, onOpenChange, width = 560, full = false, children }: { title: string; open: boolean; onOpenChange: (o: boolean) => void; width?: number; full?: boolean; children: ReactNode }) {
   const { t } = useI18n()
+  const screen = full && !useMedia().sm
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent maxW={width} showCloseButton={false} maxH="88vh" gap="$3">
+      <DialogContent maxW={width} showCloseButton={false} maxH="88vh" gap="$3" tabIndex={-1} focusVisibleStyle={{ outlineWidth: 0 }} {...(screen ? SCREEN : null)}>
         <XStack items="center" justify="space-between" gap="$2">
           <DialogTitle numberOfLines={1} flex={1}>
             {title}
           </DialogTitle>
-          <XStack render="button" aria-label={t('Close')} p="$1" onPress={() => onOpenChange(false)}>
+          <XStack
+            render="button"
+            aria-label={t('Close')}
+            onPress={() => onOpenChange(false)}
+            width={32}
+            height={32}
+            mr={-6}
+            rounded={999}
+            items="center"
+            justify="center"
+            shrink={0}
+            cursor="pointer"
+            hoverStyle={{ bg: '$hover' }}
+            $max-sm={{ width: 44, height: 44, mr: -12 }}
+          >
             <X size={16} />
           </XStack>
         </XStack>
