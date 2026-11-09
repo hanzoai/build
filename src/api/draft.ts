@@ -47,12 +47,19 @@ export function parse(said: string): Sketch | null {
   return { name, role: word(o.role), instructions, opening: word(o.opening), emoji: word(o.emoji).slice(0, 8), figure: word(o.figure) }
 }
 
-/** The line they typed, drafted. */
+/**
+ * The tokens a draft is allowed: Enso reasons before it answers, and under 4,000 the answer
+ * is cut off with nothing said (measured: 1,200 came back empty, 4,000 in full).
+ */
+export const ROOM = 4000
+
+/** The line they typed, drafted; asked a second time when the first answer was not one. */
 export async function sketch(t: Target, line: string, signal?: AbortSignal): Promise<Sketch> {
-  const said = await ask(t, SYSTEM, line.trim(), signal, 1200, ENSO)
-  const draft = parse(said)
-  if (!draft) throw new Error('The draft did not come out. Try again.')
-  return draft
+  for (let tried = 0; tried < 2; tried++) {
+    const draft = parse(await ask(t, SYSTEM, line.trim(), signal, ROOM, ENSO))
+    if (draft) return draft
+  }
+  throw new Error('The draft did not come out. Try again.')
 }
 
 /** The instructions as saved: what the model wrote, then the first line it says. */
