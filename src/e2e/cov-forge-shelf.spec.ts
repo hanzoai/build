@@ -61,7 +61,7 @@ async function shelf(page: Page, seed: Partial<World> = {}) {
   }
   const sent = await enter(page, held(world, answer))
   // Each starter's picture: synapse has none, the rest do.
-  await page.route('https://hanzo.ai/templates/**', (r) => (r.request().url().includes('synapse') ? r.fulfill({ status: 404 }) : r.fulfill({ body: PNG, contentType: 'image/webp' })))
+  await page.route(/\/(templates|screenshots)\/[^/]+\.webp$/, (r) => (r.request().url().includes('synapse') ? r.fulfill({ status: 404 }) : r.fulfill({ body: PNG, contentType: 'image/webp' })))
   return { sent, world }
 }
 

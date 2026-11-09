@@ -126,13 +126,35 @@ export function useCached<T>(key: string | null, load: (signal: AbortSignal) => 
   return { value, error, loading, reload }
 }
 
+/** Last coding runs read per `api\norg`, so mounting another rail or switching tabs starts warm. */
+const recentRuns = new Map<string, Session[]>()
+
 /**
  * The org's coding runs, newest first, kept current by the org's own session
  * stream: a status that moves moves its dot, and a run started anywhere appears.
  */
 export function useRecents(t: Target, signed: boolean): Read<Session[]> {
-  const read = useRead(signed ? () => list(t, { kind: 'coding', limit: 50 }) : null, [] as Session[], [t, signed])
-  const [rows, setRows] = useState<Session[]>([])
+  const scope = signed ? `${t.api}\n${t.org ?? ''}` : null
+  const warm = scope !== null ? recentRuns.get(scope) : undefined
+  const read = useRead(
+    signed
+      ? async () => {
+          const next = await list(t, { kind: 'coding', limit: 50 })
+          if (scope !== null) recentRuns.set(scope, next)
+          return next
+        }
+      : null,
+    warm ?? ([] as Session[]),
+    [t.api, t.org, signed],
+  )
+  const [settled, setSettled] = useState(warm !== undefined)
+  useEffect(() => {
+    setSettled(scope !== null && recentRuns.has(scope))
+  }, [scope])
+  useEffect(() => {
+    if (!read.loading) setSettled(true)
+  }, [read.loading])
+  const [rows, setRows] = useState<Session[]>(() => warm ?? read.value)
   useEffect(() => setRows(read.value), [read.value])
   const last = useRef(0)
   // useRead's reload is the same function every render, so it never reopens the feed.
@@ -157,7 +179,7 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
             const i = prev.findIndex((r) => r.id === s.id)
             if (i === -1) {
               // A run this list has not seen: re-read rather than guess its kind.
-              reload()
+              if (!s.kind || s.kind === 'coding') reload()
               return prev
             }
             const next = prev.slice()
@@ -174,7 +196,7 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
     })
     return () => ctl.abort()
   }, [t, signed, again])
-  return { ...read, value: rows }
+  return { ...read, value: rows, loading: read.loading && !settled }
 }
 
 export function usePlaces(t: Target, signed: boolean): Read<Place[]> {

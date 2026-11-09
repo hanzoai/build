@@ -20,7 +20,7 @@ import { useProjects, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { Out } from './out.tsx'
 
-const SHOTS = 'https://hanzo.ai/templates'
+const SHOTS = ['/templates', 'https://gallery.hanzo.ai/screenshots', 'https://hanzo.ai/templates'] as const
 
 function Head({ title, says }: { title: string; says: string }) {
   return (
@@ -306,7 +306,8 @@ export function Sites() {
  * anchored at its top edge, so nothing of the page's header is cropped away.
  */
 function Shot({ slug }: { slug: string }) {
-  const [gone, setGone] = useState(false)
+  const [step, setStep] = useState(0)
+  const base = SHOTS[step]
   return (
     <YStack width="100%" aspectRatio={16 / 10} bg="$hover" items="center" justify="center" position="relative" overflow="hidden">
       <YStack items="center" gap="$2" opacity={0.6}>
@@ -315,15 +316,15 @@ function Shot({ slug }: { slug: string }) {
           {slug}
         </SizableText>
       </YStack>
-      {gone ? null : (
+      {base ? (
         <img
-          src={`${SHOTS}/${encodeURIComponent(slug)}.webp`}
+          src={`${base}/${encodeURIComponent(slug)}.webp`}
           alt=""
           loading="lazy"
-          onError={() => setGone(true)}
+          onError={() => setStep((s) => s + 1)}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }}
         />
-      )}
+      ) : null}
     </YStack>
   )
 }
@@ -361,16 +362,14 @@ export function Templates() {
               <Card key={x.slug} label={say('Start from {template}', { template: x.title })} onPress={() => void take(x.slug)}>
                 <Shot slug={x.slug} />
                 <YStack p="$3" gap="$1">
-                  <XStack items="center" gap="$2">
-                    <SizableText size="$3" color="$ink" numberOfLines={1} flex={1}>
-                      {busy === x.slug ? say('Copying…') : x.title}
+                  <SizableText size="$3" color="$ink" numberOfLines={1}>
+                    {busy === x.slug ? say('Copying…') : x.title}
+                  </SizableText>
+                  {x.framework ? (
+                    <SizableText size="$1" color="$soft" numberOfLines={1}>
+                      {x.framework}
                     </SizableText>
-                    {x.framework ? (
-                      <SizableText size="$1" color="$soft">
-                        {x.framework}
-                      </SizableText>
-                    ) : null}
-                  </XStack>
+                  ) : null}
                   <SizableText size="$1" color="$soft" numberOfLines={2}>
                     {x.description}
                   </SizableText>
