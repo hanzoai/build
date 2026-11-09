@@ -25,7 +25,7 @@ import { EFFORTS as EVERY } from '@hanzo/ui/chat/pure'
 import { parseModels, thirdParty } from '@hanzo/ui/models/catalog'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
-import { balance as readBalance } from './api/billing.ts'
+import { prepaid as readPrepaid } from './api/billing.ts'
 import { Refusal, type Target } from './api/call.ts'
 import { ENSO, models as read, type Model } from './api/models.ts'
 import { usePick } from './pick.ts'
@@ -277,13 +277,13 @@ export interface Mind {
   topUp?: (id?: string) => void
 }
 
-/** The prepaid balance in cents for a signed-in target, read once; null until it is, and where it could not be read. */
+/** The prepaid balance in cents that can pay for another maker's models, for a signed-in target, read once; null until it is, and where the API does not say. */
 function useBalance(t: Target, on: boolean): number | null {
   const [cents, set] = useState<number | null>(null)
   useEffect(() => {
     if (!on || !t.token()) return
     let live = true
-    readBalance(t).then(
+    readPrepaid(t).then(
       (n) => live && set(n),
       () => live && set(null),
     )

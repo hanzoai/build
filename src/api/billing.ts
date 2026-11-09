@@ -389,6 +389,16 @@ export async function balance(t: Target): Promise<number> {
   return num(b.available ?? b.balance)
 }
 
+/**
+ * What can pay for another maker's models, whole cents: cash and the credit line, never
+ * granted credit (`GET /v1/billing/balance` `prepaid`). Null where the answer carries no
+ * such figure, so a caller does not assume it.
+ */
+export async function prepaid(t: Target): Promise<number | null> {
+  const b = obj(await call<unknown>(t, 'GET', '/v1/billing/balance'))
+  return typeof b.prepaid === 'number' && Number.isFinite(b.prepaid) ? b.prepaid : null
+}
+
 /** Granted credit the org can spend, in US cents. */
 export async function credit(t: Target): Promise<number> {
   const raw = obj(await call<unknown>(t, 'GET', '/v1/billing/credit-balance'))

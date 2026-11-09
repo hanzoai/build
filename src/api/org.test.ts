@@ -466,3 +466,21 @@ describe('webhooks', () => {
     expect(gone[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/webhook/wh_1' })
   })
 })
+
+describe('what pays for another maker’s models', () => {
+  it('is the prepaid figure of the balance, which never counts granted credit', async () => {
+    const seen = answer(200, { available: 5000, prepaid: 1240, credit: 3760 })
+    expect(await billing.prepaid(T)).toBe(1240)
+    expect(seen[0]!.url).toBe('https://api.hanzo.ai/v1/billing/balance')
+  })
+
+  it('is zero when the account holds credit and nothing prepaid', async () => {
+    answer(200, { available: 5000, prepaid: 0, credit: 5000 })
+    expect(await billing.prepaid(T)).toBe(0)
+  })
+
+  it('is not assumed where the answer carries no prepaid figure', async () => {
+    answer(200, { available: 5000 })
+    expect(await billing.prepaid(T)).toBeNull()
+  })
+})
