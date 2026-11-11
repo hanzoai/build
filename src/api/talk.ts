@@ -2,8 +2,9 @@
  * Dev's conversation, as the platform keeps it (apps/agents talk.go): one
  * session, every turn.
  *
- *   POST /v1/agent/turns {session?, input, model?, repo?, base?, target?, plan?, issue?}
+ *   POST /v1/agent/turns {session?, input, model?, effort?, repo?, base?, target?, mode?, issue?}
  *        → {sessionId, runId}
+ *   POST /v1/agent/sessions/{id}/answer {question, text, chosen}   answer what a turn asked
  *
  * The first thing said opens the conversation; everything said after continues
  * the SAME session under a new run, once its last turn has answered — what is said
@@ -11,15 +12,17 @@
  * agent answers, and decides for itself when a turn needs a sandbox (leased on its
  * first use, kept for the conversation) or a coding run (which carries on the
  * conversation's last, in its sandbox and on its branch). A turn that only talks
- * uses neither.
+ * uses neither, and a turn ends when its answer does: a build it started is
+ * followed after, and its outcome is said into the conversation when it ends.
  *
- * The repository, branch, machine, issue and Plan are what the person chose: a
- * coding run the agent starts works on them when it names none, and Plan makes it
- * a plan. Between turns the conversation's session rests `paused`.
+ * The repository, branch, machine and mode are kept on the conversation from the
+ * first message: every coding run its turns start works on them, auto starts it,
+ * manual asks first (a question answered here), plan only reads and plans. The
+ * model and effort ride each turn. Between turns the session rests `paused`.
  */
 import { phrase } from '@hanzo/i18n'
 
-import { call, Refusal, type Target } from './call.ts'
+import { call, Refusal, seg, type Target } from './call.ts'
 import type { Event, Session } from './sessions.ts'
 import { decode } from './turn.ts'
 
@@ -42,8 +45,10 @@ export interface Say {
   base?: string
   /** One of the org's machines. Absent is the sandbox. */
   target?: string
-  /** Every coding run the turn starts is a plan. */
-  plan?: boolean
+  /** How the conversation's coding runs go: on their own, asked for first, or plans only. */
+  mode?: 'auto' | 'manual' | 'plan'
+  /** How hard a coding run thinks: low, medium or high. */
+  effort?: string
   /** The issue on `repo` a coding run resolves. */
   issue?: number
 }
@@ -58,11 +63,10 @@ export interface Said {
 /** The request body: only what was said, with no empty values sent. */
 export function body(s: Say): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = { input: s.input.trim() }
-  for (const k of ['session', 'model', 'repo', 'base', 'target'] as const) {
+  for (const k of ['session', 'model', 'effort', 'repo', 'base', 'target', 'mode'] as const) {
     const v = s[k]?.trim()
     if (v) out[k] = v
   }
-  if (s.plan) out.plan = true
   if (s.issue && Number.isInteger(s.issue) && s.issue > 0) out.issue = s.issue
   return out
 }
@@ -76,15 +80,18 @@ export async function say(t: Target, s: Say): Promise<Said> {
   return { session, run: typeof r?.runId === 'string' ? r.runId : '' }
 }
 
-/** What a conversation's turn is doing now — its latest progress line — and the coding run it follows, if any. */
-export function now(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): { doing: string; run: string } {
+/** What a conversation's turn is doing now: its latest progress line, or ''. */
+export function now(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): string {
   let doing = ''
-  let run = ''
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     const b = decode(e.payload)
-    if (!b || typeof b === 'string') continue
-    if (e.kind === 'progress' && typeof b.activity === 'string') doing = b.activity
-    if (e.kind === 'spawn' && typeof b.session === 'string') run = b.session
+    if (e.kind === 'progress' && b && typeof b !== 'string' && typeof b.activity === 'string') doing = b.activity
   }
-  return { doing, run }
+  return doing
+}
+
+/** Answer a question a session's run asked: an option pressed, or the person's own words. */
+export async function answer(t: Target, session: string, question: string, text: string, chosen: boolean): Promise<void> {
+  if (!text.trim()) throw new Refusal(400, phrase('Say an answer'))
+  await call(t, 'POST', `/v1/agent/sessions/${seg(session)}/answer`, { question, text: text.trim(), chosen })
 }

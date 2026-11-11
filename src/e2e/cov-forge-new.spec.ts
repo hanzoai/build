@@ -151,7 +151,9 @@ test.describe('New', () => {
       repo: 'universe',
       base: 'dev',
       target: 'tgt_1',
+      mode: 'auto',
       model: 'zen5.8-coder',
+      effort: 'medium',
     })
     expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
   })
@@ -182,7 +184,7 @@ test.describe('New', () => {
     await expect(ask(page)).toHaveValue('Add a footer')
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
-    expect(posted(sent, '/v1/agent/turns')[1]?.body).toEqual({ input: 'Add a footer', repo: 'universe', base: 'main', model: 'enso-auto' })
+    expect(posted(sent, '/v1/agent/turns')[1]?.body).toEqual({ input: 'Add a footer', repo: 'universe', base: 'main', mode: 'auto', model: 'enso-auto', effort: 'medium' })
   })
 
   test('says when a codebase’s environment waits for review, or has none, above the composer', async ({ page, baseURL }, info) => {

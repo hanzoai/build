@@ -330,6 +330,7 @@ export type Ran = 'running' | 'done' | 'error' | 'cancelled'
  *   note   a lifecycle line: started, pushed, stopped
  *   plan   a plan run's answer, which can be approved into a build
  *   run    a coding run a conversation's turn started (talk.ts), opened on its own page
+ *   ask    a question the run asked its person, with its options, and the answer once given
  */
 export type Card =
   | { kind: 'said'; key: string; who: 'person' | 'agent'; text: string }
@@ -341,6 +342,7 @@ export type Card =
   | { kind: 'note'; key: string; text: string }
   | { kind: 'plan'; key: string; text: string }
   | { kind: 'run'; key: string; session: string }
+  | { kind: 'ask'; key: string; question: string; text: string; options: string[]; answer: string }
 
 /** What the run's own steps are called on a card: English, marked (`phrase`); the transcript draws them through `t`. */
 const NAMES: Record<string, string> = {
@@ -437,6 +439,7 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
   }
   const failures = new Set<string>()
   const spawned = new Set<string>()
+  const asked = new Map<string, number>()
   const failed = (message: string) => {
     if (failures.has(message)) return
     failures.add(message)
@@ -495,6 +498,19 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
       case 'status': {
         phase = null
         if (!b) break
+        // A question the run asked its person (apps/agents ask.go), and its answer, drawn on the question.
+        if (str(b.status) === 'asked') {
+          const options = (Array.isArray(b.options) ? b.options : []).map((o) => str(obj(o).label)).filter(Boolean)
+          asked.set(str(b.question), out.length)
+          out.push({ kind: 'ask', key: mint(), question: str(b.question), text: str(b.text), options, answer: '' })
+          break
+        }
+        if (str(b.status) === 'answered') {
+          const at = asked.get(str(b.question))
+          const card = at === undefined ? undefined : out[at]
+          if (card?.kind === 'ask') out[at!] = { ...card, answer: str(b.answer) }
+          break
+        }
         const done = str(b.status) === 'done'
         const text = str(b.plan) || str(b.answer)
         if (done && (mode === 'plan' || mode === 'setup') && text) {

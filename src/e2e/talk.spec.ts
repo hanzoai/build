@@ -22,10 +22,17 @@ function platform(page: Page): Promise<Sent[]> {
       if (path === '/v1/agent/turns' && method === 'POST') {
         const said = (body as { input: string }).input
         ev('message', { role: 'user', text: said })
-        ev('message', { text: `You said: ${said}` })
+        if (said === 'build the page')
+          ev('status', { status: 'asked', question: 'qst_1', text: 'Start a coding run: build the page', options: [{ label: 'Start it' }, { label: 'Not now' }] })
+        else ev('message', { text: `You said: ${said}` })
         return { json: { sessionId: TALKING, runId: `run_${events.length}` } }
       }
       if (path === `/v1/agent/sessions/${TALKING}/events`) return { json: { events } }
+      if (path === `/v1/agent/sessions/${TALKING}/answer` && method === 'POST') {
+        const { question, text } = body as { question: string; text: string }
+        ev('status', { status: 'answered', question, answer: text, chosen: true })
+        return { json: { question, text } }
+      }
       if (path === `/v1/agent/sessions/${TALKING}`) {
         return { json: { id: TALKING, org: ORG, title: 'hello', status: 'paused', channel: 'app', rootSessionId: TALKING, recentEvents: events.slice(-1) } }
       }
@@ -49,7 +56,7 @@ test('the first thing said in Dev opens a conversation and starts no run, and a 
 
   // One conversation, at its own address; nothing was started that leases a sandbox.
   await expect(p).toHaveURL(new URL(`/${TALKING}`, baseURL).href)
-  expect(posted(sent, '/v1/agent/turns')[0]?.body).toMatchObject({ input: 'hello', repo: 'universe', base: 'main' })
+  expect(posted(sent, '/v1/agent/turns')[0]?.body).toMatchObject({ input: 'hello', repo: 'universe', base: 'main', mode: 'auto' })
   expect(posted(sent, '/v1/agent/turns')[0]?.body).not.toHaveProperty('session')
   expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
   const transcript = p.getByLabel('Transcript')
@@ -60,10 +67,28 @@ test('the first thing said in Dev opens a conversation and starts no run, and a 
   await reply.fill('now build it')
   await reply.press('Enter')
   await expect.poll(() => posted(sent, '/v1/agent/turns').length).toBe(2)
+  // The conversation keeps its code: a follow-up names only what was said, and the model.
   expect(posted(sent, '/v1/agent/turns')[1]?.body).toMatchObject({ session: TALKING, input: 'now build it' })
+  expect(posted(sent, '/v1/agent/turns')[1]?.body).not.toHaveProperty('repo')
   await expect(transcript.getByText('You said: now build it')).toBeVisible()
   await expect(transcript.getByText('You said: hello')).toBeVisible()
   await expect(p).toHaveURL(new URL(`/${TALKING}`, baseURL).href)
   expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
   await p.screenshot({ path: info.outputPath('conversation.png') })
+})
+
+test('a question a turn asks is answered on its card, and nothing steers a build', async ({ page: p }) => {
+  const sent = await platform(p)
+  await p.goto('/')
+  const ask = p.getByRole('textbox', { name: 'Describe a task or ask a question' })
+  await ask.fill('build the page', { timeout: 45_000 })
+  await ask.press('Enter')
+  // The turn asks, as Manual does before a build starts; the card carries the options.
+  const question = p.getByLabel('Question')
+  await expect(question.getByText('Start a coding run: build the page')).toBeVisible()
+  await question.getByRole('button', { name: 'Start it' }).click()
+  await expect.poll(() => posted(sent, `/v1/agent/sessions/${TALKING}/answer`).length).toBe(1)
+  expect(posted(sent, `/v1/agent/sessions/${TALKING}/answer`)[0]?.body).toEqual({ question: 'qst_1', text: 'Start it', chosen: true })
+  await expect(question.getByText('✓ Start it')).toBeVisible()
+  expect(sent.filter((s) => s.path.endsWith('/steer'))).toHaveLength(0)
 })

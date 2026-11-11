@@ -3,12 +3,13 @@
  * answered, at one address however many turns it takes — the way Chat reads.
  *
  * Every send continues the same session. While a turn works, what is said is that
- * turn's next input; once it has answered and is following a coding run it
- * started, the words steer that run, which the turn follows into its follow-up.
- * The agent decides what a turn needs: an answer, a sandbox (leased on first use
- * and kept for the conversation), or a coding run, which shows here as a card
- * that opens it on its own page. The line under the transcript is what the turn
- * is doing now, from its own progress.
+ * turn's next input; once it has answered, the next turn. A build is never steered
+ * from here — the words are the conversation's, and a build is steered from its
+ * own page, which its card opens. The agent decides what a turn needs: an answer,
+ * a sandbox (leased on first use and kept for the conversation), or a coding run,
+ * whose outcome is said here when it ends. A question a turn asks — in Manual,
+ * whether a build may start — is answered on its card. The line under the
+ * transcript is what the turn is doing now, from its own progress.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
@@ -17,14 +18,13 @@ import { Composer, measure } from '@hanzo/ui/chat'
 import { useMemo, useState } from 'react'
 
 import { Refusal } from './api/call.ts'
-import { steer } from './api/coding.ts'
 import { log, message, stop, type Event } from './api/sessions.ts'
-import { now, say as talk } from './api/talk.ts'
+import { answer, now, say as talk } from './api/talk.ts'
 import { cards, merge } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
 import { useRead, type RunState } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
-import { useMind } from './mind.ts'
+import { level, useMind } from './mind.ts'
 import { pane } from './pane.ts'
 import { speaker } from './reply.tsx'
 import { carrying, compose, pick, type Attached } from './tools.tsx'
@@ -48,7 +48,7 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
   const listen = useMemo(() => speaker(t), [t])
   const shown = useMemo(() => cards(events, '', say), [events, say])
   const working = status === 'running'
-  const { doing, run } = useMemo(() => now(events), [events])
+  const doing = useMemo(() => now(events), [events])
 
   /** One act at a time; what it answers, or the reason it was refused, is the note. */
   const act = async (work: () => Promise<string>) => {
@@ -67,15 +67,16 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
   const send = () => {
     const words = compose(draft.trim(), files)
     if (!words) return
+    const next = () => talk(t, { session: id, input: words, model: mind.model, effort: level(mind.effort) })
     void act(async () => {
-      if (!working) await talk(t, { session: id, input: words, model: mind.model })
+      if (!working) await next()
       else
         try {
           await message(t, id, words)
         } catch (e) {
-          // The turn has answered and is following the build it started: the words steer the build.
-          if (!(e instanceof Refusal) || e.status !== 409 || !run) throw e
-          await steer(t, run, words)
+          // The turn answered as the words were sent: they are the next turn.
+          if (!(e instanceof Refusal) || e.status !== 409) throw e
+          await next()
         }
       setDraft('')
       setFiles([])
@@ -103,6 +104,7 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
         listen={signed ? listen : undefined}
         onVerdict={(v) => verdict(t, id, '', v)}
         onRun={(session) => host.go(session)}
+        onAnswer={(question, label) => void act(async () => (await answer(t, id, question, label, true), ''))}
       />
       <YStack pb="$3" pt="$2" gap="$2">
         <YStack {...measure} gap="$2">

@@ -79,6 +79,7 @@ export function Transcript({
   queued = [],
   onSendQueued,
   onRun,
+  onAnswer,
 }: {
   cards: Card[]
   /** The run is still working: a card still running shows it; otherwise it was cut off. */
@@ -106,6 +107,8 @@ export function Transcript({
   onSendQueued?: (id: string) => void
   /** Open a coding run a conversation started, on its own page. */
   onRun?: (session: string) => void
+  /** Answer a question the run asked with one of its options. Absent, a question has no buttons. */
+  onAnswer?: (question: string, label: string) => void
 }) {
   const { t } = useI18n()
   // A card the run never finished is cut off once the run has ended, not still going.
@@ -228,6 +231,25 @@ export function Transcript({
                   </Button>
                 ) : null}
               </XStack>
+            )
+          case 'ask':
+            return (
+              <YStack key={c.key} gap="$2" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Question')}>
+                <Prose text={c.text} />
+                {c.answer ? (
+                  <SizableText size="$2" color="$soft">
+                    {`✓ ${c.answer}`}
+                  </SizableText>
+                ) : (
+                  <XStack gap="$2" flexWrap="wrap">
+                    {c.options.map((label) => (
+                      <Button key={label} size="sm" variant="outline" disabled={!onAnswer} onPress={() => onAnswer?.(c.question, label)}>
+                        {label}
+                      </Button>
+                    ))}
+                  </XStack>
+                )}
+              </YStack>
             )
           case 'plan':
             return (

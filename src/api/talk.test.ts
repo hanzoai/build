@@ -18,13 +18,19 @@ afterEach(() => vi.unstubAllGlobals())
 describe('saying something', () => {
   it('sends only what was said and chosen, with no empty values', () => {
     expect(body({ input: '  hello  ' })).toEqual({ input: 'hello' })
-    expect(body({ input: 'fix it', session: CONV, repo: ' site ', base: '', target: '', plan: false, model: 'zen6', issue: 0 })).toEqual({
+    expect(body({ input: 'fix it', session: CONV, repo: ' site ', base: '', target: '', model: 'zen6', effort: '', issue: 0 })).toEqual({
       input: 'fix it',
       session: CONV,
       repo: 'site',
       model: 'zen6',
     })
-    expect(body({ input: 'plan it', plan: true, issue: 7, target: 'tgt_1' })).toEqual({ input: 'plan it', plan: true, issue: 7, target: 'tgt_1' })
+    expect(body({ input: 'plan it', mode: 'manual', effort: 'high', issue: 7, target: 'tgt_1' })).toEqual({
+      input: 'plan it',
+      mode: 'manual',
+      effort: 'high',
+      issue: 7,
+      target: 'tgt_1',
+    })
   })
 
   it('posts to the conversation door and answers its session, the same one every turn', async () => {
@@ -107,8 +113,18 @@ describe('a conversation’s record', () => {
     ])
   })
 
-  it('says what the turn is doing now, and the run it follows', () => {
-    expect(now(record)).toEqual({ doing: 'Install', run: 'sess_run1' })
-    expect(now([])).toEqual({ doing: '', run: '' })
+  it('says what the turn is doing now', () => {
+    expect(now(record)).toBe('Install')
+    expect(now([])).toBe('')
+  })
+
+  it('draws a question the run asked, and its answer once given', () => {
+    const ask = [
+      ev(1, 'status', { status: 'asked', question: 'qst_1', text: 'Start a coding run: build the page', options: [{ label: 'Start it' }, { label: 'Not now' }] }),
+    ]
+    expect(cards(ask)).toMatchObject([{ kind: 'ask', question: 'qst_1', options: ['Start it', 'Not now'], answer: '' }])
+    expect(cards([...ask, ev(2, 'status', { status: 'answered', question: 'qst_1', answer: 'Start it', chosen: true })])).toMatchObject([
+      { kind: 'ask', question: 'qst_1', answer: 'Start it' },
+    ])
   })
 })

@@ -330,8 +330,10 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         repo: repo?.name ?? hub?.full_name,
         base: repo ? kept.branch : hub ? kept.branch || hub.default_branch : undefined,
         target: place.id,
-        plan: mode === 'plan',
+        // The mode the composer shows: Auto starts a build, Manual asks first, Plan only plans.
+        mode: carry.mode.value === 'manual' ? 'manual' : mode === 'plan' ? 'plan' : 'auto',
         model: mind.model,
+        effort: level(mind.effort),
         issue,
       })
       setDraft('')
