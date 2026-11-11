@@ -48,7 +48,7 @@ import { Project } from './project.tsx'
 import { Plans } from './plans.tsx'
 import { path, route } from './route.ts'
 import { Run } from './run.tsx'
-import { DOTS } from './section.tsx'
+import { dot } from './section.tsx'
 import { Library } from './library.tsx'
 import { Templates } from './shelf.tsx'
 import { Find } from './find.tsx'
@@ -76,7 +76,7 @@ function Shell() {
   }
 
   const rows: RailSession[] = useMemo(() => {
-    const list = recents.value.map((s) => ({ id: s.id, title: s.title || say('Untitled run'), status: DOTS[s.status] ?? 'idle' }))
+    const list = recents.value.map((s) => ({ id: s.id, title: s.title || say('Untitled run'), status: dot(s) }))
     if (order === 'running') list.sort((a, b) => Number(b.status === 'running') - Number(a.status === 'running'))
     return list
   }, [recents.value, order, say])

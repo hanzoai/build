@@ -1,8 +1,10 @@
 /**
- * Runs, as the platform records them: one session per run.
+ * Runs, as the platform records them: one session per run — and Dev's
+ * conversations (talk.ts), one session for every turn.
  *
- *   GET   /v1/agent/sessions?kind=&project=&status=&limit=&after=   newest first, {sessions, next}
+ *   GET   /v1/agent/sessions?kind=&channel=&project=&status=&limit=&after=   newest first, {sessions, next}
  *   GET   /v1/agent/sessions/{id}                            + the 50 most recent events
+ *   GET   /v1/agent/sessions/{id}/events?after=&limit=       its whole log, a page at a time, {events, next}
  *   PATCH /v1/agent/sessions/{id}         {title}|{published} rename it; open its story to the public build route
  *   POST  /v1/agent/sessions/{id}/message {message}           steer a running run
  *   POST  /v1/agent/sessions/{id}/pause                       pause it; a sandbox run keeps its work on its branch
@@ -49,6 +51,12 @@ export interface Session {
   org: string
   /** Whether its story is open to the public build route. Only a run that names a project can be. */
   published: boolean
+  /** Where it was started: 'app' for a conversation in Dev (talk.ts), '' for a run on its own. */
+  channel: string
+  /** The session it belongs to — a conversation, for the coding runs it started — or ''. */
+  parent: string
+  /** The top of its tree: its own id for a session of its own. A stream is followed by it. */
+  root: string
   events: number
   createdAt: string
   updatedAt: string
@@ -94,6 +102,9 @@ export function session(raw: unknown): Session {
     sandbox: str(s.sandbox),
     org: str(s.org),
     published: s.published === true,
+    channel: str(s.channel),
+    parent: str(s.parentSessionId),
+    root: str(s.rootSessionId),
     events: num(s.events),
     createdAt: str(s.createdAt),
     updatedAt: str(s.updatedAt),
@@ -131,6 +142,8 @@ export function took(runs: Session[], mode: string): [number, number] | null {
 
 export interface ListQuery {
   kind?: string
+  /** The sessions started on one channel: 'app' for Dev's conversations. */
+  channel?: string
   project?: string
   /** running, paused, done or error: the four the platform filters on. */
   status?: string
@@ -176,6 +189,22 @@ export async function get(t: Target, id: string): Promise<Detail> {
   return {
     ...session(raw),
     recent,
+  }
+}
+
+/**
+ * A session's whole log, oldest first, read a page at a time — what a conversation
+ * draws from its first word, where the detail carries only the latest fifty.
+ */
+export async function log(t: Target, id: string): Promise<Event[]> {
+  const out: Event[] = []
+  let after = 0
+  for (;;) {
+    const raw = obj(await call<unknown>(t, 'GET', `/v1/agent/sessions/${seg(id)}/events${query({ after: after || undefined, limit: 1000 })}`))
+    out.push(...(Array.isArray(raw.events) ? raw.events : []).map(event))
+    const next = num(raw.next)
+    if (next <= after) return out
+    after = next
   }
 }
 

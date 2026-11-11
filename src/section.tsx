@@ -15,6 +15,7 @@ import { SidebarItem, SidebarSection, StatusDot, type SessionStatus } from '@han
 import { useMemo, type ReactNode } from 'react'
 
 import type { Session } from './api/sessions.ts'
+import { talks } from './api/talk.ts'
 import { useRecents, type Read } from './data.ts'
 import type { Host } from './host.tsx'
 import { nav } from './nav.tsx'
@@ -28,6 +29,13 @@ export const DOTS: Record<string, SessionStatus> = {
   stopped: 'stopped',
   error: 'error',
 }
+
+/**
+ * The dot a row draws. A conversation rests paused between turns (api/talk.ts):
+ * it has answered and waits for the person, which reads as done, not as a run held.
+ */
+export const dot = (s: Pick<Session, 'status' | 'channel'>): SessionStatus =>
+  talks(s) && s.status === 'paused' ? 'done' : (DOTS[s.status] ?? 'idle')
 
 /** The org's coding runs, newest first, kept live by the org's feed. */
 export function useSessions(host: Host): Read<Session[]> {
@@ -86,7 +94,7 @@ export function DevSection({
           sessions.value.map((s) => (
             <SidebarItem
               key={s.id}
-              icon={<StatusDot status={DOTS[s.status] ?? 'idle'} />}
+              icon={<StatusDot status={dot(s)} />}
               active={r.kind === 'run' && r.id === s.id}
               onPress={then(() => host.go(s.id))}
             >

@@ -6,10 +6,11 @@
  * composer Chat draws too (@hanzo/ui/chat): Dev hands it the three pills, the
  * chips that go to its repositories, issues and templates, and its commands.
  *
- * Sending starts a coding run on a project and opens it. A project is a
- * repository — the org's on the forge, or one its GitHub grants — so a run
- * names one, and an ask with none chosen opens the picker rather than making a
- * project up from its words. The choices a person made here are kept in this
+ * Sending opens a conversation (api/talk.ts) and goes to it: the agent answers,
+ * and decides for itself when the ask needs a sandbox or a coding run — on the
+ * repository, branch and machine chosen here, and only planning when Plan is on.
+ * A run on one of the org's machines needs a repository, so an ask with none
+ * chosen there opens the picker rather than making a project up from its words. The choices a person made here are kept in this
  * browser, per org, so the next New starts where the last one did — and a kept
  * repository New can no longer offer is let go, so the next run is not sent
  * back to it. A repository can also be given by its address (Use a git URL).
@@ -29,6 +30,7 @@ import { useDictation, useTalk, useVoice } from '@hanzo/voice'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { start, unhonoured, type Mode } from './api/coding.ts'
+import { say } from './api/talk.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
 import { heard, repos as githubRepos } from './api/github.ts'
 import { plain, read, SETUP, unset, type Environment } from './api/environment.ts'
@@ -318,27 +320,24 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         setNote(prepped.reply.split('```')[0]!.trim())
         return
       }
-      // Manual: the run is asked for before it starts; it edits, commits and pushes on its own once it has.
-      if (!(await carry.allow({ id: 'run', name: t('Dev to start this run'), note: t('It edits, tests, commits and pushes its own branch') }))) {
-        setNote(t('Not started.'))
-        return
-      }
-      const run = await start(target, {
-        prompt: compose([said.trim(), carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n---\n'), files),
+      // The first thing said opens a conversation (api/talk.ts) and starts nothing:
+      // the agent answers, and leases a sandbox or starts a coding run only when the
+      // ask needs one — on the repository, branch, machine and Plan chosen here.
+      const sent = await say(target, {
+        input: compose([said.trim(), carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n---\n'), files),
         // The name alone. The org rides the request, and a slash is not a repo name.
         // An empty base or place is not sent: the default branch, and the sandbox.
         repo: repo?.name ?? hub?.full_name,
         base: repo ? kept.branch : hub ? kept.branch || hub.default_branch : undefined,
-        targetId: place.id,
-        mode,
+        target: place.id,
+        plan: mode === 'plan',
         model: mind.model,
-        effort: level(mind.effort),
         issue,
       })
       setDraft('')
       setFiles([])
       setIssue(0)
-      onStarted(run.session)
+      onStarted(sent.session)
     } catch (e) {
       setNote(plain(e, repo?.name ?? hub?.full_name ?? t('a new project'), 'run', t))
     } finally {

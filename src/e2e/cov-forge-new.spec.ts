@@ -60,6 +60,7 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
     const env = path.match(/^\/v1\/environment\/([^/]+)$/)?.[1]
     if (env) return { json: world.envs[env] ?? { repo: env, install: '', start: '', secrets: [], state: 'ready' } }
     if (path === '/v1/agent/coding' && method === 'POST') return { status: 202, json: { sessionId: NEXT, repo: 'universe', branch: 'agent/x' } }
+    if (path === '/v1/agent/turns' && method === 'POST') return { json: { sessionId: NEXT, runId: 'run_1' } }
     if (path === `/v1/agent/sessions/${NEXT}` || path === `/v1/agent/sessions/${SESSION}`) return { json: { id: path.split('/').pop(), title: 'A run', status: 'running', kind: 'coding', recentEvents: [] } }
     if (path === '/v1/agent/sessions/stream') return { text: '', type: 'text/event-stream' }
     if (path === '/v1/platform/apps') return { status: 202, json: world.declared.length > 1 ? world.declared.shift() : world.declared[0] }
@@ -144,15 +145,15 @@ test.describe('New', () => {
 
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
-    expect(posted(sent, '/v1/agent/coding')[0]?.body).toEqual({
-      prompt: 'Add a footer',
+    // What is sent opens a conversation with what was chosen; nothing is started for it.
+    expect(posted(sent, '/v1/agent/turns')[0]?.body).toEqual({
+      input: 'Add a footer',
       repo: 'universe',
       base: 'dev',
-      targetId: 'tgt_1',
-      mode: 'build',
+      target: 'tgt_1',
       model: 'zen5.8-coder',
-      effort: 'medium',
     })
+    expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
   })
 
   test('with no project chosen, an ask in the sandbox opens the picker and makes no project up', async ({ page, baseURL }) => {
@@ -171,8 +172,8 @@ test.describe('New', () => {
     expect(posted(sent, '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Build a todo app', repo: 'universe', mode: 'build', model: 'enso-auto', effort: 'medium' })
   })
 
-  test('a run in the sandbox names Enso as its model, and no machine; a refusal is said and the draft stays', async ({ page, baseURL }) => {
-    const { sent } = await desk(page, { holds: { 'POST /v1/agent/coding': [{ status: 503, detail: 'No sandbox is free right now' }] } }, DAVE, holding(FORGE))
+  test('a conversation in the sandbox names Enso as its model, and no machine; a refusal is said and the draft stays', async ({ page, baseURL }) => {
+    const { sent } = await desk(page, { holds: { 'POST /v1/agent/turns': [{ status: 503, detail: 'The agents are not answering right now' }] } }, DAVE, holding(FORGE))
     await page.goto('/')
     await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: universe', { timeout: 45_000 })
     await ask(page).fill('Add a footer')
@@ -181,7 +182,7 @@ test.describe('New', () => {
     await expect(ask(page)).toHaveValue('Add a footer')
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
-    expect(posted(sent, '/v1/agent/coding')[1]?.body).toEqual({ prompt: 'Add a footer', repo: 'universe', base: 'main', mode: 'build', model: 'enso-auto', effort: 'medium', desktop: true })
+    expect(posted(sent, '/v1/agent/turns')[1]?.body).toEqual({ input: 'Add a footer', repo: 'universe', base: 'main', model: 'enso-auto' })
   })
 
   test('says when a codebase’s environment waits for review, or has none, above the composer', async ({ page, baseURL }, info) => {

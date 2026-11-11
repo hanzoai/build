@@ -158,7 +158,7 @@ test.describe('signing in', () => {
   })
 
   test('words sent while signed out are sent once the person is in', async ({ page }) => {
-    const sent = await serve(page, ({ path, method }) => (path === '/v1/agent/coding' && method === 'POST' ? { status: 202, json: { sessionId: SESSION, repo: 'shop', branch: '' } } : undefined))
+    const sent = await serve(page, ({ path, method }) => (path === '/v1/agent/turns' && method === 'POST' ? { json: { sessionId: SESSION, runId: 'run_1' } } : undefined))
     // The project the run works on, chosen on an earlier visit.
     const shop = { owner: ORG, name: 'shop', full_name: `${ORG}/shop`, private: true, default_branch: 'main', pushed_at: '', installation_id: 0, forge: true, clone: '' }
     await page.addInitScript(([key, kept]) => localStorage.setItem(key, kept), [`hanzo.build.new.${ORG}`, JSON.stringify({ repo: shop, branch: 'main', place: '', mode: 'build', effort: 'medium', ask: '' })] as const)
@@ -167,17 +167,17 @@ test.describe('signing in', () => {
     await ask.fill('Add a cart to the shop')
     await ask.press('Enter')
     await expect.poll(() => went(page)).toEqual(['sign in'])
-    expect(sent.filter((s) => s.path === '/v1/agent/coding')).toEqual([])
+    expect(sent.filter((s) => s.path === '/v1/agent/turns')).toEqual([])
 
     // Back from signing in: the same tab, now with a person.
     await mounted(page, { path: '', org: ORG, admin: true, person: { name: 'Dave', email: 'dave@acme.test', avatar: '' } })
-    await expect.poll(() => sent.filter((s) => s.method === 'POST' && s.path === '/v1/agent/coding').length).toBe(1)
-    expect(sent.find((s) => s.path === '/v1/agent/coding')!.body).toMatchObject({ prompt: 'Add a cart to the shop', repo: 'shop' })
+    await expect.poll(() => sent.filter((s) => s.method === 'POST' && s.path === '/v1/agent/turns').length).toBe(1)
+    expect(sent.find((s) => s.path === '/v1/agent/turns')!.body).toMatchObject({ input: 'Add a cart to the shop', repo: 'shop' })
     await expect.poll(() => went(page)).toEqual([SESSION])
     // Once: a reload does not send it again.
     await page.reload()
     await page.waitForTimeout(500)
-    expect(sent.filter((s) => s.method === 'POST' && s.path === '/v1/agent/coding')).toHaveLength(1)
+    expect(sent.filter((s) => s.method === 'POST' && s.path === '/v1/agent/turns')).toHaveLength(1)
   })
 })
 
@@ -662,8 +662,9 @@ test.describe('a host that draws its own rail', () => {
     // A run the list has not seen is read again rather than guessed at, at most every five seconds.
     await expect(row(page, 'Started from the CLI')).toBeVisible({ timeout: 15_000 })
     await expect(row(page, 'Started from the CLI').locator('[data-status]')).toHaveAttribute('data-status', 'running')
-    // Each reconnect, and each run it has not seen, re-reads the list — at most every five seconds.
-    const reads = () => listed.filter((at) => at - listed[0]! > 500)
+    // Each reconnect, and each run it has not seen, re-reads the list — at most every five seconds. One
+    // read asks for its two halves at once, the runs and the conversations (data.ts useRecents).
+    const reads = () => listed.filter((at, i) => at - listed[0]! > 500 && at - listed[i - 1]! > 250)
     await expect.poll(() => reads().length, { timeout: 15_000 }).toBeGreaterThan(1)
     expect(reads().slice(1).every((at, i) => at - reads()[i]! >= 4_900)).toBe(true)
   })
@@ -854,7 +855,7 @@ test.describe('attaching files', () => {
     await ask(page).fill('Fix the cart')
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new RegExp(`/${SESSION}$`))
-    expect((sent.find((s) => s.method === 'POST' && s.path === '/v1/agent/coding')!.body as { prompt: string }).prompt).toBe('Fix the cart')
+    expect((sent.find((s) => s.method === 'POST' && s.path === '/v1/agent/turns')!.body as { input: string }).input).toBe('Fix the cart')
   })
 
   test('files ride the prompt as text, a binary one as its bytes read as text, and a removed one does not', async ({ page }, info) => {
@@ -868,8 +869,8 @@ test.describe('attaching files', () => {
     await ask(page).fill('Fix the cart')
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new RegExp(`/${SESSION}$`))
-    const body = sent.find((s) => s.method === 'POST' && s.path === '/v1/agent/coding')!.body as { prompt: string }
-    expect(body.prompt).toBe(`Fix the cart\n\n\`notes.md\`:\n\`\`\`\n# Notes\n\`\`\`\n\n\`pixel.png\`:\n\`\`\`\n${new TextDecoder().decode(PNG)}\n\`\`\``)
+    const body = sent.find((s) => s.method === 'POST' && s.path === '/v1/agent/turns')!.body as { input: string }
+    expect(body.input).toBe(`Fix the cart\n\n\`notes.md\`:\n\`\`\`\n# Notes\n\`\`\`\n\n\`pixel.png\`:\n\`\`\`\n${new TextDecoder().decode(PNG)}\n\`\`\``)
   })
 
   test('a file over 100 KB is refused, and the attachments stop at 200 KB in all', async ({ page }) => {

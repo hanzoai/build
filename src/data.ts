@@ -13,6 +13,7 @@ import type { Target } from './api/call.ts'
 import { places, type Place } from './api/places.ts'
 import { projects, type Project } from './api/projects.ts'
 import { get, list, watch, type Detail, type Event, type Session } from './api/sessions.ts'
+import { TALK } from './api/talk.ts'
 import { merge } from './api/turn.ts'
 
 export interface Read<T> {
@@ -130,8 +131,10 @@ export function useCached<T>(key: string | null, load: (signal: AbortSignal) => 
 const recentRuns = new Map<string, Session[]>()
 
 /**
- * The org's coding runs, newest first, kept current by the org's own session
- * stream: a status that moves moves its dot, and a run started anywhere appears.
+ * The org's conversations and coding runs, newest first, kept current by the
+ * org's own session stream: a status that moves moves its dot, and one started
+ * anywhere appears. A conversation's own coding runs are in its tree, not here:
+ * the platform lists roots.
  */
 export function useRecents(t: Target, signed: boolean): Read<Session[]> {
   const scope = signed ? `${t.api}\n${t.org ?? ''}` : null
@@ -139,7 +142,12 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
   const read = useRead(
     signed
       ? async () => {
-          const next = await list(t, { kind: 'coding', limit: 50 })
+          const [runs, talked] = await Promise.all([list(t, { kind: 'coding', limit: 50 }), list(t, { channel: TALK, limit: 50 })])
+          const seen = new Set<string>()
+          const next = [...runs, ...talked]
+            .filter((s) => !seen.has(s.id) && Boolean(seen.add(s.id)))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .slice(0, 50)
           if (scope !== null) recentRuns.set(scope, next)
           return next
         }
@@ -260,15 +268,18 @@ export function useRun(t: Target, id: string | null): RunState {
   const reload = useRef(detail.reload)
   reload.current = detail.reload
 
+  // The stream is followed by the run's tree: a conversation's coding run is in the
+  // conversation's (talk.ts), and its frames carry that root.
+  const root = (detail.value?.id === id && detail.value.root) || id
   useEffect(() => {
     setLive([])
     setPushed(null)
     setRefused('')
-    if (!id) return
+    if (!id || !root) return
     const ctl = new AbortController()
     void watch(
       t,
-      id,
+      root,
       {
         // A frame from a stream this run has already left is not this run's.
         event: (e) => {
@@ -277,14 +288,16 @@ export function useRun(t: Target, id: string | null): RunState {
         session: (s) => {
           if (!ctl.signal.aborted && s.id === id) setPushed(s)
         },
+        // A reconnect may have missed frames, and so may the move to the run's
+        // own tree once its read named one: either is read again.
         open: (n) => {
-          if (n > 0) reload.current()
+          if (n > 0 || root !== id) reload.current()
         },
       },
       ctl.signal,
     ).catch((e: unknown) => setRefused((e as Error).message))
     return () => ctl.abort()
-  }, [t, id])
+  }, [t, id, root])
 
   // The read and the frames describe THIS run or nothing: a read kept from the
   // run before (it stays until the next one lands, or forever if it fails) must

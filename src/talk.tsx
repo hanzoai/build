@@ -1,0 +1,144 @@
+/**
+ * A conversation in Dev (api/talk.ts): what the person said and what the agent
+ * answered, at one address however many turns it takes — the way Chat reads.
+ *
+ * Every send continues the same session. While a turn works, what is said is that
+ * turn's next input; once it has answered and is following a coding run it
+ * started, the words steer that run, which the turn follows into its follow-up.
+ * The agent decides what a turn needs: an answer, a sandbox (leased on first use
+ * and kept for the conversation), or a coding run, which shows here as a card
+ * that opens it on its own page. The line under the transcript is what the turn
+ * is doing now, from its own progress.
+ */
+import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { useI18n } from '@hanzo/i18n/react'
+import { Steer } from '@hanzo/ui/agents'
+import { Composer, measure } from '@hanzo/ui/chat'
+import { useMemo, useState } from 'react'
+
+import { Refusal } from './api/call.ts'
+import { steer } from './api/coding.ts'
+import { log, message, stop, type Event } from './api/sessions.ts'
+import { now, say as talk } from './api/talk.ts'
+import { cards, merge } from './api/turn.ts'
+import { verdict } from './api/verdict.ts'
+import { useRead, type RunState } from './data.ts'
+import { useHost, useTarget } from './host.tsx'
+import { useMind } from './mind.ts'
+import { pane } from './pane.ts'
+import { speaker } from './reply.tsx'
+import { carrying, compose, pick, type Attached } from './tools.tsx'
+import { Transcript } from './transcript.tsx'
+
+export function Talk({ id, state }: { id: string; state: RunState }) {
+  const { t: say } = useI18n()
+  const host = useHost()
+  const t = useTarget()
+  const signed = Boolean(host.person)
+  const { detail, record, status, refused } = state
+  // The whole conversation from its first word: the detail carries the latest
+  // fifty events, and a turn that builds says many. Live frames are added to it.
+  const whole = useRead(signed ? () => log(t, id) : null, [] as Event[], [t, id, signed])
+  const events = useMemo(() => merge(whole.value, state.events), [whole.value, state.events])
+  const [draft, setDraft] = useState('')
+  const [files, setFiles] = useState<Attached[]>([])
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const mind = useMind(t)
+  const listen = useMemo(() => speaker(t), [t])
+  const shown = useMemo(() => cards(events, '', say), [events, say])
+  const working = status === 'running'
+  const { doing, run } = useMemo(() => now(events), [events])
+
+  /** One act at a time; what it answers, or the reason it was refused, is the note. */
+  const act = async (work: () => Promise<string>) => {
+    if (busy) return
+    setBusy(true)
+    setNote('')
+    try {
+      setNote(await work())
+    } catch (e) {
+      setNote((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const send = () => {
+    const words = compose(draft.trim(), files)
+    if (!words) return
+    void act(async () => {
+      if (!working) await talk(t, { session: id, input: words, model: mind.model })
+      else
+        try {
+          await message(t, id, words)
+        } catch (e) {
+          // The turn has answered and is following the build it started: the words steer the build.
+          if (!(e instanceof Refusal) || e.status !== 409 || !run) throw e
+          await steer(t, run, words)
+        }
+      setDraft('')
+      setFiles([])
+      return ''
+    })
+  }
+
+  const empty = (
+    <SizableText size="$2" color="$soft">
+      {!signed ? say('Sign in to follow this conversation.') : detail.error ? say(detail.error.message) : detail.loading ? say('Reading this conversation…') : say('Thinking…')}
+    </SizableText>
+  )
+
+  return (
+    <YStack data-slot="talk" {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
+      <XStack px="$4" pt="$3" pb="$2" items="center" minH={44}>
+        <SizableText size="$4" color="$ink" numberOfLines={1}>
+          {record?.title || say('New conversation')}
+        </SizableText>
+      </XStack>
+      <Transcript
+        cards={shown}
+        live={working}
+        empty={empty}
+        listen={signed ? listen : undefined}
+        onVerdict={(v) => verdict(t, id, '', v)}
+        onRun={(session) => host.go(session)}
+      />
+      <YStack pb="$3" pt="$2" gap="$2">
+        <YStack {...measure} gap="$2">
+          {note || (signed && refused) ? (
+            <SizableText size="$1" color="$soft" role="status">
+              {note || refused}
+            </SizableText>
+          ) : null}
+          {working ? (
+            <XStack items="center" gap="$2" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
+              <SizableText size="$2" color="$soft" flex={1} minW={0} numberOfLines={1} role="status">
+                {doing || say('Thinking…')}
+              </SizableText>
+              <Steer
+                onCommand={(c) => {
+                  if (c === 'stop') void act(async () => (await stop(t, id), say('Stopped')))
+                }}
+                withhold={['pause', 'resume', ...(busy ? (['stop'] as const) : [])]}
+              />
+            </XStack>
+          ) : null}
+        </YStack>
+        <Composer
+          column
+          value={draft}
+          onChange={setDraft}
+          onSend={send}
+          ready={Boolean(draft.trim())}
+          disabled={!signed || busy || !record}
+          placeholder={!signed ? say('Sign in to reply') : working ? say('Add to what it is doing') : say('Reply')}
+          label={say('Reply to this conversation')}
+          plus={{ upload: () => pick(files, setFiles, setNote, say) }}
+          carried={carrying(files, setFiles)}
+          mind={signed && !working ? mind : null}
+        />
+      </YStack>
+    </YStack>
+  )
+}

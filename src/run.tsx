@@ -74,8 +74,9 @@ import { approve, followUp, headline, retry, start, steer, type Ask, type Earlie
 import { limits as readLimits } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, followed, outcome, pull, settled, steps } from './api/turn.ts'
+import { say as talk, talks } from './api/talk.ts'
 import { verdict } from './api/verdict.ts'
-import { useKept, useProjects, useRead, useRun } from './data.ts'
+import { useKept, useProjects, useRead, useRun, type RunState } from './data.ts'
 import { Desk, SEED } from './desk.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { level, pacing, useMind } from './mind.ts'
@@ -89,6 +90,7 @@ import { schedule } from './scheduled.tsx'
 import { SideProvider, useSplit } from './side.tsx'
 import { PAGE, useDeck, useKey, usePanel } from './tabs.ts'
 import { carrying, compose, pick, type Attached } from './tools.tsx'
+import { Talk } from './talk.tsx'
 import { Transcript, type QueuedMessage, type TranscriptView } from './transcript.tsx'
 
 const LIVE = new Set(['running', 'paused', ''])
@@ -104,13 +106,21 @@ const STATUS: Record<string, string> = {
 
 type MenuItems = NonNullable<DropdownMenuProps['items']>
 
+/** One session's page: a conversation (talk.tsx) or one run, as its record says. */
 export function Run({ id }: { id: string }) {
-  const { t: say } = useI18n()
   const host = useHost()
   const t = useTarget()
   // Signed out, there is nothing to read: the gateway answers a bare run with a refusal.
+  const state = useRun(t, host.person ? id : null)
+  return talks(state.record) ? <Talk id={id} state={state} /> : <Job id={id} state={state} />
+}
+
+function Job({ id, state: read }: { id: string; state: RunState }) {
+  const { t: say } = useI18n()
+  const host = useHost()
+  const t = useTarget()
   const signed = Boolean(host.person)
-  const { detail, record, events, status, refused } = useRun(t, signed ? id : null)
+  const { detail, record, events, status, refused } = read
   const [draft, setDraft] = useState('')
   const [files, setFiles] = useState<Attached[]>([])
   const [note, setNote] = useState('')
@@ -278,6 +288,16 @@ export function Run({ id }: { id: string }) {
   const carry = async (said: string, how: 'follow' | 'approve' | 'retry' = 'follow'): Promise<string> => {
     if (!earlier) throw new Error(say('This run is still being read'))
     if (paused) await stop(t, id, 'Continued in a follow-up run').catch(() => undefined)
+    // A run a conversation started is carried on by the conversation (talk.ts): the
+    // words go there, in its session, and so does the reader.
+    if (record?.parent) {
+      const words = how === 'approve' ? `Carry out this plan:\n\n${said.trim()}` : said.trim() || 'Continue where the run left off.'
+      await talk(t, { session: record.parent, input: words, model: mind.model })
+      setDraft('')
+      setFiles([])
+      host.go(record.parent)
+      return ''
+    }
     const ask = how === 'approve' ? approve(earlier, said) : how === 'retry' ? retry(earlier, said) : followUp(earlier, said)
     const run = await start(t, tuned(ask))
     setDraft('')
@@ -512,7 +532,9 @@ export function Run({ id }: { id: string }) {
             ? say('Add a follow up for the setup agent')
             : say('Add a follow up')
           : finished
-            ? say('Follow up — continues in a new run')
+            ? record?.parent
+              ? say('Follow up — continues the conversation')
+              : say('Follow up — continues in a new run')
             : say('Reading this run…')
 
   const desk_ = (sheet: boolean) => (

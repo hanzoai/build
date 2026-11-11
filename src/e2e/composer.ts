@@ -9,7 +9,7 @@ import { ORG, SESSION, signIn, type Reply } from './signed.ts'
 import { KEPT } from './stubs.ts'
 
 /**
- * A start answers 202, the person's settings are `prefs` and a write merges in,
+ * A conversation is opened at SESSION, the person's settings are `prefs` and a write merges in,
  * and a recording is transcribed as `heard` says, held until `hold` resolves.
  * Answers what the page sent, and each recording's multipart body.
  */
@@ -20,7 +20,7 @@ export async function composer(page: Page, { heard = { json: { text: ' add a car
       // The kept codebase is one of the org's repositories, so New offers it rather than asking for one.
       if (path === '/v1/git/repos') return { json: { data: [{ name: 'universe', org: ORG, defaultBranch: 'main' }] } }
       if (path === '/v1/environment/universe') return { json: { repo: 'universe', install: 'pnpm i', start: '', secrets: [], state: 'ready' } }
-      if (path === '/v1/agent/coding' && method === 'POST') return { status: 202, json: { sessionId: SESSION, repo: 'universe', branch: '' } }
+      if (path === '/v1/agent/turns' && method === 'POST') return { json: { sessionId: SESSION, runId: 'run_1' } }
       if (path === '/v1/pref' && method === 'GET') return { json: { prefs, updatedAt: 1 } }
       if (path === '/v1/pref' && method === 'PATCH') return { json: { prefs: { ...prefs, ...(body as object) }, updatedAt: 2 } }
       return undefined

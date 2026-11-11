@@ -329,6 +329,7 @@ export type Ran = 'running' | 'done' | 'error' | 'cancelled'
  *   todo   the agent's plan, as a checklist it ticks
  *   note   a lifecycle line: started, pushed, stopped
  *   plan   a plan run's answer, which can be approved into a build
+ *   run    a coding run a conversation's turn started (talk.ts), opened on its own page
  */
 export type Card =
   | { kind: 'said'; key: string; who: 'person' | 'agent'; text: string }
@@ -339,6 +340,7 @@ export type Card =
   | { kind: 'todo'; key: string; items: { text: string; done: boolean }[] }
   | { kind: 'note'; key: string; text: string }
   | { kind: 'plan'; key: string; text: string }
+  | { kind: 'run'; key: string; session: string }
 
 /** What the run's own steps are called on a card: English, marked (`phrase`); the transcript draws them through `t`. */
 const NAMES: Record<string, string> = {
@@ -434,6 +436,7 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
     return c
   }
   const failures = new Set<string>()
+  const spawned = new Set<string>()
   const failed = (message: string) => {
     if (failures.has(message)) return
     failures.add(message)
@@ -527,6 +530,19 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
         if (!text) break
         if (str(b?.role) === 'user') person(text)
         else out.push({ kind: 'said', key: mint(), who: 'agent', text })
+        break
+      }
+      case 'spawn': {
+        // A conversation's turn started a coding run, or follows the one that carried it on.
+        const session = str(b?.session)
+        if (!session || spawned.has(session)) break
+        spawned.add(session)
+        out.push({ kind: 'run', key: mint(), session })
+        break
+      }
+      case 'log': {
+        // A conversation's turn that failed says why on its record of the run.
+        if (b && str(b.runId) && str(b.status) === 'error') failed(str(b.error))
         break
       }
     }

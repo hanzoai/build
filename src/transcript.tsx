@@ -2,7 +2,8 @@
  * A run's transcript, drawn by what each part is (turn.ts `cards`): what the
  * agent said as markdown, its reasoning folded, each command it ran as a card
  * that opens onto its output, the files it changed, its plan as a checklist, the
- * run's own steps, and a plan run's plan with the button that builds it.
+ * run's own steps, a plan run's plan with the button that builds it, and in a
+ * conversation the coding runs its turns started, each opening on its own page.
  * What the agent said, and its plan, can be copied and judged, as a reply on
  * claude.ai can: a thumb pressed again takes the verdict back.
  *
@@ -77,6 +78,7 @@ export function Transcript({
   view = 'normal',
   queued = [],
   onSendQueued,
+  onRun,
 }: {
   cards: Card[]
   /** The run is still working: a card still running shows it; otherwise it was cut off. */
@@ -102,6 +104,8 @@ export function Transcript({
   queued?: QueuedMessage[]
   /** Send a queued message immediately. */
   onSendQueued?: (id: string) => void
+  /** Open a coding run a conversation started, on its own page. */
+  onRun?: (session: string) => void
 }) {
   const { t } = useI18n()
   // A card the run never finished is cut off once the run has ended, not still going.
@@ -211,6 +215,19 @@ export function Transcript({
               <SizableText key={c.key} size="$1" color="$soft" role="note">
                 {t(c.text)}
               </SizableText>
+            )
+          case 'run':
+            return (
+              <XStack key={c.key} items="center" gap="$2" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Coding run')}>
+                <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1}>
+                  {t('Coding run')}
+                </SizableText>
+                {onRun ? (
+                  <Button size="sm" variant="outline" onPress={() => onRun(c.session)}>
+                    {t('Open the run')}
+                  </Button>
+                ) : null}
+              </XStack>
             )
           case 'plan':
             return (
