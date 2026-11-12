@@ -150,8 +150,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const wakeLockRef = useRef<{ release?: () => Promise<void> } | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
   // The model and effort a run started here uses: the one choice Chat and New share.
-  const mind = useMind(t)
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
+  const mind = useMind(t, (limits as { plan?: string } | null)?.plan, host.topUp)
   const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
   const listen = useMemo(() => speaker(t), [t])
 

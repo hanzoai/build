@@ -77,6 +77,7 @@ import {
 import { Composer, Message } from '@hanzo/ui/chat'
 import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
 import { HanzoMark } from '@hanzo/ui/product'
+import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -84,6 +85,7 @@ import { read as pushed, type Pull } from './api/changes.ts'
 import { codebases, one, type Codebase } from './api/codebases.ts'
 import { start, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
+import { limits as readLimits } from './api/models.ts'
 import { declare } from './api/platform.ts'
 import { address, deployments, name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
@@ -288,7 +290,8 @@ export function Project({ at }: { at: Where }) {
   const [picked, setPicked] = useState<Attachment[]>([])
   const [attached, setAttached] = useState<Attached[]>([])
   // The model and effort Chat and New share, and dictation into the ask.
-  const mind = useMind(target)
+  const { limits } = useLimits(signed ? (signal) => readLimits(target, signal) : null, target)
+  const mind = useMind(target, (limits as { plan?: string } | null)?.plan, host.topUp)
   const voice = useVoice({ speech: useEar(target), language: useSpoken(), ...useDictation(draft, setDraft) })
   const [bridge, setBridge] = useState(false)
   const [editing, setEditing] = useState(false)

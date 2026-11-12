@@ -16,11 +16,13 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Steer } from '@hanzo/ui/agents'
 import { Composer, measure } from '@hanzo/ui/chat'
+import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useMemo, useState } from 'react'
 
 import { DEV_MODES, MODES, type Mode } from './gear.ts'
 
 import { Refusal } from './api/call.ts'
+import { limits as readLimits } from './api/models.ts'
 import { log, message, stop, type Event } from './api/sessions.ts'
 import { answer, now, say as talk } from './api/talk.ts'
 import { cards, merge } from './api/turn.ts'
@@ -47,7 +49,8 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
   const [files, setFiles] = useState<Attached[]>([])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
-  const mind = useMind(t)
+  const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
+  const mind = useMind(t, (limits as { plan?: string } | null)?.plan, host.topUp)
   const listen = useMemo(() => speaker(t), [t])
   const shown = useMemo(() => cards(events, '', say), [events, say])
   const working = status === 'running'

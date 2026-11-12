@@ -51,6 +51,35 @@ export const isFree = (plan: string | null | undefined): boolean => plan === 'fr
 
 const KEY = 'hanzo.mind'
 const CHANGE = 'hanzo:mind'
+const PREFS_KEY = 'hanzo.chat.preferences'
+const PREFS_EVENT = 'hanzo:chat:preferences'
+
+/** Whether third-party cloud models are enabled in Settings → Preferences (off by default). */
+export function allowThirdPartyModels(): boolean {
+  try {
+    const v = JSON.parse(store()?.getItem(PREFS_KEY) ?? 'null') as {
+      allowThirdPartyModels?: unknown
+      thirdPartyChosen?: unknown
+    } | null
+    return v?.thirdPartyChosen ? Boolean(v.allowThirdPartyModels) : v?.allowThirdPartyModels === true
+  } catch {
+    return false
+  }
+}
+
+function useAllowThirdPartyModels(): boolean {
+  const [allowed, setAllowed] = useState(allowThirdPartyModels)
+  useEffect(() => {
+    const sync = () => setAllowed(allowThirdPartyModels())
+    window.addEventListener(PREFS_EVENT, sync)
+    window.addEventListener('storage', sync)
+    return () => {
+      window.removeEventListener(PREFS_EVENT, sync)
+      window.removeEventListener('storage', sync)
+    }
+  }, [])
+  return allowed
+}
 
 /** An effort kept, read back: one the ladder still offers, XHigh (which Max replaced) as Max, else Auto. */
 const effortOf = (v: unknown): Effort => (v === 'xhigh' ? 'max' : EFFORTS.some((e) => e.id === v) ? (v as Effort) : FIRST.effort)
@@ -334,6 +363,7 @@ function settleReturn(): void {
 export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) => void): Mind {
   const [choice, change] = useChoice()
   const { models, list, loading, error, note } = useCatalog(t)
+  const allowThirdParty = useAllowThirdPartyModels()
   const free = isFree(plan)
   const [picked, pick] = usePick(choice.model, (id) => change({ model: id }), list)
   // Another maker's model is paid from the balance on any plan; Hanzo's own follow the plan.
@@ -341,6 +371,7 @@ export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) =
   const cents = funds.cents
   const may = (id: string): boolean => sendable(free, models, cents, id)
   const model = may(picked) ? picked : ENSO
+  const listed = allowThirdParty ? models : models.filter((m) => !thirdParty(m) || m.id === model)
   // A top-up returns to this address with the model it was for: pick it once the balance can pay.
   const [back] = useState(returned)
   useEffect(() => {
@@ -353,7 +384,7 @@ export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) =
   return {
     model,
     effort: choice.effort,
-    models,
+    models: listed,
     loading,
     error,
     note,

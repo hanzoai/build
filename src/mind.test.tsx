@@ -130,7 +130,7 @@ describe('the catalog', () => {
     expect(asked).toBe(2)
   })
 
-  it('starts a surface on Enso at Auto, with the catalog already read on the first render', async () => {
+  it('starts a surface on Enso at Auto, hiding third-party models until enabled in preferences', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: CATALOG }), { status: 200 })))
     const t: Target = { api: 'https://api.first', token: () => 'tok', org: null }
     await catalog(t)
@@ -141,7 +141,12 @@ describe('the catalog', () => {
     }
     renderToString(<Reads />)
     expect(seen).toMatchObject({ model: ENSO, effort: 'auto', loading: false, error: null })
-    expect(seen!.models).toHaveLength(4)
+    expect(seen!.models.map((m) => m.id)).toEqual(['enso-auto', 'zen6', 'zen6-flash'])
+
+    browser({ 'hanzo.chat.preferences': JSON.stringify({ allowThirdPartyModels: true, thirdPartyChosen: true }) })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: CATALOG }), { status: 200 })))
+    renderToString(<Reads />)
+    expect(seen!.models.map((m) => m.id)).toEqual(['enso-auto', 'zen6', 'zen6-flash', 'opus'])
   })
 })
 
