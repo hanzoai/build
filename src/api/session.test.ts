@@ -213,7 +213,7 @@ describe('cards', () => {
     expect(of('step').map((s) => [s.name, s.detail, s.ran])).toEqual([
       ['Sandbox', 'leasing a dev sandbox', 'done'],
       ['Clone', 'cloning the codebase', 'done'],
-      ['ask_user', 'run', 'done'],
+      ['Called', 'run.ask_user()', 'done'],
       ['Search', 'go table tests', 'done'],
       ['Push', 'pushing agent/ab12', 'running'],
     ])
@@ -222,7 +222,7 @@ describe('cards', () => {
 
   it('draws each item once, as it last stood', () => {
     expect(of('shell')).toMatchObject([{ command: 'go test ./...', output: 'FAIL widgets', ran: 'error' }])
-    expect(of('edit')).toMatchObject([{ files: ['widget.go'], ran: 'done' }])
+    expect(of('edit')).toMatchObject([{ files: [{ path: 'widget.go', kind: 'update', added: null, removed: null }], ran: 'done' }])
     expect(of('think')).toMatchObject([{ text: '**Reading** the widget' }])
     expect(of('todo')).toMatchObject([{ items: [{ text: 'Read', done: true }, { text: 'Test', done: false }] }])
     expect(JSON.stringify(got)).not.toContain('/work/')

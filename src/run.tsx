@@ -74,7 +74,7 @@ import { approve, followUp, headline, retry, start, steer, type Ask, type Earlie
 import { limits as readLimits } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, followed, outcome, pull, settled, steps } from './api/turn.ts'
-import { say as talk, talks } from './api/talk.ts'
+import { answer as reply, say as talk, talks } from './api/talk.ts'
 import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun, type RunState } from './data.ts'
 import { Desk, SEED } from './desk.tsx'
@@ -980,6 +980,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
             ) : null
           }
           onApprove={planned && earlier ? (p) => void act(() => carry(p, 'approve')) : undefined}
+          // What dev asks its person while it works (its ask tool), answered here.
+          onAnswer={signed ? (q, label) => void act(async () => (await reply(t, id, q, label, true), '')) : undefined}
           approving={busy}
           onVerdict={(v) => verdict(t, id, record?.project ?? '', v)}
           empty={

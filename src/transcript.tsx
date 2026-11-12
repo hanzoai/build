@@ -23,6 +23,7 @@ import { Feedback, type Verdict } from '@hanzo/ui/agents'
 import { Code, GAP, MEASURE, Message, Step, Thread } from '@hanzo/ui/chat'
 import { useState, type ReactNode } from 'react'
 
+import { counted, edited, explored } from './api/cli.ts'
 import type { Card, Ran } from './api/turn.ts'
 import { Prose } from './prose.tsx'
 import { artifacts, lead, Reply, type Artifact, type Listen } from './reply.tsx'
@@ -167,26 +168,54 @@ export function Transcript({
               </YStack>
             )
           case 'shell':
-            return (
-              <Step key={`${c.key}:${view}`} name={t('Shell')} detail={c.command} status={state(c.ran)} defaultOpen={expandVerbose} aria-label={t('Command {command}', { command: c.command })}>
-                <Code language="shell" value={c.output ? `$ ${c.command}\n${c.output}` : `$ ${c.command}`}>
-                  {c.output ? `$ ${c.command}\n${tail(c.output)}` : `$ ${c.command}`}
-                </Code>
-              </Step>
-            )
-          case 'edit':
+            // The CLI's words: Ran (Running while it works), the command as the shell got it, its output under it.
             return (
               <Step
                 key={`${c.key}:${view}`}
-                name={c.files.length === 1 ? t('Edited') : c.files.length ? t('Edited {n} files', { n: c.files.length }) : t('Edited files')}
-                detail={c.files.join(', ')}
+                name={state(c.ran) === 'running' ? t('Running') : t('Ran')}
+                detail={c.command}
                 status={state(c.ran)}
                 defaultOpen={expandVerbose}
-                aria-label={c.files.length ? t('Edited {files}', { files: c.files.join(', ') }) : t('Edited files')}
+                aria-label={t('Command {command}', { command: c.command })}
+              >
+                <Code language="shell" value={c.output || t('(no output)')}>
+                  {c.output ? tail(c.output.replace(/\n+$/, '')) : t('(no output)')}
+                </Code>
+              </Step>
+            )
+          case 'explore':
+            // The CLI's Explored block: one line an action, consecutive reads on one line (cli.ts explored).
+            return (
+              <YStack key={c.key} gap="$1" aria-label={state(c.ran) === 'running' ? t('Exploring') : t('Explored')}>
+                <SizableText size="$2" color="$ink" fontWeight="600">
+                  {state(c.ran) === 'running' ? t('Exploring') : t('Explored')}
+                </SizableText>
+                {explored(c.calls).map((l, i) => (
+                  <XStack key={i} gap="$2" pl="$3">
+                    <SizableText size="$2" color="$soft" shrink={0}>
+                      {t(l.title)}
+                    </SizableText>
+                    <SizableText size="$2" color="$ink" style={{ ...mono, overflowWrap: 'anywhere' }}>
+                      {l.text}
+                    </SizableText>
+                  </XStack>
+                ))}
+              </YStack>
+            )
+          case 'edit':
+            // The CLI's patch header: Added / Deleted / Edited a file, or Edited N files, with the lines added and removed.
+            return (
+              <Step
+                key={`${c.key}:${view}`}
+                name={!c.files.length ? t('Edited files') : c.files.length > 1 ? `Edited ${c.files.length} files` : edited(c.files).split(' ')[0]!}
+                detail={!c.files.length ? '' : c.files.length > 1 ? edited(c.files).split(' ').slice(3).join(' ') : edited(c.files).split(' ').slice(1).join(' ')}
+                status={state(c.ran)}
+                defaultOpen={expandVerbose}
+                aria-label={c.files.length ? edited(c.files) : t('Edited files')}
               >
                 <YStack gap="$2" items="flex-start">
                   <SizableText size="$1" color="$soft" style={{ whiteSpace: 'pre-wrap' }}>
-                    {c.files.length ? c.files.join('\n') : t('The agent named no files.')}
+                    {c.files.length ? c.files.map((f) => `${f.path} ${counted(f)}`.trimEnd()).join('\n') : t('The agent named no files.')}
                   </SizableText>
                   {onDiff ? (
                     <Button size="sm" variant="outline" onPress={onDiff}>

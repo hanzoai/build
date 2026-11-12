@@ -31,6 +31,7 @@ import { phrase } from '@hanzo/i18n'
 import type { Say } from '@hanzo/i18n/react'
 
 import { english } from '../say.ts'
+import { actions, called, counted, edited, explored, explores, shown, type Changed, type Explore } from './cli.ts'
 import type { Event } from './sessions.ts'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -323,8 +324,9 @@ export type Ran = 'running' | 'done' | 'error' | 'cancelled'
  *
  *   said   prose: the agent's messages (markdown), or a person's steering words
  *   think  the agent's reasoning, folded until opened
- *   shell  a command the agent ran, and what it printed
- *   edit   files the agent changed; the diff is the run's Git tab
+ *   shell  a command the agent ran, and what it printed: the CLI's "Ran"
+ *   explore  reads, listings and searches, consecutive ones together: the CLI's "Explored"
+ *   edit   files the agent changed, with the lines each adds and removes; the diff is the run's Git tab
  *   step   a step of the run itself (lease, clone, install, push), or a tool the agent called
  *   todo   the agent's plan, as a checklist it ticks
  *   note   a lifecycle line: started, pushed, stopped
@@ -336,7 +338,8 @@ export type Card =
   | { kind: 'said'; key: string; who: 'person' | 'agent'; text: string }
   | { kind: 'think'; key: string; text: string }
   | { kind: 'shell'; key: string; command: string; output: string; ran: Ran }
-  | { kind: 'edit'; key: string; files: string[]; ran: Ran }
+  | { kind: 'explore'; key: string; calls: Explore[]; ran: Ran }
+  | { kind: 'edit'; key: string; files: Changed[]; ran: Ran }
   | { kind: 'step'; key: string; name: string; detail: string; output: string; ran: Ran }
   | { kind: 'todo'; key: string; items: { text: string; done: boolean }[] }
   | { kind: 'note'; key: string; text: string }
@@ -390,14 +393,36 @@ function item(it: Record<string, unknown>, key: string): Card | null {
       return str(it.text) ? { kind: 'said', key, who: 'agent', text: str(it.text) } : null
     case 'reasoning':
       return str(it.text) ? { kind: 'think', key, text: str(it.text) } : null
-    case 'command_execution':
-      return { kind: 'shell', key, command: str(it.command), output: str(it.aggregated_output), ran: itemRan(it) }
+    case 'command_execution': {
+      // What the command did is the agent's own parse of it (cli.ts): exploration, or a command it ran.
+      const did = actions(it.command_actions)
+      if (explores(did)) return { kind: 'explore', key, calls: [{ actions: did, exit: typeof it.exit_code === 'number' ? it.exit_code : null }], ran: itemRan(it) }
+      return { kind: 'shell', key, command: shown(str(it.command)), output: str(it.aggregated_output), ran: itemRan(it) }
+    }
     case 'file_change': {
       const changes = Array.isArray(it.changes) ? it.changes : []
-      return { kind: 'edit', key, files: changes.map((c) => rel(str(obj(c).path))).filter(Boolean), ran: itemRan(it) }
+      const files = changes
+        .map((c): Changed => {
+          const o = obj(c)
+          const kind = o.kind === 'add' || o.kind === 'delete' ? o.kind : 'update'
+          const n = (v: unknown) => (typeof v === 'number' ? v : null)
+          return { path: rel(str(o.path)), kind, added: n(o.added), removed: n(o.removed) }
+        })
+        .filter((f) => f.path)
+      return { kind: 'edit', key, files, ran: itemRan(it) }
     }
-    case 'mcp_tool_call':
-      return { kind: 'step', key, name: str(it.tool) || phrase('Tool'), detail: str(it.server), output: '', ran: itemRan(it) }
+    case 'mcp_tool_call': {
+      const ran = itemRan(it)
+      const said = Array.isArray(obj(it.result).content) ? (obj(it.result).content as unknown[]).map((c) => str(obj(c).text)).filter(Boolean).join('\n') : ''
+      return {
+        kind: 'step',
+        key,
+        name: ran === 'running' ? phrase('Calling') : phrase('Called'),
+        detail: called(str(it.server), str(it.tool), it.arguments),
+        output: str(obj(it.error).message) || said,
+        ran,
+      }
+    }
     case 'web_search':
       return { kind: 'step', key, name: phrase('Search'), detail: str(it.query), output: '', ran: 'done' }
     case 'todo_list': {
@@ -574,7 +599,65 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
   // The ask opens the conversation, ahead of the steps that set the run up.
   const ask = out.findIndex((c) => c.kind === 'said' && c.who === 'person' && !steered.has(c))
   if (ask > 0) out.unshift(...out.splice(ask, 1))
+  return gather(out)
+}
+
+/**
+ * Consecutive exploration as the CLI keeps it: one Explored block, open across the
+ * reads, listings and searches that follow each other — the agent's reasoning
+ * between them included, which stays where it was said, after the block.
+ */
+function gather(cards: Card[]): Card[] {
+  const out: Card[] = []
+  let open: Extract<Card, { kind: 'explore' }> | null = null
+  for (const c of cards) {
+    if (c.kind === 'explore') {
+      if (open) {
+        open.calls = [...open.calls, ...c.calls]
+        if (c.ran === 'running') open.ran = 'running'
+        continue
+      }
+      open = { ...c, calls: [...c.calls] }
+      out.push(open)
+      continue
+    }
+    if (c.kind !== 'think') open = null
+    out.push(c)
+  }
   return out
+}
+
+/**
+ * Cards as the CLI prints them, line for line: what a run's transcript reads as in
+ * `dev`'s terminal. The transcript draws the same words (transcript.tsx); this is
+ * them as text, which the parity tests hold to the CLI's own.
+ */
+export function printed(cards: Card[], live = false): string {
+  const lines: string[] = []
+  const under = (first: string[], rest = '    ') => first.map((l, i) => `${i === 0 ? '  └ ' : rest}${l}`)
+  for (const c of cards) {
+    switch (c.kind) {
+      case 'explore':
+        lines.push(`• ${c.ran === 'running' && live ? 'Exploring' : 'Explored'}`, ...under(explored(c.calls).map((l) => `${l.title} ${l.text}`)))
+        break
+      case 'shell': {
+        const output = c.output.replace(/\n+$/, '')
+        lines.push(`• ${c.ran === 'running' && live ? 'Running' : 'Ran'} ${c.command}`, ...under(output ? output.split('\n') : ['(no output)']))
+        break
+      }
+      case 'edit':
+        lines.push(`• ${edited(c.files)}`)
+        if (c.files.length > 1) lines.push(...c.files.map((f) => `  └ ${f.path} ${counted(f)}`.trimEnd()))
+        break
+      case 'step':
+        if (c.name === 'Called' || c.name === 'Calling') lines.push(`• ${c.name} ${c.detail}`)
+        break
+      case 'said':
+        if (c.who === 'agent') lines.push(`• ${c.text}`)
+        break
+    }
+  }
+  return lines.join('\n')
 }
 
 /** The plan a plan run answered with, from its final status, or ''. */

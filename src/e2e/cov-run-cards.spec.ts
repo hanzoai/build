@@ -46,10 +46,11 @@ test('each card draws what it is, and a command the run never finished is cut of
   const build = t.getByLabel('Command go build')
   await expect(build).toHaveAttribute('data-status', 'error')
   await build.getByText('go build').click()
-  // A long output shows its last six thousand characters.
-  const output = build.getByText(/^\$ go build\s…x+THE END$/)
+  // Ran, as dev says it; a long output shows its last six thousand characters.
+  await expect(build.getByText('Ran', { exact: true })).toBeVisible()
+  const output = build.getByText(/^…x+THE END$/)
   await expect(output).toBeVisible()
-  expect((await output.textContent())!.length).toBe('$ go build\n…'.length + 6000)
+  expect((await output.textContent())!.length).toBe('…'.length + 6000)
   await expect(t.getByLabel('Command rm -rf dist')).toHaveAttribute('data-status', 'cancelled')
   await expect(t.getByLabel('Command go test ./...')).toHaveAttribute('data-status', 'cancelled')
   const plan = t.getByLabel('Plan checklist')
@@ -70,12 +71,13 @@ test('an edit names its file, its files, or says the agent named none', async ({
   // Its diff opens in the side panel, one press away.
   await one.getByRole('button', { name: 'Open the diff' }).click()
   await expect(p.getByRole('complementary', { name: 'Run details' }).getByRole('tab', { name: 'Diff', exact: true })).toHaveAttribute('aria-selected', 'true')
-  const two = t.getByLabel('Edited a.ts, b.ts')
+  const two = t.getByLabel('Edited 2 files')
   await expect(two.getByText('Edited 2 files')).toBeVisible()
   const none = t.getByLabel('Edited files', { exact: true })
   await none.getByText('Edited files').click()
   await expect(none.getByText('The agent named no files.')).toBeVisible()
-  await expect(t.getByLabel('Edited gone.ts')).toHaveAttribute('data-status', 'error')
+  // A file deleted alone is said with dev's own verb.
+  await expect(t.getByLabel('Deleted gone.ts')).toHaveAttribute('data-status', 'error')
 })
 
 test('a step with no output does not open', async ({ page: p }) => {
