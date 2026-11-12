@@ -34,7 +34,7 @@ export const DOTS: Record<string, SessionStatus> = {
  * The dot a row draws. A conversation rests paused between turns (api/talk.ts):
  * it has answered and waits for the person, which reads as done, not as a run held.
  */
-export const dot = (s: Pick<Session, 'status' | 'channel'>): SessionStatus =>
+export const dot = (s: Pick<Session, 'status' | 'channel' | 'parent'>): SessionStatus =>
   talks(s) && s.status === 'paused' ? 'done' : (DOTS[s.status] ?? 'idle')
 
 /** The org's coding runs, newest first, kept live by the org's feed. */

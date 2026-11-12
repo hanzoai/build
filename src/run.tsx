@@ -292,7 +292,9 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     // words go there, in its session, and so does the reader.
     if (record?.parent) {
       const words = how === 'approve' ? `Carry out this plan:\n\n${said.trim()}` : said.trim() || 'Continue where the run left off.'
-      await talk(t, { session: record.parent, input: words, model: mind.model })
+      // Approving the plan is going ahead: the conversation leaves Plan for Auto, so
+      // the run it starts builds.
+      await talk(t, { session: record.parent, input: words, model: mind.model, effort: level(mind.effort), ...(how === 'approve' ? { mode: 'auto' as const } : {}) })
       setDraft('')
       setFiles([])
       host.go(record.parent)

@@ -382,6 +382,18 @@ test.describe('a plan run', () => {
     expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ mode: 'build', after: SESSION, prompt: `Add the widget\n\nCarry out this plan:\n\n${PLAN}` })
   })
 
+  test('in a conversation is built by the conversation, which goes ahead in Auto', async ({ page: p }) => {
+    const CONVERSATION = `sess_${'c'.repeat(32)}`
+    const { sent } = await rig(p, { ...planned(), record: { ...planned().record, parentSessionId: CONVERSATION, rootSessionId: CONVERSATION, channel: 'app' } }, ({ method, path }) =>
+      method === 'POST' && path === '/v1/agent/turns' ? { json: { sessionId: CONVERSATION, runId: 'run_2' } } : undefined,
+    )
+    await p.goto(`/${SESSION}`)
+    await p.getByRole('button', { name: 'Approve and build' }).click()
+    await expect.poll(() => to(sent, 'POST', '/v1/agent/turns').length).toBe(1)
+    expect(to(sent, 'POST', '/v1/agent/turns')[0]?.body).toMatchObject({ session: CONVERSATION, mode: 'auto', input: `Carry out this plan:\n\n${PLAN}` })
+    expect(to(sent, 'POST', '/v1/agent/coding')).toHaveLength(0)
+  })
+
   test('that cannot start its build says why', async ({ page: p }) => {
     await rig(p, planned(), ({ path }) => (path === '/v1/agent/coding' ? refusal('Out of credits', 402) : undefined))
     await p.goto(`/${SESSION}`)

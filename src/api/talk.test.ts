@@ -56,12 +56,15 @@ describe('saying something', () => {
     await expect(say(T, { input: 'hi' })).rejects.toThrow('The conversation answered with no session')
   })
 
-  it('tells a conversation from a run by its channel, and reads its tree', () => {
+  it('tells a conversation from a run in it by its parent, and reads its tree', () => {
     const conv = session({ id: CONV, channel: 'app', rootSessionId: CONV })
-    const run = session({ id: 'sess_r', kind: 'coding', parentSessionId: CONV, rootSessionId: CONV })
+    // A conversation's run is born in its tree, on its channel.
+    const run = session({ id: 'sess_r', kind: 'coding', channel: 'app', parentSessionId: CONV, rootSessionId: CONV })
+    const alone = session({ id: 'sess_s', kind: 'coding', rootSessionId: 'sess_s' })
     expect(talks(conv)).toBe(true)
     expect(talks(run)).toBe(false)
-    expect(run).toMatchObject({ parent: CONV, root: CONV, channel: '' })
+    expect(talks(alone)).toBe(false)
+    expect(run).toMatchObject({ parent: CONV, root: CONV, channel: 'app' })
   })
 })
 

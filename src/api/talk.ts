@@ -29,8 +29,12 @@ import { decode } from './turn.ts'
 /** The channel a conversation's session is on. */
 export const TALK = 'app'
 
-/** Whether a session is a conversation, rather than one run. */
-export const talks = (s: Pick<Session, 'channel'> | null | undefined): boolean => s?.channel === TALK
+/**
+ * Whether a session is a conversation, rather than one run. A conversation's runs
+ * are on its channel too — born in its tree, its person's alone — and are told
+ * from it by having a parent: the conversation is the root.
+ */
+export const talks = (s: Pick<Session, 'channel' | 'parent'> | null | undefined): boolean => s?.channel === TALK && !s.parent
 
 export interface Say {
   /** The conversation to continue. Absent starts one. */

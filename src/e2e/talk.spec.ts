@@ -92,3 +92,29 @@ test('a question a turn asks is answered on its card, and nothing steers a build
   await expect(question.getByText('✓ Start it')).toBeVisible()
   expect(sent.filter((s) => s.path.endsWith('/steer'))).toHaveLength(0)
 })
+
+test('the conversation’s mode is its person’s to change, and what they pick goes with what they say next', async ({ page: p }) => {
+  const sent = await platform(p)
+  await p.goto('/')
+  const ask = p.getByRole('textbox', { name: 'Describe a task or ask a question' })
+  await ask.fill('hello', { timeout: 45_000 })
+  await ask.press('Enter')
+  const transcript = p.getByLabel('Transcript')
+  await expect(transcript.getByText('You said: hello')).toBeVisible()
+
+  // Nothing picked: the turn sends no mode, and the conversation keeps its own.
+  const reply = p.getByRole('textbox', { name: 'Reply to this conversation' })
+  await reply.fill('what would you do?')
+  await reply.press('Enter')
+  await expect.poll(() => posted(sent, '/v1/agent/turns').length).toBe(2)
+  expect(posted(sent, '/v1/agent/turns')[1]?.body).not.toHaveProperty('mode')
+
+  // Plan picked: sent with the next words, and every turn after keeps it.
+  await p.getByRole('button', { name: /^Mode: / }).click()
+  await p.getByRole('listbox', { name: 'Mode' }).getByRole('option', { name: /^Plan/ }).click()
+  await expect(p.getByRole('button', { name: 'Mode: Plan' })).toBeVisible()
+  await reply.fill('plan the page')
+  await reply.press('Enter')
+  await expect.poll(() => posted(sent, '/v1/agent/turns').length).toBe(3)
+  expect(posted(sent, '/v1/agent/turns')[2]?.body).toMatchObject({ session: TALKING, input: 'plan the page', mode: 'plan' })
+})

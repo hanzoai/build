@@ -9,13 +9,16 @@
  * a sandbox (leased on first use and kept for the conversation), or a coding run,
  * whose outcome is said here when it ends. A question a turn asks — in Manual,
  * whether a build may start — is answered on its card. The line under the
- * transcript is what the turn is doing now, from its own progress.
+ * transcript is what the turn is doing now, from its own progress. The mode pill
+ * is the conversation's: Plan, Auto or Manual, kept from the turn it is sent with.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Steer } from '@hanzo/ui/agents'
 import { Composer, measure } from '@hanzo/ui/chat'
 import { useMemo, useState } from 'react'
+
+import { DEV_MODES, MODES, type Mode } from './gear.ts'
 
 import { Refusal } from './api/call.ts'
 import { log, message, stop, type Event } from './api/sessions.ts'
@@ -49,6 +52,10 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
   const shown = useMemo(() => cards(events, '', say), [events, say])
   const working = status === 'running'
   const doing = useMemo(() => now(events), [events])
+  // The conversation's mode, as it keeps it until the person picks another: what
+  // they pick is sent with what they say next, and kept for every turn after.
+  const [picked, setPicked] = useState<Mode | null>(null)
+  const mode: Mode = picked ?? (DEV_MODES.includes(record?.mode as Mode) ? (record?.mode as Mode) : 'auto')
 
   /** One act at a time; what it answers, or the reason it was refused, is the note. */
   const act = async (work: () => Promise<string>) => {
@@ -67,7 +74,7 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
   const send = () => {
     const words = compose(draft.trim(), files)
     if (!words) return
-    const next = () => talk(t, { session: id, input: words, model: mind.model, effort: level(mind.effort) })
+    const next = () => talk(t, { session: id, input: words, model: mind.model, effort: level(mind.effort), ...(picked ? { mode: picked } : {}) })
     void act(async () => {
       if (!working) await next()
       else
@@ -139,6 +146,7 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
           plus={{ upload: () => pick(files, setFiles, setNote, say) }}
           carried={carrying(files, setFiles)}
           mind={signed && !working ? mind : null}
+          mode={signed && !working ? { value: mode, set: (m) => setPicked(m as Mode), items: MODES.filter((m) => DEV_MODES.includes(m.id)) } : null}
         />
       </YStack>
     </YStack>
