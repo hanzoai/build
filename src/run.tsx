@@ -220,8 +220,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const failed = finished && state === 'error'
   const asked = shown.find((c) => c.kind === 'said' && c.who === 'person')
   const again = asked && asked.kind === 'said' ? asked.text : ''
-  // What the recorded read left out: it carries the latest fifty turns.
-  const hidden = Math.max(0, (detail.value?.events ?? 0) - (detail.value?.recent.length ?? 0))
+  // What the recorded read left out once initial pagination and live replay are merged.
+  const hidden = Math.max(0, (detail.value?.events ?? 0) - events.length)
   // Only a run still working is on a step.
   const current = running ? plan.find((x) => !x.done) : undefined
 

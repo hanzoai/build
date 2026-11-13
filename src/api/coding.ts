@@ -70,6 +70,20 @@ export interface Ask {
   effort?: string
   /** The number of the issue on `repo` this run resolves: its pull request says `Closes #<n>`. */
   issue?: number
+  /** Client-generated idempotency key so retries never duplicate a run. */
+  requestId?: string
+  /** Out-of-band instructions (skills, memories) kept separate from `prompt`. */
+  instructions?: string
+  /** Explicit alias for `instructions` passed via `-c developer_instructions=...`. */
+  developerInstructions?: string
+}
+
+let reqSeq = 0
+function newRequestId(): string {
+  const uuid = globalThis.crypto?.randomUUID?.()
+  if (uuid) return uuid
+  reqSeq += 1
+  return `req_${Date.now().toString(36)}_${reqSeq.toString(36)}`
 }
 
 export interface Run {
@@ -87,7 +101,19 @@ export interface Run {
  */
 export function body(ask: Ask): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = { prompt: ask.prompt.trim() }
-  for (const k of ['repo', 'base', 'targetId', 'project', 'after', 'mode', 'model', 'effort'] as const) {
+  for (const k of [
+    'repo',
+    'base',
+    'targetId',
+    'project',
+    'after',
+    'mode',
+    'model',
+    'effort',
+    'requestId',
+    'instructions',
+    'developerInstructions',
+  ] as const) {
     const v = ask[k]?.trim()
     if (v) out[k] = v
   }
@@ -100,7 +126,12 @@ export async function start(t: Target, ask: Ask): Promise<Run> {
   if (!ask.prompt.trim()) throw new Refusal(400, phrase('Say what the run should do'))
   const why = unhonoured(ask.mode, ask.targetId)
   if (why) throw new Refusal(400, why)
-  const r = await call<Partial<Record<string, unknown>>>(t, 'POST', '/v1/agent/coding', body(ask))
+  const r = await call<Partial<Record<string, unknown>>>(
+    t,
+    'POST',
+    '/v1/agent/coding',
+    body({ ...ask, requestId: ask.requestId?.trim() || newRequestId() }),
+  )
   const s = (k: string) => (typeof r?.[k] === 'string' ? (r[k] as string) : '')
   if (!s('sessionId')) throw new Refusal(502, phrase('The run was admitted but named no session'))
   return {
@@ -119,10 +150,13 @@ export async function start(t: Target, ask: Ask): Promise<Run> {
  * with the words; the follow-up's session arrives on this run's own stream as
  * its `followed` status (turn.ts `followed`).
  */
-export async function steer(t: Target, session: string, text: string): Promise<void> {
+export async function steer(t: Target, session: string, text: string, requestId?: string): Promise<void> {
   const words = text.trim()
   if (!words) throw new Refusal(400, phrase('Say something to the run'))
-  await call(t, 'POST', `/v1/agent/coding/${seg(session)}/steer`, { text: words })
+  await call(t, 'POST', `/v1/agent/coding/${seg(session)}/steer`, {
+    text: words,
+    requestId: requestId?.trim() || newRequestId(),
+  })
 }
 
 /** A run a follow-up continues, as its record states it. */
@@ -180,17 +214,20 @@ const modeOf = (m: string): Mode => (m === 'plan' || m === 'setup' ? m : 'build'
  * when it carries a paused run on (apps/coding steer.go followUp).
  */
 export function followUp(e: Earlier, said: string): Ask {
+  const next = from(e)
   const head = headline(e.title, e.repo)
   const words = said.trim()
   let prompt: string
-  if (words) {
+  if (next.after) {
+    prompt = words || 'Continue where the earlier run left off.'
+  } else if (words) {
     const was = head ? `This follows an earlier run on this codebase: “${head}”.` : 'This follows an earlier run on this codebase.'
     prompt = `${words}\n\n${was}${e.pushed ? ' Its work so far is on this branch; build on it.' : ''}`
   } else {
     const kept = e.pushed ? 'An earlier run already worked on this; its work so far is on this branch. Build on it. ' : ''
     prompt = `${head}\n\n${kept}Continue where the earlier run left off.`.trim()
   }
-  return { ...from(e), prompt, mode: modeOf(e.mode) }
+  return { ...next, prompt, mode: modeOf(e.mode) }
 }
 
 /** A build of what a plan run answered: its ask as the title, and the plan to carry out. */

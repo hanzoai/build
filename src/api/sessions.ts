@@ -170,20 +170,58 @@ export async function list(t: Target, q: ListQuery = {}): Promise<Session[]> {
   return (await page(t, q)).sessions
 }
 
-export async function get(t: Target, id: string): Promise<Detail> {
-  const raw = obj(await call<unknown>(t, 'GET', `/v1/agent/sessions/${seg(id)}`))
+export interface GetOptions {
+  limit?: number
+  after?: number
+}
+
+export async function get(t: Target, id: string, opts?: GetOptions): Promise<Detail> {
+  const raw = obj(
+    await call<unknown>(
+      t,
+      'GET',
+      `/v1/agent/sessions/${seg(id)}${query({ limit: opts?.limit, after: opts?.after })}`,
+    ),
+  )
   let recent = (Array.isArray(raw.recentEvents) ? raw.recentEvents : []).map(event)
-  // The detail carries the 50 most recent events; when a long run has scrolled
-  // past seq 1, read the opening turns so the person's full multi-line ask stays
-  // at the head of the transcript and in Try again.
-  if (recent.length > 0 && recent[0]!.seq > 1) {
-    try {
-      const head = obj(await call<unknown>(t, 'GET', `/v1/agent/sessions/${seg(id)}/events?limit=2`))
-      const first = (Array.isArray(head.events) ? head.events : []).map(event)
-      const have = new Set(recent.map((e) => e.seq))
-      recent = [...first.filter((e) => e.seq > 0 && !have.has(e.seq)), ...recent].sort((a, b) => a.seq - b.seq)
-    } catch {
-      /* keep the tail */
+  // When `limit` is explicitly requested (e.g. Run's initial 500-event load) and a
+  // long coding run still exceeds one page (`recent[0].seq > 1`), page forward from
+  // seq 0 so middle history is never dropped. Without `opts`, keep the lightweight
+  // 2-event head fetch so short summary callers stay single-hop.
+  if (recent.length > 0 && recent[0]!.seq > 1 && opts?.after === undefined) {
+    const tailFloor = recent[0]!.seq
+    if (opts?.limit && opts.limit > 50) {
+      try {
+        const earlier: Event[] = []
+        let cursor = 0
+        for (let page = 0; page < 6 && cursor < tailFloor - 1; page++) {
+          const chunk = obj(
+            await call<unknown>(
+              t,
+              'GET',
+              `/v1/agent/sessions/${seg(id)}/events${query({ after: cursor || undefined, limit: Math.min(1000, opts.limit) })}`,
+            ),
+          )
+          const rows = (Array.isArray(chunk.events) ? chunk.events : []).map(event)
+          earlier.push(...rows.filter((e) => e.seq > 0 && e.seq < tailFloor))
+          const next = num(chunk.next)
+          if (next <= cursor || next >= tailFloor - 1) break
+          cursor = next
+        }
+        const have = new Set(recent.map((e) => e.seq))
+        recent = [...earlier.filter((e) => !have.has(e.seq)), ...recent].sort((a, b) => a.seq - b.seq)
+      } catch {
+        /* keep the tail */
+      }
+    } else {
+      try {
+        const head = obj(await call<unknown>(t, 'GET', `/v1/agent/sessions/${seg(id)}/events?limit=2`))
+        const first = (Array.isArray(head.events) ? head.events : []).map(event)
+        const have = new Set(recent.map((e) => e.seq))
+        recent = [...first.filter((e) => e.seq > 0 && !have.has(e.seq)), ...recent].sort((a, b) => a.seq - b.seq)
+      } catch {
+        /* keep the tail */
+      }
     }
   }
   return {
@@ -254,17 +292,26 @@ export interface Watch {
   open?: (attempt: number) => void
 }
 
+export interface WatchOptions {
+  /** Resume replaying missed events strictly after this sequence number. */
+  after?: number
+}
+
 /**
- * Follow one run's tree until `signal` aborts. Reconnects with a capped backoff;
- * a refusal (401/403) ends it, because retrying a no is not recovery.
+ * Follow one run's tree until `signal` aborts. Reconnects with a capped backoff
+ * and replays missed frames via `?after=<lastSeq>` + `Last-Event-ID`; a refusal
+ * (401/403) ends it, because retrying a no is not recovery.
  */
-export async function watch(t: Target, root: string, on: Watch, signal: AbortSignal): Promise<void> {
+export async function watch(t: Target, root: string, on: Watch, signal: AbortSignal, opts?: WatchOptions): Promise<void> {
   let opened = 0
   let fails = 0
+  let lastSeq = opts?.after && Number.isFinite(opts.after) && opts.after > 0 ? Math.floor(opts.after) : 0
   while (!signal.aborted) {
     try {
-      const res = await fetch(`${t.api}/v1/agent/sessions/stream${query({ root })}`, {
-        headers: headers(t, { Accept: 'text/event-stream' }),
+      const extra: Record<string, string> = { Accept: 'text/event-stream' }
+      if (lastSeq > 0) extra['Last-Event-ID'] = String(lastSeq)
+      const res = await fetch(`${t.api}/v1/agent/sessions/stream${query({ root, after: lastSeq > 0 ? lastSeq : undefined })}`, {
+        headers: headers(t, extra),
         cache: 'no-store',
         signal,
       })
@@ -282,7 +329,15 @@ export async function watch(t: Target, root: string, on: Watch, signal: AbortSig
             return
           }
           if (f.event === 'session') on.session?.(session(obj(data).session))
-          else if (f.event === 'event') on.event?.(event(obj(data).event))
+          else if (f.event === 'event') {
+            const ev = event(obj(data).event)
+            if (!root || !ev.sessionId || ev.sessionId === root) {
+              const fid = Number(f.id)
+              if (Number.isInteger(fid) && fid > lastSeq) lastSeq = fid
+              if (ev.seq > lastSeq) lastSeq = ev.seq
+            }
+            on.event?.(ev)
+          }
         },
         signal,
       )

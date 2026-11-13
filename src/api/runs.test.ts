@@ -200,10 +200,14 @@ describe('coding', () => {
     expect(headline('  Add the widget ', '')).toBe('Add the widget')
   })
 
-  it('follows up a run with no codebase in the sandbox it kept', () => {
-    expect(followUp(earlier, 'and tests')).toEqual({ repo: undefined, project: undefined, targetId: undefined, after: earlier.id, prompt: 'and tests\n\nThis follows an earlier run on this codebase: “Add the widget”.', mode: 'build' })
-    expect(followUp({ ...earlier, title: '' }, 'and tests').prompt).toBe('and tests\n\nThis follows an earlier run on this codebase.')
+  it('follows up a run with no codebase in the sandbox it kept, preserving clean session continuity', () => {
+    expect(followUp(earlier, 'and tests')).toEqual({ repo: undefined, project: undefined, targetId: undefined, after: earlier.id, prompt: 'and tests', mode: 'build' })
+    expect(followUp({ ...earlier, title: '' }, 'and tests').prompt).toBe('and tests')
     expect(followUp({ ...earlier, title: '' }, '').prompt).toBe('Continue where the earlier run left off.')
+    // Stateless machine with nothing pushed has no `after` session to resume, so it carries the earlier title context.
+    expect(followUp({ ...earlier, environment: 'tgt_1', pushed: false }, 'and tests').prompt).toBe(
+      'and tests\n\nThis follows an earlier run on this codebase: “Add the widget”.',
+    )
   })
 
   it('reads the ask out of the title the platform gives a run that made its codebase', () => {

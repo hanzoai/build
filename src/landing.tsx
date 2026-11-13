@@ -21,7 +21,7 @@
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { CircleDot, Cloud, Code, Ghost, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
+import { CircleDot, Cloud, Code, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { Composer, MEASURE, type Command } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
@@ -149,13 +149,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState<Source | null>(null)
   const [offering, setOffering] = useState(false)
-  const [forgetful, setForgetful] = useState(false)
   const [desk, setDesk] = useState(false)
   const deck = useDeck('dev-new', { tabs: [{ id: 'tab-1', kind: PAGE, title: '' }], at: 'tab-1' })
   useKey(() => setDesk((d) => !d))
-  const [browserTabs, setBrowserTabs] = useState(false)
-  const [webSearch, setWebSearch] = useState(false)
-  const [research, setResearch] = useState(false)
   // Asking for a repository's address, for one the lists do not show.
   const [giving, setGiving] = useState(false)
   // The repository and branch lists are read again each time they open.
@@ -323,8 +319,12 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       // The first thing said opens a conversation (api/talk.ts) and starts nothing:
       // the agent answers, and leases a sandbox or starts a coding run only when the
       // ask needs one — on the repository, branch, machine and Plan chosen here.
+      // Skills, memories and plugin system prompts travel out-of-band as
+      // developerInstructions so the user prompt stays clean and cacheable.
+      const developerInstructions = [carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n')
       const sent = await say(target, {
-        input: compose([said.trim(), carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n---\n'), files),
+        input: compose(said.trim(), files),
+        ...(developerInstructions ? { developerInstructions } : {}),
         // The name alone. The org rides the request, and a slash is not a repo name.
         // An empty base or place is not sent: the default branch, and the sandbox.
         repo: repo?.name ?? hub?.full_name,
@@ -524,23 +524,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         <XStack data-slot="conversation-head" shrink={0} items="center" justify="space-between" gap="$2" px="$3" height={36} $max-md={{ display: 'none' }}>
           <XStack items="center" gap="$2" minW={0} flex={1} />
           <XStack data-slot="conversation-controls" items="center" gap="$1" shrink={0}>
-            <XStack
-              render="button"
-              data-slot="header-private-chat"
-              aria-label={t('Private chat')}
-              aria-pressed={forgetful}
-              onPress={() => setForgetful((f) => !f)}
-              width={32}
-              height={32}
-              rounded="$3"
-              items="center"
-              justify="center"
-              bg={forgetful ? '$hover' : 'transparent'}
-              hoverStyle={{ bg: '$hover' }}
-              cursor="pointer"
-            >
-              <Ghost size={16} color={forgetful ? 'var(--foreground)' : 'var(--muted-foreground)'} aria-hidden />
-            </XStack>
             {wide ? <PanelToggle open={desk} onToggle={() => setDesk((d) => !d)} /> : null}
           </XStack>
         </XStack>
@@ -603,16 +586,11 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                 onChange={setDraft}
                 onSend={() => void send()}
                 busy={busy}
-                {...({ forgetful } as Record<string, unknown>)}
                 placeholder={t('Ask, build, or run anything…')}
                 label={t('Describe a task or ask a question')}
                 plus={{
                   upload: () => pick(files, setFiles, setNote, t),
-                  ...({
-                    browserTabs: { on: browserTabs, set: setBrowserTabs },
-                    webSearch: { on: webSearch, set: setWebSearch },
-                  } as Record<string, unknown>),
-                  research: { on: research, set: setResearch },
+                  research: { on: carry.gear.gear.research, set: (on) => carry.gear.set({ research: on }) },
                   skills: carry.skills,
                   design: carry.design,
                   plugins: carry.plugins,
@@ -624,6 +602,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                 at={carry.plugins}
                 pills={pills}
                 commands={commands}
+                mode={carry.mode}
                 mind={mind}
                 effort={pacing(mind)}
                 limits={limits}

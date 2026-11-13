@@ -24,12 +24,13 @@ describe('saying something', () => {
       repo: 'site',
       model: 'zen6',
     })
-    expect(body({ input: 'plan it', mode: 'manual', effort: 'high', issue: 7, target: 'tgt_1' })).toEqual({
+    expect(body({ input: 'plan it', mode: 'manual', effort: 'high', issue: 7, target: 'tgt_1', developerInstructions: ' # Skills ' })).toEqual({
       input: 'plan it',
       mode: 'manual',
       effort: 'high',
       issue: 7,
       target: 'tgt_1',
+      developerInstructions: '# Skills',
     })
   })
 

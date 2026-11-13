@@ -357,8 +357,26 @@ describe('coding', () => {
     const seen = answer(202, { ok: true })
     await coding.steer(T, 'sess_1', '  use the other endpoint ')
     expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/coding/sess_1/steer', body: { text: 'use the other endpoint' } })
+    expect(typeof (seen[0]!.body as Record<string, unknown>).requestId).toBe('string')
+    await coding.steer(T, 'sess_1', 'retry with explicit id', 'req_fixed_1')
+    expect((seen[1]!.body as Record<string, unknown>).requestId).toBe('req_fixed_1')
     await expect(coding.steer(T, 'sess_1', ' ')).rejects.toMatchObject({ status: 400 })
-    expect(seen).toHaveLength(1)
+    expect(seen).toHaveLength(2)
+  })
+
+  it('forwards developerInstructions out-of-band and attaches an idempotent requestId on start', async () => {
+    const seen = answer(202, { sessionId: 'sess_clean' })
+    await coding.start(T, {
+      prompt: 'fix callback redirect',
+      developerInstructions: '# Skills\nUse ponytail.\n# Memories\n- Prefer .ts',
+      requestId: 'req_start_99',
+    })
+    expect(seen[0]!.body).toEqual({
+      prompt: 'fix callback redirect',
+      developerInstructions: '# Skills\nUse ponytail.\n# Memories\n- Prefer .ts',
+      requestId: 'req_start_99',
+      desktop: true,
+    })
   })
 })
 

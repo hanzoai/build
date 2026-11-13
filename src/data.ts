@@ -261,12 +261,23 @@ export interface RunState {
  * the record. `id` null reads nothing.
  */
 export function useRun(t: Target, id: string | null): RunState {
-  const detail = useRead<Detail | null>(id ? () => get(t, id) : null, null, [t, id])
+  const detail = useRead<Detail | null>(id ? () => get(t, id, { limit: 500 }) : null, null, [t, id])
   const [live, setLive] = useState<Event[]>([])
   const [pushed, setPushed] = useState<Session | null>(null)
   const [refused, setRefused] = useState('')
   const reload = useRef(detail.reload)
   reload.current = detail.reload
+  const seenId = useRef<string | null>(null)
+  const highestSeq = useRef(0)
+  if (seenId.current !== id) {
+    seenId.current = id
+    highestSeq.current = 0
+  }
+  if (detail.value && detail.value.id === id) {
+    for (const e of detail.value.recent) {
+      if (e.sessionId === id && e.seq > highestSeq.current) highestSeq.current = e.seq
+    }
+  }
 
   // The stream is followed by the run's tree: a conversation's coding run is in the
   // conversation's (talk.ts), and its frames carry that root.
@@ -283,7 +294,10 @@ export function useRun(t: Target, id: string | null): RunState {
       {
         // A frame from a stream this run has already left is not this run's.
         event: (e) => {
-          if (!ctl.signal.aborted && e.sessionId === id) setLive((prev) => [...prev, e])
+          if (!ctl.signal.aborted && e.sessionId === id) {
+            if (e.seq > highestSeq.current) highestSeq.current = e.seq
+            setLive((prev) => [...prev, e])
+          }
         },
         session: (s) => {
           if (!ctl.signal.aborted && s.id === id) setPushed(s)
@@ -295,6 +309,7 @@ export function useRun(t: Target, id: string | null): RunState {
         },
       },
       ctl.signal,
+      { after: root === id ? highestSeq.current : 0 },
     ).catch((e: unknown) => setRefused((e as Error).message))
     return () => ctl.abort()
   }, [t, id, root])

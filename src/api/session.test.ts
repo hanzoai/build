@@ -119,6 +119,56 @@ describe('sessions', () => {
       text: 'check this pr -\nhttps://github.com/ClickHouse/ClickHouse/pull/115724',
     })
   })
+
+  it('fetches limit=500 and backfills middle pages when a long coding run exceeds one page', async () => {
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        seen.push(url)
+        if (url.endsWith('/sessions/sess_big?limit=500')) {
+          return new Response(
+            JSON.stringify({
+              id: 'sess_big',
+              status: 'running',
+              events: 503,
+              recentEvents: [
+                { id: 'e4', sessionId: 'sess_big', seq: 4, kind: 'log', payload: { message: 'step 4' } },
+                { id: 'e5', sessionId: 'sess_big', seq: 5, kind: 'status', payload: { status: 'done' } },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        if (url.endsWith('/sessions/sess_big/events?limit=500')) {
+          return new Response(
+            JSON.stringify({
+              events: [
+                { id: 'e1', sessionId: 'sess_big', seq: 1, kind: 'message', payload: { role: 'user', text: 'initial ask' } },
+                { id: 'e2', sessionId: 'sess_big', seq: 2, kind: 'log', payload: { message: 'step 2' } },
+              ],
+              next: 2,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        return new Response(
+          JSON.stringify({
+            events: [{ id: 'e3', sessionId: 'sess_big', seq: 3, kind: 'log', payload: { message: 'step 3' } }],
+            next: 0,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+    const d = await sessions.get(T, 'sess_big', { limit: 500 })
+    expect(seen).toEqual([
+      'https://api.hanzo.ai/v1/agent/sessions/sess_big?limit=500',
+      'https://api.hanzo.ai/v1/agent/sessions/sess_big/events?limit=500',
+      'https://api.hanzo.ai/v1/agent/sessions/sess_big/events?after=2&limit=500',
+    ])
+    expect(d.recent.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5])
+  })
 })
 
 const EARLIER: Earlier = {
@@ -133,29 +183,34 @@ const EARLIER: Earlier = {
 }
 
 describe('a follow-up', () => {
-  it('starts from the branch a run pushed, and says which run it follows', () => {
+  it('resumes the session cleanly without prepending a 1-line summary stub when after is set', () => {
     const ask = followUp(EARLIER, ' now add tests ')
     expect(ask).toMatchObject({ repo: 'hanzoai/universe', after: 'sess_1', mode: 'build' })
     expect(ask.base).toBeUndefined()
     expect(ask.targetId).toBeUndefined()
-    expect(ask.prompt).toBe('now add tests\n\nThis follows an earlier run on this codebase: “Add the widget”. Its work so far is on this branch; build on it.')
+    expect(ask.prompt).toBe('now add tests')
   })
 
   it('goes on in the sandbox the run kept, whether it pushed or not', () => {
     const ask = followUp({ ...EARLIER, pushed: false, mode: 'plan' }, 'go on')
-    expect(ask).toMatchObject({ after: 'sess_1', mode: 'plan' })
+    expect(ask).toMatchObject({ after: 'sess_1', mode: 'plan', prompt: 'go on' })
     expect(ask.base).toBeUndefined()
   })
 
   it('on a machine, which keeps no sandbox, starts where the run started when it pushed nothing', () => {
     const ask = followUp({ ...EARLIER, environment: 'tgt_1', pushed: false }, 'go on')
     expect(ask.after).toBeUndefined()
-    expect(ask).toMatchObject({ base: 'main', targetId: 'tgt_1' })
+    expect(ask).toMatchObject({
+      base: 'main',
+      targetId: 'tgt_1',
+      prompt: 'go on\n\nThis follows an earlier run on this codebase: “Add the widget”.',
+    })
   })
 
-  it('goes on with nothing said as the platform does: the ask, and carry on', () => {
-    expect(followUp(EARLIER, '').prompt).toBe(
-      'Add the widget\n\nAn earlier run already worked on this; its work so far is on this branch. Build on it. Continue where the earlier run left off.',
+  it('goes on with nothing said by continuing the resumed session cleanly', () => {
+    expect(followUp(EARLIER, '').prompt).toBe('Continue where the earlier run left off.')
+    expect(followUp({ ...EARLIER, environment: 'tgt_1', pushed: false }, '').prompt).toBe(
+      'Add the widget\n\nContinue where the earlier run left off.',
     )
   })
 

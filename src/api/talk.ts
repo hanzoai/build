@@ -55,6 +55,10 @@ export interface Say {
   effort?: string
   /** The issue on `repo` a coding run resolves. */
   issue?: number
+  /** Out-of-band instructions (skills, memories) kept separate from `input`. */
+  instructions?: string
+  /** Explicit alias for `instructions` forwarded to turns and coding runs. */
+  developerInstructions?: string
 }
 
 export interface Said {
@@ -67,7 +71,17 @@ export interface Said {
 /** The request body: only what was said, with no empty values sent. */
 export function body(s: Say): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = { input: s.input.trim() }
-  for (const k of ['session', 'model', 'effort', 'repo', 'base', 'target', 'mode'] as const) {
+  for (const k of [
+    'session',
+    'model',
+    'effort',
+    'repo',
+    'base',
+    'target',
+    'mode',
+    'instructions',
+    'developerInstructions',
+  ] as const) {
     const v = s[k]?.trim()
     if (v) out[k] = v
   }

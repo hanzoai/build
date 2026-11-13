@@ -43,20 +43,23 @@ describe('parse', () => {
 })
 
 describe('watch', () => {
-  it('follows one tree, reports each open, and reconnects after a drop', async () => {
+  it('follows one tree, reports each open, and reconnects with ?after=<lastSeq> + Last-Event-ID after a drop', async () => {
     vi.useFakeTimers()
     const ctl = new AbortController()
     const urls: string[] = []
     const auth: (string | null)[] = []
+    const lastIds: (string | null)[] = []
     let n = 0
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit) => {
         urls.push(url)
-        auth.push(new Headers(init.headers).get('authorization'))
+        const h = new Headers(init.headers)
+        auth.push(h.get('authorization'))
+        lastIds.push(h.get('last-event-id'))
         n += 1
         if (n === 1) return new Response(body('event: session\ndata: {"session":{"id":"sess_1","status":"running"}}\n\n'), { status: 200 })
-        if (n === 2) return new Response(body('event: event\ndata: {"event":{"id":"e1","sessionId":"sess_1","seq":3,"kind":"log","payload":{"message":"go test"}}}\n\n'), { status: 200 })
+        if (n === 2) return new Response(body('id: 3\nevent: event\ndata: {"event":{"id":"e1","sessionId":"sess_1","seq":3,"kind":"log","payload":{"message":"go test"}}}\n\n'), { status: 200 })
         ctl.abort()
         return new Response(null, { status: 200 })
       }),
@@ -68,6 +71,9 @@ describe('watch', () => {
     await vi.runAllTimersAsync()
     await done
     expect(urls[0]).toBe('https://api.hanzo.ai/v1/agent/sessions/stream?root=sess_1')
+    expect(lastIds[0]).toBeNull()
+    expect(urls[2]).toBe('https://api.hanzo.ai/v1/agent/sessions/stream?root=sess_1&after=3')
+    expect(lastIds[2]).toBe('3')
     expect(auth[0]).toBe('Bearer tok')
     // The platform wraps each frame by its kind; the bare record is inside.
     expect(sessions.map((s) => [s.id, s.status])).toEqual([['sess_1', 'running']])
