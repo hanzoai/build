@@ -13,6 +13,7 @@ import type { Page } from '@playwright/test'
 import { desk, open } from './desk.ts'
 import { expect, test } from './fixture.ts'
 import { BOX, ev, finished, hold, rig, SESSION, tells, to } from './cov-run.ts'
+import type { Sent } from './signed.ts'
 
 const live = () => ({ ...finished(), status: 'running', sandbox: BOX })
 const SCREEN = `/v1/sandbox/${BOX}/screen/ticket`
@@ -123,6 +124,56 @@ test('the Browser shows where a run published when nothing serves', async ({ pag
   await open(p, 'Preview')
   await expect(desk(p).getByText('Nothing is serving yet', { exact: true }).first()).toBeVisible()
   await expect(desk(p).getByText('When the run starts a server in its sandbox, the page opens here.')).toBeVisible()
+  // While the run works, its server is the agent's to start.
+  await expect(desk(p).getByRole('button', { name: 'Start dev server' })).toHaveCount(0)
+})
+
+const EXEC = `/v1/sandbox/${BOX}/exec`
+/** The exec calls that started a server (SERVE) rather than read one (SERVED). */
+const starts = (sent: Sent[]) =>
+  to(sent, 'POST', EXEC).filter((s) => (s.body as { argv: string[] }).argv[2]!.includes('nohup'))
+
+test('a finished run’s Preview starts its server again and opens it once it listens', async ({ page: p }, info) => {
+  const { world, sent } = await rig(p, { record: { ...finished(), sandbox: BOX } }, (s) => {
+    if (s.path !== EXEC) return undefined
+    const argv = (s.body as { argv: string[] }).argv
+    if (!argv[2]!.includes('nohup')) return { json: { exitCode: 0, stdout: 'up\n  VITE ready in 300 ms\n' } }
+    world.ports = [{ port: 5173, host: `sandbox-${BOX}-preview-5173.hanzo.app` }]
+    return { json: { exitCode: 0, stdout: argv[4] || 'pnpm run dev', stderr: '' } }
+  })
+  world.env = { ...world.env, start: 'pnpm dev --host' }
+  await p.route(/-preview-\d+\.hanzo\.app\//, (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><body>the app on 5173</body>' }))
+  await p.goto(`/${SESSION}`)
+  await open(p, 'Preview')
+  await expect(desk(p).getByText('A server the run started stopped when the run ended.', { exact: false })).toBeVisible()
+  await p.screenshot({ path: info.outputPath('start.png') })
+  await desk(p).getByRole('button', { name: 'Start dev server' }).click()
+  // The codebase's own start command is what runs, when its environment names one.
+  await expect.poll(() => starts(sent).length).toBe(1)
+  expect((starts(sent)[0]!.body as { argv: string[] }).argv[4]).toBe('pnpm dev --host')
+  await expect(p.frameLocator('iframe[title="What the run serves on port 5173"]').getByText('the app on 5173')).toBeVisible()
+  await p.screenshot({ path: info.outputPath('started.png') })
+})
+
+test('a server started from the Preview that exits says why, with what it wrote', async ({ page: p }, info) => {
+  const { sent } = await rig(p, { record: { ...finished(), sandbox: BOX } }, (s) => {
+    if (s.path !== EXEC) return undefined
+    const argv = (s.body as { argv: string[] }).argv
+    if (!argv[2]!.includes('nohup')) return { json: { exitCode: 0, stdout: "down\n> next dev\nError: Cannot find module './client/local'\n" } }
+    return { json: { exitCode: 0, stdout: 'yarn run dev' } }
+  })
+  await p.goto(`/${SESSION}`)
+  await open(p, 'Preview')
+  await desk(p).getByRole('button', { name: 'Start dev server' }).click()
+  await expect(desk(p).getByText('The dev server stopped.')).toBeVisible({ timeout: 10_000 })
+  await expect(desk(p).getByText(/Cannot find module '.\/client\/local'/)).toBeVisible()
+  await p.screenshot({ path: info.outputPath('stopped.png') })
+  // With no start command of its own, the package's dev script is what was asked for.
+  expect((starts(sent)[0]!.body as { argv: string[] }).argv[4]).toBe('')
+  await desk(p).getByRole('button', { name: 'Try again' }).click()
+  await expect.poll(() => starts(sent).length).toBe(2)
+  await desk(p).getByRole('button', { name: 'Set a start command' }).click()
+  await expect(desk(p).getByRole('tab', { name: /Environment/ })).toBeVisible()
 })
 
 test('the Artifacts tab saves what the run left and opens its previews', async ({ page: p }) => {
