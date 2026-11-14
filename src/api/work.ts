@@ -7,6 +7,13 @@
  *   GET /v1/task/board                                       every issue and pull request: the forge's, and the task index's
  *   GET /v1/task/projects                                    the boards
  *   GET /v1/task/projects/{key}/issues                       one board's
+ *   POST /v1/git/workspace                                   set the org's code workspace up for the caller
+ *
+ * In a workspace the platform made for the org, the board is read as the
+ * person's own forge account, seated there by POST /v1/git/workspace (cloud
+ * apps/git workspace.go). Nothing else seats them, so a board refused for want of
+ * a seat — or of the org's namespace — opens the workspace and is read again
+ * (`seated`).
  *
  * A project is a repository, so the list is those sources merged (merge.ts) and
  * not a second copy of them. An issue row from the board is read for what it
@@ -19,7 +26,7 @@
  * Creating, renaming and deleting a board are forge operations. This surface
  * reads the work and opens a run against it.
  */
-import { call, seg, type Target } from './call.ts'
+import { call, Refusal, seg, type Target } from './call.ts'
 import { codebases } from './codebases.ts'
 import { installations, repos as granted, type Repo } from './github.ts'
 import { assemble, canon, issues as merged, owners, type Held, type Issue, type Site, type Source } from '../merge.ts'
@@ -104,8 +111,44 @@ export function work(raw: unknown): Issue | null {
   }
 }
 
+/**
+ * What the board answers a caller with no seat in the org's made workspace yet,
+ * or an org with no namespace on the forge yet (cloud apps/task source.go): both
+ * are what opening the workspace makes. A seat refused for being no person's — an
+ * API key — is not one of them, and is said as it is.
+ */
+const UNSEATED = /no forge identity for this principal yet|no namespace on the forge yet/i
+
+/** The workspace opened for a target, once while the page lives: concurrent reads share one open. */
+const opened = new Map<string, Promise<unknown>>()
+
+/** Set the org's code workspace up for the caller: its namespace, and their forge account and seat. Idempotent. */
+export function open(t: Target): Promise<unknown> {
+  const key = `${t.api}\n${t.org ?? ''}`
+  let p = opened.get(key)
+  if (!p) {
+    p = call<unknown>(t, 'POST', '/v1/git/workspace', {}).catch((e: unknown) => {
+      opened.delete(key)
+      throw e
+    })
+    opened.set(key, p)
+  }
+  return p
+}
+
+/** A board read that, refused for want of a seat or a namespace, opens the workspace and reads once more. */
+async function seated<T>(t: Target, read: () => Promise<T>): Promise<T> {
+  try {
+    return await read()
+  } catch (e) {
+    if (!(e instanceof Refusal) || e.status !== 403 || !UNSEATED.test(e.message)) throw e
+    await open(t)
+    return read()
+  }
+}
+
 export async function boards(t: Target, signal?: AbortSignal): Promise<Board[]> {
-  const raw = await call<unknown>(t, 'GET', '/v1/task/projects', undefined, { signal })
+  const raw = await seated(t, () => call<unknown>(t, 'GET', '/v1/task/projects', undefined, { signal }))
   return rows(raw)
     .map(board)
     .filter((b): b is Board => b !== null)
@@ -120,7 +163,7 @@ const issuesOf = (raw: unknown): Issue[] =>
 
 /** Every issue and pull request the org has, from the forge and the task index, each once. */
 export async function everything(t: Target, signal?: AbortSignal): Promise<Issue[]> {
-  return issuesOf(await call<unknown>(t, 'GET', '/v1/task/board', undefined, { signal }))
+  return issuesOf(await seated(t, () => call<unknown>(t, 'GET', '/v1/task/board', undefined, { signal })))
 }
 
 /** The rows a list of projects is assembled from (merge.ts `assemble`), and which sources did not answer. */
