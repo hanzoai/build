@@ -165,6 +165,60 @@ describe('the org’s work', () => {
   })
 })
 
+describe('a board read before the person has a seat', () => {
+  /** The platform as a made workspace answers it: the board refuses until POST /v1/git/workspace seats the caller. */
+  function unseated(refusal: string) {
+    const seen: string[] = []
+    let open = false
+    const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        const path = new URL(url).pathname
+        seen.push(`${init.method ?? 'GET'} ${path}`)
+        if (path === '/v1/git/workspace' && init.method === 'POST') {
+          open = true
+          return json(200, { owner: 'acme', made: true, login: 'seat-ann' })
+        }
+        if (!open) return json(403, { detail: refusal })
+        if (path === '/v1/task/board') return json(200, [FORGE])
+        if (path === '/v1/task/projects') return json(200, [{ key: 'build', name: 'Build' }])
+        return json(404, { detail: 'not found' })
+      }),
+    )
+    return seen
+  }
+  const SET_UP = 'open Codebase, Projects or Issues in Hanzo Dev to set it up'
+
+  it('opens the workspace, which seats them, and reads the board again', async () => {
+    const seen = unseated(`no forge identity for this principal yet; ${SET_UP}`)
+    const all = await everything({ ...T, org: 'acme-seat' })
+    expect(all.map((i) => i.number)).toEqual([3])
+    expect(seen).toEqual(['GET /v1/task/board', 'POST /v1/git/workspace', 'GET /v1/task/board'])
+  })
+
+  it('opens it for an org with no namespace on the forge yet, too', async () => {
+    const seen = unseated(`this org has no namespace on the forge yet; ${SET_UP}`)
+    expect((await boards({ ...T, org: 'acme-ns' })).map((b) => b.key)).toEqual(['build'])
+    expect(seen).toEqual(['GET /v1/task/projects', 'POST /v1/git/workspace', 'GET /v1/task/projects'])
+  })
+
+  it('opens it once for the reads that were refused together', async () => {
+    const seen = unseated(`no forge identity for this principal yet; ${SET_UP}`)
+    const t = { ...T, org: 'acme-both' }
+    const [all, kept] = await Promise.all([everything(t), boards(t)])
+    expect(all).toHaveLength(1)
+    expect(kept).toHaveLength(1)
+    expect(seen.filter((s) => s === 'POST /v1/git/workspace')).toHaveLength(1)
+  })
+
+  it('says a refusal no seat can answer as it is: an API key holds none', async () => {
+    const seen = unseated('no forge identity for this principal: a seat in a code workspace is a person’s')
+    await expect(everything({ ...T, org: 'acme-key' })).rejects.toMatchObject({ status: 403, message: expect.stringContaining('a seat in a code workspace is a person') })
+    expect(seen).toEqual(['GET /v1/task/board'])
+  })
+})
+
 describe('what projects are made from', () => {
   const HUB = { repos: [{ owner: 'hanzoai', name: 'build', full_name: 'hanzoai/build', private: false, default_branch: 'main', pushed_at: '2026-10-01T00:00:00Z', installation_id: 7, codebase: 'hanzoai_build' }], next: 'c2', total: 140, unread: ['hanzo-labs'], connected: true }
   const HELD = { data: [{ name: 'hanzoai_build', org: 'hanzo', defaultBranch: 'main', updatedAt: '2026-10-02T00:00:00Z' }] }
