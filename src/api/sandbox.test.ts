@@ -76,6 +76,56 @@ describe('a sandbox', () => {
   })
 })
 
+describe('a server started from the Preview', () => {
+  it('runs the start script detached, handing it the environment’s start command, and answers what it started', async () => {
+    const seen = replies({ status: 200, body: { exitCode: 0, stdout: 'EVN_FILE_NAME=dev yarn dev', stderr: '' } })
+    expect(await sandbox.serve(T, 'm_1', '  EVN_FILE_NAME=dev yarn dev ')).toBe('EVN_FILE_NAME=dev yarn dev')
+    expect(seen[0]).toEqual({
+      method: 'POST',
+      url: 'https://api.hanzo.ai/v1/sandbox/m_1/exec',
+      body: { argv: ['sh', '-c', sandbox.SERVE, 'sh', 'EVN_FILE_NAME=dev yarn dev'], timeoutSec: 30 },
+    })
+  })
+
+  it('starts it detached, in a group of its own, with its output and pid kept out of the checkout', () => {
+    expect(sandbox.SERVE).toContain('nohup sh -c "$cmd" </dev/null >"$d/log" 2>&1 &')
+    expect(sandbox.SERVE).toContain('setsid nohup')
+    expect(sandbox.SERVE).toContain(`d=${sandbox.SERVE_DIR}`)
+    expect(sandbox.SERVE_DIR.startsWith('/tmp/')).toBe(true)
+  })
+
+  it('resumes a parked sandbox first, then starts it', async () => {
+    const seen = replies(
+      { status: 409, body: { detail: 'sandbox is parked' } },
+      { status: 200, body: { status: 'running' } },
+      { status: 200, body: { exitCode: 0, stdout: 'pnpm run dev' } },
+    )
+    expect(await sandbox.serve(T, 'm_1')).toBe('pnpm run dev')
+    expect(seen.map((s) => s.url)).toEqual([
+      'https://api.hanzo.ai/v1/sandbox/m_1/exec',
+      'https://api.hanzo.ai/v1/sandbox/m_1/resume',
+      'https://api.hanzo.ai/v1/sandbox/m_1/exec',
+    ])
+  })
+
+  it('says why there was nothing to start, and what failed when it could not', async () => {
+    replies({ status: 200, body: { exitCode: 3, stdout: 'no-script\n' } })
+    await expect(sandbox.serve(T, 'm_1')).rejects.toMatchObject({ status: 422, message: expect.stringContaining('no dev or start script') })
+    replies({ status: 200, body: { exitCode: 3, stdout: 'no-package' } })
+    await expect(sandbox.serve(T, 'm_1')).rejects.toMatchObject({ status: 422, message: expect.stringContaining('no package.json') })
+    replies({ status: 200, body: { exitCode: 2, stdout: '', stderr: 'sh: 1: cannot create /tmp/hanzo-preview/log\nmkdir: permission denied\n' } })
+    await expect(sandbox.serve(T, 'm_1')).rejects.toMatchObject({ status: 502, message: 'mkdir: permission denied' })
+  })
+
+  it('reads whether it still runs, and what it last wrote', async () => {
+    const seen = replies({ status: 200, body: { exitCode: 0, stdout: 'down\n> dev\nError: Cannot find module\n' } })
+    expect(await sandbox.served(T, 'm_1')).toEqual({ up: false, log: '> dev\nError: Cannot find module' })
+    expect(seen[0]!.body).toEqual({ argv: ['sh', '-c', sandbox.SERVED], timeoutSec: 10 })
+    replies({ status: 200, body: { exitCode: 0, stdout: 'up\nready on 3000' } })
+    expect(await sandbox.served(T, 'm_1')).toEqual({ up: true, log: 'ready on 3000' })
+  })
+})
+
 describe('what a run left', () => {
   it('reads its artifacts, dropping any it cannot name', async () => {
     replies({

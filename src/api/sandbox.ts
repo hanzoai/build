@@ -10,6 +10,7 @@
  *   POST /v1/sandbox/{id}/{screen|terminal}/ticket     one ticket, spent when the page's socket opens (30 s)
  *   GET  /v1/sandbox/{id}/ports                        what listens in it, each with its preview host
  *   POST /v1/sandbox/{id}/preview {port}               an address that opens that port in a browser
+ *   POST /v1/sandbox/{id}/exec {argv, timeoutSec}      one command in /work: {exitCode, stdout, stderr}
  *   POST /v1/sandbox/read {id, path}                   a directory's names, or a file's bytes
  *
  * A door or a preview asked of a sandbox that stopped as it was asked is 409: it
@@ -136,6 +137,99 @@ export async function preview(t: Target, id: string, port: number): Promise<stri
   }
   if (url.protocol !== 'https:') throw new Refusal(502, phrase('The sandbox answered with no address to open'))
   return url.href
+}
+
+/**
+ * Where a server started from the Preview keeps its process group and its output:
+ * under /tmp, as a run keeps its own files out of the checkout it commits.
+ */
+export const SERVE_DIR = '/tmp/hanzo-preview'
+
+/**
+ * The shell that starts the app's server for the Preview, detached in a session of
+ * its own so it outlives the one command that started it. A server a run starts
+ * ends with the run (the agent's harness takes it down), so the Preview starts one
+ * again. It runs the codebase's start command when its environment names one ($1),
+ * else the package's `dev` script, or `start`, by the package manager its lockfile
+ * names, with the environment's secrets sourced as a run sources them (cloud
+ * apps/coding envPath). A server this started before is stopped first, its whole
+ * group. It prints what it started, or exits 3 saying why nothing could be.
+ */
+export const SERVE = [
+  `d=${SERVE_DIR}`,
+  'mkdir -p "$d"',
+  'if [ -f /tmp/hanzo-run/env ]; then . /tmp/hanzo-run/env; fi',
+  'cmd=$1',
+  'if [ -z "$cmd" ]; then',
+  '  [ -f package.json ] || { echo no-package; exit 3; }',
+  '  if [ -f pnpm-lock.yaml ]; then pm=pnpm; elif [ -f yarn.lock ]; then pm=yarn; elif [ -f bun.lock ] || [ -f bun.lockb ]; then pm=bun; else pm=npm; fi',
+  `  run=$(node -e 'const s=require("./package.json").scripts||{};process.stdout.write(s.dev?"dev":s.start?"start":"")' 2>/dev/null)`,
+  '  [ -n "$run" ] || { echo no-script; exit 3; }',
+  '  cmd="$pm run $run"',
+  'fi',
+  'old=$(cat "$d/pid" 2>/dev/null)',
+  'if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then kill -TERM "-$old" 2>/dev/null || kill -TERM "$old" 2>/dev/null; sleep 1; fi',
+  'if command -v setsid >/dev/null 2>&1; then setsid nohup sh -c "$cmd" </dev/null >"$d/log" 2>&1 & else nohup sh -c "$cmd" </dev/null >"$d/log" 2>&1 & fi',
+  'echo $! >"$d/pid"',
+  'printf %s "$cmd"',
+].join('\n')
+
+/** Whether the server the Preview started still runs (`up` or `down`), then its output's last lines. */
+export const SERVED = [
+  `d=${SERVE_DIR}`,
+  'p=$(cat "$d/pid" 2>/dev/null)',
+  'if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then echo up; else echo down; fi',
+  'tail -n 40 "$d/log" 2>/dev/null',
+].join('\n')
+
+/** Why there was nothing to start, as SERVE says it. */
+const UNSTARTED: Record<string, string> = {
+  'no-package': phrase('This checkout has no package.json to start. Set a start command in its Environment.'),
+  'no-script': phrase('Its package.json has no dev or start script. Set a start command in its Environment.'),
+}
+
+interface Ran {
+  code: number
+  out: string
+  err: string
+}
+
+/** One command in the sandbox, as an argument vector: its exit code and output. A failed command is an answer, not a refusal. */
+async function exec(t: Target, id: string, argv: string[], timeoutSec: number): Promise<Ran> {
+  const r = (await call<Record<string, unknown>>(t, 'POST', `/v1/sandbox/${seg(id)}/exec`, { argv, timeoutSec })) ?? {}
+  return {
+    code: typeof r.exitCode === 'number' ? r.exitCode : -1,
+    out: typeof r.stdout === 'string' ? r.stdout : '',
+    err: typeof r.stderr === 'string' ? r.stderr : '',
+  }
+}
+
+/**
+ * Start the app's server in the sandbox, detached, and answer the command it runs:
+ * `start` when the codebase's environment names one, else its package's dev script.
+ * A parked sandbox is resumed first.
+ */
+export async function serve(t: Target, id: string, start = ''): Promise<string> {
+  const r = await running(t, id, () => exec(t, id, ['sh', '-c', SERVE, 'sh', start.trim()], 30))
+  const said = r.out.trim()
+  if (r.code === 0 && said) return said
+  const why = UNSTARTED[said]
+  if (r.code === 3 && why) throw new Refusal(422, why)
+  throw new Refusal(502, r.err.trim().split('\n').pop() || phrase('The dev server could not be started.'))
+}
+
+export interface Served {
+  /** Whether the server the Preview started still runs. */
+  up: boolean
+  /** The last lines it wrote. */
+  log: string
+}
+
+/** Whether the server the Preview started still runs, and what it last wrote. */
+export async function served(t: Target, id: string): Promise<Served> {
+  const r = await exec(t, id, ['sh', '-c', SERVED], 10)
+  const [first = '', ...rest] = r.out.split('\n')
+  return { up: first.trim() === 'up', log: rest.join('\n').trimEnd() }
 }
 
 export interface Node {

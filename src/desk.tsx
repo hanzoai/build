@@ -14,12 +14,13 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n, type Say } from '@hanzo/i18n/react'
 import { ChevronRight, ExternalLink, Folder, GitBranch, GitPullRequest, Globe, Info, Laptop, Maximize2, MoreHorizontal, RefreshCcw, Square, SquareTerminal, X } from '@hanzogui/lucide-icons-2'
-import { Button, DropdownMenu, Input, Switch, type DropdownMenuProps } from '@hanzo/ui'
+import { Button, DropdownMenu, Switch, type DropdownMenuProps } from '@hanzo/ui'
 import { PreviewFrame, type PreviewHandle } from '@hanzo/ui/agents'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { read as readChanges, type Changes } from './api/changes.ts'
-import { park, ports as listening, preview, sandbox as look, wake, type Box, type Port } from './api/sandbox.ts'
+import { read as readEnvironment } from './api/environment.ts'
+import { park, ports as listening, preview, sandbox as look, serve, served, wake, type Box, type Port } from './api/sandbox.ts'
 import type { Event } from './api/sessions.ts'
 import { cards, failure, shell, steps, type ShellLine } from './api/turn.ts'
 import { useKept, useRead } from './data.ts'
@@ -118,7 +119,12 @@ export function Desk({
   const environ = () => side.open({ kind: 'environment', title: say('Environment') })
 
   const kinds: Kind[] = [
-    { id: 'preview', label: say('Preview'), bleed: true, render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} /> },
+    {
+      id: 'preview',
+      label: say('Preview'),
+      bleed: true,
+      render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} repo={repo} onEnvironment={environ} />,
+    },
     {
       id: 'artifacts',
       label: say('Artifacts'),
@@ -386,7 +392,21 @@ const SAYS: Record<number, (port: number, say: Say) => string> = {
  * looking. A preview that lost its sandbox (409) is opened again, at most twice
  * in a while; any other status is said, and Retry is the person's.
  */
-function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['state'] | ''; site: string; live: boolean }) {
+function Browser({
+  sandbox,
+  held,
+  site,
+  live,
+  repo,
+  onEnvironment,
+}: {
+  sandbox: string
+  held: Box['state'] | ''
+  site: string
+  live: boolean
+  repo: string
+  onEnvironment: () => void
+}) {
   const { t: say } = useI18n()
   const t = useTarget()
   const [open, setOpen] = useState<Port[]>([])
@@ -394,9 +414,14 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
   const [src, setSrc] = useState('')
   const [why, setWhy] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const [serving, setServing] = useState<Serving | null>(null)
   const reopened = useRef<number[]>([])
   const frame = useRef<HTMLIFrameElement>(null)
   const running = Boolean(sandbox) && held === 'running'
+  // A server the run started ended with the run, so once it has, the person can
+  // start one again here, in the sandbox kept for its previews — a suspended one
+  // is resumed for it. While the run works, its server is the agent's to start.
+  const startable = Boolean(sandbox) && !live && (held === 'running' || held === 'parked')
 
   // What listens, read again while the sandbox runs: a dev server appears once it listens.
   useEffect(() => {
@@ -462,19 +487,52 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
 
   const tab = () => away(preview(t, sandbox, port)).catch((e: Error) => setWhy(e.message))
 
-  const detect = () => {
-    if (!sandbox) return
-    void listening(t, sandbox).then(
-      (ps) => {
-        setOpen(ps)
-        setPort((p) => (ps.some((x) => x.port === p) ? p : (ps[0]?.port ?? 0)))
-      },
-      () => undefined,
-    )
+  /**
+   * Start the app's server: the codebase's start command when its environment
+   * names one, else its package's dev script. The page opens once it listens,
+   * because what listens is read every few seconds anyway.
+   */
+  const start = async () => {
+    setServing({ command: '', up: true, log: '', why: '' })
+    try {
+      const named = repo ? await readEnvironment(t, repo).then((e) => e.start, () => '') : ''
+      setServing({ command: await serve(t, sandbox, named), up: true, log: '', why: '' })
+    } catch (e) {
+      setServing({ command: '', up: false, log: '', why: (e as Error).message })
+    }
   }
 
-  if (!running) return <Site site={site} live={live} held={held} onDetect={detect} />
-  if (!port) return <Site site={site} live={live} held={held} onDetect={detect} />
+  // While a server started here comes up, whether it is still running and what it
+  // says; one that exits says why. Read for a while, never for as long as the page is open.
+  const coming = Boolean(serving?.command && serving.up && !port)
+  useEffect(() => {
+    if (!coming) return
+    let gone = false
+    const until = Date.now() + WATCH
+    const check = () => {
+      if (Date.now() > until) {
+        clearInterval(every)
+        setServing((v) => v && { ...v, why: say('It is running, and nothing listens on a port yet.') })
+        return
+      }
+      served(t, sandbox).then(
+        (s) => {
+          if (gone) return
+          setServing((v) => v && { ...v, up: s.up, log: s.log, why: s.up ? '' : say('The dev server stopped.') })
+        },
+        () => undefined,
+      )
+    }
+    const every = setInterval(check, WATCHING)
+    return () => {
+      gone = true
+      clearInterval(every)
+    }
+  }, [t, sandbox, coming, say])
+
+  const nothing = <Site site={site} live={live} held={held} serving={serving} onStart={startable ? () => void start() : undefined} onEnvironment={repo ? onEnvironment : undefined} />
+  if (!running) return nothing
+  if (!port) return nothing
   const host = open.find((p) => p.port === port)?.host ?? ''
   return (
     <YStack flex={1} minH={0}>
@@ -533,14 +591,41 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
   )
 }
 
+/** A server started from the Preview: what it runs, whether it still does, its last output, and why it stopped. */
+interface Serving {
+  /** '' until the sandbox has said what it started. */
+  command: string
+  up: boolean
+  log: string
+  why: string
+}
+
+/** How long, and how often, a server started here is watched while it comes up. */
+const WATCH = 120_000
+const WATCHING = 3_000
+
 /**
  * Where the run published its work, framed, with its address, a reload and the
- * page in a tab of its own; or what keeps its sandbox from serving.
+ * page in a tab of its own; or what keeps its sandbox from serving, and the
+ * server the person can start in it.
  */
-function Site({ site, live, held, onDetect }: { site: string; live: boolean; held: Box['state'] | ''; onDetect?: () => void }) {
+function Site({
+  site,
+  live,
+  held,
+  serving,
+  onStart,
+  onEnvironment,
+}: {
+  site: string
+  live: boolean
+  held: Box['state'] | ''
+  serving?: Serving | null
+  onStart?: () => void
+  onEnvironment?: () => void
+}) {
   const { t } = useI18n()
   const frame = useRef<PreviewHandle | null>(null)
-  const [urlInput, setUrlInput] = useState(site)
   return (
     <YStack flex={1} minH={0}>
       <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
@@ -550,14 +635,6 @@ function Site({ site, live, held, onDetect }: { site: string; live: boolean; hel
         <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
           {site || t('Nothing is serving yet')}
         </SizableText>
-        <Input
-          unstyled
-          value={urlInput}
-          onChangeText={setUrlInput}
-          placeholder={t('Type a URL')}
-          aria-label={t('Type a URL')}
-          style={{ width: 120, fontSize: 12, outlineStyle: 'none', background: 'transparent' }}
-        />
         {site ? (
           <Out href={site} label={t('Open in a new tab')}>
             <XStack p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
@@ -582,23 +659,48 @@ function Site({ site, live, held, onDetect }: { site: string; live: boolean; hel
                 ? `${t('The run’s sandbox is suspended.')} ${t('Resume it to see what it serves.')}`
                 : live
                   ? t('When the run starts a server in its sandbox, the page opens here.')
-                  : `${t('Nothing listens in this run’s sandbox, and it published no site.')} ${t('Its work is on its branch.')}`}
+                  : `${t('Nothing listens in this run’s sandbox, and it published no site.')} ${t('A server the run started stopped when the run ended.')}`}
             </SizableText>
-            {onDetect ? (
-              <XStack gap="$1" items="center" pt="$1" flexWrap="wrap" justify="center">
-                <SizableText size="$1" color="$soft">
-                  {t('Preview your app instead?')}
+            {serving ? (
+              <YStack items="center" gap="$2" width="100%">
+                <SizableText size="$2" color="$ink" role="status" style={{ textAlign: 'center', maxWidth: 320 }}>
+                  {serving.why || (serving.command ? t('Starting {command}…', { command: serving.command }) : t('Starting the dev server…'))}
                 </SizableText>
-                <XStack render="button" onPress={onDetect} px="$1.5" py="$0.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-                  <SizableText size="$1" color="$ink" style={{ textDecorationLine: 'underline' }}>
-                    {t('Detect dev server')}
-                  </SizableText>
-                </XStack>
-              </XStack>
+                {serving.log ? <Tail log={serving.log} /> : null}
+                {serving.why ? (
+                  <XStack gap="$2" flexWrap="wrap" justify="center">
+                    {onStart ? (
+                      <Button size="sm" variant="outline" onPress={onStart}>
+                        {t('Try again')}
+                      </Button>
+                    ) : null}
+                    {onEnvironment ? (
+                      <Button size="sm" variant="outline" onPress={onEnvironment}>
+                        {t('Set a start command')}
+                      </Button>
+                    ) : null}
+                  </XStack>
+                ) : null}
+              </YStack>
+            ) : onStart ? (
+              <Button size="sm" onPress={onStart}>
+                {t('Start dev server')}
+              </Button>
             ) : null}
           </YStack>
         }
       />
+    </YStack>
+  )
+}
+
+/** The last lines a server wrote, as it wrote them. */
+function Tail({ log }: { log: string }) {
+  return (
+    <YStack width="100%" maxW={460} maxH={200} overflow="scroll" rounded="$2" borderWidth={1} borderColor="$borderColor" p="$2">
+      <SizableText size="$1" color="$soft" style={{ ...mono, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        {log.split('\n').slice(-12).join('\n')}
+      </SizableText>
     </YStack>
   )
 }
