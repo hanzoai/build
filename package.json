@@ -68,6 +68,11 @@
       "import": "./lib/mind.js",
       "default": "./lib/mind.js"
     },
+    "./handoff": {
+      "types": "./lib/handoff.d.ts",
+      "import": "./lib/handoff.js",
+      "default": "./lib/handoff.js"
+    },
     "./dev-mode": {
       "types": "./lib/dev-mode.d.ts",
       "import": "./lib/dev-mode.js",

@@ -324,10 +324,6 @@ export interface Mind {
   balance?: string
   /** The way to the top-up, given the model that was chosen if one was. */
   topUp?: (id?: string) => void
-  /** Whether third-party provider models (Anthropic, OpenAI, Google, etc.) are included in `models`. */
-  allowThirdParty?: boolean
-  /** How many third-party models are currently hidden because `allowThirdParty` is off. */
-  hiddenThirdPartyCount?: number
 }
 
 /** The prepaid balance in cents that can pay for another maker's models, for a signed-in target, read once; null until it is, and where the API does not say. */
@@ -396,7 +392,6 @@ export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) =
   const may = (id: string): boolean => sendable(free, models, cents, id)
   const model = may(picked) ? picked : ENSO
   const listed = allowThirdParty ? models : models.filter((m) => !thirdParty(m) || m.id === model)
-  const hiddenThirdPartyCount = allowThirdParty ? 0 : models.filter((m) => thirdParty(m) && m.id !== model).length
   // A top-up returns to this address with the model it was for: pick it once the balance can pay.
   const [back] = useState(returned)
   useEffect(() => {
@@ -414,8 +409,6 @@ export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) =
     error,
     note,
     free,
-    allowThirdParty,
-    hiddenThirdPartyCount,
     pick: (id) => {
       if (may(id)) pick(id)
     },
