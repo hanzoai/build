@@ -172,7 +172,7 @@ function AgentCard({
     <>
       {mark}
       <YStack flex={1} minW={0} gap="$0.5">
-        <SizableText size="$3" fontWeight="600" color="$ink" numberOfLines={1}>
+        <SizableText size="$3" color="$ink" numberOfLines={1}>
           {title}
         </SizableText>
         {role ? (
@@ -214,7 +214,7 @@ function AgentCard({
           bg="transparent"
           cursor="pointer"
           $platform-web={{ textAlign: 'start' }}
-          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+          focusVisibleStyle={RING}
         >
           <XStack items="center" gap="$3" width="100%" minW={0}>
             {identity}
@@ -250,7 +250,7 @@ function AgentCard({
             bg="transparent"
             cursor="pointer"
             $platform-web={{ textAlign: 'start' }}
-            focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+            focusVisibleStyle={RING}
           >
             {identity}
           </XStack>
@@ -326,7 +326,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
   // Toggleable creation panel opened by `+ New agent` / `+ New bot` — closed by default when browsing so the grid starts immediately.
   const creator =
     adding && signed ? (
-      <YStack gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="var(--border-strong)" bg="$panel">
+      <YStack gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel">
         <XStack items="center" justify="space-between" gap="$2">
           <SizableText size="$3" fontWeight="500" color="$ink">
             {botsMode ? t('Create a new bot') : t('Create a new agent')}
@@ -345,7 +345,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
             shrink={0}
             cursor="pointer"
             hoverStyle={{ bg: '$hover' }}
-            focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+            focusVisibleStyle={RING}
           >
             <X size={15} color="$soft" />
           </XStack>
@@ -370,7 +370,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
                 <Button
                   size="sm"
                   variant="outline"
-                  borderColor="var(--border-strong)"
+                  borderColor="$borderColor"
                   onPress={() => {
                     onAdding(false)
                     setElecting((first[0] ?? allCast[0])!)
@@ -391,7 +391,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
               <Button
                 size="sm"
                 variant="outline"
-                borderColor="var(--border-strong)"
+                borderColor="$borderColor"
                 onPress={() => {
                   onAdding(false)
                   setScratch(true)
@@ -402,7 +402,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
               <Button
                 size="sm"
                 variant="outline"
-                borderColor="var(--border-strong)"
+                borderColor="$borderColor"
                 onPress={() => {
                   onAdding(false)
                   setMaking('self')
@@ -413,7 +413,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
               <Button
                 size="sm"
                 variant="outline"
-                borderColor="var(--border-strong)"
+                borderColor="$borderColor"
                 onPress={() => {
                   onAdding(false)
                   setMaking('person')
@@ -559,7 +559,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
               p={2}
               rounded="$3"
               borderWidth={1}
-              borderColor="var(--border-strong)"
+              borderColor="$borderColor"
               bg="$panel"
               shrink={0}
             >
@@ -616,7 +616,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
               <YStack gap="$3">
                 {!botsMode ? (
                   <XStack items="baseline" justify="space-between" gap="$2">
-                    <SizableText render="h2" size="$4" fontWeight="600" color="$ink">
+                    <SizableText render="h2" size="$4" color="$ink">
                       {t('Core team')}
                     </SizableText>
                     <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
@@ -639,7 +639,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
               >
                 <XStack items="center" justify="space-between" gap="$3" flexWrap="wrap">
                   <YStack gap="$1.5" flex={1} minW={200}>
-                    <SizableText render="h2" size="$4" fontWeight="600" color="$ink">
+                    <SizableText render="h2" size="$4" color="$ink">
                       {domain === 'all' ? t('Domain thinkers & personas') : t(DOMAIN_DEFS.find((d) => d.id === domain)?.label ?? 'Personas')}
                     </SizableText>
                     <SizableText size="$2" color="$soft">
@@ -650,7 +650,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
                     <Button
                       size="sm"
                       variant="outline"
-                      borderColor="var(--border-strong)"
+                      borderColor="$borderColor"
                       onPress={() => setShowSpecialists((v) => !v)}
                     >
                       {showSpecialists ? t('Hide personas') : t('Browse {n} personas', { n: specialistsFiltered.length })}
@@ -664,7 +664,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
                     </Grid>
                     {specialistsFiltered.length > more ? (
                       <XStack>
-                        <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setMore(more + PAGE)}>
+                        <Button size="sm" variant="outline" onPress={() => setMore(more + PAGE)}>
                           {t('Show more ({remaining} left)', { remaining: specialistsFiltered.length - more })}
                         </Button>
                       </XStack>
@@ -699,7 +699,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
           title={t(botsMode ? 'No bots yet' : 'No agents yet')}
           detail={t(botsMode ? 'Create a 24/7 bot from scratch or browse presets to start from.' : 'Create one with AI, from scratch, or browse agents to start from.')}
         >
-          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => onView('discover')}>
+          <Button size="sm" variant="outline" onPress={() => onView('discover')}>
             {t(botsMode ? 'Browse bots' : 'Browse agents')}
           </Button>
           <Button size="sm" variant="primary" onPress={() => onAdding(true)}>
@@ -804,7 +804,7 @@ function Elect({
       </XStack>
       {all.length > 1 ? (
         <Field label={t('Preset')} hint={t('Select any agent or bot preset to elect as an autonomous 24/7 worker.')}>
-          <XStack gap="$1.5" flexWrap="wrap" maxH={136} overflow="scroll" p="$1" borderWidth={1} borderColor="var(--border-strong)" bg="$panel" rounded="$3">
+          <XStack gap="$1.5" flexWrap="wrap" maxH={136} overflow="scroll" p="$1" borderWidth={1} borderColor="$borderColor" bg="$panel" rounded="$3">
             {all.map((c) => {
               const active = c.name === picked.name && c.category === picked.category
               return (
@@ -857,7 +857,7 @@ function Elect({
                   )
                 })}
               </XStack>
-              <Input value={schedule} onChangeText={setSchedule} placeholder="*/15 * * * *" aria-label={t('Proactive schedule')} borderColor="var(--border-strong)" />
+              <Input value={schedule} onChangeText={setSchedule} placeholder="*/15 * * * *" aria-label={t('Proactive schedule')} />
             </YStack>
           </Field>
           <YStack gap="$2">
@@ -891,13 +891,13 @@ function Elect({
             <SizableText size="$1" color="$soft">
               {t(EACH[period])}
             </SizableText>
-            <Input value={cap} onChangeText={setCap} placeholder="10" aria-label={t('Budget each period')} inputMode="decimal" borderColor="var(--border-strong)" />
+            <Input value={cap} onChangeText={setCap} placeholder="10" aria-label={t('Budget each period')} inputMode="decimal" />
           </YStack>
           <YStack gap="$1" width={140}>
             <SizableText size="$1" color="$soft">
               {t('One run, USD')}
             </SizableText>
-            <Input value={task} onChangeText={setTask} placeholder="1" aria-label={t('Budget for one run')} inputMode="decimal" borderColor="var(--border-strong)" />
+            <Input value={task} onChangeText={setTask} placeholder="1" aria-label={t('Budget for one run')} inputMode="decimal" />
           </YStack>
           <Choice label={t('Period')} value={period} options={PERIODS.map((p) => ({ id: p, label: t(PERIOD[p]) }))} onChange={(p: Period) => setPeriod(p)} />
         </XStack>
@@ -967,10 +967,10 @@ function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void;
       ) : (
         <>
           <Field label={t('Name')}>
-            <Input value={name} onChangeText={setName} aria-label={t('Name')} borderColor="var(--border-strong)" />
+            <Input value={name} onChangeText={setName} aria-label={t('Name')} />
           </Field>
           <Field label={t('Description')}>
-            <Textarea value={about} onChangeText={setAbout} aria-label={t('Description')} rows={3} borderColor="var(--border-strong)" />
+            <Textarea value={about} onChangeText={setAbout} aria-label={t('Description')} rows={3} />
           </Field>
           {self ? (
             <Field label={t('Personality')}>
@@ -994,7 +994,7 @@ function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void;
             </Field>
           ) : null}
           <Field label={t('Writing')}>
-            <Textarea value={writing} onChangeText={setWriting} aria-label={t('Writing')} rows={6} borderColor="var(--border-strong)" />
+            <Textarea value={writing} onChangeText={setWriting} aria-label={t('Writing')} rows={6} />
           </Field>
           <XStack>
             <Button size="sm" variant="ghost" onPress={() => file.current?.click()}>
@@ -1014,7 +1014,7 @@ function Person({ self, onClose, onMade }: { self: boolean; onClose: () => void;
             />
           </XStack>
           <Field label={t('Instructions')}>
-            <Textarea value={instructions} onChangeText={setEdited} aria-label={t('Instructions')} rows={8} borderColor="var(--border-strong)" />
+            <Textarea value={instructions} onChangeText={setEdited} aria-label={t('Instructions')} rows={8} />
           </Field>
           <Line>{note}</Line>
           <XStack gap="$2" items="center">
@@ -1072,7 +1072,7 @@ export function Profile({ name }: { name: string }) {
           $max-sm={{ minH: 44 }}
           cursor="pointer"
           hoverStyle={{ bg: '$hover' }}
-          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+          focusVisibleStyle={RING}
           aria-label={t(isBot ? 'Back to bots' : 'Back to agents')}
         >
           <ArrowLeft size={14} color="$soft" {...{ 'data-i18n-mirror': '' }} />
@@ -1095,7 +1095,7 @@ export function Profile({ name }: { name: string }) {
                   render="h1"
                   fontFamily="$heading"
                   size="$7"
-                  fontWeight="600"
+                 
                   letterSpacing={'-0.025em' as never}
                   color="$ink"
                   numberOfLines={1}
@@ -1106,7 +1106,7 @@ export function Profile({ name }: { name: string }) {
                   {a.description || t('No role written yet.')}
                 </SizableText>
               </YStack>
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setEditing(true)}>
+              <Button size="sm" variant="outline" onPress={() => setEditing(true)}>
                 {t('Edit')}
               </Button>
             </XStack>
@@ -1247,10 +1247,10 @@ function Editor({
       ) : (
         <>
           <Field label={t('Name')} hint={agent ? t('An agent keeps its name.') : t('Letters, digits, . _ or -. Other agents call it as agent_<name>.')}>
-            <Input value={d.name} onChangeText={(v: string) => set({ name: v })} aria-label={t('Name')} disabled={Boolean(agent)} autoCapitalize="none" borderColor="var(--border-strong)" />
+            <Input value={d.name} onChangeText={(v: string) => set({ name: v })} aria-label={t('Name')} disabled={Boolean(agent)} autoCapitalize="none" />
           </Field>
           <Field label={t('Description')} hint={t('The line another agent reads to decide whether to call this one.')}>
-            <Input value={d.description} onChangeText={(v: string) => set({ description: v })} placeholder={t('Answers questions about our codebase')} aria-label={t('Description')} borderColor="var(--border-strong)" />
+            <Input value={d.description} onChangeText={(v: string) => set({ description: v })} placeholder={t('Answers questions about our codebase')} aria-label={t('Description')} />
           </Field>
           <Field label={t('Model')}>
             <XStack items="center" gap="$2" flexWrap="wrap">
@@ -1276,7 +1276,7 @@ function Editor({
             </XStack>
           </Field>
           <Field label={t('Instructions')} hint={t('The system prompt: what the model reads before every run.')}>
-            <Textarea value={d.instructions} onChangeText={(v: string) => set({ instructions: v })} placeholder={t('Be terse, and cite the file you read.')} aria-label={t('Instructions')} rows={8} borderColor="var(--border-strong)" />
+            <Textarea value={d.instructions} onChangeText={(v: string) => set({ instructions: v })} placeholder={t('Be terse, and cite the file you read.')} aria-label={t('Instructions')} rows={8} />
           </Field>
           <YStack gap="$2">
             <XStack items="center" gap="$3">
@@ -1299,7 +1299,7 @@ function Editor({
             </XStack>
             {every ? null : (
               <>
-                <Input value={find} onChangeText={setFind} placeholder={t('Find a tool…')} aria-label={t('Find a tool')} borderColor="var(--border-strong)" />
+                <Input value={find} onChangeText={setFind} placeholder={t('Find a tool…')} aria-label={t('Find a tool')} />
                 <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" maxH={240} overflow="scroll">
                   {on.loading && !on.value.length ? (
                     <Soft>{t('Loading the tools that are on…')}</Soft>
@@ -1373,7 +1373,7 @@ function Editor({
                     )
                   })}
                 </XStack>
-                <Input value={d.schedule ?? ''} onChangeText={(v: string) => set({ schedule: v })} placeholder="*/15 * * * *" aria-label={t('Proactive schedule')} borderColor="var(--border-strong)" />
+                <Input value={d.schedule ?? ''} onChangeText={(v: string) => set({ schedule: v })} placeholder="*/15 * * * *" aria-label={t('Proactive schedule')} />
                 <SizableText size="$1" color="$soft">
                   {t('Event-driven triggers')}
                 </SizableText>
@@ -1407,13 +1407,13 @@ function Editor({
                 <SizableText size="$1" color="$soft">
                   {t(EACH[d.period])}
                 </SizableText>
-                <Input value={d.cap} onChangeText={(v: string) => set({ cap: v })} placeholder="10" aria-label={t('Budget each period')} inputMode="decimal" borderColor="var(--border-strong)" />
+                <Input value={d.cap} onChangeText={(v: string) => set({ cap: v })} placeholder="10" aria-label={t('Budget each period')} inputMode="decimal" />
               </YStack>
               <YStack gap="$1" width={140}>
                 <SizableText size="$1" color="$soft">
                   {t('One run, USD')}
                 </SizableText>
-                <Input value={d.task} onChangeText={(v: string) => set({ task: v })} placeholder="1" aria-label={t('Budget for one run')} inputMode="decimal" borderColor="var(--border-strong)" />
+                <Input value={d.task} onChangeText={(v: string) => set({ task: v })} placeholder="1" aria-label={t('Budget for one run')} inputMode="decimal" />
               </YStack>
               <Choice label={t('Period')} value={d.period} options={PERIODS.map((p) => ({ id: p, label: t(PERIOD[p]) }))} onChange={(p: Period) => set({ period: p })} />
             </XStack>

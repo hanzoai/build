@@ -163,7 +163,7 @@ test('New runs in Cloud or on a machine under remote control, and says how to li
   await expect(p.getByText('hanzo link', { exact: true })).toBeVisible()
   await p.screenshot({ path: info.outputPath('place.png') })
   await list.getByText('dave-laptop').click()
-  await expect(p.getByRole('button', { name: 'Where the run runs: Local - Device' })).toBeVisible()
+  await expect(p.getByRole('button', { name: 'Where the run runs: dave-laptop' })).toBeVisible()
 })
 
 test('New’s repository list refreshes, and a missing GitHub repository leads to Sync', async ({ page: p }, info) => {

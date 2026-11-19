@@ -122,7 +122,7 @@ test.describe('New', () => {
     await expect(places.getByText('online · 10 vCPU / 32G')).toBeVisible()
     await page.screenshot({ path: info.outputPath('new-places.png') })
     await places.getByRole('option', { name: /dave-laptop/ }).click()
-    await expect(chip(page, 'Where the run runs')).toHaveAccessibleName('Where the run runs: Local - Device')
+    await expect(chip(page, 'Where the run runs')).toHaveAccessibleName('Where the run runs: dave-laptop')
 
     // Dev has no mode picker: no Auto beside the effort.
     await expect(page.locator('[data-slot="mode"]')).toHaveCount(0)

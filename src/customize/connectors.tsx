@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { add, one, owns, ready, remove, servers, shelf, titleOf, type Adding, type Listing, type Page, type Server } from '../api/connectors.ts'
 import { natives, type Native } from '../api/mcp.ts'
 import { toggle, tools, type Tool } from '../api/tools.ts'
-import { RING } from '../pane.ts'
+import { RING, RING_INSET } from '../pane.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Out } from '../out.tsx'
 import { route } from '../route.ts'
@@ -34,7 +34,6 @@ import { Add, Confirm, Empty, Failed, Featured, Field, FilterPills, Grid, Mark, 
 const PAGE = 48
 const BUILTIN_INITIAL = 6
 
-const FOCUS_RING_INSET = { outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 } as const
 
 type ShelfFilter = 'all' | 'hosted' | 'official'
 
@@ -452,7 +451,7 @@ function Natives({ q }: { q: string }) {
                   minH={44}
                   cursor="pointer"
                   hoverStyle={{ bg: '$hover' }}
-                  focusVisibleStyle={FOCUS_RING_INSET}
+                  focusVisibleStyle={RING_INSET}
                   $platform-web={{ textAlign: 'start' }}
                   onClick={() => setOpen(on ? null : s.name)}
                 >

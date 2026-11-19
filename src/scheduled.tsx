@@ -25,7 +25,7 @@ import { ModelPicker } from '@hanzo/ui/models'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
-import { RING } from './pane.ts'
+import { RING, RING_INSET } from './pane.ts'
 import { automations, create, cron, events, jobs, remove, save, start, words, type Automation, type Draft, type Job, type Parsed, type Schedule } from './api/auto.ts'
 import { Refusal, told } from './api/call.ts'
 import { ENSO, limits as readLimits, models } from './api/models.ts'
@@ -381,7 +381,7 @@ function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; 
         gap="$3"
         cursor="pointer"
         $platform-web={{ textAlign: 'start' }}
-        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+        focusVisibleStyle={RING_INSET}
       >
         <YStack width={32} height={32} rounded="$3" bg="$raised" items="center" justify="center" shrink={0} aria-hidden>
           <Clock size={16} color="$soft" />
@@ -450,7 +450,7 @@ function Ran({ j, first, now, onOpen }: { j: Job; first: boolean; now: number; o
         py="$2.5"
         cursor="pointer"
         $platform-web={{ textAlign: 'start' }}
-        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+        focusVisibleStyle={RING_INSET}
       >
         <StatusDot status={DOTS[j.state]} />
         <YStack flex={1} minW={0} gap="$0.5">

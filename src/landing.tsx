@@ -439,7 +439,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const placeItems = useMemo(
     () =>
       (places.value.length ? places.value : [SANDBOX]).map((p) => {
-        const display = displayPlace(p, { devMode, cloudTitle: t('Auto (Cloud)') })
+        const display = displayPlace(p, { devMode, say: t })
         return {
           id: p.id || 'sandbox',
           label: display.title,
@@ -462,7 +462,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   )
 
   const activePlaceDisplay = useMemo(
-    () => displayPlace(place, { devMode, cloudTitle: t('Auto (Cloud)') }),
+    () => displayPlace(place, { devMode, say: t }),
     [place, devMode, t],
   )
   const placeTooltip = place.id
@@ -473,10 +473,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const branch = kept.branch || kept.repo?.default_branch || 'main'
   const forge = isForge(kept.repo)
   const hasRepo = Boolean(isForge(kept.repo) || isHub(kept.repo))
-  const showRepoSelect = devMode || hasRepo || picking
   const screen = (to: 'issues' | 'templates' | 'projects' | 'sync') => () => host.go(path({ kind: 'screen', screen: to }))
 
-  // The composer's pills: where the run goes, and (in Developer mode or once chosen) which repository and branch.
+  // The composer's pills: where the run goes, which repository, which branch.
   const pills = (
     <>
       <TooltipProvider delay={150}>
@@ -521,57 +520,55 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      {showRepoSelect ? (
-        <RepoSelect
-          open={picking}
-          onOpenChange={setPicking}
-          value={isForge(kept.repo) ? { ...kept.repo, source: 'forge' } : isHub(kept.repo) ? { ...kept.repo, source: 'github' } : null}
-          onChange={(r) => {
-            const hub = (r as { github?: boolean }).github ? hubs.current.get((r.full_name ?? '').toLowerCase()) : undefined
-            setIssue(0)
-            if (hub) {
-              set({ repo: hub, branch: hub.default_branch })
-              return
-            }
-            const row = known.current.get(r.name) ?? chosen(r)
-            set({ repo: row, branch: row.default_branch })
-          }}
-          load={loadRepos}
-          connect={
-            hasRepo ? (
-              <FooterLink
-                label={t('Work without a repository')}
-                onPress={() => {
-                  drop()
-                  setPicking(false)
-                }}
-              />
-            ) : undefined
+      <RepoSelect
+        open={picking}
+        onOpenChange={setPicking}
+        value={isForge(kept.repo) ? { ...kept.repo, source: 'forge' } : isHub(kept.repo) ? { ...kept.repo, source: 'github' } : null}
+        onChange={(r) => {
+          const hub = (r as { github?: boolean }).github ? hubs.current.get((r.full_name ?? '').toLowerCase()) : undefined
+          setIssue(0)
+          if (hub) {
+            set({ repo: hub, branch: hub.default_branch })
+            return
           }
-          tabs={[
-            { id: 'all', label: t('All') },
-            { id: 'forge', label: t('Organization') },
-            { id: 'github', label: 'GitHub' },
-          ]}
-          troubleshoot={{ label: t('Link GitHub project…'), onPress: screen('sync') }}
-          action={{
-            label: t('Add to project'),
-            onPress: (r) => {
-              const row = known.current.get(r.name)
-              setAdding({
-                repo: row?.clone || `${target.api}/v1/git/${r.owner}/${r.name}.git`,
-                title: row?.full_name || `${r.owner}/${r.name}`,
-                ref: r.default_branch || 'main',
-                name: r.name,
-              })
-            },
-          }}
-          placeholder={t('Repository')}
-          placement="top-start"
-          disabled={!signed}
-        />
-      ) : null}
-      {devMode && forge ? (
+          const row = known.current.get(r.name) ?? chosen(r)
+          set({ repo: row, branch: row.default_branch })
+        }}
+        load={loadRepos}
+        connect={
+          hasRepo ? (
+            <FooterLink
+              label={t('Work without a repository')}
+              onPress={() => {
+                drop()
+                setPicking(false)
+              }}
+            />
+          ) : undefined
+        }
+        tabs={[
+          { id: 'all', label: t('All') },
+          { id: 'forge', label: t('Organization') },
+          { id: 'github', label: 'GitHub' },
+        ]}
+        troubleshoot={{ label: t('Link GitHub project…'), onPress: screen('sync') }}
+        action={{
+          label: t('Add to project'),
+          onPress: (r) => {
+            const row = known.current.get(r.name)
+            setAdding({
+              repo: row?.clone || `${target.api}/v1/git/${r.owner}/${r.name}.git`,
+              title: row?.full_name || `${r.owner}/${r.name}`,
+              ref: r.default_branch || 'main',
+              name: r.name,
+            })
+          },
+        }}
+        placeholder={t('Repository')}
+        placement="top-start"
+        disabled={!signed}
+      />
+      {forge ? (
         <BranchSelect open={branching} onOpenChange={setBranching} value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} placement="top-start" />
       ) : null}
     </>
@@ -584,7 +581,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     { id: 'templates', label: t('Browse templates'), icon: <LayoutTemplate size={14} color="$soft" />, run: screen('templates') },
     { id: 'projects', label: t('Open projects'), icon: <Code size={14} color="$soft" />, run: screen('projects') },
     { id: 'sync', label: t('Connect GitHub…'), icon: <GitBranch size={14} color="$soft" />, run: screen('sync') },
-    ...(devMode ? [{ id: 'address', label: t('Use a git URL'), icon: <Link2 size={14} color="$soft" />, run: () => setGiving(true) }] : []),
+    { id: 'address', label: t('Use a git URL'), icon: <Link2 size={14} color="$soft" />, run: () => setGiving(true) },
   ]
 
   // The `+` menu's Connectors shelf gives power users 1-click access to attach a GitHub project even when the composer bar is kept clean.
@@ -686,7 +683,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           </YStack>
           <YStack width="100%" maxW={MEASURE} gap="$2" pb="$3">
             <YStack gap="$2">
-              {env.value && (env.value.state === 'proposed' || (devMode && unset(env.value))) && !place.id ? (
+              {env.value && (env.value.state === 'proposed' || unset(env.value)) && !place.id ? (
                 <XStack
                   items="center"
                   justify="space-between"

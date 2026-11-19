@@ -85,7 +85,7 @@ export function Drafted({ onMade }: { onMade: (a: Agent) => void }) {
           borderWidth={1}
           borderColor="var(--border-strong)"
           bg="$background"
-          focusWithinStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)' }}
+          focusWithinStyle={RING}
         >
           <Sparkles size={14} color="$soft" shrink={0} aria-hidden />
           <Input

@@ -358,7 +358,7 @@ export function SetupDialog({
                 </XStack>
               ) : shown.length === 0 ? (
                 <SizableText size="$1" color="$soft">
-                  {list.length ? t('Nothing matches.') : t('No projects linked yet — start a prompt to create one automatically, or link a GitHub repository.')}
+                  {list.length ? t('Nothing matches.') : t('This organization has no repositories on the forge yet.')}
                 </SizableText>
               ) : (
                 shown.map((h) => {

@@ -18,7 +18,7 @@ import { BookOpen, Bot, Plug, Plus, Puzzle, Search, Users, X } from '@hanzogui/l
 import { Button, Input } from '@hanzo/ui'
 import { useCallback, useId, useState, type ReactNode } from 'react'
 
-import { RING } from '../pane.ts'
+import { RING, RING_INSET } from '../pane.ts'
 import { useHost } from '../host.tsx'
 import { path, TABS, type Tab } from '../route.ts'
 import { Agents } from './agents.tsx'
@@ -252,7 +252,7 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
                     borderBottomWidth={2}
                     borderColor={on ? '$ink' : 'transparent'}
                     hoverStyle={{ borderColor: on ? '$ink' : 'var(--border-strong)' }}
-                    focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+                    focusVisibleStyle={RING_INSET}
                   >
                     <XStack opacity={on ? 1 : 0.7} $max-md={{ display: 'none' }}>
                       {LABEL[id].icon}

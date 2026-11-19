@@ -14,7 +14,7 @@ import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from '@hanzo
 import { Button } from '@hanzo/ui'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 
-import { RING } from '../pane.ts'
+import { RING, RING_INSET } from '../pane.ts'
 
 import { ANCHORS, DOMAIN, DOMAINS, FACET, FACETS, ITEMS, type Answers, type Domain, type Form, type Score } from './ocean.ts'
 
@@ -325,7 +325,7 @@ export function Traits({ form, score }: { form: Form; score: Score }) {
                   gap="$2"
                   cursor="pointer"
                   hoverStyle={{ bg: '$hover' }}
-                  focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+                  focusVisibleStyle={RING_INSET}
                   $platform-web={{ textAlign: 'start' }}
                 >
                   <YStack flex={1} minW={0}>

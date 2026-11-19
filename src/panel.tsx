@@ -43,7 +43,7 @@ import {
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { RING } from './pane.ts'
+import { RING, RING_INSET } from './pane.ts'
 import { copy } from './clipboard.ts'
 import { useBrowse, useBrowser, type Browser, type Shown } from './host.tsx'
 import { useSide } from './side.tsx'
@@ -842,7 +842,7 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
         borderWidth={0}
         bg="transparent"
         cursor="pointer"
-        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+        focusVisibleStyle={RING_INSET}
       >
         {icon ? (
           <XStack aria-hidden shrink={0} opacity={on ? 1 : 0.7}>

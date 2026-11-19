@@ -13,7 +13,7 @@ import { Boxes, ExternalLink, GitBranch, Globe, Lock, MoreHorizontal, Pencil, Se
 import { Button, DropdownMenu, Input, Skeleton } from '@hanzo/ui'
 import { useEffect, useMemo, useState } from 'react'
 
-import { RING } from './pane.ts'
+import { RING, RING_INSET } from './pane.ts'
 import { clone } from './address.ts'
 import { address, change, fork, remove, templates, type Project, type Template } from './api/projects.ts'
 import { Address, Confirm, Rename } from './ask.tsx'
@@ -26,7 +26,7 @@ const SHOTS = ['/templates', 'https://gallery.hanzo.ai/screenshots', 'https://ha
 function Head({ title, says }: { title: string; says: string }) {
   return (
     <YStack gap="$1">
-      <SizableText render="h1" size="$7" fontWeight="600" color="$ink">
+      <SizableText render="h1" size="$7" color="$ink">
         {title}
       </SizableText>
       <SizableText size="$2" color="$soft">
@@ -53,7 +53,7 @@ function Card({ onPress, label, disabled = false, children }: { onPress: () => v
       cursor={disabled ? 'default' : 'pointer'}
       opacity={disabled ? 0.72 : 1}
       hoverStyle={disabled ? undefined : { borderColor: 'var(--border-strong)', bg: '$hover' }}
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+      focusVisibleStyle={RING}
       $platform-web={{ textAlign: 'start' }}
     >
       {children}
@@ -195,16 +195,16 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
           </YStack>
         ) : null}
         {list.error ? (
-          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$7" gap="$3" items="center">
+          <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" px="$5" py="$7" gap="$3" items="center">
             <SizableText size="$2" color="var(--state-error)" text="center">
               {say(list.error.message)}
             </SizableText>
-            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={list.reload}>
+            <Button size="sm" variant="outline" onPress={list.reload}>
               {say('Try again')}
             </Button>
           </YStack>
         ) : !host.person ? (
-          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$7" gap="$3" items="center">
+          <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" px="$5" py="$7" gap="$3" items="center">
             <SizableText size="$2" color="$soft" text="center">
               {say('Sign in to see what your organization has built.')}
             </SizableText>
@@ -230,7 +230,7 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
             </YStack>
           </YStack>
         ) : filtered.length === 0 ? (
-          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$7" gap="$3" items="center">
+          <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" px="$5" py="$7" gap="$3" items="center">
             <SizableText size="$2" color="$soft" text="center">
               {needle ? say('Nothing matches.') : `${say('Nothing built yet.')} ${say('Describe something on the New page and it lands here.')}`}
             </SizableText>
@@ -263,7 +263,7 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
                         minH={44}
                         cursor="pointer"
                         $platform-web={{ textAlign: 'start' }}
-                        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+                        focusVisibleStyle={RING_INSET}
                       >
                         {p.visibility === 'private' ? <Lock size={15} color="$soft" /> : <Globe size={15} color="$soft" />}
                         <YStack flex={1} minW={0} gap="$0.5">
@@ -467,7 +467,7 @@ export function Templates() {
                 onChangeText={setQ}
                 placeholder={say('Search templates…')}
                 aria-label={say('Search templates')}
-                borderColor="var(--border-strong)"
+                borderColor="$borderColor"
                 bg="$panel"
                 startAdornment={<Search size={14} color="$soft" />}
                 endAdornment={
@@ -519,7 +519,7 @@ export function Templates() {
                       bg={on ? '$ink' : 'transparent'}
                       cursor="pointer"
                       hoverStyle={on ? undefined : { bg: '$hover', borderColor: '$ink' }}
-                      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+                      focusVisibleStyle={RING}
                     >
                       <SizableText size="$1" fontWeight={on ? '500' : '400'} color={on ? '$background' : '$soft'}>
                         {c.label}
@@ -541,11 +541,11 @@ export function Templates() {
                     $max-sm={{ minH: 44 }}
                     rounded={999}
                     borderWidth={1}
-                    borderColor="var(--border-strong)"
+                    borderColor="$borderColor"
                     bg="$panel"
                     cursor="pointer"
                     hoverStyle={{ bg: '$hover', borderColor: '$ink' }}
-                    focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+                    focusVisibleStyle={RING}
                   >
                     <SizableText size="$1" fontWeight="500" color="$ink">
                       {moreCats ? say('Show less') : say('+{n} more', { n: hiddenCatCount })}
@@ -557,11 +557,11 @@ export function Templates() {
           </YStack>
         ) : null}
         {list.error ? (
-          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+          <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
             <SizableText size="$2" color="var(--state-error)" text="center">
               {say(list.error.message)}
             </SizableText>
-            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={list.reload}>
+            <Button size="sm" variant="outline" onPress={list.reload}>
               {say('Try again')}
             </Button>
           </YStack>
@@ -583,7 +583,7 @@ export function Templates() {
             </YStack>
           </YStack>
         ) : !list.value.length ? (
-          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+          <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
             <YStack items="center" gap="$1" maxW={420}>
               <SizableText size="$4" fontWeight="500" color="$ink" text="center">
                 {say('No templates right now')}
@@ -593,7 +593,7 @@ export function Templates() {
               </SizableText>
             </YStack>
             <XStack gap="$2" flexWrap="wrap" justify="center">
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => host.open('https://gallery.hanzo.ai')}>
+              <Button size="sm" variant="outline" onPress={() => host.open('https://gallery.hanzo.ai')}>
                 <ExternalLink size={14} />
                 {say('The whole catalog')}
               </Button>
@@ -603,7 +603,7 @@ export function Templates() {
             </XStack>
           </YStack>
         ) : !filtered.length ? (
-          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+          <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
             <SizableText size="$2" color="$soft" text="center">
               {say('Nothing matches.')}
             </SizableText>
@@ -611,7 +611,7 @@ export function Templates() {
               <Button
                 size="sm"
                 variant="outline"
-                borderColor="var(--border-strong)"
+                borderColor="$borderColor"
                 onPress={() => {
                   setQ('')
                   setCat('')

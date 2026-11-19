@@ -25,7 +25,7 @@ import { ChipSelect } from '@hanzo/ui/product'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { RING } from './pane.ts'
+import { RING, RING_INSET } from './pane.ts'
 import { automation, changes, create, remove, review, runs, save, start, starters, words, type Automation, type Draft, type Kind, type Run, type Schedule, type Starter } from './api/auto.ts'
 import { current, subscriptions, type Subscription } from './api/billing.ts'
 import { SOCIAL } from './api/provider.ts'
@@ -187,12 +187,12 @@ export function When({ s, onChange, disabled }: { s: Schedule; onChange: (s: Sch
       {s.kind === 'weekly' ? <ChipSelect name={t('Day')} label={days.find((x) => x.id === s.day)?.label ?? t('Monday')} chosen={days.find((x) => x.id === s.day)} items={days} onChange={(x) => setWhen({ day: x.id })} placement="bottom-start" width={180} /> : null}
       {s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly' ? (
         <YStack width={110} maxW="100%">
-          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label={t('Time of day')} inputMode="text" borderColor="var(--border-strong)" bg="$panel" />
+          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label={t('Time of day')} inputMode="text" bg="$panel" />
         </YStack>
       ) : null}
       {s.kind === 'once' ? (
         <YStack width={190} maxW="100%">
-          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="2026-10-20T09:00" aria-label={t('Date and time')} autoCapitalize="none" borderColor="var(--border-strong)" bg="$panel" />
+          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="2026-10-20T09:00" aria-label={t('Date and time')} autoCapitalize="none" bg="$panel" />
         </YStack>
       ) : null}
       {s.kind === 'hourly' ? (
@@ -201,13 +201,13 @@ export function When({ s, onChange, disabled }: { s: Schedule; onChange: (s: Sch
             {t('at minute')}
           </SizableText>
           <YStack width={70}>
-            <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label={t('Minute')} inputMode="numeric" borderColor="var(--border-strong)" bg="$panel" />
+            <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label={t('Minute')} inputMode="numeric" bg="$panel" />
           </YStack>
         </XStack>
       ) : null}
       {s.kind === 'cron' ? (
         <YStack width={200} maxW="100%">
-          <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label={t('Cron')} autoCapitalize="none" borderColor="var(--border-strong)" bg="$panel" />
+          <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label={t('Cron')} autoCapitalize="none" bg="$panel" />
         </YStack>
       ) : null}
       {s.kind !== 'manual' ? <ChipSelect name={t('Time zone')} label={s.tz || 'UTC'} chosen={{ id: s.tz || 'UTC', label: s.tz || 'UTC' }} items={zones} onChange={(z) => setWhen({ tz: z.id })} placeholder={t('Search zones…')} placement="bottom-start" width={260} /> : null}
@@ -459,7 +459,7 @@ export function Editor({ id }: { id: string }) {
               />
             </XStack>
             {a && !a.draft ? (
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={Boolean(busy) || dirty} onPress={() => void go()}>
+              <Button size="sm" variant="outline" disabled={Boolean(busy) || dirty} onPress={() => void go()}>
                 <Play size={14} />
                 {busy === 'run' ? t('Starting…') : t('Run now')}
               </Button>
@@ -492,7 +492,7 @@ export function Editor({ id }: { id: string }) {
               {note}
             </SizableText>
             {upgrade ? (
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => away(path({ kind: 'screen', screen: 'plans' }))}>
+              <Button size="sm" variant="outline" onPress={() => away(path({ kind: 'screen', screen: 'plans' }))}>
                 {t('See plans')}
               </Button>
             ) : null}
@@ -511,13 +511,13 @@ export function Editor({ id }: { id: string }) {
               <SizableText flex={1} minW={0} $sm={{ minW: 200 }} size="$1" color="$soft">
                 {t('Paid plans include automation runs. On the Free plan each run needs $1 of credit.')}
               </SizableText>
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => away(path({ kind: 'screen', screen: 'plans' }))}>
+              <Button size="sm" variant="outline" onPress={() => away(path({ kind: 'screen', screen: 'plans' }))}>
                 {t('See plans')}
               </Button>
             </XStack>
           ) : null}
           <YStack gap="$1">
-            <SizableText render="h1" size="$7" fontWeight="600" color="$ink" numberOfLines={1}>
+            <SizableText render="h1" size="$7" color="$ink" numberOfLines={1}>
               {fresh ? t('New automation') : a?.name}
             </SizableText>
             <SizableText size="$2" color="$soft">
@@ -541,7 +541,7 @@ export function Editor({ id }: { id: string }) {
                 {t('Start from')}
               </SizableText>
               {visibleStarters.map((x) => (
-                <Button key={x.key} size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => begin(x)} aria-label={t('Start from {name}', { name: x.name })}>
+                <Button key={x.key} size="sm" variant="outline" onPress={() => begin(x)} aria-label={t('Start from {name}', { name: x.name })}>
                   {x.name}
                 </Button>
               ))}
@@ -558,7 +558,7 @@ export function Editor({ id }: { id: string }) {
                   items="center"
                   rounded="$3"
                   borderWidth={1}
-                  borderColor="var(--border-strong)"
+                  borderColor="$borderColor"
                   bg="$panel"
                   cursor="pointer"
                   hoverStyle={{ bg: '$hover' }}
@@ -581,7 +581,7 @@ export function Editor({ id }: { id: string }) {
               aria-label={t('Automation name')}
               autoFocus={fresh}
               disabled={locked}
-              borderColor="var(--border-strong)"
+              borderColor="$borderColor"
               bg="$panel"
             />
           </Field>
@@ -594,7 +594,7 @@ export function Editor({ id }: { id: string }) {
               placeholder={t('What should it do each run? For example: summarize what needs my attention today across calendar, email and messages.')}
               aria-label={t('Instructions')}
               rows={7}
-              borderColor="var(--border-strong)"
+              borderColor="$borderColor"
               bg="$panel"
             />
           </Field>
@@ -616,7 +616,7 @@ export function Editor({ id }: { id: string }) {
               cursor="pointer"
               hoverStyle={{ bg: '$hover' }}
               $platform-web={{ textAlign: 'start' }}
-              focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+              focusVisibleStyle={RING_INSET}
             >
               <SlidersHorizontal size={15} color="$soft" />
               <YStack flex={1} minW={0} gap="$0.5">
@@ -752,11 +752,11 @@ export function Editor({ id }: { id: string }) {
                 {t('Runs')}
               </SizableText>
               {history.error && !history.value.length ? (
-                <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$4" py="$5" gap="$2.5" items="flex-start">
+                <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" px="$4" py="$5" gap="$2.5" items="flex-start">
                   <SizableText size="$2" color="var(--state-error)">
                     {told(history.error, t)}
                   </SizableText>
-                  <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setBeat((n) => n + 1)}>
+                  <Button size="sm" variant="outline" onPress={() => setBeat((n) => n + 1)}>
                     {t('Try again')}
                   </Button>
                 </YStack>
@@ -921,7 +921,7 @@ function Page({ title, says, onBack, loading = false, error = false, onRetry }: 
             {t('Scheduled tasks')}
           </Button>
         </XStack>
-        <SizableText render="h1" size="$7" fontWeight="600" color="$ink">
+        <SizableText render="h1" size="$7" color="$ink">
           {title}
         </SizableText>
         <SizableText size="$2" color={error ? 'var(--state-error)' : '$soft'}>
@@ -936,7 +936,7 @@ function Page({ title, says, onBack, loading = false, error = false, onRetry }: 
         ) : null}
         {error && onRetry ? (
           <XStack>
-            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={onRetry}>
+            <Button size="sm" variant="outline" onPress={onRetry}>
               {t('Try again')}
             </Button>
           </XStack>

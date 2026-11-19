@@ -39,7 +39,7 @@ const FR: Record<string, string> = {
   'Previous page': 'Page précédente',
   Prev: 'Préc.',
   'Next page': 'Page suivante',
-  'No projects linked yet — start a prompt to create one automatically, or pick one of the paths below.':
+  'No projects yet. A project is a repository: link one from GitHub, or start one from a template.':
     'Aucun projet pour l’instant. Un projet est un dépôt : liez-en un depuis GitHub, ou partez d’un modèle.',
   'Start from a finished product — a site, an app, a store — and make it yours.': 'Partez d’un produit fini — un site, une app, une boutique — et faites-le vôtre.',
 }
@@ -107,7 +107,7 @@ test('in French, Projects is the catalog’s words around the forge’s own name
 
 test('in French, the empty page offers its two ways in, in the catalog’s words', async ({ page }) => {
   await open(page, { locale: 'fr-FR', catalog: FR }, [])
-  await expect(page.getByText(FR['No projects linked yet — start a prompt to create one automatically, or pick one of the paths below.']!)).toBeVisible({ timeout: 45_000 })
+  await expect(page.getByText(FR['No projects yet. A project is a repository: link one from GitHub, or start one from a template.']!)).toBeVisible({ timeout: 45_000 })
   const card = page.getByRole('button', { name: FR['Create from template'] }).last()
   await expect(card).toContainText(FR['Start from a finished product — a site, an app, a store — and make it yours.']!)
   // The other card's line the catalog lacks: English.

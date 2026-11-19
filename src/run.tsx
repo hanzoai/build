@@ -39,6 +39,7 @@ import {
   GitPullRequest,
   Globe,
   Layers,
+  MessageSquare,
   MoreHorizontal,
   Pencil,
   Share,
@@ -66,8 +67,9 @@ import { Steer, type Command } from '@hanzo/ui/agents'
 import { Composer, Failure, measure } from '@hanzo/ui/chat'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
+import { copy as toClipboard } from './clipboard.ts'
 import { approve, followUp, headline, retry, start, steer, type Ask, type Earlier } from './api/coding.ts'
 import { limits as readLimits } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
@@ -77,12 +79,12 @@ import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun, type RunState } from './data.ts'
 import { Desk, SEED } from './desk.tsx'
 import { useDevMode } from './dev-mode.ts'
-import { KeepAwake } from './awake.tsx'
+import { KeepAwake, useKeepAwake } from './awake.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { level, pacing, useMind } from './mind.ts'
 import { Out } from './out.tsx'
 import { Gutter } from './gutter.tsx'
-import { gap, pane, RING } from './pane.ts'
+import { gap, pane, RING, RING_INSET } from './pane.ts'
 import { useEar, useSpoken } from './voice.ts'
 import { speaker, type Artifact } from './reply.tsx'
 import { PanelToggle } from './panel.tsx'
@@ -142,12 +144,12 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const [name, setName] = useState('')
   const [copied, setCopied] = useState('')
   const [unfolded, setUnfolded] = useState(false)
+  const [outputStyle, setOutputStyle] = useKept<string>('hanzo.build.output.style', 'default')
   const [transcriptView, setTranscriptView] = useKept<TranscriptView>('hanzo.build.transcript.view', 'normal')
   const [envColumn, setEnvColumn] = useState(false)
   const [splitPanes, setSplitPanes] = useState<string[]>([])
   const [queued, setQueued] = useState<QueuedMessage[]>([])
-  const [keepAwake, setKeepAwake] = useState(false)
-  const wakeLockRef = useRef<{ release?: () => Promise<void> } | null>(null)
+  const [keepAwake, setKeepAwake] = useKeepAwake()
   const [nowMs, setNowMs] = useState(() => Date.now())
   // The model and effort a run started here uses: the one choice Chat and New share.
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
@@ -372,12 +374,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   }
 
   const copy = async (what: string, value: string) => {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(what)
-    } catch {
-      setNote(say('This browser would not copy.'))
-    }
+    if (await toClipboard(value)) setCopied(what)
+    else setNote(say('This browser would not copy.'))
   }
 
   const share = (on: boolean) =>
@@ -455,21 +453,6 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     const timer = setInterval(() => setNowMs(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [running, paused])
-
-  const toggleKeepAwake = async (on: boolean) => {
-    setKeepAwake(on)
-    try {
-      const nav = navigator as unknown as { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }
-      if (on && nav.wakeLock) {
-        wakeLockRef.current = await nav.wakeLock.request('screen')
-      } else if (!on && wakeLockRef.current?.release) {
-        await wakeLockRef.current.release()
-        wakeLockRef.current = null
-      }
-    } catch {
-      /* WakeLock API optional */
-    }
-  }
 
   const toggleDockPane = (kind: 'terminal' | 'preview' | 'diff' | 'files', label: string) => {
     if (!desk) setDesk(true)
@@ -691,45 +674,71 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                       <DropdownMenuShortcut>F</DropdownMenuShortcut>
                     </DropdownMenuItem>
 
-                    {devMode ? (
-                      <>
-                        <DropdownMenuSeparator />
+                  <DropdownMenuSeparator />
 
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <SizableText size="$2" color="$ink" flex={1}>
+                        {say('Transcript view')}
+                      </SizableText>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent minW={160}>
+                      {(
+                        [
+                          ['normal', say('Normal')],
+                          ['thinking', say('Thinking')],
+                          ['verbose', say('Verbose')],
+                        ] as const
+                      ).map(([val, label]) => (
+                        <DropdownMenuItem key={val} onSelect={() => setTranscriptView(val)}>
+                          <SizableText size="$2" color="$ink" flex={1}>
+                            {label}
+                          </SizableText>
+                          {transcriptView === val ? <Check size={14} color="$ink" /> : null}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <SizableText size="$2" color="$ink" flex={1}>
+                          {say('Output style')}
+                        </SizableText>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent minW={170}>
+                        {(
+                          [
+                            ['default', say('Default')],
+                            ['proactive', say('Proactive')],
+                            ['concise', say('Concise')],
+                            ['explanatory', say('Explanatory')],
+                            ['learning', say('Learning')],
+                          ] as const
+                        ).map(([val, label]) => (
+                          <DropdownMenuItem key={val} onSelect={() => setOutputStyle(val)}>
                             <SizableText size="$2" color="$ink" flex={1}>
-                              {say('Transcript view')}
+                              {label}
                             </SizableText>
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent minW={160}>
-                            {(
-                              [
-                                ['normal', say('Normal')],
-                                ['thinking', say('Thinking')],
-                                ['verbose', say('Verbose')],
-                              ] as const
-                            ).map(([val, label]) => (
-                              <DropdownMenuItem key={val} onSelect={() => setTranscriptView(val)}>
-                                <SizableText size="$2" color="$ink" flex={1}>
-                                  {label}
-                                </SizableText>
-                                {transcriptView === val ? <Check size={14} color="$ink" /> : null}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                      </>
-                    ) : null}
+                            {outputStyle === val ? <Check size={14} color="$blue10" /> : null}
+                          </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setOutputStyle('custom')}>
+                          <SizableText size="$2" color="$ink" flex={1}>
+                            {say('New style...')}
+                          </SizableText>
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
 
                     <DropdownMenuSeparator />
 
-                    {devMode ? (
-                      <DropdownMenuItem onSelect={() => void copy('id', id)}>
-                        <SizableText size="$2" color="$ink" flex={1}>
-                          {copied === 'id' ? say('Copied') : say('Copy run id')}
-                        </SizableText>
-                      </DropdownMenuItem>
-                    ) : null}
+                    <DropdownMenuItem onSelect={() => void copy('id', id)}>
+                      <SizableText size="$2" color="$ink" flex={1}>
+                        {copied === 'id' ? say('Copied') : say('Copy run id')}
+                      </SizableText>
+                    </DropdownMenuItem>
 
                     <DropdownMenuItem
                       onSelect={() => {
@@ -740,6 +749,35 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                       <SizableText size="$2" color="$ink" flex={1}>
                         {say('Schedule this')}
                       </SizableText>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuItem
+                      aria-label={say('Archive')}
+                      onSelect={() => {
+                        if (running) void stop(t, id, 'Archived').catch(() => undefined)
+                        host.go('')
+                      }}
+                    >
+                      <SizableText size="$2" color="$ink" flex={1}>
+                        {say('Archive')}
+                      </SizableText>
+                      <DropdownMenuShortcut>A</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      aria-label={say('Delete')}
+                      variant="destructive"
+                      onSelect={() => {
+                        if (running) void stop(t, id, 'Deleted').catch(() => undefined)
+                        host.go('')
+                      }}
+                    >
+                      <SizableText size="$2" color="$red10" flex={1}>
+                        {say('Delete')}
+                      </SizableText>
+                      <DropdownMenuShortcut>D</DropdownMenuShortcut>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -807,31 +845,29 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           ) : null}
           {wide ? (
             <XStack items="center" gap="$0.5">
-              {devMode ? (
-                <XStack
-                  render={<button type="button" />}
-                  aria-label={say('Toggle environment column')}
-                  aria-pressed={envColumn}
-                  onClick={() => {
-                    if (!desk) setDesk(true)
-                    setEnvColumn((v) => !v)
-                  }}
-                  minW={32}
-                  minH={32}
-                  $touchable={{ minW: 44, minH: 44 }}
-                  $max-sm={{ minW: 44, minH: 44 }}
-                  items="center"
-                  justify="center"
-                  rounded="$2"
-                  borderWidth={0}
-                  cursor="pointer"
-                  bg={envColumn ? '$hover' : 'transparent'}
-                  hoverStyle={{ bg: '$hover' }}
-                  focusVisibleStyle={RING}
-                >
-                  <SlidersHorizontal size={15} opacity={envColumn ? 1 : 0.7} />
-                </XStack>
-              ) : null}
+              <XStack
+                render={<button type="button" />}
+                aria-label={say('Toggle environment column')}
+                aria-pressed={envColumn}
+                onClick={() => {
+                  if (!desk) setDesk(true)
+                  setEnvColumn((v) => !v)
+                }}
+                minW={32}
+                minH={32}
+                $touchable={{ minW: 44, minH: 44 }}
+                $max-sm={{ minW: 44, minH: 44 }}
+                items="center"
+                justify="center"
+                rounded="$2"
+                borderWidth={0}
+                cursor="pointer"
+                bg={envColumn ? '$hover' : 'transparent'}
+                hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
+              >
+                <SlidersHorizontal size={15} opacity={envColumn ? 1 : 0.7} />
+              </XStack>
               <XStack
                 render={<button type="button" />}
                 aria-label={say(devMode ? 'Toggle terminal pane' : 'Toggle activity pane')}
@@ -852,28 +888,26 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               >
                 <SquareTerminal size={15} opacity={splitPanes.includes('terminal') ? 1 : 0.7} />
               </XStack>
-              {devMode ? (
-                <XStack
-                  render={<button type="button" />}
-                  aria-label={say('Toggle diff pane')}
-                  aria-pressed={splitPanes.includes('diff')}
-                  onClick={() => toggleDockPane('diff', say('Diff'))}
-                  minW={32}
-                  minH={32}
-                  $touchable={{ minW: 44, minH: 44 }}
-                  $max-sm={{ minW: 44, minH: 44 }}
-                  items="center"
-                  justify="center"
-                  rounded="$2"
-                  borderWidth={0}
-                  cursor="pointer"
-                  bg={splitPanes.includes('diff') ? '$hover' : 'transparent'}
-                  hoverStyle={{ bg: '$hover' }}
-                  focusVisibleStyle={RING}
-                >
-                  <FileDiff size={15} opacity={splitPanes.includes('diff') ? 1 : 0.7} />
-                </XStack>
-              ) : null}
+              <XStack
+                render={<button type="button" />}
+                aria-label={say('Toggle diff pane')}
+                aria-pressed={splitPanes.includes('diff')}
+                onClick={() => toggleDockPane('diff', say('Diff'))}
+                minW={32}
+                minH={32}
+                $touchable={{ minW: 44, minH: 44 }}
+                $max-sm={{ minW: 44, minH: 44 }}
+                items="center"
+                justify="center"
+                rounded="$2"
+                borderWidth={0}
+                cursor="pointer"
+                bg={splitPanes.includes('diff') ? '$hover' : 'transparent'}
+                hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
+              >
+                <FileDiff size={15} opacity={splitPanes.includes('diff') ? 1 : 0.7} />
+              </XStack>
               <XStack
                 render={<button type="button" />}
                 aria-label={say('Toggle browser pane')}
@@ -942,10 +976,11 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                       setEnvColumn((v) => !v)
                     }}
                   >
-                    <SlidersHorizontal size={15} />
+                    <MessageSquare size={15} />
                     <SizableText size="$2" color="$ink" flex={1}>
-                      {say('Environment details')}
+                      {say('Side chat')}
                     </SizableText>
+                    <DropdownMenuShortcut>Ctrl+;</DropdownMenuShortcut>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={() => {
@@ -964,7 +999,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     </XStack>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <KeepAwake on={keepAwake} onToggle={(on) => void toggleKeepAwake(on)} />
+                  <KeepAwake on={keepAwake} onToggle={(on) => void setKeepAwake(on)} />
                 </DropdownMenuContent>
               </DropdownMenu>
             </XStack>
@@ -1069,7 +1104,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                   bg="transparent"
                   cursor="pointer"
                   hoverStyle={{ bg: '$hover' }}
-                  focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+                  focusVisibleStyle={RING_INSET}
                 >
                   {unfolded ? <ChevronDown size={14} color="$soft" /> : <ChevronRight size={14} color="$soft" />}
                   <SizableText size="$2" fontWeight="500" color="$ink">

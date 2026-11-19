@@ -149,7 +149,7 @@ export function Tile({
           cursor="pointer"
           // A button centres its words unless told: a card reads from the line's start.
           $platform-web={{ textAlign: 'start' }}
-          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+          focusVisibleStyle={RING}
         >
           {body}
         </XStack>
@@ -194,7 +194,7 @@ export function Featured({ title, detail, meta, mark, action, onOpen }: { title:
         bg="transparent"
         cursor="pointer"
         $platform-web={{ textAlign: 'start' }}
-        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+        focusVisibleStyle={RING}
       >
         {mark}
         <YStack flex={1} minW={0} gap="$1.5">
@@ -300,7 +300,7 @@ export function Sheet({ title, open, onOpenChange, width = 560, full = false, ch
             shrink={0}
             cursor="pointer"
             hoverStyle={{ bg: '$hover' }}
-            focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+            focusVisibleStyle={RING}
             $touchable={{ width: 44, height: 44 }}
             $max-sm={{ width: 44, height: 44, mr: -12 }}
           >
@@ -623,7 +623,7 @@ export function FilterPills<T extends string>({
             bg={active ? '$ink' : 'transparent'}
             cursor="pointer"
             hoverStyle={active ? undefined : { bg: '$hover', borderColor: '$ink' }}
-            focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+            focusVisibleStyle={RING}
           >
             <SizableText size="$1" fontWeight={active ? '500' : '400'} color={active ? '$background' : '$soft'}>
               {o.label}
@@ -649,7 +649,7 @@ export function FilterPills<T extends string>({
           bg="$panel"
           cursor="pointer"
           hoverStyle={{ bg: '$hover', borderColor: '$ink' }}
-          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+          focusVisibleStyle={RING}
         >
           <SizableText size="$1" fontWeight="500" color="$ink">
             {expanded ? t('Show less') : t('+{n} more', { n: hiddenCount })}
