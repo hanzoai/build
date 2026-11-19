@@ -248,7 +248,6 @@ function Row({ row: kept, touch, onAct, onDismiss }: { row: Suggestion; touch: b
       data-act={row.act.kind}
       aria-label={row.title}
       onPress={handleAct}
-      onClick={handleAct}
       flex={1}
       minW={0}
       self="stretch"
