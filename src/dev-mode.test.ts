@@ -28,26 +28,24 @@ describe('Developer mode and friendly device labels', () => {
     expect(getDevMode()).toBe(true)
   })
 
-  it('formats technical machine strings into neutral Local - Device labels in Simple Mode and preserves hardware detail', () => {
-    expect(formatDeviceLabel('MacBook-Pro.local · 16 vCPU / 64G', { devMode: false })).toEqual({
-      title: 'Local - Device',
-      detail: 'MacBook-Pro.local · 16 vCPU / 64G',
+  it('uses the key and event the Hanzo host\u2019s own settings store uses (components/settings/kit.tsx), so one switch serves both', () => {
+    expect(DEV_MODE_KEY).toBe('hanzo.dev_mode')
+    expect(DEV_MODE_EVENT).toBe('hanzo:dev-mode')
+  })
+
+  it('keeps a machine\u2019s own name, tidied, with its hardware beneath', () => {
+    expect(formatDeviceLabel('MacBook-Pro.local \u00b7 16 vCPU / 64G', { devMode: false })).toEqual({
+      title: 'MacBook-Pro',
+      detail: 'MacBook-Pro.local \u00b7 16 vCPU / 64G',
     })
-    expect(formatDeviceLabel('MacBook GPU M2', { devMode: false })).toEqual({
-      title: 'Local - Device',
-      detail: 'MacBook GPU M2',
-    })
-    expect(formatDeviceLabel('workstation.local (shell-1)', { devMode: false })).toEqual({
-      title: 'Local - Device',
-      detail: 'workstation.local (shell-1)',
-    })
-    expect(formatDeviceLabel('cloud-1 · shell-1', { devMode: false })).toEqual({
-      title: 'Cloud workspace',
-      detail: 'cloud-1 · shell-1',
-    })
-    expect(formatDeviceLabel('Hanzo sandbox', { devMode: false })).toEqual({
-      title: 'Cloud workspace',
-      detail: 'Managed Hanzo cloud workspace',
-    })
+    expect(formatDeviceLabel('dgx (shell-1)', { devMode: false, hardware: '1\u00d7 GB10' })).toEqual({ title: 'dgx', detail: '1\u00d7 GB10 \u00b7 dgx (shell-1)' })
+    expect(formatDeviceLabel('dave-laptop', { devMode: true, hardware: '10 vCPU' })).toEqual({ title: 'dave-laptop', detail: '10 vCPU' })
+  })
+
+  it('names the cloud workspace in plain words, through the reader\u2019s say', () => {
+    expect(formatDeviceLabel('Hanzo sandbox', { devMode: false })).toEqual({ title: 'Cloud workspace', detail: 'Managed Hanzo cloud workspace' })
+    expect(formatDeviceLabel('cloud-1 \u00b7 shell-1', { devMode: false })).toEqual({ title: 'Cloud workspace', detail: 'cloud-1 \u00b7 shell-1' })
+    const french = ((s: string) => `fr:${s}`) as never
+    expect(formatDeviceLabel('sandbox', { devMode: false, say: french }).title).toBe('fr:Cloud workspace')
   })
 })

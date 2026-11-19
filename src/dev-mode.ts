@@ -1,4 +1,7 @@
+import type { Say } from '@hanzo/i18n/react'
 import { useCallback, useSyncExternalStore } from 'react'
+
+import { english } from './say.ts'
 
 export const DEV_MODE_KEY = 'hanzo.dev_mode'
 export const DEV_MODE_EVENT = 'hanzo:dev-mode'
@@ -43,93 +46,45 @@ export function useDevMode(): [boolean, (next: boolean) => void] {
 }
 
 export interface DeviceLabelOptions {
-  kind?: string | null
-  os?: string | null
   hardware?: string | null
   host?: string | null
-  cloudTitle?: string
   devMode?: boolean
+  /** The reader's `t`; English where none is given. */
+  say?: Say
 }
 
 function mergeDetail(...parts: (string | null | undefined)[]): string | undefined {
   const seen = new Set<string>()
   const out: string[] = []
   for (const p of parts) {
-    const clean = (p ?? '').trim()
-    if (!clean) continue
-    for (const seg of clean.split(/\s*·\s*/)) {
-      const s = seg.trim()
-      if (!s) continue
-      const key = s.toLowerCase()
-      if (!seen.has(key)) {
+    for (const seg of (p ?? '').trim().split(/\s*·\s*/)) {
+      const key = seg.trim().toLowerCase()
+      if (key && !seen.has(key)) {
         seen.add(key)
-        out.push(s)
+        out.push(seg.trim())
       }
     }
   }
   return out.length ? out.join(' · ') : undefined
 }
 
-export function formatDeviceLabel(
-  raw: string | null | undefined,
-  opts: DeviceLabelOptions = {},
-): { title: string; detail?: string } {
-  const cleanRaw = (raw ?? '').trim()
-  const cloudFallback = opts.cloudTitle ?? 'Cloud workspace'
-  if (!cleanRaw) {
-    return { title: opts.devMode ? 'Cloud' : cloudFallback }
+/**
+ * A device as a person reads it. A developer sees the name the machine reports.
+ * Anyone else sees that name tidied (`MacBook-Pro.local` → `MacBook-Pro`) with
+ * the hardware beneath, and the cloud workspace in plain words.
+ */
+export function formatDeviceLabel(raw: string | null | undefined, opts: DeviceLabelOptions = {}): { title: string; detail?: string } {
+  const say = opts.say ?? english
+  const name = (raw ?? '').trim()
+  if (opts.devMode) return name ? { title: name, detail: mergeDetail(opts.hardware, opts.host && opts.host !== name ? opts.host : undefined) } : { title: 'Cloud' }
+  const lower = name.toLowerCase()
+  if (!name || /^(hanzo sandbox|sandbox|cloud|cloud workspace)$/.test(lower) || /^cloud-\d+(\s|·|$)/.test(lower)) {
+    return { title: say('Cloud workspace'), detail: !name || !lower.startsWith('cloud-') ? say('Managed Hanzo cloud workspace') : name }
   }
-  if (opts.devMode) {
-    return {
-      title: cleanRaw,
-      detail: mergeDetail(opts.hardware, opts.host && opts.host !== cleanRaw ? opts.host : undefined),
-    }
-  }
-
-  const lower = cleanRaw.toLowerCase()
-
-  if (
-    lower === 'hanzo sandbox' ||
-    lower === 'sandbox' ||
-    lower === 'cloud' ||
-    lower === 'cloud workspace' ||
-    /^cloud(-\d+)?(\b|\s|·)/.test(lower)
-  ) {
-    return {
-      title: cloudFallback,
-      detail:
-        lower === 'cloud' || lower === 'cloud workspace' || lower === 'hanzo sandbox' || lower === 'sandbox'
-          ? 'Managed Hanzo cloud workspace'
-          : cleanRaw,
-    }
-  }
-
-  const basePart = cleanRaw
+  const tidy = name
     .split(/\s*·\s*/)[0]!
     .replace(/\s*\((?:shell|desk|tmux|tty)[^)]*\)\s*$/i, '')
     .replace(/\.(local|lan|home|internal)$/i, '')
-    .replace(/-\d+$/, '')
     .trim()
-
-  const combinedHint = `${cleanRaw} ${opts.host ?? ''} ${opts.hardware ?? ''}`
-
-  if (
-    /macbook|\bmbp\b|\bmba\b|\b(imac|mac-studio|mac-mini|mac|laptop|desktop|workstation|localhost|local)\b/i.test(combinedHint) ||
-    opts.os === 'darwin' ||
-    opts.kind === 'laptop' ||
-    opts.kind === 'desktop' ||
-    /^tgt_[a-z0-9]+$/i.test(basePart)
-  ) {
-    const title = 'Local - Device'
-    const detail = mergeDetail(opts.hardware, opts.host, cleanRaw !== title ? cleanRaw : undefined)
-    return { title, detail }
-  }
-
-  const humanized = basePart
-    .replace(/[-_]+/g, ' ')
-    .trim()
-
-  const title = humanized ? `Local - ${humanized}` : 'Local - Device'
-  const detail = mergeDetail(opts.hardware, opts.host, cleanRaw !== title ? cleanRaw : undefined)
-  return { title, detail }
+  return { title: tidy || name, detail: mergeDetail(opts.hardware, opts.host, name !== tidy ? name : undefined) }
 }

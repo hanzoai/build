@@ -9,7 +9,10 @@
  */
 import { phrase } from '@hanzo/i18n'
 
+import type { Say } from '@hanzo/i18n/react'
+
 import { formatDeviceLabel } from '../dev-mode.ts'
+import { english } from '../say.ts'
 import type { Target } from './call.ts'
 import { machines, state } from './machines.ts'
 
@@ -26,28 +29,17 @@ export interface Place {
 }
 
 /** The cloud workspace, named in English and marked (`phrase`): a screen draws its label through `t`. */
-export const SANDBOX: Place = { id: '', label: phrase('Cloud workspace'), kind: 'sandbox', status: 'online', capacity: '' }
+export const SANDBOX: Place = { id: '', label: phrase('Hanzo sandbox'), kind: 'sandbox', status: 'online', capacity: '' }
 
 export async function places(t: Target): Promise<Place[]> {
   const list = await machines(t)
   return [SANDBOX, ...list.map((m) => ({ id: m.id, label: m.label, kind: m.kind, status: state(m), capacity: m.capacity }))]
 }
 
-export function displayPlace(
-  p: Place,
-  opts?: { devMode?: boolean; cloudTitle?: string },
-): { title: string; detail?: string } {
-  if (!p.id) {
-    return {
-      title: opts?.devMode ? 'Cloud' : (opts?.cloudTitle ?? 'Auto (Cloud)'),
-      detail: 'Runs automatically in your Hanzo cloud workspace',
-    }
-  }
-  return formatDeviceLabel(p.label, {
-    kind: p.kind,
-    hardware: p.capacity,
-    devMode: opts?.devMode,
-  })
+export function displayPlace(p: Place, opts?: { devMode?: boolean; say?: Say }): { title: string; detail?: string } {
+  const say = opts?.say ?? english
+  if (!p.id) return opts?.devMode ? { title: 'Cloud' } : { title: say('Auto (Cloud)'), detail: say('Runs automatically in your Hanzo cloud workspace') }
+  return formatDeviceLabel(p.label, { hardware: p.capacity, devMode: opts?.devMode, say })
 }
 
 /** Whether a run sent here now would be taken. */

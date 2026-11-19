@@ -4,7 +4,7 @@ import { displayMachine, machine } from './machines.ts'
 import { displayPlace, SANDBOX } from './places.ts'
 
 describe('device names a person reads', () => {
-  it('names a laptop Local - Device in Simple mode and keeps its hardware as the detail', () => {
+  it('keeps a laptop\u2019s own name in Simple mode, with its hardware as the detail', () => {
     const m = machine({
       id: 'tgt_1',
       label: 'MacBook-Pro.local',
@@ -14,7 +14,7 @@ describe('device names a person reads', () => {
       metricsAt: '2026-10-04T06:00:00Z',
       spec: { os: 'darwin', arch: 'arm64', cpus: 16, memory: 64 * 1024 * 1024 * 1024, gpus: [{ model: 'Apple M2' }] },
     })
-    expect(displayMachine(m, { devMode: false })).toEqual({ title: 'Local - Device', detail: 'Apple M2 · 64 GB · MacBook-Pro.local' })
+    expect(displayMachine(m, { devMode: false })).toEqual({ title: 'MacBook-Pro', detail: 'Apple M2 · 64 GB · MacBook-Pro.local' })
     expect(displayMachine(m, { devMode: true }).title).toBe('MacBook-Pro.local')
   })
 

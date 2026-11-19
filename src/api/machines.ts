@@ -14,6 +14,7 @@
  * hostname and keeps it online while it runs.
  */
 import { phrase } from '@hanzo/i18n'
+import type { Say } from '@hanzo/i18n/react'
 
 import { formatDeviceLabel } from '../dev-mode.ts'
 import { call, Refusal, seg, type Target } from './call.ts'
@@ -139,17 +140,8 @@ function hardwareSummary(m: Machine): string {
   return [hw, host].filter(Boolean).join(' · ')
 }
 
-export function displayMachine(
-  m: Machine,
-  opts?: { devMode?: boolean },
-): { title: string; detail?: string } {
-  return formatDeviceLabel(m.label, {
-    kind: m.kind,
-    os: m.spec?.os,
-    hardware: hardwareSummary(m),
-    host: m.host,
-    devMode: opts?.devMode,
-  })
+export function displayMachine(m: Machine, opts?: { devMode?: boolean; say?: Say }): { title: string; detail?: string } {
+  return formatDeviceLabel(m.label, { hardware: hardwareSummary(m), host: m.host, devMode: opts?.devMode, say: opts?.say })
 }
 
 export function machine(raw: unknown): Machine {

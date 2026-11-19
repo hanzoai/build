@@ -181,7 +181,7 @@ export function Machines() {
   const drain = async (m: Machine, status: 'online' | 'draining') => {
     setNote('')
     try {
-      const display = displayMachine(m, { devMode })
+      const display = displayMachine(m, { devMode, say: t })
       await change(target, m.id, { status })
       setNote(status === 'draining' ? t('{name} takes no new runs', { name: display.title }) : t('{name} takes runs again', { name: display.title }))
       list.reload()
@@ -312,7 +312,7 @@ export function Machines() {
         ) : (
           <Card>
             {list.value.map((m, i) => {
-              const display = displayMachine(m, { devMode })
+              const display = displayMachine(m, { devMode, say: t })
               const showDetails = devMode ? !collapsedDevIds[m.id] : expandedId === m.id
               const toggleDetails = () => {
                 if (devMode) {
