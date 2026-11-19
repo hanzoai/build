@@ -87,8 +87,6 @@ export function Inventory({ answers, onChange, onDone }: { answers: Answers; onC
         <YStack
           flex={1}
           height={6}
-          rounded={999}
-          bg="$hover"
           overflow="hidden"
           role="progressbar"
           aria-label={t('Answered')}
@@ -130,25 +128,19 @@ export function Inventory({ answers, onChange, onDone }: { answers: Answers; onC
             return (
               <XStack
                 key={v}
-                render={<button type="button" />}
+                render="button"
                 role="radio"
                 aria-checked={selected}
                 aria-label={t(ANCHORS[v - 1])}
-                onClick={() => answer(safeAt, v)}
+                onPress={() => answer(safeAt, v)}
                 width="100%"
                 minH={48}
                 px="$3.5"
                 py="$2"
                 gap="$3"
                 items="center"
-                rounded="$3"
-                borderWidth={1}
-                borderColor={selected ? '$ink' : 'var(--border-strong)'}
-                bg={selected ? '$raised' : '$panel'}
-                hoverStyle={{ bg: selected ? '$raised' : '$hover', borderColor: '$ink' }}
                 focusVisibleStyle={RING}
                 $platform-web={{ textAlign: 'start' }}
-                cursor="pointer"
               >
                 <SizableText size="$2" fontWeight="500" color={selected ? '$ink' : '$soft'} width={16} fontVariant={['tabular-nums']} shrink={0}>
                   {v}
@@ -243,8 +235,6 @@ const Statement = memo(function Statement({
       py="$2.5"
       minH={48}
       borderTopWidth={first ? 0 : 1}
-      borderColor="$borderColor"
-      bg={current ? '$hover' : 'transparent'}
     >
       <SizableText size="$1" color="$soft" width={24} fontVariant={['tabular-nums']} shrink={0}>
         {i + 1}
@@ -258,24 +248,16 @@ const Statement = memo(function Statement({
           return (
             <XStack
               key={v}
-              render={<button type="button" />}
+              render="button"
               role="radio"
               aria-checked={selected}
               aria-label={t(ANCHORS[v - 1])}
-              onClick={() => onAnswer(i, v)}
+              onPress={() => onAnswer(i, v)}
               width={32}
               height={32}
-              $touchable={{ minW: 44, minH: 44 }}
-              $max-sm={{ minW: 44, minH: 44 }}
-              rounded={999}
               items="center"
               justify="center"
-              borderWidth={1}
-              borderColor={selected ? '$ink' : 'var(--border-strong)'}
-              bg={selected ? '$ink' : 'transparent'}
-              hoverStyle={selected ? undefined : { bg: '$hover', borderColor: '$ink' }}
               focusVisibleStyle={RING}
-              cursor="pointer"
             >
               <SizableText size="$1" fontWeight={selected ? '600' : '400'} color={selected ? '$background' : '$soft'} fontVariant={['tabular-nums']}>
                 {v}
@@ -313,18 +295,16 @@ export function Traits({ form, score }: { form: Form; score: Score }) {
             <YStack key={d} borderTopWidth={idx ? 1 : 0} borderColor="$borderColor">
               {hasFacets ? (
                 <XStack
-                  render={<button type="button" />}
+                  render="button"
                   aria-expanded={open}
                   aria-label={t('{domain}: {score}', { domain: t(DOMAIN[d]), score: score.domains[d].toFixed(1) })}
-                  onClick={() => toggleDomain(d)}
+                  onPress={() => toggleDomain(d)}
                   width="100%"
                   px="$3"
                   py="$2.5"
                   minH={44}
                   items="center"
                   gap="$2"
-                  cursor="pointer"
-                  hoverStyle={{ bg: '$hover' }}
                   focusVisibleStyle={RING_INSET}
                   $platform-web={{ textAlign: 'start' }}
                 >
@@ -374,7 +354,6 @@ function Bar({ label, value, strong = false }: { label: string; value: number; s
       aria-valuemax={5}
       aria-valuetext={value.toFixed(1)}
       pl={strong ? 0 : '$2'}
-      $max-sm={{ flexDirection: 'column', items: 'stretch', gap: '$1.5', pl: 0 }}
     >
       <XStack items="center" justify="space-between" gap="$2" width={strong ? 150 : 142} shrink={0} $max-sm={{ width: '100%' }}>
         <SizableText size={strong ? '$2' : '$1'} fontWeight={strong ? '500' : '400'} color={strong ? '$ink' : '$soft'} numberOfLines={1} flex={1} minW={0}>

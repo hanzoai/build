@@ -255,11 +255,11 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
         <TilesSkeleton label={t('Loading your skills')} count={4} />
       ) : !own.value.length && !added.length ? (
         <Empty title={t('No skills yet')} detail={may ? t('Add one from Hanzo, or write your own.') : t('An org admin adds skills. Browse what there is.')}>
-          <Button size="sm" variant={may ? 'outline' : 'primary'} borderColor={may ? 'var(--border-strong)' : undefined} onPress={() => onView('discover')}>
+          <Button size="sm" variant="outline" onPress={() => onView('discover')}>
             {t('Browse skills')}
           </Button>
           {may ? (
-            <Button size="sm" variant="primary" onPress={() => onAdding(true)}>
+            <Button size="sm" onPress={() => onAdding(true)}>
               {t('Write a skill')}
             </Button>
           ) : null}
@@ -418,7 +418,7 @@ function Reader({
           <Button size="sm" variant={added ? 'outline' : 'primary'} borderColor={added ? 'var(--border-strong)' : undefined} disabled={busy} onPress={() => onFlip(!added)}>
             {busy ? t('Updating…') : added ? t('Remove') : t('Add to your skills')}
           </Button>
-          <SizableText size="$1" color="$soft" flex={1} minW={160} $max-sm={{ flexBasis: 'auto', grow: 0, minW: 0, width: '100%' }}>
+          <SizableText size="$1" color="$soft" flex={1}>
             {added ? t('On for your organization.') : t('Every run in your organization can use it once added.')}
           </SizableText>
         </XStack>

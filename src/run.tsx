@@ -557,7 +557,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
 
   const triggerButton = (
     <XStack
-      render={<button type="button" />}
+      render="button"
       aria-label={say('Manage this run')}
       items="center"
       gap="$1.5"
@@ -567,16 +567,11 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
       mx="$-1.5"
       py="$0.5"
       minH={32}
-      $touchable={{ minH: 44 }}
-      $max-sm={{ minH: 44 }}
       rounded="$2"
-      borderWidth={0}
-      bg="transparent"
-      cursor="pointer"
       hoverStyle={{ bg: '$hover' }}
       focusVisibleStyle={RING}
     >
-      <SizableText render="h1" size="$5" fontWeight="600" color="$ink" numberOfLines={1} minW={0}>
+      <SizableText render="h1" size="$5" color="$ink" numberOfLines={1} minW={0}>
         {title}
       </SizableText>
       <ChevronDown size={14} opacity={0.7} />
@@ -586,8 +581,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   return (
     <XStack data-slot="run-split" display="grid" gridTemplateColumns="minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
       <YStack data-slot="run" ref={split.main} {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
-        <XStack px="$4" $max-md={{ px: '$3' }} pt="$3" pb="$2" gap="$1.5" items="center" minH={44}>
-          <YStack flex={1} minW={0} items="flex-start" gap="$0.5">
+        <XStack px="$4" pt="$3" pb="$2" gap="$1.5" items="center" minH={44}>
+          <YStack flex={1} minW={0} items="flex-start">
             <XStack items="center" gap="$1" maxW="100%" minW={0}>
               {signed && record ? (
                 <DropdownMenu>
@@ -674,31 +669,31 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                       <DropdownMenuShortcut>F</DropdownMenuShortcut>
                     </DropdownMenuItem>
 
-                  <DropdownMenuSeparator />
+                    <DropdownMenuSeparator />
 
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <SizableText size="$2" color="$ink" flex={1}>
-                        {say('Transcript view')}
-                      </SizableText>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent minW={160}>
-                      {(
-                        [
-                          ['normal', say('Normal')],
-                          ['thinking', say('Thinking')],
-                          ['verbose', say('Verbose')],
-                        ] as const
-                      ).map(([val, label]) => (
-                        <DropdownMenuItem key={val} onSelect={() => setTranscriptView(val)}>
-                          <SizableText size="$2" color="$ink" flex={1}>
-                            {label}
-                          </SizableText>
-                          {transcriptView === val ? <Check size={14} color="$ink" /> : null}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <SizableText size="$2" color="$ink" flex={1}>
+                          {say('Transcript view')}
+                        </SizableText>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent minW={160}>
+                        {(
+                          [
+                            ['normal', say('Normal')],
+                            ['thinking', say('Thinking')],
+                            ['verbose', say('Verbose')],
+                          ] as const
+                        ).map(([val, label]) => (
+                          <DropdownMenuItem key={val} onSelect={() => setTranscriptView(val)}>
+                            <SizableText size="$2" color="$ink" flex={1}>
+                              {label}
+                            </SizableText>
+                            {transcriptView === val ? <Check size={14} color="$blue10" /> : null}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
 
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger>
@@ -792,19 +787,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           {pr.href ? (
             // From the run's record, which the coding service writes; `pull` draws only a pull request address.
             <Out href={pr.href} label={say('Open pull request {pr}', { pr: pr.label })}>
-              <XStack
-                items="center"
-                gap="$1.5"
-                px="$2.5"
-                $max-sm={{ px: '$2' }}
-                py="$1.5"
-                minH={32}
-                $touchable={{ minH: 44 }}
-                rounded="$3"
-                borderWidth={1}
-                borderColor="var(--border-strong)"
-                hoverStyle={{ bg: '$hover' }}
-              >
+              <XStack items="center" gap="$1.5" px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
                 <GitPullRequest size={14} />
                 <SizableText size="$2" color="$ink">
                   {pr.label}
@@ -816,26 +799,9 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           {sharing.length ? (
             <DropdownMenu
               trigger={
-                <XStack
-                  render={<button type="button" />}
-                  aria-label={say('Share')}
-                  items="center"
-                  gap="$1.5"
-                  px="$2.5"
-                  $max-sm={{ px: '$2', minH: 44 }}
-                  py="$1.5"
-                  minH={32}
-                  $touchable={{ minH: 44 }}
-                  rounded="$3"
-                  borderWidth={1}
-                  borderColor="var(--border-strong)"
-                  bg="transparent"
-                  cursor="pointer"
-                  hoverStyle={{ bg: '$hover' }}
-                  focusVisibleStyle={RING}
-                >
+                <XStack render="button" aria-label={say('Share')} items="center" gap="$1.5" px="$2.5" py="$1.5" rounded="$3" borderWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
                   <Share size={14} />
-                  <SizableText size="$2" color="$ink" $max-sm={{ display: 'none' }}>
+                  <SizableText size="$2" color="$ink">
                     {say('Share')}
                   </SizableText>
                 </XStack>
@@ -846,22 +812,18 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           {wide ? (
             <XStack items="center" gap="$0.5">
               <XStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={say('Toggle environment column')}
                 aria-pressed={envColumn}
-                onClick={() => {
+                onPress={() => {
                   if (!desk) setDesk(true)
                   setEnvColumn((v) => !v)
                 }}
                 minW={32}
                 minH={32}
-                $touchable={{ minW: 44, minH: 44 }}
-                $max-sm={{ minW: 44, minH: 44 }}
                 items="center"
                 justify="center"
                 rounded="$2"
-                borderWidth={0}
-                cursor="pointer"
                 bg={envColumn ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
                 focusVisibleStyle={RING}
@@ -869,19 +831,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 <SlidersHorizontal size={15} opacity={envColumn ? 1 : 0.7} />
               </XStack>
               <XStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={say(devMode ? 'Toggle terminal pane' : 'Toggle activity pane')}
                 aria-pressed={splitPanes.includes('terminal')}
-                onClick={() => toggleDockPane('terminal', say(devMode ? 'Terminal' : 'Activity'))}
+                onPress={() => toggleDockPane('terminal', say(devMode ? 'Terminal' : 'Activity'))}
                 minW={32}
                 minH={32}
-                $touchable={{ minW: 44, minH: 44 }}
-                $max-sm={{ minW: 44, minH: 44 }}
                 items="center"
                 justify="center"
                 rounded="$2"
-                borderWidth={0}
-                cursor="pointer"
                 bg={splitPanes.includes('terminal') ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
                 focusVisibleStyle={RING}
@@ -889,19 +847,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 <SquareTerminal size={15} opacity={splitPanes.includes('terminal') ? 1 : 0.7} />
               </XStack>
               <XStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={say('Toggle diff pane')}
                 aria-pressed={splitPanes.includes('diff')}
                 onClick={() => toggleDockPane('diff', say('Diff'))}
                 minW={32}
                 minH={32}
-                $touchable={{ minW: 44, minH: 44 }}
-                $max-sm={{ minW: 44, minH: 44 }}
                 items="center"
                 justify="center"
                 rounded="$2"
-                borderWidth={0}
-                cursor="pointer"
                 bg={splitPanes.includes('diff') ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
                 focusVisibleStyle={RING}
@@ -909,19 +863,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 <FileDiff size={15} opacity={splitPanes.includes('diff') ? 1 : 0.7} />
               </XStack>
               <XStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={say('Toggle browser pane')}
                 aria-pressed={splitPanes.includes('preview')}
                 onClick={() => toggleDockPane('preview', say('Preview'))}
                 minW={32}
                 minH={32}
-                $touchable={{ minW: 44, minH: 44 }}
-                $max-sm={{ minW: 44, minH: 44 }}
                 items="center"
                 justify="center"
                 rounded="$2"
-                borderWidth={0}
-                cursor="pointer"
                 bg={splitPanes.includes('preview') ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
                 focusVisibleStyle={RING}
@@ -929,19 +879,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 <Globe size={15} opacity={splitPanes.includes('preview') ? 1 : 0.7} />
               </XStack>
               <XStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={say('Toggle files pane')}
                 aria-pressed={splitPanes.includes('files')}
                 onClick={() => toggleDockPane('files', say('Files'))}
                 minW={32}
                 minH={32}
-                $touchable={{ minW: 44, minH: 44 }}
-                $max-sm={{ minW: 44, minH: 44 }}
                 items="center"
                 justify="center"
                 rounded="$2"
-                borderWidth={0}
-                cursor="pointer"
                 bg={splitPanes.includes('files') ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
                 focusVisibleStyle={RING}
@@ -950,22 +896,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               </XStack>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <XStack
-                    render={<button type="button" />}
-                    aria-label={say('More workspace options')}
-                    minW={32}
-                    minH={32}
-                    $touchable={{ minW: 44, minH: 44 }}
-                    $max-sm={{ minW: 44, minH: 44 }}
-                    items="center"
-                    justify="center"
-                    rounded="$2"
-                    borderWidth={0}
-                    bg="transparent"
-                    cursor="pointer"
-                    hoverStyle={{ bg: '$hover' }}
-                    focusVisibleStyle={RING}
-                  >
+                  <XStack render="button" aria-label={say('More workspace options')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
                     <MoreHorizontal size={15} opacity={0.7} />
                   </XStack>
                 </DropdownMenuTrigger>
@@ -1063,7 +994,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 <SizableText size="$2" color="$soft">
                   {say('Sign in to follow this run.')}
                 </SizableText>
-                <Button size="sm" variant="primary" onPress={() => host.signIn?.()}>
+                <Button size="sm" onPress={() => host.signIn?.()}>
                   {say('Sign in')}
                 </Button>
               </YStack>
@@ -1086,9 +1017,9 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
             ) : null}
             {plan.length ? (
               // One line until it is opened, so the steps never crowd the transcript.
-              <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden" bg="$panel">
+              <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
                 <XStack
-                  render={<button type="button" />}
+                  render="button"
                   aria-label={say('Steps · {n}', { n: plan.length })}
                   aria-expanded={unfolded}
                   onClick={() => setUnfolded(!unfolded)}
@@ -1096,18 +1027,13 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                   px="$3"
                   py="$1.5"
                   minH={36}
-                  $touchable={{ minH: 44 }}
-                  $max-sm={{ minH: 44 }}
                   gap="$2"
                   items="center"
-                  borderWidth={0}
-                  bg="transparent"
-                  cursor="pointer"
                   hoverStyle={{ bg: '$hover' }}
                   focusVisibleStyle={RING_INSET}
                 >
-                  {unfolded ? <ChevronDown size={14} color="$soft" /> : <ChevronRight size={14} color="$soft" />}
-                  <SizableText size="$2" fontWeight="500" color="$ink">
+                  {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  <SizableText size="$2" color="$ink">
                     {say('Steps · {n}', { n: plan.length })}
                   </SizableText>
                   {current && !unfolded ? (
@@ -1120,7 +1046,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                   ? plan.map((s) => {
                       const on = s === current
                       return (
-                        <XStack key={s.name} items="center" gap="$2" px="$3" py="$1.5" borderTopWidth={1} borderColor="$borderColor" bg="$background">
+                        <XStack key={s.name} items="center" gap="$2" px="$3" py="$1.5" borderTopWidth={1} borderColor="$borderColor">
                           <SizableText size="$2" color={s.done || on ? '$ink' : '$soft'}>
                             {s.done ? '✓' : on ? '●' : '○'}
                           </SizableText>
@@ -1143,7 +1069,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               </XStack>
             ) : null}
             {running ? (
-              <XStack items="center" gap="$2" px="$3" py="$2" rounded="$4" borderWidth={1} borderColor="var(--border-strong)" bg="$panel" flexWrap="wrap" rowGap="$1.5">
+              <XStack items="center" gap="$2" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" flexWrap="wrap" rowGap="$1">
                 <SizableText size="$2" color="$ink" flex={1} minW={160}>
                   {paused
                     ? kept.pushed
@@ -1162,7 +1088,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     ...(busy || waiting ? (['pause', 'resume', 'stop'] as const) : []),
                   ]}
                 />
-                <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={notify} onPress={() => void ask()}>
+                <Button size="sm" disabled={notify} onPress={() => void ask()}>
                   {notify ? say('You will be notified') : say('Notify me')}
                 </Button>
               </XStack>
@@ -1223,16 +1149,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
             onChangeText={setName}
             aria-label={say('The run’s name')}
             maxLength={512}
-            borderColor="var(--border-strong)"
             onKeyDown={(e: { key?: string }) => {
               if (e.key === 'Enter') save()
             }}
           />
           <XStack gap="$2" justify="flex-end">
-            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setNaming(false)}>
+            <Button size="sm" variant="outline" onPress={() => setNaming(false)}>
               {say('Cancel')}
             </Button>
-            <Button size="sm" variant="primary" disabled={busy || !name.trim()} onPress={save}>
+            <Button size="sm" disabled={busy || !name.trim()} onPress={save}>
               {say('Save')}
             </Button>
           </XStack>
@@ -1270,7 +1195,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
             <SizableText size="$2" color="$soft" width={16} fontVariant={['tabular-nums']}>
               {String(i + 1)}
             </SizableText>
-            <SizableText size="$2" color="$ink" flex={1}>
+            <SizableText size="$2" color="$ink">
               {s}
             </SizableText>
           </XStack>
@@ -1279,7 +1204,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
       <SizableText size="$2" color="$soft">
         {t('Interrupt anytime to steer the agent or ask it questions.')}
       </SizableText>
-      <Button size="sm" variant="primary" onPress={onDone}>
+      <Button size="sm" onPress={onDone}>
         {t('Got it')}
       </Button>
     </YStack>

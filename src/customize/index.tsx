@@ -115,11 +115,6 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
       gap="$2"
       px="$3"
       height={36}
-      $max-sm={{ minH: 44, height: 44 }}
-      rounded="$3"
-      borderWidth={1}
-      borderColor="var(--border-strong)"
-      bg="$panel"
       focusWithinStyle={{ borderColor: '$outlineColor' }}
     >
       <Search size={14} color="$soft" shrink={0} aria-hidden />
@@ -129,8 +124,6 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
         minW={0}
         height="100%"
         p={0}
-        borderWidth={0}
-        bg="transparent"
         fontSize="$2"
         color="$ink"
         value={q}
@@ -143,20 +136,13 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
       />
       {q ? (
         <XStack
-          render={<button type="button" />}
+          render="button"
           aria-label={t('Clear search')}
-          onClick={() => setQ('')}
+          onPress={() => setQ('')}
           minW={24}
           minH={24}
-          $touchable={{ minW: 44, minH: 44 }}
-          $max-sm={{ minW: 44, minH: 44 }}
           items="center"
           justify="center"
-          rounded="$2"
-          borderWidth={0}
-          bg="transparent"
-          cursor="pointer"
-          hoverStyle={{ bg: '$hover' }}
           focusVisibleStyle={RING}
         >
           <X size={13} color="$soft" />
@@ -169,7 +155,6 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
     <Button
       size="sm"
       variant={quietToolbarAdd ? 'outline' : 'primary'}
-      borderColor={quietToolbarAdd ? 'var(--border-strong)' : undefined}
       shrink={0}
       aria-expanded={inlineCreator ? adding : undefined}
       onPress={() => setAdding(inlineCreator ? !adding : true)}
@@ -180,17 +165,10 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
 
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
-      <YStack width="100%" maxW={1080} mx="auto" gap="$5">
+      <YStack width="100%" maxW={1080} mx="auto" gap="$4">
         {/* A host whose sidebar lists the tabs heads the page with the tab itself. */}
-        <YStack gap="$1.5">
-          <SizableText
-            render="h1"
-            fontFamily="$heading"
-            size="$7"
-            fontWeight="600"
-            letterSpacing={'-0.025em' as never}
-            color="$ink"
-          >
+        <YStack gap="$1">
+          <SizableText render="h1" size="$6" color="$ink">
             {host.sections ? t(LABEL[tab].title) : t('Customize')}
           </SizableText>
           <SizableText size="$2" color="$soft">
@@ -205,11 +183,9 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
               aria-label={t('Customize')}
               gap="$4"
               borderBottomWidth={1}
-              borderColor="$borderColor"
               overflowX="auto"
               overflowY="hidden"
               $platform-web={{ scrollbarWidth: 'none' }}
-              $max-md={{ gap: '$3' }}
             >
               {TABS.map((id, idx) => {
                 const on = id === tab
@@ -218,11 +194,11 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
                     key={id}
                     id={`${tabId}-${id}`}
                     role="tab"
-                    render={<button type="button" />}
+                    render="button"
                     aria-selected={on}
                     aria-controls={`${tabId}-panel`}
                     tabIndex={on ? 0 : -1}
-                    onClick={() => pick(id)}
+                    onPress={() => pick(id)}
                     onKeyDown={(e: { key?: string; preventDefault?: () => void }) => {
                       let nextIdx: number | null = null
                       if (e.key === 'ArrowRight') nextIdx = (idx + 1) % TABS.length
@@ -240,18 +216,12 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
                     gap="$1.5"
                     pb="$2"
                     minH={36}
-                    $touchable={{ minH: 44 }}
-                    $max-sm={{ minH: 44 }}
                     mb={-1}
                     shrink={0}
-                    cursor="pointer"
-                    bg="transparent"
                     borderTopWidth={0}
                     borderLeftWidth={0}
                     borderRightWidth={0}
                     borderBottomWidth={2}
-                    borderColor={on ? '$ink' : 'transparent'}
-                    hoverStyle={{ borderColor: on ? '$ink' : 'var(--border-strong)' }}
                     focusVisibleStyle={RING_INSET}
                   >
                     <XStack opacity={on ? 1 : 0.7} $max-md={{ display: 'none' }}>

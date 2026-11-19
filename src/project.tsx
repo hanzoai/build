@@ -177,23 +177,18 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
               }}
             />
             {note ? (
-              <SizableText size="$1" color="var(--state-error)">
+              <SizableText size="$1" color="$soft">
                 {note}
               </SizableText>
             ) : null}
             {!open ? (
               <XStack
-                render={<button type="button" />}
-                onClick={onOpen}
+                render="button"
+                onPress={onOpen}
                 px="$1.5"
                 py="$1"
                 minH={28}
-                $touchable={{ minH: 44 }}
-                $max-sm={{ minH: 44 }}
                 items="center"
-                rounded="$2"
-                cursor="pointer"
-                hoverStyle={{ bg: '$hover' }}
                 focusVisibleStyle={RING}
               >
                 <SizableText size="$1" color="$soft" textDecorationLine="underline">
@@ -675,30 +670,16 @@ export function Project({ at }: { at: Where }) {
     <YStack data-slot="preview" flex={1} minH={0} minW={0} gap="$2" display={view === 'preview' ? 'flex' : 'none'}>
       {/* The framed page's own controls, beside it: reload, the page, the width, and the page in a tab of its own. */}
       <XStack data-slot="preview-bar" items="center" gap="$1.5" minW={0} shrink={0} $max-md={{ px: '$2' }}>
-        <XStack
-          render={<button type="button" />}
-          aria-label={t('Reload the preview')}
-          onClick={() => frame.current?.reload()}
-          minW={32}
-          minH={32}
-          $touchable={{ minW: 44, minH: 44 }}
-          $max-sm={{ minW: 44, minH: 44 }}
-          items="center"
-          justify="center"
-          rounded="$3"
-          cursor="pointer"
-          hoverStyle={{ bg: '$hover' }}
-          focusVisibleStyle={RING}
-        >
-          <RefreshCcw size={15} color="$ink" />
+        <XStack render="button" aria-label={t('Reload the preview')} onPress={() => frame.current?.reload()} p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
+          <RefreshCcw size={16} />
         </XStack>
         <PageSelect pages={pages} value={page} onChange={setPage} shrink={1} />
         <XStack flex={1} />
         <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label={t('Device')} labels="none" />
         {src ? (
           <Out href={src} label={t('Open in a new tab')}>
-            <XStack minW={32} minH={32} $touchable={{ minW: 44, minH: 44 }} $max-sm={{ minW: 44, minH: 44 }} items="center" justify="center" rounded="$3" hoverStyle={{ bg: '$hover' }}>
-              <ExternalLink size={15} color="$ink" />
+            <XStack p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
+              <ExternalLink size={16} />
             </XStack>
           </Out>
         ) : null}
@@ -751,29 +732,22 @@ export function Project({ at }: { at: Where }) {
         toolbar={
           bridge ? (
             <XStack
-              render={<button type="button" />}
+              render="button"
               aria-pressed={editing}
               aria-label={editing ? t('Stop picking elements') : t('Pick an element to edit')}
-              onClick={() => {
+              onPress={() => {
                 const next = !editing
                 setEditing(next)
                 frame.current?.post({ type: 'preview:editable', active: next })
               }}
               minW={36}
               minH={36}
-              $touchable={{ minW: 44, minH: 44 }}
-              $max-sm={{ minW: 44, minH: 44 }}
               items="center"
               justify="center"
               rounded="$10"
-              borderWidth={1}
-              borderColor={editing ? '$ink' : 'var(--border-strong)'}
-              bg={editing ? '$ink' : '$panel'}
-              cursor="pointer"
-              hoverStyle={{ bg: editing ? '$ink' : '$hover' }}
               focusVisibleStyle={RING}
             >
-              <MousePointerClick size={16} color={editing ? '$background' : '$ink'} />
+              <MousePointerClick size={16} />
             </XStack>
           ) : undefined
         }
@@ -846,64 +820,31 @@ export function Project({ at }: { at: Where }) {
         start={
           // Shrinks with the bar, so the project's name truncates rather than
           // running under Publish on a phone.
-          <XStack items="center" gap="$1.5" minW={0} shrink={1}>
-            <XStack
-              render={<button type="button" />}
-              aria-label={t('All runs')}
-              onClick={() => host.go('')}
-              minW={32}
-              minH={32}
-              $touchable={{ minW: 44, minH: 44 }}
-              $max-sm={{ minW: 44, minH: 44 }}
-              items="center"
-              justify="center"
-              rounded="$2"
-              shrink={0}
-              cursor="pointer"
-              hoverStyle={{ bg: '$hover' }}
-              focusVisibleStyle={RING}
-            >
+          <XStack items="center" gap="$2" minW={0} shrink={1}>
+            <XStack render="button" aria-label={t('All runs')} onPress={() => host.go('')} p="$1" shrink={0}>
               <HanzoMark size={20} />
             </XStack>
             <ProjectChip name={title} onPress={() => setSwitcher(true)} />
-            <XStack
-              render={<button type="button" />}
-              aria-label={t('History')}
-              onClick={() => setHistory(true)}
-              minW={32}
-              minH={32}
-              $touchable={{ minW: 44, minH: 44 }}
-              $max-sm={{ minW: 44, minH: 44 }}
-              items="center"
-              justify="center"
-              rounded="$3"
-              shrink={0}
-              cursor="pointer"
-              hoverStyle={{ bg: '$hover' }}
-              focusVisibleStyle={RING}
-            >
-              <Clock size={16} color="$soft" />
+            <XStack render="button" aria-label={t('History')} onPress={() => setHistory(true)} p="$1.5" rounded="$3" shrink={0} hoverStyle={{ bg: '$hover' }}>
+              <Clock size={16} />
             </XStack>
             {/* The chat folds away beside the work; on a phone the views switch to it instead. */}
             <XStack
-              render={<button type="button" />}
+              render="button"
               aria-label={shut ? t('Show the chat') : t('Hide the chat')}
               aria-pressed={!shut}
               onClick={() => (cramped ? setAsked(!asked) : setCollapsed(!collapsed))}
               minW={32}
               minH={32}
-              $touchable={{ minW: 44, minH: 44 }}
               items="center"
               justify="center"
               rounded="$3"
               shrink={0}
-              cursor="pointer"
-              bg={!shut ? '$hover' : 'transparent'}
               hoverStyle={{ bg: '$hover' }}
               focusVisibleStyle={RING}
               $max-md={{ display: 'none' }}
             >
-              <PanelLeft size={16} color={!shut ? '$ink' : '$soft'} />
+              <PanelLeft size={16} />
             </XStack>
           </XStack>
         }
@@ -923,7 +864,7 @@ export function Project({ at }: { at: Where }) {
           <XStack items="center" gap="$2">
             {/* Share gives way on a phone, where Publish is the one that matters. */}
             <XStack display="none" $md={{ display: 'flex' }}>
-              <Button variant="outline" borderColor="var(--border-strong)" size="sm" onPress={() => void share()}>
+              <Button variant="outline" size="sm" onPress={() => void share()}>
                 <Share2 size={14} /> {t('Share')}
               </Button>
             </XStack>
@@ -963,9 +904,9 @@ export function Project({ at }: { at: Where }) {
       </Workspace>
 
       <Dialog open={history} onOpenChange={setHistory}>
-        <DialogContent maxW={480} gap="$3">
+        <DialogContent maxW={480}>
           <DialogTitle>{t('Runs on {title}', { title })}</DialogTitle>
-          <YStack gap="$1" maxH={360} overflow="scroll">
+          <YStack gap="$1">
             {runs.value.length === 0 ? (
               <SizableText size="$2" color="$soft">
                 {t('No runs yet.')}
@@ -976,9 +917,9 @@ export function Project({ at }: { at: Where }) {
                 return (
                   <XStack
                     key={r.id}
-                    render={<button type="button" />}
+                    render="button"
                     aria-current={active ? 'true' : undefined}
-                    onClick={() => {
+                    onPress={() => {
                       setChosen(r.id)
                       setHistory(false)
                     }}
@@ -988,14 +929,6 @@ export function Project({ at }: { at: Where }) {
                     px="$2.5"
                     py="$2"
                     minH={40}
-                    $touchable={{ minH: 44 }}
-                    $max-sm={{ minH: 44 }}
-                    rounded="$3"
-                    borderWidth={1}
-                    borderColor={active ? 'var(--border-strong)' : 'transparent'}
-                    bg={active ? '$hover' : 'transparent'}
-                    hoverStyle={{ bg: '$hover' }}
-                    cursor="pointer"
                     $platform-web={{ textAlign: 'start' }}
                     focusVisibleStyle={RING}
                   >
@@ -1028,14 +961,12 @@ export function Project({ at }: { at: Where }) {
               onChangeText={setSwitchQ}
               placeholder={t('Find a project…')}
               aria-label={t('Find a project')}
-              borderColor="var(--border-strong)"
-              bg="$panel"
               startAdornment={<Search size={14} color="$soft" />}
             />
           ) : null}
           <YStack gap="$1" maxH={420} overflow="scroll">
             {repos.error ? (
-              <SizableText size="$2" color="var(--state-error)">
+              <SizableText size="$2" color="$soft">
                 {repos.error.message}
               </SizableText>
             ) : repos.loading && repos.value.length === 0 ? (
@@ -1057,10 +988,10 @@ export function Project({ at }: { at: Where }) {
                 return (
                   <XStack
                     key={`${c.org}/${c.name}`}
-                    render={<button type="button" />}
+                    render="button"
                     aria-label={t('Open {repo}', { repo: `${c.org}/${c.name}` })}
                     aria-current={here ? 'page' : undefined}
-                    onClick={() => {
+                    onPress={() => {
                       setSwitcher(false)
                       setSwitchQ('')
                       host.go(path({ kind: 'repo', org: c.org || host.org || '', name: c.name }))
@@ -1068,21 +999,15 @@ export function Project({ at }: { at: Where }) {
                     px="$2.5"
                     py="$2"
                     minH={40}
-                    $touchable={{ minH: 44 }}
-                    $max-sm={{ minH: 44 }}
                     items="center"
                     justify="space-between"
                     gap="$2"
                     rounded="$3"
-                    borderWidth={1}
-                    borderColor={here ? 'var(--border-strong)' : 'transparent'}
-                    bg={here ? '$hover' : 'transparent'}
                     hoverStyle={{ bg: '$hover' }}
-                    cursor="pointer"
                     $platform-web={{ textAlign: 'start' }}
                     focusVisibleStyle={RING}
                   >
-                    <SizableText size="$2" color="$ink" fontWeight={here ? '500' : '400'} numberOfLines={1} flex={1}>
+                    <SizableText size="$2" color="$ink" numberOfLines={1}>
                       {c.name}
                     </SizableText>
                     {here ? <Check size={14} color="$ink" /> : null}
@@ -1093,7 +1018,6 @@ export function Project({ at }: { at: Where }) {
           </YStack>
           <Button
             variant="outline"
-            borderColor="var(--border-strong)"
             size="sm"
             onPress={() => {
               setSwitcher(false)

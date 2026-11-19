@@ -501,10 +501,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             maxW={280}
             px="$3"
             py="$2"
-            rounded="$3"
-            bg="var(--popover)"
-            borderWidth={1}
-            borderColor="var(--border-strong)"
             z="var(--z-popover)"
           >
             <YStack gap="$0.5">
@@ -692,10 +688,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                   mx="$3"
                   px="$3"
                   py="$2"
-                  rounded="$4"
-                  borderWidth={1}
-                  borderColor="var(--border-strong)"
-                  bg="$panel"
                   flexWrap="wrap"
                 >
                   <SizableText size="$2" color="$ink" flex={1} minW={180}>

@@ -114,17 +114,15 @@ export function PanelToggle({ open, onToggle }: { open: boolean; onToggle: () =>
   if (open) return null
   return (
     <XStack
-      render={<button type="button" />}
+      render="button"
       data-slot="side-toggle"
       aria-label={t('Show tabs')}
       aria-expanded={false}
       aria-keyshortcuts={SHORTCUTS}
       {...({ title: t('Show tabs ({keys})', { keys: KEYS }) } as object)}
-      onClick={onToggle}
+      onPress={onToggle}
       width={32}
       height={32}
-      $touchable={{ minW: 44, minH: 44 }}
-      $max-sm={{ minW: 44, minH: 44 }}
       {...quiet()}
     >
       <Plus size={16} />
@@ -206,7 +204,7 @@ function Suggested({ suggested, onGo }: { suggested: readonly Suggestion[]; onGo
   const { t } = useI18n()
   return (
     <YStack data-slot="side-suggested" px="$4" pt="$4" gap="$3">
-      <SizableText size="$1" fontWeight="500" color="$soft">
+      <SizableText fontSize={13} color="$soft">
         {t('Suggested')}
       </SizableText>
       {suggested.length ? (
@@ -214,19 +212,14 @@ function Suggested({ suggested, onGo }: { suggested: readonly Suggestion[]; onGo
           {suggested.map((s) => (
             <YStack key={s.url} role="listitem" shrink={0}>
               <YStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={s.title}
-                onClick={() => onGo(s.url)}
+                onPress={() => onGo(s.url)}
                 width={120}
                 items="center"
                 gap="$2"
                 py="$2.5"
                 px="$1.5"
-                rounded={12}
-                borderWidth={0}
-                bg="transparent"
-                cursor="pointer"
-                hoverStyle={{ bg: '$hover' }}
                 focusVisibleStyle={RING}
               >
                 <Mark icon={s.icon} title={s.title} />
@@ -238,7 +231,7 @@ function Suggested({ suggested, onGo }: { suggested: readonly Suggestion[]; onGo
           ))}
         </XStack>
       ) : (
-        <SizableText size="$2" color="$soft">
+        <SizableText fontSize={13} color="$soft">
           {t('No suggestions.')}
         </SizableText>
       )}
@@ -252,28 +245,25 @@ function Elsewhere({ tab }: { tab: Tab }) {
   return (
     <YStack flex={1} items="center" justify="center" gap="$3" p="$5" data-slot="side-elsewhere">
       <Globe size={20} opacity={0.6} />
-      <SizableText size="$3" fontWeight="500" color="$ink" numberOfLines={1} maxW="100%">
+      <SizableText fontSize={13} color="$ink" numberOfLines={1} maxW="100%">
         {tab.title || tab.url}
       </SizableText>
       <XStack
-        render={<button type="button" />}
-        onClick={() => popOut(tab)}
+        render="button"
+        onPress={() => popOut(tab)}
         items="center"
         gap="$1.5"
         px="$3"
         minH={34}
-        $touchable={{ minH: 44 }}
-        $max-sm={{ minH: 44 }}
         rounded={999}
         borderWidth={1}
         borderColor="$borderColor"
-        bg="transparent"
         cursor="pointer"
         hoverStyle={{ bg: '$hover' }}
         focusVisibleStyle={RING}
       >
         <ExternalLink size={13} />
-        <SizableText size="$2" color="$ink">
+        <SizableText fontSize={13} color="$ink">
           {t('Open in a new window')}
         </SizableText>
       </XStack>
@@ -366,26 +356,23 @@ function Zoom({ level, onLevel, disabled }: { level: number; onLevel: (percent: 
   const step = (way: 1 | -1) => () => onLevel(zoomed(level, way))
   const box = (label: string, onSelect: () => void, child: ReactNode) => (
     <XStack
-      render={<button type="button" />}
+      render="button"
       aria-label={label}
       aria-disabled={disabled || undefined}
-      onClick={disabled ? undefined : onSelect}
+      onPress={disabled ? undefined : onSelect}
       width={24}
       height={24}
-      $touchable={{ minW: 44, minH: 44 }}
-      $max-sm={{ minW: 44, minH: 44 }}
       {...quiet(false, disabled)}
-      rounded={6}
     >
       {child}
     </XStack>
   )
   return (
-    <XStack data-slot="page-zoom" role="group" aria-label={t('Zoom')} items="center" gap="$2" px={8} minH={38} $max-sm={{ minH: 48 }} opacity={disabled ? 0.5 : 1}>
-      <SizableText size="$2" color="$ink" flex={1}>
+    <XStack data-slot="page-zoom" role="group" aria-label={t('Zoom')} items="center" gap="$2" px={8} height={38} opacity={disabled ? 0.5 : 1}>
+      <SizableText fontSize={13} color="$ink" flex={1}>
         {t('Zoom')}
       </SizableText>
-      <XStack items="center" gap={2} borderWidth={1} borderColor="$borderColor" rounded={8} px={2} minH={28}>
+      <XStack items="center" gap={2} borderWidth={1} borderColor="$borderColor" rounded={8} px={2} height={28}>
         {box(t('Zoom out'), step(-1), <Minus size={12} />)}
         <SizableText size="$1" color="$ink" width={40} text="center" aria-live="polite" fontVariant={['tabular-nums']}>
           {`${level}%`}
@@ -502,15 +489,11 @@ function Actions({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <XStack
-          render={<button type="button" />}
+          render="button"
           aria-label={t('Page actions')}
           width={PILL}
           height={PILL}
-          $touchable={{ minW: 44, minH: 44 }}
-          $max-sm={{ minW: 44, minH: 44 }}
           {...quiet()}
-          rounded={999}
-          bg="$edge"
         >
           <MoreHorizontal size={16} />
         </XStack>
@@ -579,43 +562,34 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
       <XStack data-slot="side-bar" minH={BAR} px="$2" py="$1" gap="$2" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
         <XStack items="center" minH={PILL} px={4} gap={2} rounded={999} bg="$edge" shrink={0}>
           <XStack
-            render={<button type="button" />}
+            render="button"
             aria-label={t('Back')}
             aria-disabled={!back || undefined}
-            onClick={back ? onBack : undefined}
+            onPress={back ? onBack : undefined}
             width={28}
             height={28}
-            $touchable={{ minW: 44, minH: 44 }}
-            $max-sm={{ minW: 44, minH: 44 }}
             {...quiet(false, !back)}
-            rounded={999}
           >
             <ArrowLeft size={15} {...MIRROR} />
           </XStack>
           <XStack
-            render={<button type="button" />}
+            render="button"
             aria-label={t('Forward')}
             aria-disabled={!ahead || undefined}
-            onClick={ahead ? onForward : undefined}
+            onPress={ahead ? onForward : undefined}
             width={28}
             height={28}
-            $touchable={{ minW: 44, minH: 44 }}
-            $max-sm={{ minW: 44, minH: 44 }}
             {...quiet(false, !ahead)}
-            rounded={999}
           >
             <ArrowRight size={15} {...MIRROR} />
           </XStack>
           <XStack
-            render={<button type="button" />}
+            render="button"
             aria-label={t('Reload this tab')}
-            onClick={() => again((n) => n + 1)}
+            onPress={() => again((n) => n + 1)}
             width={28}
             height={28}
-            $touchable={{ minW: 44, minH: 44 }}
-            $max-sm={{ minW: 44, minH: 44 }}
             {...quiet()}
-            rounded={999}
           >
             <RotateCw size={14} />
           </XStack>
@@ -630,7 +604,6 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
           bg="$edge"
           borderWidth={1}
           // Focused, the address is the bar's one ringed thing, as a browser's is.
-          borderColor={typing ? 'var(--ring)' : 'transparent'}
           data-slot="side-address"
         >
           <SizableText
@@ -656,8 +629,6 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
               />
             }
             width="100%"
-            borderWidth={0}
-            bg="transparent"
             color="$ink"
             fontFamily="$body"
             size="$2"
@@ -711,11 +682,9 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
             position="absolute"
             t={0}
             l={0}
-            borderWidth={0}
             width={scale ? (scale.width as never) : '100%'}
             height={scale ? (scale.height as never) : '100%'}
             display="block"
-            bg="$background"
             $platform-web={scale ? { transform: scale.transform, transformOrigin: scale.transformOrigin } : undefined}
           />
         </YStack>
@@ -767,8 +736,6 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
       pl="$2.5"
       pr="$1"
       minH={30}
-      $touchable={{ minH: 44 }}
-      $max-sm={{ minH: 44 }}
       // As wide as a title wants up to a browser tab's width, sharing the strip
       // as a browser's tabs do when there are many.
       flexBasis={236}
@@ -805,13 +772,13 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
       } as object)}
     >
       <XStack
-        render={<button type="button" />}
+        render="button"
         role="tab"
         id={`side-tab-${tab.id}`}
         aria-selected={on}
         aria-controls="side-body"
         tabIndex={on ? 0 : -1}
-        onClick={() => side.pick(tab.id)}
+        onPress={() => side.pick(tab.id)}
         onKeyDown={(e: { key?: string; metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; preventDefault?: () => void }) => {
           const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
           if (step && e.shiftKey && (e.metaKey || e.ctrlKey)) {
@@ -835,12 +802,8 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
         flex={1}
         minW={0}
         minH={28}
-        $touchable={{ minH: 44 }}
-        $max-sm={{ minH: 44 }}
         items="center"
         gap="$2"
-        borderWidth={0}
-        bg="transparent"
         cursor="pointer"
         focusVisibleStyle={RING_INSET}
       >
@@ -849,26 +812,22 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
             {icon}
           </XStack>
         ) : null}
-        <SizableText size="$2" fontWeight={on ? '500' : '400'} color={on ? '$ink' : '$soft'} numberOfLines={1}>
+        <SizableText fontSize={13} color={on ? '$ink' : '$soft'} numberOfLines={1}>
           {label}
         </SizableText>
       </XStack>
       {tab.pinned ? (
         // A pinned tab's end is its pin, always shown: pressing it lets the tab go.
         <XStack
-          render={<button type="button" />}
+          render="button"
           aria-label={t('Unpin {tab}', { tab: label })}
           tabIndex={-1}
-          onClick={() => side.unpin(tab.id)}
+          onPress={() => side.unpin(tab.id)}
           minW={22}
           minH={22}
-          $touchable={{ minW: 44, minH: 44 }}
-          $max-sm={{ minW: 44, minH: 44 }}
           items="center"
           justify="center"
           rounded={6}
-          borderWidth={0}
-          bg="transparent"
           cursor="pointer"
           opacity={on ? 0.8 : 0.55}
           hoverStyle={{ bg: '$hover', opacity: 1 }}
@@ -878,19 +837,15 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
         </XStack>
       ) : (
         <XStack
-          render={<button type="button" />}
+          render="button"
           aria-label={t('Close {tab}', { tab: label })}
           tabIndex={-1}
-          onClick={() => side.shut(tab.id)}
+          onPress={() => side.shut(tab.id)}
           minW={22}
           minH={22}
-          $touchable={{ minW: 44, minH: 44 }}
-          $max-sm={{ minW: 44, minH: 44 }}
           items="center"
           justify="center"
           rounded={6}
-          borderWidth={0}
-          bg="transparent"
           cursor="pointer"
           opacity={on ? 0.8 : 0.45}
           hoverStyle={{ bg: '$hover', opacity: 1 }}
@@ -941,14 +896,12 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
   const poppable = tab?.kind === PAGE && (tab.body !== undefined || Boolean(tab.url))
   const plus = (
     <XStack
-      render={<button type="button" />}
+      render="button"
       aria-label={say('Open a tab')}
       width={28}
       height={28}
-      $touchable={{ minW: 44, minH: 44 }}
-      $max-sm={{ minW: 44, minH: 44 }}
       {...quiet()}
-      onClick={closed.length ? undefined : blank}
+      onPress={closed.length ? undefined : blank}
     >
       <Plus size={16} />
     </XStack>
@@ -956,21 +909,19 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
 
   const body = (
     <YStack role="complementary" aria-label={label ?? say('Side panel')} data-slot="side" flex={1} minW={0} minH={0} overflow="hidden" rounded="inherit">
-      <XStack data-slot="side-strip" minH={STRIP} px="$2" py="$1" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
+      <XStack data-slot="side-strip" height={STRIP} px="$2" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
         {column?.hidden && !column.full ? (
           <XStack
-            render={<button type="button" />}
+            render="button"
             data-slot="side-show"
-            onClick={column.show}
+            onPress={column.show}
             minH={32}
-            $touchable={{ minH: 44 }}
-            $max-sm={{ minH: 44 }}
             px="$2"
             gap="$1.5"
             {...quiet()}
           >
             <PanelLeftOpen size={16} />
-            <SizableText size="$2" color="$ink">
+            <SizableText fontSize={13} color="$ink">
               {column.main === 'run' ? say('Show run') : column.main === 'chat' ? say('Show chat') : say('Show {main}', { main: column.main })}
             </SizableText>
           </XStack>
@@ -995,48 +946,42 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
         <XStack flex={1} />
         {menu}
         <XStack
-          render={<button type="button" />}
+          render="button"
           aria-label={say('Open this tab in a new window')}
           aria-disabled={!poppable || undefined}
-          onClick={poppable ? () => popOut(tab) : undefined}
+          onPress={poppable ? () => popOut(tab) : undefined}
           width={28}
           height={28}
-          $touchable={{ minW: 44, minH: 44 }}
-          $max-sm={{ minW: 44, minH: 44 }}
           {...quiet(false, !poppable)}
         >
           <ExternalLink size={14} />
         </XStack>
         {column ? (
           <XStack
-            render={<button type="button" />}
+            render="button"
             data-slot="side-full"
             aria-label={column.full ? say('Exit full screen') : say('Full screen')}
             aria-pressed={column.full}
             aria-keyshortcuts={column.full ? 'Escape' : undefined}
             {...({ title: column.full ? say('Exit full screen ({key})', { key: 'Esc' }) : say('Full screen') } as object)}
-            onClick={() => column.fill(!column.full)}
+            onPress={() => column.fill(!column.full)}
             width={28}
             height={28}
-            $touchable={{ minW: 44, minH: 44 }}
-            $max-sm={{ minW: 44, minH: 44 }}
             {...quiet(column.full)}
           >
             {column.full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </XStack>
         ) : null}
         <XStack
-          render={<button type="button" />}
+          render="button"
           data-slot="side-toggle"
           aria-label={say('Hide tabs')}
           aria-expanded
           aria-keyshortcuts={SHORTCUTS}
           {...({ title: say('Hide tabs ({keys})', { keys: KEYS }) } as object)}
-          onClick={onHide}
+          onPress={onHide}
           width={32}
           height={32}
-          $touchable={{ minW: 44, minH: 44 }}
-          $max-sm={{ minW: 44, minH: 44 }}
           {...quiet(true)}
         >
           <Columns2 size={16} />
@@ -1058,7 +1003,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
       >
         {!tab ? (
           <YStack flex={1} items="center" justify="center" p="$5">
-            <SizableText size="$2" color="$soft">
+            <SizableText fontSize={13} color="$soft">
               {say('No tabs open.')}
             </SizableText>
           </YStack>

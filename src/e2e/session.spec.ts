@@ -157,7 +157,7 @@ test('New runs in Cloud or on a machine under remote control, and says how to li
   await p.getByRole('button', { name: 'Where the run runs: Auto (Cloud)' }).click()
   const list = p.getByRole('listbox', { name: 'Where the run runs' })
   await expect(list.getByText('Auto (Cloud)', { exact: true })).toBeVisible()
-  await expect(list.getByText(`Hanzo sandbox · ${REPO} environment`)).toBeVisible()
+  await expect(list.getByText('Cloud workspace')).toBeVisible()
   await expect(list.getByText('Remote control · online · 10 vCPU / 32G')).toBeVisible()
   await expect(p.getByText('Set up remote control')).toBeVisible()
   await expect(p.getByText('hanzo link', { exact: true })).toBeVisible()

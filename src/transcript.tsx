@@ -51,7 +51,7 @@ function UserSaid({ text, after }: { text: string; after?: ReactNode }) {
         </YStack>
       </Message>
       {long ? (
-        <XStack render="button" aria-expanded={open} onPress={() => setOpen((v) => !v)} px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+        <XStack render="button" aria-expanded={open} onPress={() => setOpen((v) => !v)} self="flex-start" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
           <SizableText size="$1" color="$soft">
             {open ? t('Show less') : t('Show more')}
           </SizableText>
@@ -253,10 +253,6 @@ export function Transcript({
                     gap="$1.5"
                     px="$2.5"
                     py="$1"
-                    rounded={999}
-                    borderWidth={1}
-                    borderColor="$borderColor"
-                    bg="$panel"
                     $platform-web={{ display: 'inline-flex' }}
                   >
                     <GitBranch size={12} color="$soft" shrink={0} aria-hidden />
@@ -337,8 +333,6 @@ export function Transcript({
                 onPress={() => onSendQueued(q.id)}
                 px="$2"
                 py="$0.5"
-                rounded="$2"
-                hoverStyle={{ bg: '$hover' }}
               >
                 <SizableText size="$1" color="$soft">
                   {t('Send now')}

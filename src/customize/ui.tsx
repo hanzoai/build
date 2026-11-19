@@ -103,17 +103,17 @@ export function Tile({
   const body = (
     <>
       {mark}
-      <YStack flex={1} minW={0} gap="$1.5">
-        <SizableText size="$3" fontWeight="600" color="$ink" numberOfLines={1}>
+      <YStack flex={1} minW={0} gap="$1">
+        <SizableText size="$3" color="$ink" numberOfLines={1}>
           {title}
         </SizableText>
         {detail ? (
-          <SizableText size="$2" color="$soft" numberOfLines={2}>
+          <SizableText size="$1" color="$soft" numberOfLines={3}>
             {detail}
           </SizableText>
         ) : null}
         {meta ? (
-          <SizableText size="$1" color="$hint" numberOfLines={1}>
+          <SizableText size="$1" color="$soft" numberOfLines={1} opacity={0.8}>
             {meta}
           </SizableText>
         ) : null}
@@ -121,31 +121,16 @@ export function Tile({
     </>
   )
   return (
-    <XStack
-      role="listitem"
-      items="flex-start"
-      gap="$3"
-      p="$4"
-      minW={0}
-      rounded="$4"
-      borderWidth={1}
-      borderColor="$borderColor"
-      bg="$panel"
-      hoverStyle={onOpen ? { borderColor: 'var(--border-strong)', bg: '$hover' } : undefined}
-    >
+    <XStack role="listitem" items="flex-start" gap="$2" p="$3" minW={0} rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" hoverStyle={onOpen ? { borderColor: '$edge' } : undefined}>
       {onOpen ? (
         <XStack
-          render={<button type="button" />}
+          render="button"
           aria-label={title}
-          onClick={onOpen}
+          onPress={onOpen}
           flex={1}
           minW={0}
-          $touchable={{ minH: 44 }}
-          $max-sm={{ minH: 44 }}
           gap="$3"
           items="flex-start"
-          borderWidth={0}
-          bg="transparent"
           cursor="pointer"
           // A button centres its words unless told: a card reads from the line's start.
           $platform-web={{ textAlign: 'start' }}
@@ -167,47 +152,20 @@ export function Tile({
 export function Featured({ title, detail, meta, mark, action, onOpen }: { title: string; detail: string; meta: string; mark: ReactNode; action?: ReactNode; onOpen: () => void }) {
   const { t } = useI18n()
   return (
-    <XStack
-      items="flex-start"
-      gap="$4"
-      p="$5"
-      rounded="$4"
-      borderWidth={1}
-      borderColor="var(--border-strong)"
-      bg="$panel"
-      flexWrap="wrap"
-      rowGap="$3"
-      hoverStyle={{ bg: '$hover' }}
-    >
-      <XStack
-        render={<button type="button" />}
-        aria-label={title}
-        onClick={onOpen}
-        flex={1}
-        minW={0}
-        $sm={{ minW: 220 }}
-        $touchable={{ minH: 44 }}
-        $max-sm={{ minH: 44 }}
-        gap="$4"
-        items="flex-start"
-        borderWidth={0}
-        bg="transparent"
-        cursor="pointer"
-        $platform-web={{ textAlign: 'start' }}
-        focusVisibleStyle={RING}
-      >
+    <XStack items="flex-start" gap="$4" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" flexWrap="wrap" rowGap="$3">
+      <XStack render="button" aria-label={title} onPress={onOpen} flex={1} minW={220} gap="$4" items="flex-start" cursor="pointer" $platform-web={{ textAlign: 'start' }}>
         {mark}
         <YStack flex={1} minW={0} gap="$1.5">
           <SizableText size="$1" color="$soft" fontWeight="500">
             {t('Featured')}
           </SizableText>
-          <SizableText size="$5" fontWeight="600" color="$ink" numberOfLines={1}>
+          <SizableText size="$6" color="$ink" numberOfLines={1}>
             {title}
           </SizableText>
           <SizableText size="$2" color="$soft" numberOfLines={3}>
             {detail}
           </SizableText>
-          <SizableText size="$1" color="$hint" numberOfLines={1}>
+          <SizableText size="$1" color="$soft" numberOfLines={1}>
             {meta}
           </SizableText>
         </YStack>
@@ -223,7 +181,7 @@ export function Add({ name, added, busy, onPress, use = false }: { name: string;
   if (added) {
     return (
       <XStack aria-label={t('{name} is added', { name })} gap="$1" height={32} items="center" shrink={0}>
-        <Check size={14} color="var(--state-success)" />
+        <Check size={14} />
         <SizableText size="$1" color="$soft">
           {t('Added')}
         </SizableText>
@@ -231,15 +189,7 @@ export function Add({ name, added, busy, onPress, use = false }: { name: string;
     )
   }
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      borderColor="var(--border-strong)"
-      shrink={0}
-      aria-label={use ? t('Use {name}', { name }) : t('Add {name}', { name })}
-      disabled={busy}
-      onPress={onPress}
-    >
+    <Button size="sm" variant="outline" aria-label={use ? t('Use {name}', { name }) : t('Add {name}', { name })} disabled={busy} onPress={onPress}>
       <Plus size={14} /> {use ? t('Use') : t('Add')}
     </Button>
   )
@@ -286,22 +236,19 @@ export function Sheet({ title, open, onOpenChange, width = 560, full = false, ch
             {title}
           </DialogTitle>
           <XStack
-            render={<button type="button" />}
+            render="button"
             aria-label={t('Close')}
-            onClick={() => onOpenChange(false)}
+            onPress={() => onOpenChange(false)}
             width={32}
             height={32}
             mr={-6}
             rounded={999}
-            borderWidth={0}
-            bg="transparent"
             items="center"
             justify="center"
             shrink={0}
             cursor="pointer"
             hoverStyle={{ bg: '$hover' }}
             focusVisibleStyle={RING}
-            $touchable={{ width: 44, height: 44 }}
             $max-sm={{ width: 44, height: 44, mr: -12 }}
           >
             <X size={16} />
@@ -370,7 +317,7 @@ export function Failed({ error, onRetry }: { error: unknown; onRetry: () => void
       <SizableText size="$2" color="$soft" text="center">
         {say(error, t)}
       </SizableText>
-      <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={onRetry}>
+      <Button size="sm" variant="outline" onPress={onRetry}>
         {t('Try again')}
       </Button>
     </YStack>
@@ -407,7 +354,7 @@ export function Visitor({ children }: { children: string }) {
   return (
     <Soft
       action={
-        <Button size="sm" variant="primary" onPress={() => host.signIn?.()}>
+        <Button size="sm" onPress={() => host.signIn?.()}>
           {t('Sign in')}
         </Button>
       }
@@ -430,10 +377,10 @@ export function Line({ children }: { children: string }) {
 /** A small heading over a run of cards. */
 export function Part({ title, detail, action, children }: { title: string; detail: string; action?: ReactNode; children?: ReactNode }) {
   return (
-    <YStack gap="$3" render="section" aria-label={title}>
-      <XStack items="center" gap="$3" flexWrap="wrap" rowGap="$2">
-        <YStack flex={1} minW={0} gap="$1.5">
-          <SizableText render="h2" size="$4" fontWeight="600" color="$ink">
+    <YStack gap="$2.5" render="section" aria-label={title}>
+      <XStack items="center" gap="$3">
+        <YStack flex={1} minW={0} gap="$0.5">
+          <SizableText render="h2" size="$4" color="$ink">
             {title}
           </SizableText>
           {detail ? (
@@ -488,10 +435,10 @@ export function Choice<T extends string>({
           <XStack
             key={o.id}
             id={`${groupId}-${idx}`}
-            render={<button type="button" />}
+            render="button"
             aria-pressed={active}
             aria-label={o.count ? t('{label}, {count}', { label: o.label, count: o.count }) : o.label}
-            onClick={() => onChange(o.id)}
+            onPress={() => onChange(o.id)}
             onKeyDown={(e: { key?: string; preventDefault?: () => void }) => {
               const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
               if (!step) return
@@ -507,13 +454,6 @@ export function Choice<T extends string>({
             px="$3"
             py="$1"
             minH={30}
-            $touchable={{ minH: 44 }}
-            $max-sm={{ minH: 44 }}
-            rounded="$2"
-            borderWidth={0}
-            cursor="pointer"
-            bg={active ? '$raised' : 'transparent'}
-            hoverStyle={{ bg: active ? '$raised' : '$hover' }}
             focusVisibleStyle={RING}
           >
             <SizableText size="$2" fontWeight={active ? '500' : '400'} color={active ? '$ink' : '$soft'}>
@@ -592,10 +532,10 @@ export function FilterPills<T extends string>({
           <XStack
             key={o.id}
             id={`${groupId}-pill-${idx}`}
-            render={<button type="button" />}
+            render="button"
             aria-pressed={active}
             aria-label={o.label}
-            onClick={() => onChange(o.id)}
+            onPress={() => onChange(o.id)}
             onKeyDown={((e: { key?: string; preventDefault?: () => void }) => {
               if (e.key === 'ArrowRight') {
                 e.preventDefault?.()
@@ -615,14 +555,6 @@ export function FilterPills<T extends string>({
             px="$3"
             py="$1"
             minH={30}
-            $touchable={{ minH: 44 }}
-            $max-sm={{ minH: 44 }}
-            rounded={999}
-            borderWidth={1}
-            borderColor={active ? '$ink' : 'var(--border-strong)'}
-            bg={active ? '$ink' : 'transparent'}
-            cursor="pointer"
-            hoverStyle={active ? undefined : { bg: '$hover', borderColor: '$ink' }}
             focusVisibleStyle={RING}
           >
             <SizableText size="$1" fontWeight={active ? '500' : '400'} color={active ? '$background' : '$soft'}>
@@ -633,22 +565,14 @@ export function FilterPills<T extends string>({
       })}
       {hasOverflow ? (
         <XStack
-          render={<button type="button" />}
+          render="button"
           aria-expanded={expanded}
           aria-label={expanded ? t('Show fewer categories') : t('Show {n} more categories', { n: hiddenCount })}
-          onClick={() => setExpanded((e) => !e)}
+          onPress={() => setExpanded((e) => !e)}
           items="center"
           px="$3"
           py="$1"
           minH={30}
-          $touchable={{ minH: 44 }}
-          $max-sm={{ minH: 44 }}
-          rounded={999}
-          borderWidth={1}
-          borderColor="var(--border-strong)"
-          bg="$panel"
-          cursor="pointer"
-          hoverStyle={{ bg: '$hover', borderColor: '$ink' }}
           focusVisibleStyle={RING}
         >
           <SizableText size="$1" fontWeight="500" color="$ink">
@@ -712,18 +636,13 @@ export function RowsSkeleton({ label, count = 4 }: { label: string; count?: numb
 export function MenuTrigger({ label }: { label: string }) {
   return (
     <XStack
-      render={<button type="button" />}
+      render="button"
       aria-label={label}
       width={32}
       height={32}
-      $touchable={{ minW: 44, minH: 44 }}
-      $max-sm={{ minW: 44, minH: 44 }}
-      rounded="$2"
       items="center"
       justify="center"
       shrink={0}
-      cursor="pointer"
-      hoverStyle={{ bg: '$hover' }}
       focusVisibleStyle={RING}
     >
       <MoreHorizontal size={15} color="$soft" aria-hidden />

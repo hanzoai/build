@@ -159,9 +159,9 @@ export function Desk({
       id: 'environment',
       label: say('Environment'),
       render: () => (
-        <YStack gap="$3">
+        <YStack gap="$2">
           <Environment repo={name} busy={live && mode === 'setup'} />
-          <SizableText size="$3" fontWeight="600" color="$ink" pt="$4">
+          <SizableText size="$2" color="$ink" pt="$4">
             {say('This run')}
           </SizableText>
           <Fact label={say('Run')} value={id} />
@@ -221,19 +221,14 @@ export function Desk({
                 </SizableText>
                 {onExpandSplitPane ? (
                   <XStack
-                    render={<button type="button" />}
+                    render="button"
                     aria-label={say('Expand {pane}', { pane: k.label })}
                     onClick={() => onExpandSplitPane(pid)}
                     minW={30}
                     minH={30}
-                    $touchable={{ minW: 44, minH: 44 }}
-                    $max-sm={{ minW: 44, minH: 44 }}
                     items="center"
                     justify="center"
                     rounded="$2"
-                    borderWidth={0}
-                    bg="transparent"
-                    cursor="pointer"
                     hoverStyle={{ bg: '$hover' }}
                     focusVisibleStyle={RING}
                   >
@@ -242,19 +237,14 @@ export function Desk({
                 ) : null}
                 {onCloseSplitPane ? (
                   <XStack
-                    render={<button type="button" />}
+                    render="button"
                     aria-label={say('Close {pane}', { pane: k.label })}
                     onClick={() => onCloseSplitPane(pid)}
                     minW={30}
                     minH={30}
-                    $touchable={{ minW: 44, minH: 44 }}
-                    $max-sm={{ minW: 44, minH: 44 }}
                     items="center"
                     justify="center"
                     rounded="$2"
-                    borderWidth={0}
-                    bg="transparent"
-                    cursor="pointer"
                     hoverStyle={{ bg: '$hover' }}
                     focusVisibleStyle={RING}
                   >
@@ -282,20 +272,7 @@ export function Desk({
         menu={
           <DropdownMenu
             trigger={
-              <XStack
-                render={<button type="button" />}
-                aria-label={say('Run actions')}
-                minW={32}
-                minH={32}
-                $touchable={{ minW: 44, minH: 44 }}
-                $max-sm={{ minW: 44, minH: 44 }}
-                items="center"
-                justify="center"
-                rounded="$2"
-                cursor="pointer"
-                hoverStyle={{ bg: '$hover' }}
-                focusVisibleStyle={RING}
-              >
+              <XStack render="button" aria-label={say('Run actions')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
                 <MoreHorizontal size={16} />
               </XStack>
             }
@@ -827,7 +804,7 @@ function EnvironmentInspection({
   const envDisplay = formatDeviceLabel(environment || 'sandbox', { devMode, say: t })
 
   return (
-    <YStack width={264} $max-lg={{ width: 220 }} shrink={0} minW={0} minH={0} overflow="scroll" bg="$background" px="$3.5" py="$3" gap="$4">
+    <YStack width={264} shrink={0} minH={0} overflow="scroll" bg="$background" px="$3" py="$2.5" gap="$3">
       <SizableText size="$2" color="$ink" fontWeight="600">
         {devMode ? t('Environment') : t('Workspace')}
       </SizableText>
@@ -839,19 +816,12 @@ function EnvironmentInspection({
             {envDisplay.title}
           </SizableText>
           <XStack
-            render={<button type="button" />}
-            onClick={onOpenEnvironment}
+            render="button"
+            onPress={onOpenEnvironment}
             px="$1.5"
             py="$0.5"
             minH={28}
-            $touchable={{ minH: 44 }}
-            $max-sm={{ minH: 44 }}
             items="center"
-            rounded="$2"
-            borderWidth={0}
-            bg="transparent"
-            cursor="pointer"
-            hoverStyle={{ bg: '$hover' }}
             focusVisibleStyle={RING}
           >
             <SizableText size="$1" color="$ink" textDecorationLine="underline">
@@ -896,23 +866,23 @@ function EnvironmentInspection({
         </XStack>
       </YStack>
 
-      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$3" gap="$2">
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
         <XStack items="center" gap="$1.5">
-          <SizableText size="$2" color="$ink" fontWeight="600">
+          <SizableText size="$2" color="$ink" fontWeight="500">
             {t('Context')}
           </SizableText>
           <SizableText flex={1} size="$1" color="$soft" text="end" fontVariant={['tabular-nums']}>
             {`${contextPct}%`}
           </SizableText>
           <YStack width={28} height={6} rounded={99} bg="$borderColor" overflow="hidden">
-            <YStack width={`${contextPct}%`} height="100%" bg="$ink" />
+            <YStack width={`${contextPct}%`} height="100%" bg="$blue10" />
           </YStack>
         </XStack>
       </YStack>
 
-      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$3" gap="$2">
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
         <XStack items="center" gap="$1.5">
-          <SizableText size="$2" color="$ink" fontWeight="600">
+          <SizableText size="$2" color="$ink" fontWeight="500">
             {t('Connectors')}
           </SizableText>
           <SizableText flex={1} size="$1" color="$soft" text="end">
@@ -921,29 +891,12 @@ function EnvironmentInspection({
         </XStack>
       </YStack>
 
-      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$3" gap="$1.5">
-        <SizableText size="$2" color="$ink" fontWeight="600">
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$1.5">
+        <SizableText size="$2" color="$ink" fontWeight="500">
           {t('Changes')}
         </SizableText>
-        <XStack
-          render={<button type="button" />}
-          onClick={onOpenDiff}
-          width="100%"
-          items="flex-start"
-          gap="$2"
-          px="$1.5"
-          py="$1"
-          minH={36}
-          $touchable={{ minH: 44 }}
-          $max-sm={{ minH: 44 }}
-          rounded="$2"
-          borderWidth={0}
-          bg="transparent"
-          cursor="pointer"
-          hoverStyle={{ bg: '$hover' }}
-          focusVisibleStyle={RING}
-        >
-          <GitPullRequest size={14} color="var(--state-success)" />
+        <XStack render="button" onPress={onOpenDiff} items="flex-start" gap="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+          <GitPullRequest size={14} color="$green10" />
           <YStack flex={1} minW={0} gap="$0.5">
             <SizableText size="$2" color="$ink" numberOfLines={1} text="start">
               {title || branch || (devMode ? t('Working tree') : t('Latest changes'))}
@@ -965,8 +918,8 @@ function EnvironmentInspection({
         </XStack>
       </YStack>
 
-      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$3" gap="$2">
-        <SizableText size="$2" color="$ink" fontWeight="600">
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
+        <SizableText size="$2" color="$ink" fontWeight="500">
           {t('Background tasks')}
         </SizableText>
         {runningTasks.map((task) => (
@@ -1046,21 +999,14 @@ function Terminal({
           <>
             {reachable ? (
               <XStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={t('Shell')}
                 aria-pressed={showShell}
-                onClick={() => setLog(false)}
+                onPress={() => setLog(false)}
                 px="$2.5"
                 py="$1"
                 minH={30}
-                $touchable={{ minH: 44 }}
-                $max-sm={{ minH: 44 }}
                 items="center"
-                rounded="$2"
-                borderWidth={1}
-                borderColor={showShell ? 'var(--border-strong)' : 'transparent'}
-                bg={showShell ? '$hover' : 'transparent'}
-                cursor="pointer"
                 focusVisibleStyle={RING}
               >
                 <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
@@ -1069,21 +1015,14 @@ function Terminal({
               </XStack>
             ) : null}
             <XStack
-              render={<button type="button" />}
+              render="button"
               aria-label={t('Agent log')}
               aria-pressed={!showShell}
-              onClick={() => setLog(true)}
+              onPress={() => setLog(true)}
               px="$2.5"
               py="$1"
               minH={30}
-              $touchable={{ minH: 44 }}
-              $max-sm={{ minH: 44 }}
               items="center"
-              rounded="$2"
-              borderWidth={1}
-              borderColor={showShell ? 'transparent' : 'var(--border-strong)'}
-              bg={showShell ? 'transparent' : '$hover'}
-              cursor="pointer"
               focusVisibleStyle={RING}
             >
               <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
@@ -1094,21 +1033,14 @@ function Terminal({
         ) : (
           <>
             <XStack
-              render={<button type="button" />}
+              render="button"
               aria-label={t('Activity')}
               aria-pressed={!showShell}
-              onClick={() => setLog(true)}
+              onPress={() => setLog(true)}
               px="$2.5"
               py="$1"
               minH={30}
-              $touchable={{ minH: 44 }}
-              $max-sm={{ minH: 44 }}
               items="center"
-              rounded="$2"
-              borderWidth={1}
-              borderColor={showShell ? 'transparent' : 'var(--border-strong)'}
-              bg={showShell ? 'transparent' : '$hover'}
-              cursor="pointer"
               focusVisibleStyle={RING}
             >
               <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
@@ -1118,22 +1050,14 @@ function Terminal({
             <XStack flex={1} />
             {reachable ? (
               <XStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={t('Open terminal')}
                 aria-pressed={showShell}
-                onClick={() => setLog((v) => !v)}
+                onPress={() => setLog((v) => !v)}
                 px="$2.5"
                 py="$1"
                 minH={30}
-                $touchable={{ minH: 44 }}
-                $max-sm={{ minH: 44 }}
                 items="center"
-                rounded="$2"
-                borderWidth={1}
-                borderColor={showShell ? 'var(--border-strong)' : 'transparent'}
-                bg={showShell ? '$hover' : 'transparent'}
-                hoverStyle={{ bg: '$hover', borderColor: 'var(--border-strong)' }}
-                cursor="pointer"
                 focusVisibleStyle={RING}
               >
                 <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
@@ -1176,7 +1100,7 @@ function Log({
               {refused || (failed ? t('This run stopped before its first command: {reason}', { reason: failed }) : t('This run finished without writing a command.'))}
             </SizableText>
             {refused ? (
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={onRetry}>
+              <Button size="sm" variant="outline" onPress={onRetry}>
                 {retry}
               </Button>
             ) : null}

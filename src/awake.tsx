@@ -42,7 +42,7 @@ export function useKeepAwake(): [boolean, (on: boolean) => Promise<void>] {
 export function KeepAwake({ on, onToggle }: { on: boolean; onToggle: (on: boolean) => void }) {
   const { t } = useI18n()
   return (
-    <DropdownMenuCheckboxItem checked={on} onCheckedChange={onToggle}>
+    <DropdownMenuCheckboxItem checked={on} onCheckedChange={onToggle} preventCloseOnSelect>
       <YStack flex={1} minW={0}>
         <SizableText size="$2" color="$ink">
           {t('Keep computer awake')}

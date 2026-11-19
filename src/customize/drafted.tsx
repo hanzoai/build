@@ -111,9 +111,9 @@ export function Drafted({ onMade }: { onMade: (a: Agent) => void }) {
           />
           {line && !busy ? (
             <XStack
-              render={<button type="button" />}
+              render="button"
               aria-label={t('Clear')}
-              onClick={() => setLine('')}
+              onPress={() => setLine('')}
               minW={24}
               minH={24}
               $touchable={{ minW: 44, minH: 44 }}

@@ -50,7 +50,6 @@ export function Plans() {
   const [adding, setAdding] = useState(false)
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
-  const [noteError, setNoteError] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   const on = current(subs.value)
@@ -65,13 +64,11 @@ export function Plans() {
   const act = async (what: () => Promise<string>) => {
     setWorking(true)
     setNote('')
-    setNoteError(false)
     try {
       setNote(await what())
       subs.reload()
     } catch (e) {
       setNote((e as Error).message)
-      setNoteError(true)
     } finally {
       setWorking(false)
       setBuying(null)
@@ -119,32 +116,23 @@ export function Plans() {
 
   return (
     <YStack flex={1} minH={0} overflow="scroll">
-      <YStack width="100%" maxW={1100} mx="auto" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }} gap="$5">
+      <YStack width="100%" maxW={1100} mx="auto" px="$5" py="$5" gap="$5">
         <XStack
-          render={<button type="button" />}
+          render="button"
           aria-label={t('Back to billing')}
           items="center"
           gap="$1.5"
           self="flex-start"
-          px="$2"
-          ml="$-2"
-          minH={32}
-          $touchable={{ minH: 44 }}
-          $max-sm={{ minH: 44 }}
-          rounded="$2"
-          cursor="pointer"
-          hoverStyle={{ bg: '$hover' }}
-          focusVisibleStyle={RING}
-          onClick={() => host.go(path({ kind: 'settings', section: 'billing' }))}
+          onPress={() => host.go(path({ kind: 'settings', section: 'billing' }))}
         >
-          <ChevronLeft size={16} color="$soft" {...{ 'data-i18n-mirror': '' }} />
+          <ChevronLeft size={16} {...{ 'data-i18n-mirror': '' }} />
           <SizableText size="$2" color="$soft">
             {t('Billing')}
           </SizableText>
         </XStack>
-        <XStack items="flex-end" justify="space-between" gap="$4" flexWrap="wrap" rowGap="$3">
-          <YStack flex={1} minW={240} $max-sm={{ minW: '100%' }} gap="$1">
-            <SizableText render="h1" size="$7" fontWeight="600" color="$ink">
+        <XStack items="flex-end" gap="$4" flexWrap="wrap">
+          <YStack flex={1} minW={240} gap="$1">
+            <SizableText render="h1" size="$7" color="$ink">
               {t('Plans that grow with you')}
             </SizableText>
             <SizableText size="$2" color="$soft">
@@ -167,11 +155,11 @@ export function Plans() {
                   <XStack
                     key={k}
                     id={`${termGroupId}-${k}`}
-                    render={<button type="button" />}
+                    render="button"
                     role="radio"
                     aria-checked={active}
                     aria-label={k === 'month' ? t('Monthly') : t('Yearly')}
-                    onClick={() => setTerm(k)}
+                    onPress={() => setTerm(k)}
                     onKeyDown={((e: { key?: string; preventDefault?: () => void }) => {
                       const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
                       if (!step) return
@@ -184,12 +172,6 @@ export function Plans() {
                     px="$3"
                     py="$1.5"
                     minH={32}
-                    $touchable={{ minH: 44 }}
-                    $max-sm={{ minH: 44 }}
-                    rounded="$10"
-                    cursor="pointer"
-                    bg={active ? '$raised' : 'transparent'}
-                    hoverStyle={{ bg: active ? '$raised' : '$hover' }}
                     focusVisibleStyle={RING}
                   >
                     <SizableText size="$2" fontWeight={active ? '500' : '400'} color={active ? '$ink' : '$soft'}>
@@ -252,11 +234,10 @@ export function Plans() {
                   p="$4"
                   rounded="$4"
                   borderWidth={1}
-                  borderColor={isMine || p.popular ? '$ink' : '$borderColor'}
                   bg="$panel"
                 >
                   <XStack items="center" gap="$2">
-                    <SizableText flex={1} size="$5" fontWeight="500" color="$ink" numberOfLines={1}>
+                    <SizableText flex={1} size="$5" color="$ink">
                       {p.name}
                     </SizableText>
                     {isMine ? (
@@ -301,8 +282,8 @@ export function Plans() {
                     <YStack gap="$2" borderTopWidth={1} borderColor="$borderColor" pt="$3">
                       {visibleFeatures.map((f) => (
                         <XStack key={f} gap="$2" items="flex-start">
-                          <YStack pt={2} shrink={0}>
-                            <Check size={14} color="$soft" />
+                          <YStack pt={2}>
+                            <Check size={14} />
                           </YStack>
                           <SizableText flex={1} size="$2" color="$soft">
                             {f}
@@ -311,19 +292,14 @@ export function Plans() {
                       ))}
                       {hasMoreFeatures ? (
                         <XStack
-                          render={<button type="button" />}
+                          render="button"
                           aria-expanded={isExpanded}
-                          onClick={() => setExpanded((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
+                          onPress={() => setExpanded((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
                           self="flex-start"
                           px="$2"
                           ml="$-2"
                           minH={28}
-                          $touchable={{ minH: 44 }}
-                          $max-sm={{ minH: 44 }}
                           items="center"
-                          rounded="$2"
-                          cursor="pointer"
-                          hoverStyle={{ bg: '$hover' }}
                           focusVisibleStyle={RING}
                         >
                           <SizableText size="$1" fontWeight="500" color="$ink">
@@ -339,7 +315,7 @@ export function Plans() {
           </YStack>
         )}
         {note ? (
-          <SizableText size="$2" color={noteError ? 'var(--state-error)' : '$soft'} role="status">
+          <SizableText size="$2" color="$soft" role="status">
             {note}
           </SizableText>
         ) : null}
@@ -416,7 +392,6 @@ export function Plans() {
         onOpenChange={setAdding}
         onSaved={(m) => {
           cards.reload()
-          setNoteError(false)
           setNote(t('{card} is saved', { card: label(m) }))
         }}
       />

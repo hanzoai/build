@@ -25,8 +25,8 @@ const SHOTS = ['/templates', 'https://gallery.hanzo.ai/screenshots', 'https://ha
 
 function Head({ title, says }: { title: string; says: string }) {
   return (
-    <YStack gap="$1">
-      <SizableText render="h1" size="$7" color="$ink">
+    <YStack gap="$1" pb="$4">
+      <SizableText render="h1" size="$6" color="$ink">
         {title}
       </SizableText>
       <SizableText size="$2" color="$soft">
@@ -39,8 +39,8 @@ function Head({ title, says }: { title: string; says: string }) {
 function Card({ onPress, label, disabled = false, children }: { onPress: () => void; label: string; disabled?: boolean; children: React.ReactNode }) {
   return (
     <YStack
-      render={<button type="button" />}
-      onClick={onPress}
+      render="button"
+      onPress={onPress}
       disabled={disabled}
       aria-label={label}
       width="100%"
@@ -50,9 +50,7 @@ function Card({ onPress, label, disabled = false, children }: { onPress: () => v
       borderColor="$borderColor"
       bg="$panel"
       overflow="hidden"
-      cursor={disabled ? 'default' : 'pointer'}
       opacity={disabled ? 0.72 : 1}
-      hoverStyle={disabled ? undefined : { borderColor: 'var(--border-strong)', bg: '$hover' }}
       focusVisibleStyle={RING}
       $platform-web={{ textAlign: 'start' }}
     >
@@ -176,8 +174,6 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
             <YStack
               display="grid"
               gridTemplateColumns="repeat(4, minmax(0, 1fr))"
-              $max-md={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
-              $max-sm={{ gridTemplateColumns: 'minmax(0, 1fr)' }}
               gap="$3"
               width="100%"
             >
@@ -185,7 +181,7 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
                 <Card key={x.slug} label={say('Start from {template}', { template: x.title })} disabled={Boolean(busy) && busy !== x.slug} onPress={() => void take(x.slug)}>
                   <Shot slug={x.slug} />
                   <YStack px="$3" py="$2.5">
-                    <SizableText size="$2" fontWeight="500" color="$ink" numberOfLines={1}>
+                    <SizableText size="$2" color="$ink" numberOfLines={1}>
                       {busy === x.slug ? say('Copying…') : x.title}
                     </SizableText>
                   </YStack>
@@ -244,18 +240,18 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
           <YStack gap="$5">
             {months(filtered, say).map((g) => (
               <YStack key={g.label} gap="$2">
-                <SizableText size="$2" fontWeight="500" color="$soft">
+                <SizableText size="$2" color="$soft">
                   {g.label}
                 </SizableText>
-                <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" bg="$panel" overflow="hidden">
+                <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
                   {g.rows.map((p, i) => (
                     <XStack key={p.slug} items="center" pr="$2" borderTopWidth={i ? 1 : 0} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
                       <XStack
                         flex={1}
                         minW={0}
-                        render={<button type="button" />}
+                        render="button"
                         aria-label={say('Open {name}', { name: p.name })}
-                        onClick={() => host.go(p.slug)}
+                        onPress={() => host.go(p.slug)}
                         items="center"
                         gap="$3"
                         px="$3"
@@ -265,9 +261,9 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
                         $platform-web={{ textAlign: 'start' }}
                         focusVisibleStyle={RING_INSET}
                       >
-                        {p.visibility === 'private' ? <Lock size={15} color="$soft" /> : <Globe size={15} color="$soft" />}
+                        {p.visibility === 'private' ? <Lock size={16} opacity={0.7} /> : <Globe size={16} opacity={0.7} />}
                         <YStack flex={1} minW={0} gap="$0.5">
-                          <SizableText size="$3" fontWeight="500" color="$ink" numberOfLines={1}>
+                          <SizableText size="$3" color="$ink" numberOfLines={1}>
                             {p.name}
                           </SizableText>
                           <SizableText size="$1" color="$soft" numberOfLines={1}>
@@ -279,21 +275,8 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
                       </XStack>
                       <DropdownMenu
                         trigger={
-                          <XStack
-                            render={<button type="button" />}
-                            aria-label={say('Actions for {name}', { name: p.name })}
-                            width={32}
-                            height={32}
-                            $touchable={{ minW: 44, minH: 44 }}
-                            $max-sm={{ minW: 44, minH: 44 }}
-                            items="center"
-                            justify="center"
-                            rounded="$2"
-                            cursor="pointer"
-                            hoverStyle={{ bg: '$raised' }}
-                            focusVisibleStyle={RING}
-                          >
-                            <MoreHorizontal size={16} color="$soft" />
+                          <XStack render="button" aria-label={say('Actions for {name}', { name: p.name })} px="$1.5" py="$1" rounded="$2" hoverStyle={{ bg: '$raised' }}>
+                            <MoreHorizontal size={16} />
                           </XStack>
                         }
                         items={[
@@ -451,11 +434,11 @@ export function Templates() {
   const narrowed = q.trim() !== '' || cat !== ''
 
   return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }} items="center">
-      <YStack width="100%" maxW={1080} gap="$4">
+    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" items="center">
+      <YStack width="100%" maxW={1080}>
         <Head title={say('Templates')} says={`${say('Start from a working app.')} ${say('Picking one copies its repository into a project of yours.')}`} />
         {failed ? (
-          <SizableText size="$2" color="var(--state-error)" role="status">
+          <SizableText size="$2" color="$soft" role="status" pb="$3">
             {failed}
           </SizableText>
         ) : null}
@@ -467,24 +450,17 @@ export function Templates() {
                 onChangeText={setQ}
                 placeholder={say('Search templates…')}
                 aria-label={say('Search templates')}
-                borderColor="$borderColor"
-                bg="$panel"
                 startAdornment={<Search size={14} color="$soft" />}
                 endAdornment={
                   q ? (
                     <XStack
-                      render={<button type="button" />}
+                      render="button"
                       aria-label={say('Clear search')}
-                      onClick={() => setQ('')}
+                      onPress={() => setQ('')}
                       minW={24}
                       minH={24}
-                      $touchable={{ minW: 44, minH: 44 }}
-                      $max-sm={{ minW: 44, minH: 44 }}
                       items="center"
                       justify="center"
-                      rounded="$2"
-                      cursor="pointer"
-                      hoverStyle={{ bg: '$hover' }}
                       focusVisibleStyle={RING}
                     >
                       <X size={13} color="$soft" />
@@ -503,22 +479,14 @@ export function Templates() {
                   return (
                     <XStack
                       key={c.id || 'all'}
-                      render={<button type="button" />}
+                      render="button"
                       aria-pressed={on}
                       aria-label={c.label}
-                      onClick={() => setCat(c.id)}
+                      onPress={() => setCat(c.id)}
                       items="center"
                       px="$3"
                       py="$1"
                       minH={32}
-                      $touchable={{ minH: 44 }}
-                      $max-sm={{ minH: 44 }}
-                      rounded={999}
-                      borderWidth={1}
-                      borderColor={on ? '$ink' : 'var(--border-strong)'}
-                      bg={on ? '$ink' : 'transparent'}
-                      cursor="pointer"
-                      hoverStyle={on ? undefined : { bg: '$hover', borderColor: '$ink' }}
                       focusVisibleStyle={RING}
                     >
                       <SizableText size="$1" fontWeight={on ? '500' : '400'} color={on ? '$background' : '$soft'}>
@@ -529,22 +497,14 @@ export function Templates() {
                 })}
                 {catOverflow ? (
                   <XStack
-                    render={<button type="button" />}
+                    render="button"
                     aria-expanded={moreCats}
                     aria-label={moreCats ? say('Show fewer categories') : say('Show {n} more categories', { n: hiddenCatCount })}
-                    onClick={() => setMoreCats((v) => !v)}
+                    onPress={() => setMoreCats((v) => !v)}
                     items="center"
                     px="$3"
                     py="$1"
                     minH={32}
-                    $touchable={{ minH: 44 }}
-                    $max-sm={{ minH: 44 }}
-                    rounded={999}
-                    borderWidth={1}
-                    borderColor="$borderColor"
-                    bg="$panel"
-                    cursor="pointer"
-                    hoverStyle={{ bg: '$hover', borderColor: '$ink' }}
                     focusVisibleStyle={RING}
                   >
                     <SizableText size="$1" fontWeight="500" color="$ink">
@@ -611,7 +571,6 @@ export function Templates() {
               <Button
                 size="sm"
                 variant="outline"
-                borderColor="$borderColor"
                 onPress={() => {
                   setQ('')
                   setCat('')
@@ -627,7 +586,7 @@ export function Templates() {
               <Card key={x.slug} label={say('Start from {template}', { template: x.title })} disabled={Boolean(busy) && busy !== x.slug} onPress={() => void take(x.slug)}>
                 <Shot slug={x.slug} />
                 <YStack p="$3" gap="$1">
-                  <SizableText size="$3" fontWeight="500" color="$ink" numberOfLines={1}>
+                  <SizableText size="$3" color="$ink" numberOfLines={1}>
                     {busy === x.slug ? say('Copying…') : x.title}
                   </SizableText>
                   {x.framework ? (
@@ -643,12 +602,12 @@ export function Templates() {
             ))}
           </YStack>
         )}
-        <YStack pt="$2">
+        <YStack pt="$5">
           <Out href="https://gallery.hanzo.ai">
             <SizableText size="$2" color="$soft">
               {say('The whole catalog')}
             </SizableText>
-            <ExternalLink size={12} color="$soft" />
+            <ExternalLink size={12} opacity={0.6} />
           </Out>
         </YStack>
       </YStack>

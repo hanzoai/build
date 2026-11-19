@@ -186,13 +186,13 @@ export function When({ s, onChange, disabled }: { s: Schedule; onChange: (s: Sch
       <ChipSelect name={t('When it runs')} label={kind.label} chosen={kind} items={kinds} onChange={(k) => onChange(shaped(k.id, s))} placement="bottom-start" width={200} />
       {s.kind === 'weekly' ? <ChipSelect name={t('Day')} label={days.find((x) => x.id === s.day)?.label ?? t('Monday')} chosen={days.find((x) => x.id === s.day)} items={days} onChange={(x) => setWhen({ day: x.id })} placement="bottom-start" width={180} /> : null}
       {s.kind === 'daily' || s.kind === 'weekdays' || s.kind === 'weekly' ? (
-        <YStack width={110} maxW="100%">
-          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label={t('Time of day')} inputMode="text" bg="$panel" />
+        <YStack width={110}>
+          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="09:00" aria-label={t('Time of day')} inputMode="text" />
         </YStack>
       ) : null}
       {s.kind === 'once' ? (
-        <YStack width={190} maxW="100%">
-          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="2026-10-20T09:00" aria-label={t('Date and time')} autoCapitalize="none" bg="$panel" />
+        <YStack width={190}>
+          <Input value={s.at ?? ''} onChangeText={(v: string) => setWhen({ at: v.trim() })} placeholder="2026-10-20T09:00" aria-label={t('Date and time')} autoCapitalize="none" />
         </YStack>
       ) : null}
       {s.kind === 'hourly' ? (
@@ -201,13 +201,13 @@ export function When({ s, onChange, disabled }: { s: Schedule; onChange: (s: Sch
             {t('at minute')}
           </SizableText>
           <YStack width={70}>
-            <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label={t('Minute')} inputMode="numeric" bg="$panel" />
+            <Input value={(s.at ?? '00:00').slice(3)} onChangeText={(v: string) => setWhen({ at: `00:${v.replace(/\D/g, '').slice(0, 2)}` })} placeholder="00" aria-label={t('Minute')} inputMode="numeric" />
           </YStack>
         </XStack>
       ) : null}
       {s.kind === 'cron' ? (
-        <YStack width={200} maxW="100%">
-          <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label={t('Cron')} autoCapitalize="none" bg="$panel" />
+        <YStack width={200}>
+          <Input value={s.cron ?? ''} onChangeText={(v: string) => setWhen({ cron: v })} placeholder="0 9 * * 1-5" aria-label={t('Cron')} autoCapitalize="none" />
         </YStack>
       ) : null}
       {s.kind !== 'manual' ? <ChipSelect name={t('Time zone')} label={s.tz || 'UTC'} chosen={{ id: s.tz || 'UTC', label: s.tz || 'UTC' }} items={zones} onChange={(z) => setWhen({ tz: z.id })} placeholder={t('Search zones…')} placement="bottom-start" width={260} /> : null}
@@ -499,7 +499,7 @@ export function Editor({ id }: { id: string }) {
           </XStack>
         ) : null}
       </YStack>
-      <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$5" $max-md={{ px: '$4', py: '$4' }}>
+      <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$5">
         <YStack width="100%" maxW={760} mx="auto" gap="$5">
           {locked ? (
             <SizableText size="$1" color="$soft" role="note">
@@ -507,8 +507,8 @@ export function Editor({ id }: { id: string }) {
             </SizableText>
           ) : null}
           {free ? (
-            <XStack items="center" gap="$3" px="$3" py="$2.5" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$panel" flexWrap="wrap" rowGap="$2">
-              <SizableText flex={1} minW={0} $sm={{ minW: 200 }} size="$1" color="$soft">
+            <XStack items="center" gap="$3" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" flexWrap="wrap" rowGap="$2">
+              <SizableText flex={1} minW={200} size="$1" color="$soft">
                 {t('Paid plans include automation runs. On the Free plan each run needs $1 of credit.')}
               </SizableText>
               <Button size="sm" variant="outline" onPress={() => away(path({ kind: 'screen', screen: 'plans' }))}>
@@ -517,7 +517,7 @@ export function Editor({ id }: { id: string }) {
             </XStack>
           ) : null}
           <YStack gap="$1">
-            <SizableText render="h1" size="$7" color="$ink" numberOfLines={1}>
+            <SizableText render="h1" size="$6" color="$ink" numberOfLines={1}>
               {fresh ? t('New automation') : a?.name}
             </SizableText>
             <SizableText size="$2" color="$soft">
@@ -547,21 +547,13 @@ export function Editor({ id }: { id: string }) {
               ))}
               {starterOverflow ? (
                 <XStack
-                  render={<button type="button" />}
+                  render="button"
                   aria-expanded={moreStarters}
-                  onClick={() => setMoreStarters((v) => !v)}
+                  onPress={() => setMoreStarters((v) => !v)}
                   px="$2.5"
                   py="$1"
                   minH={32}
-                  $touchable={{ minH: 44 }}
-                  $max-sm={{ minH: 44 }}
                   items="center"
-                  rounded="$3"
-                  borderWidth={1}
-                  borderColor="$borderColor"
-                  bg="$panel"
-                  cursor="pointer"
-                  hoverStyle={{ bg: '$hover' }}
                   focusVisibleStyle={RING}
                 >
                   <SizableText size="$1" fontWeight="500" color="$ink">
@@ -581,8 +573,6 @@ export function Editor({ id }: { id: string }) {
               aria-label={t('Automation name')}
               autoFocus={fresh}
               disabled={locked}
-              borderColor="$borderColor"
-              bg="$panel"
             />
           </Field>
           <Field label={t('Instructions (required)')} hint={t("What the agent does each run. It works in a Dev sandbox with this organization's connectors, MCP servers and skills.")}>
@@ -594,8 +584,6 @@ export function Editor({ id }: { id: string }) {
               placeholder={t('What should it do each run? For example: summarize what needs my attention today across calendar, email and messages.')}
               aria-label={t('Instructions')}
               rows={7}
-              borderColor="$borderColor"
-              bg="$panel"
             />
           </Field>
           <Field label={t('When it runs')} hint={s.kind === 'cron' ? t('Five fields: minute, hour, day of month, month, day of week.') : s.kind === 'once' ? t('It runs at that time and then switches itself off.') : undefined}>
@@ -604,17 +592,15 @@ export function Editor({ id }: { id: string }) {
 
           <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" overflow="hidden">
             <XStack
-              render={<button type="button" />}
+              render="button"
               aria-expanded={showOptions}
-              onClick={() => setOptionsOpen(!showOptions)}
+              onPress={() => setOptionsOpen(!showOptions)}
               items="center"
               gap="$2.5"
               px="$4"
               py="$3"
               minH={44}
               width="100%"
-              cursor="pointer"
-              hoverStyle={{ bg: '$hover' }}
               $platform-web={{ textAlign: 'start' }}
               focusVisibleStyle={RING_INSET}
             >
@@ -852,18 +838,13 @@ export function Editor({ id }: { id: string }) {
                   {runsOverflow ? (
                     <XStack>
                       <XStack
-                        render={<button type="button" />}
+                        render="button"
                         aria-expanded={allRuns}
-                        onClick={() => setAllRuns((v) => !v)}
+                        onPress={() => setAllRuns((v) => !v)}
                         px="$2.5"
                         py="$1.5"
                         minH={32}
-                        $touchable={{ minH: 44 }}
-                        $max-sm={{ minH: 44 }}
                         items="center"
-                        rounded="$2"
-                        cursor="pointer"
-                        hoverStyle={{ bg: '$hover' }}
                         focusVisibleStyle={RING}
                       >
                         <SizableText size="$1" fontWeight="500" color="$soft">
@@ -913,7 +894,7 @@ export function Editor({ id }: { id: string }) {
 function Page({ title, says, onBack, loading = false, error = false, onRetry }: { title: string; says: string; onBack: () => void; loading?: boolean; error?: boolean; onRetry?: () => void }) {
   const { t } = useI18n()
   return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
+    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6">
       <YStack width="100%" maxW={760} mx="auto" gap="$4">
         <XStack>
           <Button size="sm" variant="ghost" onPress={onBack} aria-label={t('All scheduled tasks')}>
@@ -921,10 +902,10 @@ function Page({ title, says, onBack, loading = false, error = false, onRetry }: 
             {t('Scheduled tasks')}
           </Button>
         </XStack>
-        <SizableText render="h1" size="$7" color="$ink">
+        <SizableText render="h1" size="$6" color="$ink">
           {title}
         </SizableText>
-        <SizableText size="$2" color={error ? 'var(--state-error)' : '$soft'}>
+        <SizableText size="$2" color="$soft">
           {says}
         </SizableText>
         {loading ? (

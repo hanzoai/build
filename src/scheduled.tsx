@@ -169,7 +169,6 @@ export function Scheduled() {
     })
   const edit = (id: string) => host.go(path({ kind: 'automation', id }))
 
-  const emptyTasks = !signed || (!tasks.error && !tasks.loading && !shownTasks.length)
   const activityCap = 10
   const activityOverflow = shownRuns.length > activityCap
   const visibleRuns = !allActivity && activityOverflow ? shownRuns.slice(0, activityCap) : shownRuns
@@ -177,8 +176,8 @@ export function Scheduled() {
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
       <YStack width="100%" maxW={880} mx="auto" gap="$5">
-        <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap" rowGap="$3">
-          <YStack gap="$1" flex={1} minW={0} $sm={{ minW: 200 }}>
+        <XStack justify="space-between" items="flex-start" gap="$4">
+          <YStack gap="$1" flex={1} minW={0}>
             <SizableText render="h1" size="$7" fontWeight="600" color="$ink">
               {t('Scheduled tasks')}
             </SizableText>
@@ -186,14 +185,7 @@ export function Scheduled() {
               {t('What runs without you watching: prompts on a schedule, background runs, Studio renders and workflows.')}
             </SizableText>
           </YStack>
-          <Button
-            size="sm"
-            variant={emptyTasks ? 'outline' : 'primary'}
-            borderColor={emptyTasks ? 'var(--border-strong)' : undefined}
-            shrink={0}
-            disabled={!signed}
-            onPress={() => setMaking('')}
-          >
+          <Button size="sm" shrink={0} disabled={!signed} onPress={() => setMaking('')}>
             <Plus size={14} />
             {t('New task')}
           </Button>
@@ -210,7 +202,7 @@ export function Scheduled() {
           </SizableText>
           {!signed ? (
             <Said says={t('Sign in to see your scheduled tasks.')}>
-              <Button size="sm" variant="primary" onPress={() => host.signIn?.()}>
+              <Button size="sm" onPress={() => host.signIn?.()}>
                 {t('Sign in')}
               </Button>
             </Said>
@@ -246,7 +238,7 @@ export function Scheduled() {
               </Button>
             </Said>
           ) : (
-            <YStack role="list" aria-label={t('Your tasks')} borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" overflow="hidden">
+            <YStack role="list" aria-label={t('Your tasks')} borderWidth={1} borderColor="$borderColor" rounded="$4" overflow="hidden">
               {shownTasks.map((a, i) => (
                 <Task key={a.id} a={a} first={i === 0} onOpen={() => edit(a.id)} onSwitch={(on) => void flip(a, on)} onRun={() => void run(a)} onDelete={() => setDeleting(a)} />
               ))}
@@ -305,18 +297,13 @@ export function Scheduled() {
                 {activityOverflow ? (
                   <XStack>
                     <XStack
-                      render={<button type="button" />}
+                      render="button"
                       aria-expanded={allActivity}
-                      onClick={() => setAllActivity((v) => !v)}
+                      onPress={() => setAllActivity((v) => !v)}
                       px="$2.5"
                       py="$1.5"
                       minH={32}
-                      $touchable={{ minH: 44 }}
-                      $max-sm={{ minH: 44 }}
                       items="center"
-                      rounded="$2"
-                      cursor="pointer"
-                      hoverStyle={{ bg: '$hover' }}
                       focusVisibleStyle={RING}
                     >
                       <SizableText size="$1" fontWeight="500" color="$soft">
@@ -369,9 +356,9 @@ function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; 
   return (
     <XStack role="listitem" items="center" gap="$2.5" pr="$2.5" borderTopWidth={first ? 0 : 1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
       <XStack
-        render={<button type="button" />}
+        render="button"
         aria-label={t('Open {name}', { name: a.name })}
-        onClick={onOpen}
+        onPress={onOpen}
         flex={1}
         minW={0}
         minH={44}
@@ -379,16 +366,15 @@ function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; 
         py="$3"
         items="center"
         gap="$3"
-        cursor="pointer"
         $platform-web={{ textAlign: 'start' }}
         focusVisibleStyle={RING_INSET}
       >
         <YStack width={32} height={32} rounded="$3" bg="$raised" items="center" justify="center" shrink={0} aria-hidden>
-          <Clock size={16} color="$soft" />
+          <Clock size={16} />
         </YStack>
         <YStack flex={1} minW={0} gap="$0.5">
           <XStack items="center" gap="$2" minW={0}>
-            <SizableText size="$2" fontWeight="500" color="$ink" numberOfLines={1} shrink={1}>
+            <SizableText size="$2" color="$ink" numberOfLines={1} shrink={1}>
               {a.name}
             </SizableText>
             <Badge>{t(SOURCE[a.source])}</Badge>
@@ -404,17 +390,12 @@ function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; 
         <DropdownMenu
           trigger={
             <XStack
-              render={<button type="button" />}
+              render="button"
               aria-label={t('Actions for {name}', { name: a.name })}
               width={32}
               height={32}
-              $touchable={{ minW: 44, minH: 44 }}
-              $max-sm={{ minW: 44, minH: 44 }}
               items="center"
               justify="center"
-              rounded="$2"
-              hoverStyle={{ bg: '$raised' }}
-              cursor="pointer"
               focusVisibleStyle={RING}
             >
               <MoreHorizontal size={16} color="$soft" />
@@ -437,24 +418,10 @@ function Ran({ j, first, now, onOpen }: { j: Job; first: boolean; now: number; o
   const { t } = useI18n()
   return (
     <XStack role="listitem" borderTopWidth={first ? 0 : 1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
-      <XStack
-        render={<button type="button" />}
-        aria-label={t('{title}: {state}', { title: j.title, state: t(SAID[j.state]) })}
-        onClick={onOpen}
-        flex={1}
-        minW={0}
-        minH={44}
-        items="center"
-        gap="$3"
-        px="$3"
-        py="$2.5"
-        cursor="pointer"
-        $platform-web={{ textAlign: 'start' }}
-        focusVisibleStyle={RING_INSET}
-      >
+      <XStack render="button" aria-label={t('{title}: {state}', { title: j.title, state: t(SAID[j.state]) })} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" px="$3" py="$2.5" cursor="pointer" $platform-web={{ textAlign: 'start' }}>
         <StatusDot status={DOTS[j.state]} />
         <YStack flex={1} minW={0} gap="$0.5">
-          <SizableText size="$2" fontWeight="500" color="$ink" numberOfLines={1}>
+          <SizableText size="$2" color="$ink" numberOfLines={1}>
             {j.title}
           </SizableText>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
@@ -511,13 +478,13 @@ function Detail({ j, onClose, now }: { j: Job | null; onClose: () => void; now: 
           ) : null}
           <XStack gap="$2" flexWrap="wrap" rowGap="$2">
             {j.session ? (
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => host.go(j.session!)}>
+              <Button size="sm" variant="outline" onPress={() => host.go(j.session!)}>
                 <ScrollText size={14} />
                 {t('Open its log')}
               </Button>
             ) : null}
             {j.origin ? (
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => host.open(j.origin)}>
+              <Button size="sm" variant="outline" onPress={() => host.open(j.origin)}>
                 <ExternalLink size={14} />
                 {t('Open where it runs')}
               </Button>
@@ -627,10 +594,10 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
     <Sheet title={t('New task')} open={open} onOpenChange={(o) => !o && !busy && onClose()} width={560}>
       <YStack gap="$4">
         <Field label={t('Name')}>
-          <Input value={name} onChangeText={setName} placeholder={t('Monday summary')} aria-label={t('Task name')} borderColor="var(--border-strong)" />
+          <Input value={name} onChangeText={setName} placeholder={t('Monday summary')} aria-label={t('Task name')} />
         </Field>
         <Field label={t('What it does')} hint={t('Each run is one Dev run in this organization, as you. It reads and proposes; it changes nothing on its own.')}>
-          <Textarea value={asks} onChangeText={setAsks} placeholder={t('Summarize what changed in my repositories this week, and what needs me.')} aria-label={t('What it does')} rows={5} borderColor="var(--border-strong)" />
+          <Textarea value={asks} onChangeText={setAsks} placeholder={t('Summarize what changed in my repositories this week, and what needs me.')} aria-label={t('What it does')} rows={5} />
         </Field>
         <Field label={t('When')} hint={picking ? undefined : t('In your own words: every weekday at 8am, every 5 minutes, first of the month.')}>
           {picking ? (
@@ -644,7 +611,7 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
             </YStack>
           ) : (
             <YStack gap="$2">
-              <Input value={said} onChangeText={setSaid} placeholder={t('Every Monday at 9am')} aria-label={t('When it runs')} borderColor="var(--border-strong)" />
+              <Input value={said} onChangeText={setSaid} placeholder={t('Every Monday at 9am')} aria-label={t('When it runs')} />
               <SizableText size="$1" color={unread ? '$soft' : '$ink'} role="status" minH={18}>
                 {reading ? t('Reading…') : unread ? `${told(unread, t)} ${t('Choose instead, or say it another way.')}` : heard}
               </SizableText>
@@ -658,20 +625,15 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
         </Field>
         <YStack gap="$2">
           <XStack
-            render={<button type="button" />}
+            render="button"
             aria-expanded={advanced}
-            onClick={() => setAdvanced((v) => !v)}
+            onPress={() => setAdvanced((v) => !v)}
             items="center"
             gap="$1.5"
             self="flex-start"
             px="$2"
             ml="$-2"
             minH={32}
-            $touchable={{ minH: 44 }}
-            $max-sm={{ minH: 44 }}
-            rounded="$2"
-            cursor="pointer"
-            hoverStyle={{ bg: '$hover' }}
             focusVisibleStyle={RING}
           >
             {advanced ? <ChevronDown size={14} color="$soft" /> : <ChevronRight size={14} color="$soft" />}
@@ -704,7 +666,7 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
           <Button size="sm" variant="ghost" disabled={busy} onPress={onClose}>
             {t('Cancel')}
           </Button>
-          <Button size="sm" variant="primary" disabled={busy || !signed} onPress={() => void make()}>
+          <Button size="sm" disabled={busy || !signed} onPress={() => void make()}>
             {busy ? t('Creating…') : t('Create')}
           </Button>
         </XStack>
@@ -723,13 +685,13 @@ function Badge({ children }: { children: string }) {
 
 function Facts({ rows }: { rows: [string, string][] }) {
   return (
-    <YStack gap="$1.5">
+    <YStack gap="$1">
       {rows.map(([k, v]) => (
-        <XStack key={k} gap="$3" items="baseline">
-          <SizableText size="$1" color="$soft" width={72} shrink={0}>
+        <XStack key={k} gap="$3">
+          <SizableText size="$1" color="$soft" width={72}>
             {k}
           </SizableText>
-          <SizableText size="$1" color="$ink" flex={1} minW={0}>
+          <SizableText size="$1" color="$ink" flex={1}>
             {v}
           </SizableText>
         </XStack>

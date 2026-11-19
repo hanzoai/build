@@ -349,9 +349,7 @@ export function Machines() {
                                   render="button"
                                   aria-label={display.detail}
                                   p="$1"
-                                  rounded="$10"
                                   opacity={0.75}
-                                  hoverStyle={{ opacity: 1, bg: '$hover' }}
                                 >
                                   <Info size={14} color="$soft" />
                                 </XStack>
@@ -360,10 +358,6 @@ export function Machines() {
                                 maxW={280}
                                 px="$3"
                                 py="$2"
-                                rounded="$3"
-                                bg="var(--popover)"
-                                borderWidth={1}
-                                borderColor="$edge"
                                 z="var(--z-popover)"
                               >
                                 <SizableText fontFamily="$body" size="$1" color="$ink">

@@ -119,11 +119,6 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
           items="center"
           gap="$3"
           p="$4"
-          rounded="$4"
-          borderWidth={1}
-          borderColor="$borderColor"
-          bg="$panel"
-          $max-sm={{ flexDirection: 'column', items: 'stretch' }}
         >
           <Mark name={t('Build your own')} size={36} icon={<Code2 size={16} color="$soft" aria-hidden />} />
           <YStack flex={1} minW={0} gap="$0.5" $max-sm={{ flexBasis: 'auto', grow: 0, minW: 0, width: '100%' }}>
@@ -187,7 +182,7 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
         <TilesSkeleton label={t('Loading your plugins')} count={4} />
       ) : !mine.value.length ? (
         <Empty title={t('No plugins yet')} detail={t('Write a connector in TypeScript, or describe an API and Hanzo writes it.')}>
-          <Button size="sm" variant="primary" onPress={() => onAdding(true)}>
+          <Button size="sm" onPress={() => onAdding(true)}>
             {t('Build a plugin')}
           </Button>
         </Empty>
@@ -320,7 +315,6 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
           placeholder={way === 'source' ? 'export const acme = createProvider({ … })' : t('POST /v1/things creates a thing…')}
           rows={14}
           fontFamily="$mono"
-          borderColor="var(--border-strong)"
         />
       </Field>
       {notice ? (

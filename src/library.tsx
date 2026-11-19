@@ -95,23 +95,23 @@ const TAB = 'item:'
 function glyph(kind: ItemKind, n = 18): ReactNode {
   switch (kind) {
     case 'image':
-      return <Picture size={n} color="$soft" />
+      return <Picture size={n} />
     case 'video':
-      return <Video size={n} color="$soft" />
+      return <Video size={n} />
     case 'audio':
-      return <AudioLines size={n} color="$soft" />
+      return <AudioLines size={n} />
     case 'document':
-      return <FileText size={n} color="$soft" />
+      return <FileText size={n} />
     case 'slides':
-      return <Presentation size={n} color="$soft" />
+      return <Presentation size={n} />
     case 'type':
-      return <Type size={n} color="$soft" />
+      return <Type size={n} />
     case 'model':
-      return <Box size={n} color="$soft" />
+      return <Box size={n} />
     case 'code':
-      return <Code2 size={n} color="$soft" />
+      return <Code2 size={n} />
     default:
-      return <FileText size={n} color="$soft" />
+      return <FileText size={n} />
   }
 }
 
@@ -159,7 +159,7 @@ export function Thumb({ x, size: n }: { x: Item; size?: number }) {
           $platform-web={{ objectFit: 'cover', display: 'block' }}
         />
       ) : (
-        <YStack opacity={0.8}>{glyph(x.kind, n ? Math.max(14, Math.round(n / 2.6)) : 28)}</YStack>
+        <YStack opacity={0.7}>{glyph(x.kind, n ? Math.max(14, Math.round(n / 2.6)) : 28)}</YStack>
       )}
     </YStack>
   )
@@ -231,14 +231,14 @@ function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
     })
 
   const rows = (x: Item): MenuItems => [
-    ...(x.origin ? [{ key: 'open', label: t('Open where it was made'), icon: <ExternalLink size={14} />, onSelect: () => host.open(x.origin) }] : []),
-    ...(x.download ? [{ key: 'download', label: t('Download'), icon: <Download size={14} />, onSelect: () => window.open(x.download, '_blank', 'noopener,noreferrer') }] : []),
+    ...(x.origin ? [{ key: 'open', label: t('Open where it was made'), icon: <ExternalLink size={16} />, onSelect: () => host.open(x.origin) }] : []),
+    ...(x.download ? [{ key: 'download', label: t('Download'), icon: <Download size={16} />, onSelect: () => window.open(x.download, '_blank', 'noopener,noreferrer') }] : []),
     ...(x.mine
       ? [
           {
             key: 'share',
             label: x.shared ? t('Stop sharing') : t('Share with organization'),
-            icon: <Share2 size={14} />,
+            icon: <Share2 size={16} />,
             description: x.shared ? t('Only you see it') : t('Everyone in it can open it'),
             onSelect: () =>
               void act(async () => {
@@ -249,11 +249,11 @@ function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
           },
         ]
       : []),
-    { key: 'link', label: t('Copy link'), icon: <Copy size={14} />, onSelect: () => void copy(linkTo(x), t('Link copied')) },
+    { key: 'link', label: t('Copy link'), icon: <Copy size={16} />, onSelect: () => void copy(linkTo(x), t('Link copied')) },
     ...(x.mine
       ? [
-          { key: 'rename', label: t('Rename'), icon: <Pencil size={14} />, onSelect: () => setRenaming(x) },
-          { key: 'move', label: t('Move to project'), icon: <FolderInput size={14} />, onSelect: () => setMoving(x) },
+          { key: 'rename', label: t('Rename'), icon: <Pencil size={16} />, onSelect: () => setRenaming(x) },
+          { key: 'move', label: t('Move to project'), icon: <FolderInput size={16} />, onSelect: () => setMoving(x) },
         ]
       : []),
     { key: 'studio', label: t('Use in Studio'), icon: <Sparkles size={14} />, onSelect: () => host.open(`/design?asset=${encodeURIComponent(x.id)}`) },
@@ -351,8 +351,6 @@ function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () =>
             onChangeText={setQ}
             placeholder={t('Find a project…')}
             aria-label={t('Find a project')}
-            borderColor="$borderColor"
-            bg="$panel"
             startAdornment={<Search size={14} color="$soft" />}
           />
         ) : null}
@@ -367,7 +365,7 @@ function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () =>
               <Skeleton layout="block" height={36} rounded="$3" />
             </YStack>
           ) : projects.error ? (
-            <SizableText size="$2" color="var(--state-error)">
+            <SizableText size="$2" color="$soft">
               {told(projects.error, t)}
             </SizableText>
           ) : choices.length === 0 ? (
@@ -380,25 +378,17 @@ function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () =>
               return (
                 <XStack
                   key={p.slug || 'none'}
-                  render={<button type="button" />}
+                  render="button"
                   aria-label={p.slug ? t('Move to {project}', { project: p.name || p.slug }) : t('Move to no project')}
                   aria-current={active ? 'true' : undefined}
                   disabled={busy}
-                  onClick={() => void pick(p.slug)}
+                  onPress={() => void pick(p.slug)}
                   px="$3"
                   py="$2"
                   minH={38}
-                  $touchable={{ minH: 44 }}
-                  $max-sm={{ minH: 44 }}
                   items="center"
                   justify="space-between"
                   gap="$2"
-                  rounded="$3"
-                  borderWidth={1}
-                  borderColor={active ? 'var(--border-strong)' : 'transparent'}
-                  bg={active ? '$hover' : 'transparent'}
-                  hoverStyle={{ bg: '$hover' }}
-                  cursor="pointer"
                   $platform-web={{ textAlign: 'start' }}
                   focusVisibleStyle={RING}
                 >
@@ -412,7 +402,7 @@ function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () =>
           )}
         </YStack>
         {note ? (
-          <SizableText size="$1" color="var(--state-error)" role="status">
+          <SizableText size="$1" color="$soft" role="status">
             {note}
           </SizableText>
         ) : null}
@@ -432,22 +422,8 @@ function Acts({ x, rows }: { x: Item; rows: MenuItems }) {
   return (
     <DropdownMenu
       trigger={
-        <XStack
-          render={<button type="button" />}
-          aria-label={t('Actions for {name}', { name: x.name })}
-          width={32}
-          height={32}
-          $touchable={{ minW: 44, minH: 44 }}
-          $max-sm={{ minW: 44, minH: 44 }}
-          items="center"
-          justify="center"
-          rounded="$2"
-          hoverStyle={{ bg: '$raised' }}
-          cursor="pointer"
-          shrink={0}
-          focusVisibleStyle={RING}
-        >
-          <MoreHorizontal size={16} color="$soft" />
+        <XStack render="button" aria-label={t('Actions for {name}', { name: x.name })} width={30} height={30} items="center" justify="center" rounded="$2" hoverStyle={{ bg: '$hover' }} cursor="pointer" shrink={0}>
+          <MoreHorizontal size={16} />
         </XStack>
       }
       items={rows}
@@ -461,23 +437,20 @@ function Tile({ x, onOpen, rows }: { x: Item; onOpen: () => void; rows: MenuItem
   return (
     <YStack role="listitem" gap="$2" minW={0}>
       <YStack
-        render={<button type="button" />}
+        render="button"
         aria-label={t('Open {name}', { name: x.name })}
         onClick={onOpen}
         width="100%"
         rounded="$4"
-        borderWidth={1}
-        borderColor="$borderColor"
         overflow="hidden"
         cursor="pointer"
-        hoverStyle={{ borderColor: 'var(--border-strong)', opacity: 0.92 }}
         focusVisibleStyle={RING}
       >
         <Thumb x={x} />
       </YStack>
       <XStack items="flex-start" gap="$1" minW={0}>
         <YStack flex={1} minW={0} gap="$0.5">
-          <SizableText size="$2" color="$ink" fontWeight="500" numberOfLines={1}>
+          <SizableText size="$2" color="$ink" numberOfLines={1}>
             {x.name}
           </SizableText>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
@@ -496,9 +469,9 @@ function Row({ x, first, onOpen, rows }: { x: Item; first?: boolean; onOpen: () 
   return (
     <XStack role="listitem" items="center" gap="$2" pr="$2" borderTopWidth={first ? 0 : 1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }} minW={0}>
       <XStack
-        render={<button type="button" />}
+        render="button"
         aria-label={t('Open {name}', { name: x.name })}
-        onClick={onOpen}
+        onPress={onOpen}
         flex={1}
         minW={0}
         minH={44}
@@ -506,13 +479,12 @@ function Row({ x, first, onOpen, rows }: { x: Item; first?: boolean; onOpen: () 
         py="$2"
         items="center"
         gap="$3"
-        cursor="pointer"
         $platform-web={{ textAlign: 'start' }}
         focusVisibleStyle={RING_INSET}
       >
         <Thumb x={x} size={40} />
         <YStack flex={1} minW={0} gap="$0.5">
-          <SizableText size="$2" color="$ink" fontWeight="500" numberOfLines={1}>
+          <SizableText size="$2" color="$ink" numberOfLines={1}>
             {x.name}
           </SizableText>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
@@ -573,7 +545,7 @@ export function Preview({ id, rows }: { id: string; rows?: (x: Item) => MenuItem
       <Shown x={x} />
       <XStack items="flex-start" gap="$2">
         <YStack flex={1} minW={0} gap="$1">
-          <SizableText size="$3" fontWeight="500" color="$ink">
+          <SizableText size="$3" color="$ink">
             {x.name}
           </SizableText>
           <SizableText size="$1" color="$soft">
@@ -622,7 +594,6 @@ function Shown({ x }: { x: Item }) {
         }
         width="100%"
         maxH="60vh"
-        rounded="$4"
         $platform-web={{ objectFit: 'contain', display: 'block' }}
       />
     )
@@ -633,7 +604,6 @@ function Shown({ x }: { x: Item }) {
         render={<video src={x.url} poster={x.preview || undefined} controls preload="metadata" aria-label={x.name} />}
         width="100%"
         maxH="60vh"
-        rounded="$4"
         $platform-web={{ display: 'block' }}
       />
     )
@@ -645,9 +615,6 @@ function Shown({ x }: { x: Item }) {
         width="100%"
         height="60vh"
         maxH="60vh"
-        rounded="$4"
-        borderWidth={0}
-        bg="$panel"
         $platform-web={{ display: 'block' }}
       />
     )
@@ -673,10 +640,6 @@ function Text({ x }: { x: Item }) {
         render={<iframe src={x.url} title={x.name} />}
         width="100%"
         height="60vh"
-        rounded="$4"
-        borderWidth={1}
-        borderColor="$borderColor"
-        bg="$panel"
         $platform-web={{ display: 'block' }}
       />
     )
@@ -714,24 +677,20 @@ export function Outputs({ ids }: { ids: string[] }) {
       {shown.map((x) => (
         <XStack key={x.id} role="listitem">
           <XStack
-            render={<button type="button" />}
+            render="button"
             aria-label={t('Open {name} in the Library', { name: x.name })}
-            onClick={() => {
+            onPress={() => {
               want(x.id)
               host.go('-/artifacts')
             }}
             items="center"
             gap="$2"
             minH={38}
-            $touchable={{ minH: 44 }}
-            $max-sm={{ minH: 44 }}
             paddingInlineEnd="$2.5"
             rounded="$3"
             borderWidth={1}
             borderColor="$borderColor"
-            bg="$panel"
             overflow="hidden"
-            hoverStyle={{ bg: '$hover', borderColor: 'var(--border-strong)' }}
             cursor="pointer"
             maxW={240}
             focusVisibleStyle={RING}
@@ -908,7 +867,6 @@ export function Library() {
     <Button
       size="sm"
       variant={primary ? 'primary' : 'outline'}
-      borderColor={primary ? undefined : 'var(--border-strong)'}
       shrink={0}
       onPress={() => setKind('new')}
     >
@@ -946,8 +904,8 @@ export function Library() {
     <XStack flex={1} minH={0} minW={0} width="100%">
       <YStack flex={1} minH={0} minW={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
         <YStack width="100%" maxW={1120} mx="auto" gap="$4">
-          <XStack items="center" gap="$3" flexWrap="wrap" rowGap="$2">
-            <SizableText render="h1" size="$7" color="$ink" flex={1} minW={140}>
+          <XStack items="center" gap="$3">
+            <SizableText render="h1" size="$7" fontWeight="600" color="$ink" flex={1}>
               {sitesOnly ? t('Sites') : KINDS.find((k) => k.id === kind)?.id ? t(KINDS.find((k) => k.id === kind)!.label) : t('Library')}
             </SizableText>
             <XStack items="center" gap="$2" shrink={0}>
@@ -975,22 +933,14 @@ export function Library() {
                 ))}
                 {kindOverflow ? (
                   <XStack
-                    render={<button type="button" />}
+                    render="button"
                     aria-expanded={moreKinds}
                     aria-label={moreKinds ? t('Show fewer kinds') : t('Show {n} more kinds', { n: hiddenKindCount })}
-                    onClick={() => setMoreKinds((v) => !v)}
+                    onPress={() => setMoreKinds((v) => !v)}
                     items="center"
                     px="$3"
                     py="$1"
                     minH={32}
-                    $touchable={{ minH: 44 }}
-                    $max-sm={{ minH: 44 }}
-                    rounded={999}
-                    borderWidth={1}
-                    borderColor="$borderColor"
-                    bg="$panel"
-                    cursor="pointer"
-                    hoverStyle={{ bg: '$hover', borderColor: '$ink' }}
                     focusVisibleStyle={RING}
                   >
                     <SizableText size="$1" fontWeight="500" color="$ink">
@@ -1009,24 +959,17 @@ export function Library() {
                     placeholder={t('Search your library')}
                     aria-label={t('Search your library')}
                     disabled={!signed}
-                    borderColor="$borderColor"
-                    bg="$panel"
                     startAdornment={<Search size={14} color="$soft" />}
                     endAdornment={
                       typed ? (
                         <XStack
-                          render={<button type="button" />}
+                          render="button"
                           aria-label={t('Clear search')}
-                          onClick={() => setTyped('')}
+                          onPress={() => setTyped('')}
                           minW={24}
                           minH={24}
-                          $touchable={{ minW: 44, minH: 44 }}
-                          $max-sm={{ minW: 44, minH: 44 }}
                           items="center"
                           justify="center"
-                          rounded="$2"
-                          cursor="pointer"
-                          hoverStyle={{ bg: '$hover' }}
                           focusVisibleStyle={RING}
                         >
                           <X size={13} color="$soft" />
@@ -1077,7 +1020,7 @@ export function Library() {
             <Sites />
           ) : !signed ? (
             <Said says={t('Sign in to see your library.')}>
-              <Button size="sm" variant="primary" onPress={() => host.signIn?.()}>
+              <Button size="sm" onPress={() => host.signIn?.()}>
                 {t('Sign in')}
               </Button>
             </Said>
@@ -1172,7 +1115,7 @@ export function Library() {
                   {t('Reading more…')}
                 </SizableText>
               ) : pages.error ? (
-                <SizableText size="$1" color="var(--state-error)" role="status">
+                <SizableText size="$1" color="$soft" role="status">
                   {told(pages.error, t)}
                 </SizableText>
               ) : null}
@@ -1195,24 +1138,16 @@ export function Library() {
 function KindChip({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
   return (
     <XStack
-      render={<button type="button" />}
+      render="button"
       role="radio"
       aria-checked={on}
       aria-label={label}
-      onClick={onClick}
+      onPress={onClick}
       items="center"
       px="$3"
       py="$1"
       minH={32}
-      $touchable={{ minH: 44 }}
-      $max-sm={{ minH: 44 }}
-      rounded={999}
       shrink={0}
-      borderWidth={1}
-      borderColor={on ? '$ink' : 'var(--border-strong)'}
-      bg={on ? '$ink' : 'transparent'}
-      hoverStyle={on ? undefined : { bg: '$hover', borderColor: '$ink' }}
-      cursor="pointer"
       focusVisibleStyle={RING}
     >
       <SizableText size="$1" fontWeight={on ? '500' : '400'} color={on ? '$background' : '$soft'}>
@@ -1225,20 +1160,15 @@ function KindChip({ label, on, onClick }: { label: string; on: boolean; onClick:
 function ViewMark({ label, on, onPress, children }: { label: string; on: boolean; onPress: () => void; children: ReactNode }) {
   return (
     <XStack
-      render={<button type="button" />}
+      render="button"
       role="radio"
       aria-checked={on}
       aria-label={label}
       onClick={onPress}
       minW={30}
       minH={28}
-      $touchable={{ minW: 44, minH: 44 }}
-      $max-sm={{ minW: 44, minH: 44 }}
       items="center"
       justify="center"
-      rounded="$2"
-      bg={on ? '$raised' : 'transparent'}
-      hoverStyle={{ bg: on ? '$raised' : '$hover' }}
       cursor="pointer"
       focusVisibleStyle={RING}
     >

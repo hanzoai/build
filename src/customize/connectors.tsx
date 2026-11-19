@@ -169,11 +169,11 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
         <TilesSkeleton label={t('Loading your connectors')} count={4} />
       ) : !mine.value.length ? (
         <Empty title={t('No connectors yet')} detail={may ? t('Connect an app from Browse, or add any MCP server by its URL.') : t('An org admin adds connectors. Browse what there is.')}>
-          <Button size="sm" variant={may ? 'outline' : 'primary'} borderColor={may ? 'var(--border-strong)' : undefined} onPress={() => onView('discover')}>
+          <Button size="sm" variant="outline" onPress={() => onView('discover')}>
             {t('Browse connectors')}
           </Button>
           {may ? (
-            <Button size="sm" variant="primary" onPress={() => onAdding(true)}>
+            <Button size="sm" onPress={() => onAdding(true)}>
               {t('Add by URL')}
             </Button>
           ) : null}
@@ -418,7 +418,7 @@ function Natives({ q }: { q: string }) {
       detail={t('Hanzo’s own servers. Always on: every run can call them, and nothing needs adding.')}
       action={
         asked ? undefined : (
-          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setAsked(true)}>
+          <Button size="sm" variant="outline" onPress={() => setAsked(true)}>
             {t('Show built-in servers')}
           </Button>
         )
@@ -440,7 +440,7 @@ function Natives({ q }: { q: string }) {
             return (
               <YStack key={s.name} borderWidth={1} borderColor="$borderColor" bg="$panel" rounded="$3" overflow="hidden">
                 <XStack
-                  render={<button type="button" />}
+                  render="button"
                   aria-expanded={on}
                   aria-label={s.name}
                   width="100%"
@@ -449,11 +449,9 @@ function Natives({ q }: { q: string }) {
                   px="$3"
                   py="$2.5"
                   minH={44}
-                  cursor="pointer"
-                  hoverStyle={{ bg: '$hover' }}
                   focusVisibleStyle={RING_INSET}
                   $platform-web={{ textAlign: 'start' }}
-                  onClick={() => setOpen(on ? null : s.name)}
+                  onPress={() => setOpen(on ? null : s.name)}
                 >
                   <ServerIcon size={14} color="$soft" aria-hidden />
                   <YStack flex={1} minW={0} gap="$0.5">
@@ -472,7 +470,7 @@ function Natives({ q }: { q: string }) {
                   {on ? <ChevronUp size={14} color="$soft" aria-hidden /> : <ChevronDown size={14} color="$soft" aria-hidden />}
                 </XStack>
                 {on ? (
-                  <YStack px="$3" py="$2.5" gap="$1" borderTopWidth={1} borderColor="$borderColor" bg="$background">
+                  <YStack px="$3" py="$2" gap="$1" borderTopWidth={1} borderColor="$borderColor">
                     {s.ops.length ? (
                       s.ops.map((op) => (
                         <SizableText key={op} size="$1" color="$ink" fontFamily="$mono">
@@ -560,7 +558,7 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
       {full.error ? <StatusBanner notice={{ text: t('Showing what Browse listed. {reason}', { reason: say(full.error, t) }), error: true }} /> : null}
       {signed && ready(l) ? (
         <XStack justify="flex-end">
-          <Button size="sm" variant={added ? 'outline' : 'primary'} borderColor={added ? 'var(--border-strong)' : undefined} disabled={added} onPress={onAdd}>
+          <Button size="sm" disabled={added} onPress={onAdd}>
             {added ? t('Added') : t('Add to your connectors')}
           </Button>
         </XStack>
@@ -619,19 +617,19 @@ function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClo
         </SizableText>
       )}
       <Field label={t('Name')} hint={listing ? t('Leave it empty to use the listing’s own.') : undefined}>
-        <Input value={name} onChangeText={setName} placeholder={listing ? titleOf(listing) : t('Docs')} aria-label={t('Name')} borderColor="var(--border-strong)" />
+        <Input value={name} onChangeText={setName} placeholder={listing ? titleOf(listing) : t('Docs')} aria-label={t('Name')} />
       </Field>
       {listing ? null : (
         <Field label="URL" hint={t('A public http(s) address. Private and loopback addresses are refused.')}>
-          <Input value={url} onChangeText={setUrl} placeholder="https://mcp.example.com/mcp" aria-label="URL" autoCapitalize="none" borderColor="var(--border-strong)" />
+          <Input value={url} onChangeText={setUrl} placeholder="https://mcp.example.com/mcp" aria-label="URL" autoCapitalize="none" />
         </Field>
       )}
       <Field label={t('Secret')} hint={t('Optional. Kept sealed in KMS, sent on every call, and never shown again.')}>
-        <Input value={secret} onChangeText={setSecret} placeholder="Bearer …" aria-label={t('Secret')} secureTextEntry borderColor="var(--border-strong)" />
+        <Input value={secret} onChangeText={setSecret} placeholder="Bearer …" aria-label={t('Secret')} secureTextEntry />
       </Field>
       {secret ? (
         <Field label={t('Header')}>
-          <Input value={header} onChangeText={setHeader} aria-label={t('Header')} autoCapitalize="none" borderColor="var(--border-strong)" />
+          <Input value={header} onChangeText={setHeader} aria-label={t('Header')} autoCapitalize="none" />
         </Field>
       ) : null}
       {error ? <StatusBanner notice={{ text: error, error: true }} /> : null}
@@ -698,7 +696,7 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
           {its.length ? t('Tools ({n})', { n: its.length }) : t('Tools')}
         </SizableText>
         {its.length && may ? (
-          <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={busy} onPress={() => void (off.length ? flip(off, []) : flip([], its.map((x) => x.name)))}>
+          <Button size="sm" variant="outline" disabled={busy} onPress={() => void (off.length ? flip(off, []) : flip([], its.map((x) => x.name)))}>
             {off.length ? t('Turn all on') : t('Turn all off')}
           </Button>
         ) : null}
@@ -709,24 +707,17 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
           onChangeText={setToolQuery}
           placeholder={t('Filter tools…')}
           aria-label={t('Filter tools')}
-          borderColor="var(--border-strong)"
-          bg="$panel"
           startAdornment={<Search size={14} color="$soft" aria-hidden />}
           endAdornment={
             toolQuery ? (
               <XStack
-                render={<button type="button" />}
+                render="button"
                 aria-label={t('Clear search')}
-                onClick={() => setToolQuery('')}
+                onPress={() => setToolQuery('')}
                 minW={24}
                 minH={24}
-                $touchable={{ minW: 44, minH: 44 }}
-                $max-sm={{ minW: 44, minH: 44 }}
                 items="center"
                 justify="center"
-                rounded="$2"
-                cursor="pointer"
-                hoverStyle={{ bg: '$hover' }}
                 focusVisibleStyle={RING}
               >
                 <X size={13} color="$soft" aria-hidden />
@@ -751,7 +742,7 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
           {filteredTools.map((x, i) => {
             const short = x.name.slice(server.id.length + 1)
             return (
-              <XStack key={x.name} items="center" gap="$3" px="$3" py="$2" minH={44} borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
+              <XStack key={x.name} items="center" gap="$3" px="$3" py="$2" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
                 <YStack flex={1} minW={0} gap="$0.5">
                   <SizableText size="$2" color="$ink" fontFamily="$mono" numberOfLines={1}>
                     {short}
