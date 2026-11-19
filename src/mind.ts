@@ -20,6 +20,7 @@
  * an effort the person saved to their account once (apps/coding start.go) and
  * no screen shows any more.
  */
+import { phrase } from '@hanzo/i18n'
 import type { Modes } from '@hanzo/ui/chat'
 import { EFFORTS as EVERY } from '@hanzo/ui/chat/pure'
 import { parseModels, thirdParty } from '@hanzo/ui/models/catalog'
@@ -30,13 +31,32 @@ import { Refusal, type Target } from './api/call.ts'
 import { ENSO, models as read, type Model } from './api/models.ts'
 import { usePick } from './pick.ts'
 
-export type Effort = 'auto' | 'high' | 'max'
+export type Effort = 'auto' | 'low' | 'high' | 'max'
 
-/** The efforts a Dev run offers, in order: the composer's own list (Chat offers every one), less Low and Medium. Marked English, drawn through `t`. */
-export const EFFORTS = EVERY.filter((e): e is (typeof EVERY)[number] & { id: Effort } => ['auto', 'high', 'max'].includes(e.id))
+const EFFORT_LABELS: Partial<Record<Effort, string>> = {
+  low: phrase('Fast'),
+}
 
-/** The effort a coding run names (apps/coding takes low, medium or high): medium for Auto, high for the rest. */
-export const level = (effort: Effort): 'medium' | 'high' => (effort === 'auto' ? 'medium' : 'high')
+const EFFORT_NOTES: Record<Effort, string> = {
+  auto: phrase('Matches thinking depth to the complexity of each prompt.'),
+  low: phrase('Fastest edits and replies for straightforward coding tasks.'),
+  high: phrase('Spends extra time reasoning through multi-step tasks and code.'),
+  max: phrase('Deepest reasoning and verification for complex architecture.'),
+}
+
+/** The efforts a Dev run offers, in order: Auto (medium), Fast (low), High, and Max. Marked English, drawn through `t`. */
+export const EFFORTS = (['auto', 'low', 'high', 'max'] as const).map((id) => {
+  const base = EVERY.find((e) => e.id === id)
+  return {
+    id,
+    label: EFFORT_LABELS[id] ?? base?.label ?? id,
+    note: EFFORT_NOTES[id] ?? base?.note ?? '',
+  }
+})
+
+/** The effort a coding run names (apps/coding takes low, medium or high): low for Fast, medium for Auto, high for High/Max. */
+export const level = (effort: Effort): 'low' | 'medium' | 'high' =>
+  effort === 'low' ? 'low' : effort === 'auto' ? 'medium' : 'high'
 
 /** What a person chose: the model (Enso routes) and the effort. */
 export interface Choice {
@@ -304,6 +324,10 @@ export interface Mind {
   balance?: string
   /** The way to the top-up, given the model that was chosen if one was. */
   topUp?: (id?: string) => void
+  /** Whether third-party provider models (Anthropic, OpenAI, Google, etc.) are included in `models`. */
+  allowThirdParty?: boolean
+  /** How many third-party models are currently hidden because `allowThirdParty` is off. */
+  hiddenThirdPartyCount?: number
 }
 
 /** The prepaid balance in cents that can pay for another maker's models, for a signed-in target, read once; null until it is, and where the API does not say. */
@@ -372,6 +396,7 @@ export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) =
   const may = (id: string): boolean => sendable(free, models, cents, id)
   const model = may(picked) ? picked : ENSO
   const listed = allowThirdParty ? models : models.filter((m) => !thirdParty(m) || m.id === model)
+  const hiddenThirdPartyCount = allowThirdParty ? 0 : models.filter((m) => thirdParty(m) && m.id !== model).length
   // A top-up returns to this address with the model it was for: pick it once the balance can pay.
   const [back] = useState(returned)
   useEffect(() => {
@@ -389,6 +414,8 @@ export function useMind(t: Target, plan?: string | null, topUp?: (id?: string) =
     error,
     note,
     free,
+    allowThirdParty,
+    hiddenThirdPartyCount,
     pick: (id) => {
       if (may(id)) pick(id)
     },
