@@ -15,6 +15,7 @@
  */
 import { phrase } from '@hanzo/i18n'
 
+import { formatDeviceLabel } from '../dev-mode.ts'
 import { call, Refusal, seg, type Target } from './call.ts'
 
 export const KINDS = ['laptop', 'gpu', 'cloud', 'cluster', 'machine'] as const
@@ -119,15 +120,36 @@ export function formatRelative(isoDate?: string): string {
 export function specSummary(m: Machine): string {
   if (m.spec) {
     const parts: string[] = []
-    if (m.spec.cpus) parts.push(`${m.spec.cpus} vCPU`)
-    if (m.spec.memory) parts.push(formatBytes(m.spec.memory))
     if (m.spec.gpus && m.spec.gpus.length > 0) {
-      const g = m.spec.gpus[0]
-      parts.push(`${m.spec.gpus.length}× ${g.model || g.vendor || 'GPU'}${g.memory ? ` (${formatBytes(g.memory)})` : ''}`)
+      const g = m.spec.gpus[0]!
+      const gpuLabel = g.model || g.vendor || 'GPU'
+      parts.push(m.spec.gpus.length > 1 ? `${m.spec.gpus.length}× ${gpuLabel}` : gpuLabel)
+    } else if (m.spec.cpus) {
+      parts.push(`${m.spec.cpus} vCPU`)
     }
+    if (m.spec.memory) parts.push(formatBytes(m.spec.memory))
     if (parts.length > 0) return parts.join(' · ')
   }
   return m.capacity || ''
+}
+
+function hardwareSummary(m: Machine): string {
+  const hw = specSummary(m)
+  const host = m.host && m.host !== hw ? m.host : ''
+  return [hw, host].filter(Boolean).join(' · ')
+}
+
+export function displayMachine(
+  m: Machine,
+  opts?: { devMode?: boolean },
+): { title: string; detail?: string } {
+  return formatDeviceLabel(m.label, {
+    kind: m.kind,
+    os: m.spec?.os,
+    hardware: hardwareSummary(m),
+    host: m.host,
+    devMode: opts?.devMode,
+  })
 }
 
 export function machine(raw: unknown): Machine {

@@ -68,6 +68,11 @@
       "import": "./lib/mind.js",
       "default": "./lib/mind.js"
     },
+    "./dev-mode": {
+      "types": "./lib/dev-mode.d.ts",
+      "import": "./lib/dev-mode.js",
+      "default": "./lib/dev-mode.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

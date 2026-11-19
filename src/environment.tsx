@@ -48,16 +48,16 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
   }, [shown])
 
   if (!signed) {
-    return <Soft>{t('Sign in to see this codebase’s environment.')}</Soft>
+    return <Soft>{t('Sign in to view project environment settings.')}</Soft>
   }
   if (!repo) {
-    return <Soft>{t('This run has no codebase, so it has no environment.')}</Soft>
+    return <Soft>{t('This session uses an automatic workspace — no custom setup needed.')}</Soft>
   }
   if (env.error) {
     return <Soft>{t('{repo}’s environment could not be read right now.', { repo })}</Soft>
   }
   if (!shown) {
-    return <Soft>{t('Reading the environment…')}</Soft>
+    return <Soft>{t('Loading environment…')}</Soft>
   }
 
   const changed = install !== shown.install || startCmd !== shown.start || shown.proposal !== null
@@ -345,20 +345,20 @@ export function SetupDialog({
             <YStack gap={2} aria-label={t('Repositories')}>
               {homes.loading && !list.length ? (
                 <SizableText size="$1" color="$soft">
-                  {t('Reading the repositories…')}
+                  {t('Loading projects…')}
                 </SizableText>
               ) : homes.error && !list.length ? (
                 <XStack items="center" gap="$2" flexWrap="wrap">
                   <SizableText size="$1" color="$soft">
-                    {t('The repository list could not be read right now.')}
+                    {t('The project list could not be loaded right now.')}
                   </SizableText>
                   <Button size="sm" variant="outline" onPress={homes.reload}>
-                    {t('Read again')}
+                    {t('Try again')}
                   </Button>
                 </XStack>
               ) : shown.length === 0 ? (
                 <SizableText size="$1" color="$soft">
-                  {list.length ? t('Nothing matches.') : t('This organization has no repositories on the forge yet.')}
+                  {list.length ? t('Nothing matches.') : t('No projects linked yet — start a prompt to create one automatically, or link a GitHub repository.')}
                 </SizableText>
               ) : (
                 shown.map((h) => {
