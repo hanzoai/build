@@ -41,6 +41,7 @@ import {
 import { mouth, speech } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
+import { copy as toClipboard } from './clipboard.ts'
 import type { Target } from './api/call.ts'
 
 /** A fenced block an answer wrote out. */
@@ -150,13 +151,22 @@ export function speaker(t: Target): Listen {
 
 export type Vote = 'up' | 'down'
 
-/** Show a verdict at once and send it; if sending fails, put the earlier one back, unless the person has voted again since. */
-export function rated(prev: Vote | null, next: Vote, send: ((vote: Vote) => void | Promise<void>) | undefined, set: (to: (cur: Vote | null) => Vote | null) => void): void {
-  set(() => next)
+/** Show a verdict at once and send it; if sending fails, put the earlier one back, unless the person has voted again since (`last` counts the votes). */
+export function rated(
+  prev: Vote | null,
+  next: Vote,
+  send: ((vote: Vote) => void | Promise<void>) | undefined,
+  set: (to: Vote | null) => void,
+  last: { n: number },
+): void {
+  const mine = ++last.n
+  set(next)
   if (!send) return
   Promise.resolve()
     .then(() => send(next))
-    .catch(() => set((cur) => (cur === next ? prev : cur)))
+    .catch(() => {
+      if (last.n === mine) set(prev)
+    })
 }
 
 /** One quiet control in the row. It rests dim and comes up under a pointer or focus. */
@@ -224,6 +234,7 @@ export function Reply({
   const [took, setTook] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const [vote, setVote] = useState<Vote | null>(null)
+  const votes = useRef({ n: 0 })
   const [redoOpen, setRedoOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
@@ -270,7 +281,7 @@ export function Reply({
     onRedo?.(payload)
   }
 
-  const rate = (next: Vote) => rated(vote, next, onRate, setVote)
+  const rate = (next: Vote) => rated(vote, next, onRate, setVote, votes.current)
 
   return (
     <XStack data-slot="reply" ml="$-1" items="center" gap="$1" flexWrap="wrap">
@@ -278,7 +289,7 @@ export function Reply({
         slot="reply-copy"
         label={took ? say('Copied') : say('Copy this answer')}
         lit={took}
-        onPress={() => void navigator.clipboard?.writeText(text).then(() => setTook(true), () => {})}
+        onPress={() => void toClipboard(text).then((ok) => ok && setTook(true))}
       >
         {took ? <Check size={15} /> : <Copy size={15} />}
       </Act>
@@ -452,7 +463,7 @@ export function Reply({
               items="center"
               gap="$1.5"
               cursor="pointer"
-              onPress={() => void navigator.clipboard?.writeText(shareUrl).then(() => setShareCopied(true), () => {})}
+              onPress={() => void toClipboard(shareUrl).then((ok) => ok && setShareCopied(true))}
             >
               <XStack width={44} height={44} rounded={999} bg="$hover" items="center" justify="center">
                 {shareCopied ? <Check size={17} /> : <Link2 size={17} />}

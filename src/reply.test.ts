@@ -47,30 +47,31 @@ describe('an answer’s fenced blocks', () => {
 describe('a verdict', () => {
   const held = () => {
     let now: 'up' | 'down' | null = null
-    return { get: () => now, set: (to: (cur: 'up' | 'down' | null) => 'up' | 'down' | null) => void (now = to(now)) }
+    return { get: () => now, set: (to: 'up' | 'down' | null) => void (now = to), last: { n: 0 } }
   }
+  const later = () => new Promise((r) => setTimeout(r))
 
   it('shows at once, and stays once it is sent', async () => {
     const v = held()
-    rated(null, 'up', async () => {}, v.set)
+    rated(null, 'up', async () => {}, v.set, v.last)
     expect(v.get()).toBe('up')
-    await Promise.resolve()
+    await later()
     expect(v.get()).toBe('up')
   })
 
   it('goes back to the earlier verdict when sending it fails', async () => {
     const v = held()
-    rated(null, 'down', async () => Promise.reject(new Error('offline')), v.set)
+    rated(null, 'down', async () => Promise.reject(new Error('offline')), v.set, v.last)
     expect(v.get()).toBe('down')
-    await new Promise((r) => setTimeout(r))
+    await later()
     expect(v.get()).toBeNull()
   })
 
-  it('leaves a newer verdict alone when an older one fails', async () => {
+  it('leaves a newer verdict alone when an older one fails, even the same one', async () => {
     const v = held()
-    rated(null, 'down', async () => Promise.reject(new Error('offline')), v.set)
-    rated('down', 'up', undefined, v.set)
-    await new Promise((r) => setTimeout(r))
-    expect(v.get()).toBe('up')
+    rated(null, 'down', async () => Promise.reject(new Error('offline')), v.set, v.last)
+    rated('down', 'down', async () => {}, v.set, v.last)
+    await later()
+    expect(v.get()).toBe('down')
   })
 })
