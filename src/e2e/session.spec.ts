@@ -154,16 +154,16 @@ test('Find reads the org’s runs by status and pages back', async ({ page: p },
 test('New runs in Cloud or on a machine under remote control, and says how to link one', async ({ page: p }, info) => {
   await landing(p)
   await p.goto('/')
-  await p.getByRole('button', { name: 'Where the run runs: Cloud' }).click()
+  await p.getByRole('button', { name: 'Where the run runs: Auto (Cloud)' }).click()
   const list = p.getByRole('listbox', { name: 'Where the run runs' })
-  await expect(list.getByText('Cloud', { exact: true })).toBeVisible()
+  await expect(list.getByText('Auto (Cloud)', { exact: true })).toBeVisible()
   await expect(list.getByText(`Hanzo sandbox · ${REPO} environment`)).toBeVisible()
   await expect(list.getByText('Remote control · online · 10 vCPU / 32G')).toBeVisible()
   await expect(p.getByText('Set up remote control')).toBeVisible()
   await expect(p.getByText('hanzo link', { exact: true })).toBeVisible()
   await p.screenshot({ path: info.outputPath('place.png') })
   await list.getByText('dave-laptop').click()
-  await expect(p.getByRole('button', { name: 'Where the run runs: dave-laptop' })).toBeVisible()
+  await expect(p.getByRole('button', { name: 'Where the run runs: Local - Device' })).toBeVisible()
 })
 
 test('New’s repository list refreshes, and a missing GitHub repository leads to Sync', async ({ page: p }, info) => {
@@ -195,7 +195,7 @@ test('New’s place picker fits a phone', async ({ page: p }, info) => {
   await p.setViewportSize({ width: 390, height: 844 })
   await landing(p)
   await p.goto('/')
-  await p.getByRole('button', { name: 'Where the run runs: Cloud' }).click()
+  await p.getByRole('button', { name: 'Where the run runs: Auto (Cloud)' }).click()
   await expect(p.getByText('Set up remote control')).toBeVisible()
   expect(await cramped(p)).toEqual([])
   await p.screenshot({ path: info.outputPath('place-phone.png') })

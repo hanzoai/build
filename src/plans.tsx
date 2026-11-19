@@ -13,9 +13,10 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Check, ChevronLeft } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
-import { useState } from 'react'
+import { Button, Dialog, DialogContent, DialogTitle, Skeleton } from '@hanzo/ui'
+import { useId, useState } from 'react'
 
+import { RING } from './pane.ts'
 import { cancel, chosen, current, label, methods, money, plans, subscribe, subscriptions, type Method, type Plan, type Subscription } from './api/billing.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
@@ -24,6 +25,9 @@ import { AddCard } from './settings/card.tsx'
 import { day } from './settings/ui.tsx'
 
 type Term = 'month' | 'year'
+
+/** Maximum feature bullets shown per plan card at rest before a "+N more" disclosure. */
+const FEATURE_CAP = 6
 
 /** What a plan costs a month on a term, and what the term charges at once. */
 function price(p: Plan, term: Term): { month: number; now: number } {
@@ -35,6 +39,7 @@ export function Plans() {
   const host = useHost()
   const target = useTarget()
   const { t } = useI18n()
+  const termGroupId = useId()
   const signed = Boolean(host.person)
   const list = useRead(() => plans(target), [] as Plan[], [target])
   const subs = useRead(signed ? () => subscriptions(target) : null, [] as Subscription[], [target, signed])
@@ -45,6 +50,8 @@ export function Plans() {
   const [adding, setAdding] = useState(false)
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
+  const [noteError, setNoteError] = useState(false)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   const on = current(subs.value)
   const org = host.org
@@ -58,11 +65,13 @@ export function Plans() {
   const act = async (what: () => Promise<string>) => {
     setWorking(true)
     setNote('')
+    setNoteError(false)
     try {
       setNote(await what())
       subs.reload()
     } catch (e) {
       setNote((e as Error).message)
+      setNoteError(true)
     } finally {
       setWorking(false)
       setBuying(null)
@@ -74,7 +83,7 @@ export function Plans() {
   const move = (p: Plan) => {
     if (mine(p)) {
       return (
-        <Button size="sm" variant="outline" disabled>
+        <Button size="sm" variant="outline" borderColor="var(--border-strong)" fullWidth disabled>
           {t('Current plan')}
         </Button>
       )
@@ -88,7 +97,7 @@ export function Plans() {
       const paid = on!
       if (paid.ending) return <Line>{t('You move to {plan} when {current} ends on {date}.', { plan: p.name, current: paid.name, date: day(paid.ends) })}</Line>
       return (
-        <Button size="sm" variant="outline" onPress={() => setLeaving(true)}>
+        <Button size="sm" variant="outline" borderColor="var(--border-strong)" fullWidth onPress={() => setLeaving(true)}>
           {t('Switch to {plan}', { plan: p.name })}
         </Button>
       )
@@ -96,13 +105,13 @@ export function Plans() {
     if (on && on.price > 0) return <Line>{t('One paid plan at a time: {current} ends before {plan} begins.', { current: on.name, plan: p.name })}</Line>
     if (!card) {
       return (
-        <Button size="sm" variant="outline" onPress={() => setAdding(true)}>
+        <Button size="sm" variant="outline" borderColor="var(--border-strong)" fullWidth onPress={() => setAdding(true)}>
           {t('Add a card to upgrade')}
         </Button>
       )
     }
     return (
-      <Button size="sm" variant={p.popular ? 'primary' : 'outline'} onPress={() => setBuying(p)}>
+      <Button size="sm" variant={p.popular ? 'primary' : 'outline'} borderColor={p.popular ? undefined : 'var(--border-strong)'} fullWidth onPress={() => setBuying(p)}>
         {t('Upgrade to {plan}', { plan: p.name })}
       </Button>
     )
@@ -110,23 +119,32 @@ export function Plans() {
 
   return (
     <YStack flex={1} minH={0} overflow="scroll">
-      <YStack width="100%" maxW={1100} mx="auto" px="$5" py="$5" gap="$5">
+      <YStack width="100%" maxW={1100} mx="auto" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }} gap="$5">
         <XStack
-          render="button"
+          render={<button type="button" />}
           aria-label={t('Back to billing')}
           items="center"
-          gap="$1"
+          gap="$1.5"
           self="flex-start"
-          onPress={() => host.go(path({ kind: 'settings', section: 'billing' }))}
+          px="$2"
+          ml="$-2"
+          minH={32}
+          $touchable={{ minH: 44 }}
+          $max-sm={{ minH: 44 }}
+          rounded="$2"
+          cursor="pointer"
+          hoverStyle={{ bg: '$hover' }}
+          focusVisibleStyle={RING}
+          onClick={() => host.go(path({ kind: 'settings', section: 'billing' }))}
         >
-          <ChevronLeft size={16} {...{ 'data-i18n-mirror': '' }} />
+          <ChevronLeft size={16} color="$soft" {...{ 'data-i18n-mirror': '' }} />
           <SizableText size="$2" color="$soft">
             {t('Billing')}
           </SizableText>
         </XStack>
-        <XStack items="flex-end" gap="$4" flexWrap="wrap">
-          <YStack flex={1} minW={240} gap="$1">
-            <SizableText render="h1" size="$7" color="$ink">
+        <XStack items="flex-end" justify="space-between" gap="$4" flexWrap="wrap" rowGap="$3">
+          <YStack flex={1} minW={240} $max-sm={{ minW: '100%' }} gap="$1">
+            <SizableText render="h1" size="$7" fontWeight="600" color="$ink">
               {t('Plans that grow with you')}
             </SizableText>
             <SizableText size="$2" color="$soft">
@@ -142,66 +160,117 @@ export function Plans() {
             </SizableText>
           </YStack>
           {yearly ? (
-            <XStack role="radiogroup" aria-label={t('Billing period')} p="$1" gap="$1" rounded="$10" borderWidth={1} borderColor="$borderColor">
-              {(['month', 'year'] as const).map((k) => (
-                <XStack
-                  key={k}
-                  render="button"
-                  role="radio"
-                  aria-checked={term === k}
-                  aria-label={k === 'month' ? t('Monthly') : t('Yearly')}
-                  onPress={() => setTerm(k)}
-                  px="$3"
-                  py="$1.5"
-                  rounded="$10"
-                  bg={term === k ? '$hover' : 'transparent'}
-                >
-                  <SizableText size="$2" color={term === k ? '$ink' : '$soft'}>
-                    {k === 'month' ? t('Monthly') : t('Yearly')}
-                  </SizableText>
-                </XStack>
-              ))}
+            <XStack role="radiogroup" aria-label={t('Billing period')} p={2} gap={2} rounded="$10" borderWidth={1} borderColor="var(--border-strong)" bg="$panel" shrink={0}>
+              {(['month', 'year'] as const).map((k, idx, arr) => {
+                const active = term === k
+                return (
+                  <XStack
+                    key={k}
+                    id={`${termGroupId}-${k}`}
+                    render={<button type="button" />}
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={k === 'month' ? t('Monthly') : t('Yearly')}
+                    onClick={() => setTerm(k)}
+                    onKeyDown={((e: { key?: string; preventDefault?: () => void }) => {
+                      const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+                      if (!step) return
+                      e.preventDefault?.()
+                      const next = arr[(idx + step + arr.length) % arr.length]!
+                      setTerm(next)
+                      queueMicrotask(() => document.getElementById(`${termGroupId}-${next}`)?.focus())
+                    }) as never}
+                    items="center"
+                    px="$3"
+                    py="$1.5"
+                    minH={32}
+                    $touchable={{ minH: 44 }}
+                    $max-sm={{ minH: 44 }}
+                    rounded="$10"
+                    cursor="pointer"
+                    bg={active ? '$raised' : 'transparent'}
+                    hoverStyle={{ bg: active ? '$raised' : '$hover' }}
+                    focusVisibleStyle={RING}
+                  >
+                    <SizableText size="$2" fontWeight={active ? '500' : '400'} color={active ? '$ink' : '$soft'}>
+                      {k === 'month' ? t('Monthly') : t('Yearly')}
+                    </SizableText>
+                  </XStack>
+                )
+              })}
             </XStack>
           ) : null}
         </XStack>
 
         {list.error ? (
-          <Line>{list.error.message}</Line>
+          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+            <SizableText size="$2" color="var(--state-error)" text="center">
+              {list.error.message}
+            </SizableText>
+            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={list.reload}>
+              {t('Try again')}
+            </Button>
+          </YStack>
         ) : list.loading && !list.value.length ? (
-          <Line>{t('Reading plans…')}</Line>
+          <YStack gap="$3" aria-busy={true}>
+            <Line>{t('Reading plans…')}</Line>
+            <YStack display="grid" gridTemplateColumns="repeat(auto-fill, minmax(min(100%, 260px), 1fr))" gap="$4" width="100%">
+              {[0, 1, 2].map((i) => (
+                <YStack key={i} gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel">
+                  <Skeleton layout="block" width="45%" height={20} rounded="$2" />
+                  <Skeleton layout="block" width="80%" height={14} rounded="$2" />
+                  <Skeleton layout="block" width="40%" height={28} rounded="$2" />
+                  <Skeleton layout="block" width="100%" height={34} rounded="$3" />
+                  <YStack gap="$2" pt="$2" borderTopWidth={1} borderColor="$borderColor">
+                    <Skeleton layout="block" width="76%" height={14} rounded="$2" />
+                    <Skeleton layout="block" width="64%" height={14} rounded="$2" />
+                    <Skeleton layout="block" width="70%" height={14} rounded="$2" />
+                  </YStack>
+                </YStack>
+              ))}
+            </YStack>
+          </YStack>
         ) : list.value.length === 0 ? (
-          <Line>{t('This brand sells no plans.')}</Line>
+          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" items="center">
+            <Line>{t('This brand sells no plans.')}</Line>
+          </YStack>
         ) : (
-          <XStack flexWrap="wrap" gap="$4">
+          <YStack display="grid" gridTemplateColumns="repeat(auto-fill, minmax(min(100%, 260px), 1fr))" gap="$4" width="100%">
             {list.value.map((p) => {
               const cost = price(p, term)
+              const isMine = mine(p)
+              const isExpanded = Boolean(expanded[p.id])
+              const hasMoreFeatures = p.features.length > FEATURE_CAP
+              const visibleFeatures = hasMoreFeatures && !isExpanded ? p.features.slice(0, FEATURE_CAP) : p.features
+              const extraCount = p.features.length - FEATURE_CAP
               return (
                 <YStack
                   key={p.id}
                   aria-label={t('{plan} plan', { plan: p.name })}
-                  flex={1}
-                  minW={240}
-                  maxW={360}
-                  $max-sm={{ maxW: '100%' }}
+                  minW={0}
                   gap="$3"
                   p="$4"
                   rounded="$4"
                   borderWidth={1}
-                  borderColor={mine(p) || p.popular ? '$ink' : '$borderColor'}
+                  borderColor={isMine || p.popular ? '$ink' : '$borderColor'}
                   bg="$panel"
                 >
                   <XStack items="center" gap="$2">
-                    <SizableText flex={1} size="$5" color="$ink">
+                    <SizableText flex={1} size="$5" fontWeight="500" color="$ink" numberOfLines={1}>
                       {p.name}
                     </SizableText>
-                    {mine(p) ? (
-                      <SizableText size="$1" color="$soft">
-                        {t('Current')}
-                      </SizableText>
+                    {isMine ? (
+                      <XStack px="$2" py="$0.5" rounded={999} bg="$ink" shrink={0}>
+                        <SizableText size="$1" fontWeight="500" color="$background">
+                          {t('Current')}
+                        </SizableText>
+                      </XStack>
                     ) : p.popular ? (
-                      <SizableText size="$1" color="$soft">
-                        {t('Popular')}
-                      </SizableText>
+                      <XStack px="$2" py="$0.5" rounded={999} borderWidth={1} borderColor="var(--border-strong)" bg="$raised" shrink={0}>
+                        <SizableText size="$1" fontWeight="500" color="$ink">
+                          {t('Popular')}
+                        </SizableText>
+                      </XStack>
                     ) : null}
                   </XStack>
                   {p.description ? (
@@ -210,7 +279,7 @@ export function Plans() {
                     </SizableText>
                   ) : null}
                   <YStack gap="$0.5">
-                    <SizableText size="$7" color="$ink">
+                    <SizableText size="$7" fontWeight="600" color="$ink" fontVariant={['tabular-nums']}>
                       {p.sales ? t('Custom') : cost.month === 0 ? t('Free') : money(cost.month, p.currency)}
                     </SizableText>
                     <SizableText size="$1" color="$soft">
@@ -230,32 +299,54 @@ export function Plans() {
                   <XStack>{move(p)}</XStack>
                   {p.features.length ? (
                     <YStack gap="$2" borderTopWidth={1} borderColor="$borderColor" pt="$3">
-                      {p.features.map((f) => (
+                      {visibleFeatures.map((f) => (
                         <XStack key={f} gap="$2" items="flex-start">
-                          <YStack pt={2}>
-                            <Check size={14} />
+                          <YStack pt={2} shrink={0}>
+                            <Check size={14} color="$soft" />
                           </YStack>
                           <SizableText flex={1} size="$2" color="$soft">
                             {f}
                           </SizableText>
                         </XStack>
                       ))}
+                      {hasMoreFeatures ? (
+                        <XStack
+                          render={<button type="button" />}
+                          aria-expanded={isExpanded}
+                          onClick={() => setExpanded((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
+                          self="flex-start"
+                          px="$2"
+                          ml="$-2"
+                          minH={28}
+                          $touchable={{ minH: 44 }}
+                          $max-sm={{ minH: 44 }}
+                          items="center"
+                          rounded="$2"
+                          cursor="pointer"
+                          hoverStyle={{ bg: '$hover' }}
+                          focusVisibleStyle={RING}
+                        >
+                          <SizableText size="$1" fontWeight="500" color="$ink">
+                            {isExpanded ? t('Show less') : t('+{n} more features', { n: extraCount })}
+                          </SizableText>
+                        </XStack>
+                      ) : null}
                     </YStack>
                   ) : null}
                 </YStack>
               )
             })}
-          </XStack>
+          </YStack>
         )}
         {note ? (
-          <SizableText size="$2" color="$soft" role="status">
+          <SizableText size="$2" color={noteError ? 'var(--state-error)' : '$soft'} role="status">
             {note}
           </SizableText>
         ) : null}
       </YStack>
 
-      <Dialog open={Boolean(buying)} onOpenChange={(o) => !o && setBuying(null)}>
-        <DialogContent maxW={420} showCloseButton={false}>
+      <Dialog open={Boolean(buying)} onOpenChange={(o) => !o && !working && setBuying(null)}>
+        <DialogContent maxW={420} showCloseButton={false} gap="$3">
           <DialogTitle>{buying ? t('Upgrade to {plan}', { plan: buying.name }) : t('Upgrade')}</DialogTitle>
           {buying && card ? (
             <YStack gap="$3">
@@ -265,11 +356,12 @@ export function Plans() {
                   : t('{card} is charged {amount} now, and again every month until you cancel.', { card: label(card), amount: money(price(buying, term).now, buying.currency) })}
               </SizableText>
               <XStack gap="$2" justify="flex-end">
-                <Button size="sm" variant="ghost" onPress={() => setBuying(null)}>
+                <Button size="sm" variant="ghost" disabled={working} onPress={() => setBuying(null)}>
                   {t('Not now')}
                 </Button>
                 <Button
                   size="sm"
+                  variant="primary"
                   disabled={working}
                   onPress={() =>
                     void act(async () => {
@@ -278,7 +370,7 @@ export function Plans() {
                     })
                   }
                 >
-                  {t('Upgrade')}
+                  {working ? t('Upgrading…') : t('Upgrade')}
                 </Button>
               </XStack>
             </YStack>
@@ -286,8 +378,8 @@ export function Plans() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={leaving} onOpenChange={setLeaving}>
-        <DialogContent maxW={420} showCloseButton={false}>
+      <Dialog open={leaving} onOpenChange={(o) => !working && setLeaving(o)}>
+        <DialogContent maxW={420} showCloseButton={false} gap="$3">
           <DialogTitle>{t('Switch to the free plan?')}</DialogTitle>
           {on ? (
             <YStack gap="$3">
@@ -297,7 +389,7 @@ export function Plans() {
                   : t('{plan} stays on until the end of this period, and nothing is charged after that.', { plan: on.name })}
               </SizableText>
               <XStack gap="$2" justify="flex-end">
-                <Button size="sm" variant="ghost" onPress={() => setLeaving(false)}>
+                <Button size="sm" variant="ghost" disabled={working} onPress={() => setLeaving(false)}>
                   {t('Keep {plan}', { plan: on.name })}
                 </Button>
                 <Button
@@ -311,7 +403,7 @@ export function Plans() {
                     })
                   }
                 >
-                  {t('Switch')}
+                  {working ? t('Switching…') : t('Switch')}
                 </Button>
               </XStack>
             </YStack>
@@ -324,6 +416,7 @@ export function Plans() {
         onOpenChange={setAdding}
         onSaved={(m) => {
           cards.reload()
+          setNoteError(false)
           setNote(t('{card} is saved', { card: label(m) }))
         }}
       />

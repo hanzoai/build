@@ -196,7 +196,7 @@ test('the environment says it is reading, and why it could not be read', async (
   const go = await hold(p, ENV)
   await p.goto(`/${SESSION}`)
   await pick(p, 'Environment')
-  await expect(desk(p).getByText('Reading the environment…')).toBeVisible()
+  await expect(desk(p).getByText('Loading environment…')).toBeVisible()
   refuse = true
   go()
   await expect(desk(p).getByText('universe’s environment could not be read right now.')).toBeVisible()
@@ -236,7 +236,7 @@ test.describe('New’s offer to set a codebase up', () => {
     await expect(p.getByRole('button', { name: 'Set up environment' })).toHaveCount(0)
     await p.reload({ waitUntil: 'domcontentloaded' })
     // Read again, the saved choice stands: the sandbox says the environment is there and empty, and nothing offers it again.
-    await p.getByRole('button', { name: 'Where the run runs: Cloud' }).click()
+    await p.getByRole('button', { name: 'Where the run runs: Auto (Cloud)' }).click()
     await expect(p.getByText('Hanzo sandbox · universe environment, empty')).toBeVisible()
     await p.keyboard.press('Escape')
     await expect(p.getByRole('button', { name: 'Set up environment' })).toHaveCount(0)

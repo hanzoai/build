@@ -21,9 +21,9 @@
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { CircleDot, Cloud, Code, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
-import { Button } from '@hanzo/ui'
-import { Composer, MEASURE, type Command } from '@hanzo/ui/chat'
+import { CircleDot, Cloud, Code, FolderGit2, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
+import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@hanzo/ui'
+import { Composer, MEASURE, type Command, type Shelf } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useTalk, useVoice } from '@hanzo/voice'
@@ -37,11 +37,13 @@ import { plain, read, SETUP, unset, type Environment } from './api/environment.t
 import { homes as readHomes, type Home, type Homes } from './api/work.ts'
 import { SetupDialog } from './environment.tsx'
 import { limits as readLimits } from './api/models.ts'
-import { ready, SANDBOX, type Place } from './api/places.ts'
+import { displayPlace, ready, SANDBOX, type Place } from './api/places.ts'
 import type { At } from './address.ts'
 import { Address } from './ask.tsx'
 import { asHub, gone, isForge, isHub, settle, type HubRepo } from './choice.ts'
 import { useCached, useKept, usePlaces, useRead } from './data.ts'
+import { useDevMode } from './dev-mode.ts'
+import { takeHandoff } from './handoff.ts'
 import { useHost, useTarget } from './host.tsx'
 import { level, pacing, useMind } from './mind.ts'
 import { usePrefs } from './prefs.tsx'
@@ -131,6 +133,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const media = useMedia()
   const wide = Boolean(media.md)
   const signed = Boolean(host.person)
+  const [devMode] = useDevMode()
   const { prefs, save: savePrefs } = usePrefs()
   const [stored, keep] = useKept<Partial<Kept> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
   // What was chosen here, over the person's coding defaults (Settings → Code), over
@@ -162,6 +165,12 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   // every later visit to New would put them back.
   useEffect(() => {
     if (kept.ask || kept.issue) set({ ask: '', issue: 0 })
+    // Chat's "Open in Dev" leaves its prompt and code here (handoff.ts).
+    const handed = takeHandoff(window.sessionStorage)
+    if (handed) {
+      setDraft(handed)
+      setNote(t('Imported from Chat — ready to run in Dev.'))
+    }
     // The handover is read on this mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -426,96 +435,205 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     set({ repo: row, branch: row.default_branch })
   }
 
-  // Cloud is the sandbox, set up by the chosen codebase's environment; the rest are the org's machines.
+  // Cloud is the managed workspace, set up by the chosen project's environment; the rest are the org's machines.
   const placeItems = useMemo(
     () =>
-      (places.value.length ? places.value : [SANDBOX]).map((p) => ({
-        id: p.id || 'sandbox',
-        label: p.id ? p.label : t('Cloud'),
-        hint: p.id ? [p.status, p.capacity].filter(Boolean).join(' · ') : '',
-        icon: p.id ? <Monitor size={13} color="$soft" /> : <Cloud size={13} color="$soft" />,
-        disabled: !ready(p),
-        place: p,
-      })),
-    [places.value, t],
+      (places.value.length ? places.value : [SANDBOX]).map((p) => {
+        const display = displayPlace(p, { devMode, cloudTitle: t('Auto (Cloud)') })
+        return {
+          id: p.id || 'sandbox',
+          label: display.title,
+          hint: p.id
+            ? devMode
+              ? [p.status, p.capacity].filter(Boolean).join(' · ')
+              : p.status === 'online'
+                ? t('Online')
+                : p.status
+            : devMode
+              ? ''
+              : t('Cloud workspace'),
+          detail: display.detail,
+          icon: p.id ? <Monitor size={13} color="$soft" /> : <Cloud size={13} color="$soft" />,
+          disabled: !ready(p),
+          place: p,
+        }
+      }),
+    [places.value, devMode, t],
   )
+
+  const activePlaceDisplay = useMemo(
+    () => displayPlace(place, { devMode, cloudTitle: t('Auto (Cloud)') }),
+    [place, devMode, t],
+  )
+  const placeTooltip = place.id
+    ? t('Runs locally in your Hanzo folder')
+    : t('Runs automatically in your Hanzo cloud workspace')
+  const placeHardwareHint = place.id && !devMode ? activePlaceDisplay.detail : undefined
 
   const branch = kept.branch || kept.repo?.default_branch || 'main'
   const forge = isForge(kept.repo)
+  const hasRepo = Boolean(isForge(kept.repo) || isHub(kept.repo))
+  const showRepoSelect = devMode || hasRepo || picking
   const screen = (to: 'issues' | 'templates' | 'projects' | 'sync') => () => host.go(path({ kind: 'screen', screen: to }))
 
-  // The composer's pills: where the run goes, which repository, which branch.
+  // The composer's pills: where the run goes, and (in Developer mode or once chosen) which repository and branch.
   const pills = (
     <>
-      <ChipSelect
-        name={t('Where the run runs')}
-        icon={place.id ? <Monitor size={13} color="$soft" /> : <Cloud size={13} color="$soft" />}
-        label={place.id ? place.label : t('Cloud')}
-        chosen={placeItems.find((i) => i.place.id === place.id)}
-        items={placeItems}
-        onChange={(i) => set({ place: i.place.id })}
-        placeholder={t('Search machines…')}
-        placement="top-start"
-        loading={places.loading}
-        error={places.error?.message ?? null}
-        footer={<FooterLink label={t('Manage…')} onPress={() => host.go(path({ kind: 'settings', section: 'machines' }))} />}
-      />
-      <RepoSelect
-        open={picking}
-        onOpenChange={setPicking}
-        value={isForge(kept.repo) ? { ...kept.repo, source: 'forge' } : isHub(kept.repo) ? { ...kept.repo, source: 'github' } : null}
-        onChange={(r) => {
-          const hub = (r as { github?: boolean }).github ? hubs.current.get((r.full_name ?? "").toLowerCase()) : undefined
-          setIssue(0)
-          if (hub) {
-            set({ repo: hub, branch: hub.default_branch })
-            return
+      <TooltipProvider delay={150}>
+        <Tooltip placement="top" offset={6}>
+          <TooltipTrigger asChild>
+            <XStack items="center" minW={0} maxW="100%">
+              <ChipSelect
+                name={t('Where the run runs')}
+                icon={place.id ? <Monitor size={13} color="$soft" /> : <Cloud size={13} color="$soft" />}
+                label={activePlaceDisplay.title}
+                chosen={placeItems.find((i) => i.place.id === place.id)}
+                items={placeItems}
+                onChange={(i) => set({ place: i.place.id })}
+                placeholder={devMode ? t('Search machines…') : t('Search devices…')}
+                placement="top-start"
+                loading={places.loading}
+                error={places.error?.message ?? null}
+                footer={<FooterLink label={t('Manage…')} onPress={() => host.go(path({ kind: 'settings', section: 'machines' }))} />}
+              />
+            </XStack>
+          </TooltipTrigger>
+          <TooltipContent
+            maxW={280}
+            px="$3"
+            py="$2"
+            rounded="$3"
+            bg="var(--popover)"
+            borderWidth={1}
+            borderColor="var(--border-strong)"
+            z="var(--z-popover)"
+          >
+            <YStack gap="$0.5">
+              <SizableText fontFamily="$body" size="$1" color="$ink">
+                {placeTooltip}
+              </SizableText>
+              {placeHardwareHint ? (
+                <SizableText fontFamily="$body" size="$1" color="$soft">
+                  {placeHardwareHint}
+                </SizableText>
+              ) : null}
+            </YStack>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      {showRepoSelect ? (
+        <RepoSelect
+          open={picking}
+          onOpenChange={setPicking}
+          value={isForge(kept.repo) ? { ...kept.repo, source: 'forge' } : isHub(kept.repo) ? { ...kept.repo, source: 'github' } : null}
+          onChange={(r) => {
+            const hub = (r as { github?: boolean }).github ? hubs.current.get((r.full_name ?? '').toLowerCase()) : undefined
+            setIssue(0)
+            if (hub) {
+              set({ repo: hub, branch: hub.default_branch })
+              return
+            }
+            const row = known.current.get(r.name) ?? chosen(r)
+            set({ repo: row, branch: row.default_branch })
+          }}
+          load={loadRepos}
+          connect={
+            hasRepo ? (
+              <FooterLink
+                label={t('Work without a repository')}
+                onPress={() => {
+                  drop()
+                  setPicking(false)
+                }}
+              />
+            ) : undefined
           }
-          const row = known.current.get(r.name) ?? chosen(r)
-          set({ repo: row, branch: row.default_branch })
-        }}
-        load={loadRepos}
-        tabs={[
-          { id: 'all', label: t('All') },
-          { id: 'forge', label: t('Organization') },
-          { id: 'github', label: 'GitHub' },
-        ]}
-        troubleshoot={{ label: t('Bring a repository from GitHub'), onPress: screen('sync') }}
-        action={{
-          label: t('Add to project'),
-          onPress: (r) => {
-            const row = known.current.get(r.name)
-            setAdding({
-              repo: row?.clone || `${target.api}/v1/git/${r.owner}/${r.name}.git`,
-              title: row?.full_name || `${r.owner}/${r.name}`,
-              ref: r.default_branch || 'main',
-              name: r.name,
-            })
-          },
-        }}
-        placeholder={t('Repository')}
-        placement="top-start"
-        disabled={!signed}
-      />
-      {forge ? <BranchSelect open={branching} onOpenChange={setBranching} value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} placement="top-start" /> : null}
+          tabs={[
+            { id: 'all', label: t('All') },
+            { id: 'forge', label: t('Organization') },
+            { id: 'github', label: 'GitHub' },
+          ]}
+          troubleshoot={{ label: t('Link GitHub project…'), onPress: screen('sync') }}
+          action={{
+            label: t('Add to project'),
+            onPress: (r) => {
+              const row = known.current.get(r.name)
+              setAdding({
+                repo: row?.clone || `${target.api}/v1/git/${r.owner}/${r.name}.git`,
+                title: row?.full_name || `${r.owner}/${r.name}`,
+                ref: r.default_branch || 'main',
+                name: r.name,
+              })
+            },
+          }}
+          placeholder={t('Repository')}
+          placement="top-start"
+          disabled={!signed}
+        />
+      ) : null}
+      {devMode && forge ? (
+        <BranchSelect open={branching} onOpenChange={setBranching} value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} placement="top-start" />
+      ) : null}
     </>
   )
 
   const commands: Command[] = [
     { id: 'run', label: t('Run'), keys: 'Ctrl+↵', icon: <Play size={14} color="$soft" />, disabled: !draft.trim(), run: () => void send() },
+    { id: 'pick-repo', label: t('Link GitHub project…'), icon: <FolderGit2 size={14} color="$soft" />, run: () => setPicking(true) },
     { id: 'issues', label: t('View issues'), icon: <CircleDot size={14} color="$soft" />, run: screen('issues') },
     { id: 'templates', label: t('Browse templates'), icon: <LayoutTemplate size={14} color="$soft" />, run: screen('templates') },
     { id: 'projects', label: t('Open projects'), icon: <Code size={14} color="$soft" />, run: screen('projects') },
-    { id: 'sync', label: t('Bring a repository from GitHub'), icon: <GitBranch size={14} color="$soft" />, run: screen('sync') },
-    { id: 'address', label: t('Use a git URL'), icon: <Link2 size={14} color="$soft" />, run: () => setGiving(true) },
+    { id: 'sync', label: t('Connect GitHub…'), icon: <GitBranch size={14} color="$soft" />, run: screen('sync') },
+    ...(devMode ? [{ id: 'address', label: t('Use a git URL'), icon: <Link2 size={14} color="$soft" />, run: () => setGiving(true) }] : []),
   ]
 
+  // The `+` menu's Connectors shelf gives power users 1-click access to attach a GitHub project even when the composer bar is kept clean.
+  const connectors: Shelf = {
+    rows: homes.value.homes.slice(0, 12).map((h) => ({
+      id: h.name,
+      label: h.label,
+      note: h.branch,
+      icon: <FolderGit2 size={16} />,
+      on: codebase !== '' && codebase.toLowerCase() === h.name.toLowerCase(),
+    })),
+    pick: (id) => {
+      if (codebase && codebase.toLowerCase() === id.toLowerCase()) {
+        drop()
+        return
+      }
+      const match = homes.value.homes.find((h) => h.name === id)
+      if (match) choose(match)
+    },
+    loading: homes.loading,
+    empty: t('Start any prompt directly, or link a GitHub project'),
+    create: { label: t('Link GitHub project…'), onPress: () => setPicking(true) },
+    browse: { label: t('Connect GitHub…'), onPress: screen('sync') },
+    manage: { label: t('Open projects'), onPress: screen('projects') },
+  }
+
+  // Dev takes text files, so Sketch's image drawings stay off its `+` and `@` shelves.
+  const devPlugins: Shelf = {
+    ...carry.plugins,
+    rows: carry.plugins.rows.filter((r) => r.id !== 'sketch'),
+    pick: (id) => {
+      if (id !== 'sketch') carry.plugins.pick(id)
+    },
+  }
+
   // The machines a run can go to, as the `+` menu's Devices: the same choice as the pill's.
-  const devices = {
-    rows: placeItems.map((i) => ({ id: i.place.id || 'sandbox', label: i.label, note: i.hint, icon: <Monitor size={16} />, on: i.place.id === place.id })),
+  const devices: Shelf = {
+    rows: placeItems.map((i) => ({
+      id: i.place.id || 'sandbox',
+      label: i.label,
+      note: i.hint,
+      icon: i.place.id ? <Monitor size={16} /> : <Cloud size={16} />,
+      on: i.place.id === place.id,
+    })),
     pick: (id: string) => set({ place: id === 'sandbox' ? '' : id }),
     loading: places.loading,
     error: places.error?.message ?? null,
+    create: { label: t('Link GitHub project…'), onPress: () => setPicking(true) },
+    manage: { label: t('Manage devices…'), onPress: () => host.go(path({ kind: 'settings', section: 'machines' })) },
   }
 
   return (
@@ -529,7 +647,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         </XStack>
         <YStack
           display="grid"
-          gridTemplateRows={wide ? '1fr auto auto 1fr' : 'minmax(0, 1fr) auto'}
+          // Optical center (~43% down viewport on desktop) instead of geometric 50% + top bar offset.
+          gridTemplateRows={wide ? 'minmax(24px, 0.76fr) auto auto minmax(48px, 1.24fr)' : 'minmax(0, 1fr) auto'}
           items="center"
           $platform-web={{ justifyItems: 'center' }}
           width="100%"
@@ -548,35 +667,58 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             width="100%"
             maxW={MEASURE}
             height={wide ? undefined : '100%'}
-            pb={wide ? '$5' : '$3'}
+            px="$4"
+            pb="$5"
             overflowY="auto"
           >
-            <SizableText render="h1" fontSize="$7" lineHeight="$7" fontWeight="700" color="$ink" style={{ textAlign: 'center' }}>
+            <SizableText
+              render="h1"
+              fontFamily="$heading"
+              fontSize="$7"
+              lineHeight="$7"
+              fontWeight="600"
+              letterSpacing={'-0.025em' as never}
+              color="$ink"
+              text="center"
+            >
               {t('Build what’s next.')}
             </SizableText>
           </YStack>
-          <YStack width="100%" maxW={MEASURE} gap="$2" pb={12}>
+          <YStack width="100%" maxW={MEASURE} gap="$2" pb="$3">
             <YStack gap="$2">
-              {env.value && (env.value.state === 'proposed' || unset(env.value)) && !place.id ? (
-                <XStack items="center" justify="space-between" gap="$3" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor">
-                  <SizableText size="$2" color="$ink" flex={1} minW={0}>
+              {env.value && (env.value.state === 'proposed' || (devMode && unset(env.value))) && !place.id ? (
+                <XStack
+                  items="center"
+                  justify="space-between"
+                  gap="$3"
+                  rowGap="$2"
+                  mx="$3"
+                  px="$3"
+                  py="$2"
+                  rounded="$4"
+                  borderWidth={1}
+                  borderColor="var(--border-strong)"
+                  bg="$panel"
+                  flexWrap="wrap"
+                >
+                  <SizableText size="$2" color="$ink" flex={1} minW={180}>
                     {env.value.state === 'proposed'
                       ? t('A proposed environment for {repo} is waiting for review.', { repo: codebase })
                       : t('{repo} has no environment yet, so every run starts it bare.', { repo: codebase })}
                   </SizableText>
                   {env.value.state === 'proposed' && env.value.session ? (
-                    <Button size="sm" variant="outline" onPress={() => host.go(env.value!.session)}>
+                    <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => host.go(env.value!.session)}>
                       {t('Review')}
                     </Button>
                   ) : (
-                    <Button size="sm" onPress={() => setOffering(true)}>
+                    <Button size="sm" variant="primary" onPress={() => setOffering(true)}>
                       {t('Set up environment')}
                     </Button>
                   )}
                 </XStack>
               ) : null}
               {note || unhonoured(mode, place.id, t) || mind.note ? (
-                <SizableText size="$1" color="$soft" role="status">
+                <SizableText size="$1" color="$soft" role="status" px="$3">
                   {note || unhonoured(mode, place.id, t) || mind.note}
                 </SizableText>
               ) : null}
@@ -592,14 +734,15 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                   upload: () => pick(files, setFiles, setNote, t),
                   research: { on: carry.gear.gear.research, set: (on) => carry.gear.set({ research: on }) },
                   skills: carry.skills,
+                  connectors,
                   design: carry.design,
-                  plugins: carry.plugins,
+                  plugins: devPlugins,
                   devices,
                   memory: { on: carry.gear.gear.memory, set: (on) => carry.gear.set({ memory: on }) },
                 }}
                 carried={[...carry.on, ...carrying(files, setFiles)]}
                 slash={carry.skills}
-                at={carry.plugins}
+                at={devPlugins}
                 pills={pills}
                 commands={commands}
                 mode={carry.mode}
@@ -643,7 +786,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         </YStack>
       </YStack>
       {desk && wide ? (
-        <YStack width={440} shrink={0} height="100%" borderLeftWidth={1} borderColor="$borderColor" bg="$background" minW={0} minH={0} overflow="hidden">
+        <YStack width={440} $max-lg={{ width: 340 }} maxW="50%" shrink={0} height="100%" borderLeftWidth={1} borderColor="$borderColor" bg="$background" minW={0} minH={0} overflow="hidden">
           <Panel side={deck} kinds={[]} onHide={() => setDesk(false)} label={t('Tabs')} />
         </YStack>
       ) : null}

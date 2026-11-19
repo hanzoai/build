@@ -146,8 +146,8 @@ export function Sync() {
 
   return (
     <YStack flex={1} minH={0} overflow="scroll">
-      <XStack px="$6" pt="$5" pb="$2" gap="$2" items="center">
-        <XStack render="button" aria-label={t('Back to projects')} onPress={back}>
+      <XStack px="$6" pt="$5" pb="$2" $max-md={{ px: '$4' }} gap="$2" items="center">
+        <XStack render="button" aria-label={t('Back to projects')} onPress={back} minH={32} $touchable={{ minH: 44 }} items="center" cursor="pointer">
           <SizableText size="$2" color="$soft">
             {t('Projects')}
           </SizableText>
@@ -159,24 +159,24 @@ export function Sync() {
           {t('Sync')}
         </SizableText>
       </XStack>
-      <YStack flex={1} items="center" justify="center" px="$6" pb="$10" gap="$5">
-        <XStack justify="center" gap="$6">
+      <YStack flex={1} items="center" justify="center" px="$6" pb="$10" $max-md={{ px: '$4' }} gap="$5">
+        <XStack justify="center" gap="$6" flexWrap="wrap" rowGap="$2">
           <Step label={t('Select repositories')} done={step === 'access'} current={step === 'pick'} />
           <Step label={t('Repository access')} done={false} current={step === 'access'} />
         </XStack>
-        <YStack borderWidth={1} borderColor="$borderColor" rounded="$5" bg="$panel" px="$6" py="$6" gap="$4" width="100%" maxW={460}>
+        <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$5" bg="$panel" px="$6" py="$6" $max-md={{ px: '$4', py: '$5' }} gap="$4" width="100%" maxW={460}>
           {step === 'pick' && !owner ? (
             <>
               <YStack gap="$1" items="center">
-                <SizableText size="$5" color="$ink">
+                <SizableText size="$5" fontWeight="500" color="$ink">
                   {t('Select repositories')}
                 </SizableText>
-                <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+                <SizableText size="$2" color="$soft" text="center">
                   {t('Choose repositories to bring into {place}', { place: dest })}
                 </SizableText>
               </YStack>
               <Panel>
-                <Input value={q} onChangeText={setQ} placeholder={t('Search organizations')} aria-label={t('Search organizations')} disabled={!signed} />
+                <Input value={q} onChangeText={setQ} placeholder={t('Search organizations')} aria-label={t('Search organizations')} disabled={!signed} borderColor="var(--border-strong)" />
                 {/* No count while the first read is out: "0 organizations" then is not what this organization has. */}
                 {signed && !(list.loading && orgs.length === 0) ? (
                   <SizableText size="$1" color="$soft">
@@ -236,23 +236,23 @@ export function Sync() {
           {step === 'pick' && owner ? (
             <>
               <YStack gap="$1" items="center">
-                <SizableText size="$5" color="$ink">
+                <SizableText size="$5" fontWeight="500" color="$ink">
                   {t('Select repositories')}
                 </SizableText>
-                <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+                <SizableText size="$2" color="$soft" text="center">
                   {t('Choose repositories to bring into {place}', { place: dest })}
                 </SizableText>
               </YStack>
               <Panel>
                 <XStack items="center" gap="$2">
-                  <XStack render="button" aria-label={t('All organizations')} onPress={() => setOwner('')}>
+                  <XStack render="button" aria-label={t('All organizations')} onPress={() => setOwner('')} minW={28} minH={28} $touchable={{ minW: 44, minH: 44 }} items="center" justify="center" rounded="$2" hoverStyle={{ bg: '$hover' }}>
                     <ChevronLeft size={16} {...{ 'data-i18n-mirror': '' }} />
                   </XStack>
                   <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
                     {owner}
                   </SizableText>
                 </XStack>
-                <Input value={q} onChangeText={setQ} placeholder={t('Search repositories')} aria-label={t('Search repositories')} />
+                <Input value={q} onChangeText={setQ} placeholder={t('Search repositories')} aria-label={t('Search repositories')} borderColor="var(--border-strong)" />
                 <XStack justify="space-between" items="center">
                   <SizableText size="$1" color="$soft">
                     {ofOwner.length === 1 ? t('1 repository') : t('{n} repositories', { n: ofOwner.length })}
@@ -282,27 +282,27 @@ export function Sync() {
           {step === 'access' ? (
             <>
               <YStack gap="$1" items="center">
-                <SizableText size="$5" color="$ink">
+                <SizableText size="$5" fontWeight="500" color="$ink">
                   {t('Repository access')}
                 </SizableText>
-                <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+                <SizableText size="$2" color="$soft" text="center">
                   {t('Review who can read these repositories')}
                 </SizableText>
               </YStack>
               <XStack gap="$2" items="center">
-                <XStack flex={1} items="center" gap="$2" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor">
-                  <XStack render="button" aria-label={t('Clear the selection')} onPress={() => { setPicked([]); setStep('pick') }}>
+                <XStack flex={1} minW={0} items="center" gap="$2" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="var(--border-strong)">
+                  <XStack render="button" aria-label={t('Clear the selection')} onPress={() => { setPicked([]); setStep('pick') }} minW={24} minH={24} $touchable={{ minW: 44, minH: 44 }} items="center" justify="center">
                     <X size={12} />
                   </XStack>
                   <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
                     {more ? t('{name}, +{n} more', { name: lead, n: more }) : lead}
                   </SizableText>
                 </XStack>
-                <Button size="sm" variant="outline" onPress={() => setStep('pick')}>
+                <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setStep('pick')}>
                   {t('Edit')}
                 </Button>
               </XStack>
-              <XStack justify="space-between" gap="$4">
+              <XStack justify="space-between" gap="$4" flexWrap="wrap">
                 <YStack gap="$1">
                   <SizableText size="$1" color="$soft">
                     {t('Who gets access')}
@@ -320,25 +320,25 @@ export function Sync() {
                   </SizableText>
                 </YStack>
               </XStack>
-              <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+              <SizableText size="$2" color="$soft" text="center">
                 {t('Anyone with access to {place}', { place: dest })}
               </SizableText>
             </>
           ) : null}
           {error ? <Soft>{error}</Soft> : null}
           {unbound && step === 'access' ? (
-            <Button width="100%" variant="outline" onPress={() => void addOrg()}>
+            <Button width="100%" variant="outline" borderColor="var(--border-strong)" onPress={() => void addOrg()}>
               <Plus size={14} />
               {t('Add organization')}
             </Button>
           ) : null}
           {step === 'pick' ? (
-            <Button width="100%" disabled={!owner || picked.length === 0} onPress={() => setStep('access')}>
+            <Button width="100%" variant="primary" disabled={!owner || picked.length === 0} onPress={() => setStep('access')}>
               {t('Continue')}
             </Button>
           ) : (
             <YStack gap="$3" items="center" width="100%">
-              <Button width="100%" disabled={busy || syncing || picked.length === 0} onPress={() => void send()}>
+              <Button width="100%" variant="primary" disabled={busy || syncing || picked.length === 0} onPress={() => void send()}>
                 {syncing || busy
                   ? t('Syncing…')
                   : picked.length === 1
@@ -346,7 +346,7 @@ export function Sync() {
                     : t('Sync {n} repositories to {place}', { n: picked.length, place: dest })}
               </Button>
               {syncing ? null : (
-                <XStack render="button" aria-label={t('Sync later')} onPress={back}>
+                <XStack render="button" aria-label={t('Sync later')} onPress={back} minH={32} $touchable={{ minH: 44 }} items="center" cursor="pointer">
                   <SizableText size="$2" color="$soft">
                     {t('Sync later')}
                   </SizableText>
@@ -355,7 +355,7 @@ export function Sync() {
             </YStack>
           )}
           {!signed ? (
-            <Button width="100%" onPress={() => host.signIn?.()}>
+            <Button width="100%" variant="primary" onPress={() => host.signIn?.()}>
               {t('Sign in')}
             </Button>
           ) : null}
@@ -372,13 +372,13 @@ function Step({ label, done, current }: { label: string; done: boolean; current:
         width={14}
         height={14}
         rounded={999}
-        bg={done ? '$green10' : 'transparent'}
+        bg={done ? 'var(--state-success)' : 'transparent'}
         borderWidth={1}
-        borderColor={done || current ? '$ink' : '$borderColor'}
+        borderColor={done ? 'var(--state-success)' : current ? '$ink' : 'var(--border-strong)'}
         items="center"
         justify="center"
       >
-        {done ? <Check size={10} color="white" /> : null}
+        {done ? <Check size={10} color="$background" /> : null}
       </YStack>
       <SizableText size="$1" color={current || done ? '$ink' : '$soft'}>
         {label}

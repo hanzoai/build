@@ -16,3 +16,6 @@ export const pane = {
 } as const
 
 export const gap = 'var(--pane-gap, var(--space-2))'
+
+/** The ring a control wears while the keyboard is on it: one stroke for every button, in the host's `--ring`. */
+export const RING = { outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 1 } as const

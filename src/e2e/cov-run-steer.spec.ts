@@ -46,7 +46,7 @@ test('signed out, a run asks for a sign in wherever it would show something', as
   await open(p, 'Files')
   await expect(desk(p).getByText('Sign in to read this run’s files.')).toBeVisible()
   await open(p, 'Environment')
-  await expect(desk(p).getByText('Sign in to see this codebase’s environment.')).toBeVisible()
+  await expect(desk(p).getByText('Sign in to view project environment settings.')).toBeVisible()
   await p.screenshot({ path: info.outputPath('signed-out.png') })
 })
 

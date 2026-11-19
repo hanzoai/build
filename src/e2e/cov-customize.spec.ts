@@ -201,12 +201,12 @@ test('skills: while they are read the page says so, and then what is on arrives'
   })
   await page.goto('/-/customize')
   await yours(page).click()
-  await expect(page.getByText('Loading your skills…')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Loading your skills' })).toBeVisible()
   // The org's own are read, and there are none; what is on is still being read.
   const read = page.waitForResponse('**/v1/tool/skills/authored')
   own.release()
   await read
-  await expect(page.getByText('Loading your skills…')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Loading your skills' })).toBeVisible()
   lit.release()
   // None written here, so no heading for them; two added from Hanzo.
   await expect(page.getByRole('heading', { name: 'Made by your team' })).toHaveCount(0)
@@ -487,7 +487,7 @@ test('connectors: a server’s tools while they are asked for, when the ask is r
   }
 
   let detail = await open()
-  await expect(detail.getByText('Loading its tools…')).toBeVisible()
+  await expect(detail.getByRole('status', { name: 'Loading tools' })).toBeVisible()
   asking.release()
   await expect(detail.getByText(DOWN)).toBeVisible()
   await expect(detail.getByText('docs did not answer tools/list')).toHaveCount(0)
@@ -592,7 +592,7 @@ test('connectors: yours while they are read and when the read is refused, then a
   })
   await page.goto('/-/customize/connectors')
   await yours(page).click()
-  await expect(page.getByText('Loading your connectors…')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Loading your connectors' })).toBeVisible()
   reading.release()
   await expect(page.getByText(DOWN)).toBeVisible()
   await expect(page.getByText('the tool plane is down')).toHaveCount(0)
@@ -704,9 +704,9 @@ test('connectors: the shelf and the fleet’s servers while they are read, when 
     return undefined
   })
   await page.goto('/-/customize/connectors')
-  await expect(page.getByText('Loading connectors…')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Loading connectors' })).toBeVisible()
   await page.getByRole('button', { name: 'Show built-in servers' }).click()
-  await expect(page.getByText('Loading built-in servers…')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Loading built-in servers' })).toBeVisible()
   shelf.release()
   natives.release()
   await expect(page.getByText(DOWN)).toHaveCount(2)
@@ -871,12 +871,12 @@ test('plugins: yours and what is mounted, each while read, refused, empty, as an
   const mineView = () => yours(page).click()
   const discover = () => browse(page).click()
 
-  await expect(page.getByText('Loading built-in plugins…')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Loading built-in plugins' })).toBeVisible()
   first.mounted.release()
   await expect(page.getByText(DOWN)).toBeVisible()
   await expect(page.getByText('the deployment did not say')).toHaveCount(0)
   await mineView()
-  await expect(page.getByText('Loading your plugins…')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Loading your plugins' })).toBeVisible()
   first.yours.release()
   await expect(page.getByText(DOWN)).toBeVisible()
   await expect(page.getByText('the runtime is restarting')).toHaveCount(0)

@@ -13,7 +13,7 @@
  * `target`); a repository's org, name, branch and description, an issue's
  * title, labels and people, and the forge's own refusals are drawn as given.
  */
-import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
 import {
@@ -23,19 +23,24 @@ import {
   CircleCheck,
   CircleDot,
   CircleSlash,
+  Copy,
   ExternalLink,
   FolderGit2,
   GitBranch,
   Github,
   GitPullRequest,
   LayoutTemplate,
+  MoreHorizontal,
   RefreshCw,
-  Settings,
+  Search,
+  SlidersHorizontal,
   Trash2,
+  X,
 } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input } from '@hanzo/ui'
+import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, Skeleton, toast } from '@hanzo/ui'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
+import { RING } from './pane.ts'
 import { ago } from './ago.ts'
 import { codebases, remove as removeRepo, type Codebase } from './api/codebases.ts'
 import { unlink as removeLink } from './api/links.ts'
@@ -44,6 +49,7 @@ import { Scheduled } from './scheduled.tsx'
 import { boards, everything, sources, UNREAD, type Board, type Sources } from './api/work.ts'
 import { boardKey, pinRepo, readPending, writePending } from './choice.ts'
 import { useKept, useRead } from './data.ts'
+import { useDevMode } from './dev-mode.ts'
 import { useHost, useTarget } from './host.tsx'
 import type { Screen } from './route.ts'
 import { path } from './route.ts'
@@ -172,9 +178,10 @@ function Projects() {
   // What each repository is tied to on Hanzo — the links into it, GitHub's names
   // for the copies it made, the projects built from it — read for Remove alone.
   const made = useRead(signed ? () => sources(target) : null, NONE, [target, signed, landed])
-  const [asking, setAsking] = useState('')
+  const [confirming, setConfirming] = useState<Removal | null>(null)
   const [removing, setRemoving] = useState(false)
   const [said, setSaid] = useState('')
+  const [saidError, setSaidError] = useState(false)
   // A plan stands on the links, the forge and the projects all having answered:
   // one that missed a link leaves a copy that syncs back, and one that missed a
   // project leaves its site up. GitHub's grants only say which copies GitHub made.
@@ -193,67 +200,116 @@ function Projects() {
   const remove = async (r: Removal) => {
     setRemoving(true)
     setSaid('')
+    setSaidError(false)
     let at = 0
     try {
       for (; at < r.steps.length; at++) await drop(r.steps[at])
-      setSaid(t('{repo} is removed from Hanzo.', { repo: r.repo }))
+      toast.success(t('{repo} is removed from Hanzo.', { repo: r.repo }))
     } catch (e) {
       setSaid(stopped(r, at, (e as Error).message, t))
+      setSaidError(true)
     } finally {
       setRemoving(false)
-      setAsking('')
+      setConfirming(null)
       // Read again either way: what went leaves the list, and the next plan names only what is left.
       list.reload()
       made.reload()
     }
   }
+  const copyRepo = (named: string) => {
+    void navigator.clipboard
+      ?.writeText(named)
+      .then(() => toast.success(t('Copied {repo}', { repo: named })))
+      .catch(() => toast.error(t('Could not copy repository name')))
+  }
 
   return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4' }}>
+    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
       <YStack width="100%" maxW={1040} mx="auto" gap="$4">
-        <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap">
-          <YStack gap="$1" flex={1} minW={240}>
-            <SizableText render="h1" size="$6" fontWeight="500" color="$ink">
+        <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap" rowGap="$3">
+          <YStack gap="$1" flex={1} minW={0} $sm={{ minW: 240 }}>
+            <SizableText render="h1" size="$7" fontWeight="600" color="$ink">
               {t('Projects')}
             </SizableText>
             <SizableText size="$2" color="$soft">
               {host.org
-                ? t('{org}’s repositories on the forge. Open one to work on it.', { org: host.org })
-                : t('This organization’s repositories on the forge. Open one to work on it.')}
+                ? t('{org}’s projects and linked GitHub repositories. Open one to work on it.', { org: host.org })
+                : t('Projects and linked GitHub repositories. Open one to work on it.')}
             </SizableText>
           </YStack>
-          <XStack gap="$2" items="center" flexWrap="wrap">
-            <Button size="sm" variant="outline" onPress={template}>
-              <LayoutTemplate size={14} />
-              {t('Create from template')}
-            </Button>
-            <Button size="sm" variant="primary" onPress={link}>
-              <Github size={14} />
-              {t('Link a GitHub repo')}
-            </Button>
-          </XStack>
+          {signed ? (
+            <XStack gap="$2" items="center" flexWrap="wrap">
+              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={template}>
+                <LayoutTemplate size={14} />
+                {t('Create from template')}
+              </Button>
+              <Button size="sm" variant={none ? 'outline' : 'primary'} borderColor={none ? 'var(--border-strong)' : undefined} onPress={link}>
+                <Github size={14} />
+                {t('Link a GitHub repo')}
+              </Button>
+            </XStack>
+          ) : null}
         </XStack>
         {signed ? <GitHubLink onSync={link} /> : null}
-        {said ? <Note>{said}</Note> : null}
+        {said ? (
+          <SizableText size="$2" color={saidError ? 'var(--state-error)' : '$soft'} role="status">
+            {said}
+          </SizableText>
+        ) : null}
         {list.error ? (
-          <Note>{list.error.message}</Note>
+          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+            <SizableText size="$2" color="var(--state-error)" text="center">
+              {list.error.message}
+            </SizableText>
+            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={list.reload}>
+              {t('Try again')}
+            </Button>
+          </YStack>
         ) : !signed ? (
-          <Note>{t("Sign in to see this organization's projects.")}</Note>
+          <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+            <SizableText size="$2" color="$soft" text="center">
+              {t("Sign in to see this organization's projects.")}
+            </SizableText>
+            <Button size="sm" variant="primary" onPress={() => host.signIn?.()}>
+              {t('Sign in')}
+            </Button>
+          </YStack>
         ) : list.loading && list.value.length === 0 && pending.length === 0 ? (
-          <Note>{t('Reading the forge…')}</Note>
+          <YStack gap="$3" aria-busy={true}>
+            <Note>{t('Loading projects…')}</Note>
+            <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" bg="$panel" overflow="hidden">
+              {[0, 1, 2, 3].map((i) => (
+                <XStack key={i} items="center" gap="$3" px="$3" py="$3" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
+                  <Skeleton layout="block" width={18} height={18} rounded="$2" shrink={0} />
+                  <YStack flex={1} gap="$1.5">
+                    <Skeleton layout="block" width="38%" height={14} rounded="$2" />
+                    <Skeleton layout="block" width="56%" height={12} rounded="$2" />
+                  </YStack>
+                  <Skeleton layout="block" width={64} height={12} rounded="$2" shrink={0} />
+                </XStack>
+              ))}
+            </YStack>
+          </YStack>
         ) : none ? (
-          <YStack gap="$3" py="$2">
-            <Note>{t('No projects yet. A project is a repository: link one from GitHub, or start one from a template.')}</Note>
+          <YStack gap="$4">
+            <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$6" gap="$1.5" items="center">
+              <SizableText size="$4" fontWeight="500" color="$ink" text="center">
+                {t('No projects yet')}
+              </SizableText>
+              <SizableText size="$2" color="$soft" text="center" maxW={460}>
+                {t('No projects linked yet — start a prompt to create one automatically, or pick one of the paths below.')}
+              </SizableText>
+            </YStack>
             <XStack gap="$3" flexWrap="wrap">
               <Choice
                 label={t('Link a GitHub repo')}
-                icon={<Github size={20} />}
+                icon={<Github size={20} color="$ink" />}
                 says={t('Mirror repositories you already have. They stay in step with GitHub, and their issues can come too.')}
                 onPress={link}
               />
               <Choice
                 label={t('Create from template')}
-                icon={<LayoutTemplate size={20} />}
+                icon={<LayoutTemplate size={20} color="$ink" />}
                 says={t('Start from a finished product — a site, an app, a store — and make it yours.')}
                 onPress={template}
               />
@@ -264,44 +320,107 @@ function Projects() {
             <XStack gap="$2" items="center">
               <YStack flex={1} $max-md={{ display: 'none' }} />
               <YStack width={320} minW={0} shrink={1} $max-md={{ width: 'auto', flex: 1 }}>
-                <Input value={q} onChangeText={setQ} placeholder={t('Find a project…')} aria-label={t('Find a project')} />
+                <Input
+                  value={q}
+                  onChangeText={setQ}
+                  placeholder={t('Find a project…')}
+                  aria-label={t('Find a project')}
+                  borderColor="var(--border-strong)"
+                  bg="$panel"
+                  startAdornment={<Search size={14} color="$soft" />}
+                  endAdornment={
+                    q ? (
+                      <XStack
+                        render={<button type="button" />}
+                        aria-label={t('Clear search')}
+                        onClick={() => setQ('')}
+                        minW={24}
+                        minH={24}
+                        $touchable={{ minW: 44, minH: 44 }}
+                        $max-sm={{ minW: 44, minH: 44 }}
+                        items="center"
+                        justify="center"
+                        rounded="$2"
+                        cursor="pointer"
+                        hoverStyle={{ bg: '$hover' }}
+                        focusVisibleStyle={RING}
+                      >
+                        <X size={13} color="$soft" />
+                      </XStack>
+                    ) : undefined
+                  }
+                  onKeyDown={(e: { key?: string }) => {
+                    if (e.key === 'Escape' && q) setQ('')
+                  }}
+                />
               </YStack>
             </XStack>
             {shown.length === 0 ? (
-              <Note>{t('Nothing matches.')}</Note>
+              <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" px="$5" py="$7" gap="$3" items="center">
+                <Note>{t('Nothing matches.')}</Note>
+                <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setQ('')}>
+                  {t('Clear search')}
+                </Button>
+              </YStack>
             ) : (
-              <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
+              <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" bg="$panel" overflow="hidden">
                 <XStack px="$3" py="$2" gap="$3" items="center" bg="$panel">
-                  <XStack flex={1} render="button" aria-label={t('Sort by name')} items="center" gap="$1" onPress={() => setSort('name')}>
-                    <SizableText size="$1" color="$soft">
+                  <XStack
+                    flex={1}
+                    render={<button type="button" />}
+                    aria-label={t('Sort by name')}
+                    items="center"
+                    gap="$1"
+                    minH={28}
+                    $touchable={{ minH: 44 }}
+                    $max-sm={{ minH: 44 }}
+                    rounded="$2"
+                    cursor="pointer"
+                    focusVisibleStyle={RING}
+                    onClick={() => setSort('name')}
+                  >
+                    <SizableText size="$1" color={sort === 'name' ? '$ink' : '$soft'} fontWeight={sort === 'name' ? '500' : '400'}>
                       {t('Name')}
                     </SizableText>
-                    {sort === 'name' ? <ChevronDown size={12} /> : null}
+                    {sort === 'name' ? <ChevronDown size={12} color="$ink" /> : null}
                   </XStack>
                   <SizableText size="$1" color="$soft" width={120} $max-md={{ display: 'none' }}>
                     {t('Branch')}
                   </SizableText>
-                  <XStack render="button" aria-label={t('Sort by last updated')} items="center" justify="flex-end" gap="$1" width={120} onPress={() => setSort('updated')}>
-                    <SizableText size="$1" color="$soft">
+                  <XStack
+                    render={<button type="button" />}
+                    aria-label={t('Sort by last updated')}
+                    items="center"
+                    justify="flex-end"
+                    gap="$1"
+                    width={120}
+                    $max-sm={{ width: 76, minH: 44 }}
+                    minH={28}
+                    $touchable={{ minH: 44 }}
+                    rounded="$2"
+                    cursor="pointer"
+                    focusVisibleStyle={RING}
+                    onClick={() => setSort('updated')}
+                  >
+                    <SizableText size="$1" color={sort === 'updated' ? '$ink' : '$soft'} fontWeight={sort === 'updated' ? '500' : '400'}>
                       {t('Updated')}
                     </SizableText>
-                    {sort === 'updated' ? <ChevronDown size={12} /> : null}
+                    {sort === 'updated' ? <ChevronDown size={12} color="$ink" /> : null}
                   </XStack>
-                  {/* Remove's column, so every row's columns stand under their names whether it offers one or not. */}
-                  <YStack width={28} shrink={0} />
+                  {/* Actions column, so every row's columns stand under their headers. */}
+                  <YStack width={32} shrink={0} />
                 </XStack>
                 {slice.map((c) => {
                   const key = `${c.org}/${c.name}`
                   const named = `${c.org ? `${c.org}/` : ''}${c.name}`
                   const r = plan(c)
-                  const asked = r !== null && asking === key
                   return (
                     <YStack key={key} borderTopWidth={1} borderColor="$borderColor">
                       <XStack items="center" gap="$3" paddingInlineEnd="$3" hoverStyle={{ bg: '$hover' }}>
                         <XStack
-                          render="button"
+                          render={<button type="button" />}
                           aria-label={t('Open {repo}', { repo: named })}
-                          onPress={() => open(c)}
+                          onClick={() => open(c)}
                           $platform-web={{ textAlign: 'start' }}
                           flex={1}
                           minW={0}
@@ -309,7 +428,9 @@ function Projects() {
                           gap="$3"
                           paddingInlineStart="$3"
                           py="$2.5"
-                          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+                          minH={44}
+                          cursor="pointer"
+                          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
                         >
                           <FolderGit2 size={15} color="$soft" />
                           <YStack flex={1} minW={0}>
@@ -336,62 +457,91 @@ function Projects() {
                               {c.branch}
                             </SizableText>
                           </XStack>
-                          <SizableText size="$1" color="$soft" width={120} text="end">
+                          <SizableText size="$1" color="$soft" width={120} $max-sm={{ width: 76 }} text="end" numberOfLines={1}>
                             {syncing.has(c.name) ? t('Syncing…') : ago(c.updated)}
                           </SizableText>
                         </XStack>
-                        <XStack width={28} shrink={0} justify="center">
-                          {r && !asked ? (
-                            <XStack
-                              render="button"
-                              aria-label={t('Remove {repo}', { repo: named })}
-                              disabled={removing}
-                              onPress={() => setAsking(key)}
-                              width={28}
-                              height={28}
-                              items="center"
-                              justify="center"
-                              rounded="$2"
-                              hoverStyle={{ bg: '$raised' }}
-                              focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
-                            >
-                              <Trash2 size={14} color="$soft" />
-                            </XStack>
-                          ) : null}
+                        <XStack width={32} shrink={0} justify="center">
+                          <DropdownMenu
+                            trigger={
+                              <XStack
+                                render={<button type="button" />}
+                                aria-label={t('Actions for {repo}', { repo: named })}
+                                disabled={removing}
+                                width={32}
+                                height={32}
+                                $touchable={{ minW: 44, minH: 44 }}
+                                $max-sm={{ minW: 44, minH: 44 }}
+                                items="center"
+                                justify="center"
+                                rounded="$2"
+                                cursor="pointer"
+                                hoverStyle={{ bg: '$raised' }}
+                                focusVisibleStyle={RING}
+                              >
+                                <MoreHorizontal size={16} color="$soft" />
+                              </XStack>
+                            }
+                            items={[
+                              { key: 'open', label: t('Open workspace'), icon: <ArrowRight size={14} />, onSelect: () => open(c) },
+                              { key: 'copy', label: t('Copy repository'), icon: <Copy size={14} />, onSelect: () => copyRepo(named) },
+                              ...(r
+                                ? [
+                                    { type: 'separator' as const },
+                                    { key: 'remove', label: t('Remove from Hanzo'), icon: <Trash2 size={14} />, destructive: true, onSelect: () => setConfirming(r) },
+                                  ]
+                                : []),
+                            ]}
+                          />
                         </XStack>
                       </XStack>
-                      {asked && r ? (
-                        <XStack items="center" gap="$3" px="$3" pb="$2.5" flexWrap="wrap">
-                          <SizableText flex={1} minW={200} size="$2" color="$ink">
-                            {r.says}
-                          </SizableText>
-                          <XStack gap="$2">
-                            <Button size="sm" variant="outline" disabled={removing} onPress={() => setAsking('')}>
-                              {t('Cancel')}
-                            </Button>
-                            <Button size="sm" variant="destructive" disabled={removing} onPress={() => void remove(r)}>
-                              {removing ? t('Removing…') : t('Remove')}
-                            </Button>
-                          </XStack>
-                        </XStack>
-                      ) : null}
                     </YStack>
                   )
                 })}
-                <XStack px="$3" py="$2" justify="space-between" items="center" borderTopWidth={1} borderColor="$borderColor">
-                  <SizableText size="$1" color="$soft">
+                <XStack px="$3" py="$2" justify="space-between" items="center" gap="$2" flexWrap="wrap" borderTopWidth={1} borderColor="$borderColor">
+                  <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
                     {t('Showing {from}–{to} of {total}', { from, to, total: shown.length })}
                   </SizableText>
-                  <XStack gap="$3" items="center">
-                    <XStack render="button" aria-label={t('Previous page')} disabled={safePage === 0} onPress={() => setPage(safePage - 1)}>
+                  <XStack gap="$2" items="center">
+                    <XStack
+                      render={<button type="button" />}
+                      aria-label={t('Previous page')}
+                      disabled={safePage === 0}
+                      onClick={() => setPage(safePage - 1)}
+                      px="$2"
+                      py="$1"
+                      minH={30}
+                      $touchable={{ minH: 44 }}
+                      $max-sm={{ minH: 44 }}
+                      items="center"
+                      rounded="$2"
+                      cursor={safePage === 0 ? 'default' : 'pointer'}
+                      hoverStyle={safePage === 0 ? undefined : { bg: '$hover' }}
+                      focusVisibleStyle={RING}
+                    >
                       <SizableText size="$1" color={safePage === 0 ? '$soft' : '$ink'}>
                         {t('Prev')}
                       </SizableText>
                     </XStack>
-                    <SizableText size="$1" color="$soft">
+                    <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
                       {`${safePage + 1} / ${pages}`}
                     </SizableText>
-                    <XStack render="button" aria-label={t('Next page')} disabled={safePage >= pages - 1} onPress={() => setPage(safePage + 1)}>
+                    <XStack
+                      render={<button type="button" />}
+                      aria-label={t('Next page')}
+                      disabled={safePage >= pages - 1}
+                      onClick={() => setPage(safePage + 1)}
+                      px="$2"
+                      py="$1"
+                      minH={30}
+                      $touchable={{ minH: 44 }}
+                      $max-sm={{ minH: 44 }}
+                      items="center"
+                      rounded="$2"
+                      cursor={safePage >= pages - 1 ? 'default' : 'pointer'}
+                      hoverStyle={safePage >= pages - 1 ? undefined : { bg: '$hover' }}
+                      focusVisibleStyle={RING}
+                    >
                       <SizableText size="$1" color={safePage >= pages - 1 ? '$soft' : '$ink'}>
                         {t('Next')}
                       </SizableText>
@@ -403,6 +553,24 @@ function Projects() {
           </>
         )}
       </YStack>
+      <Dialog open={confirming !== null} onOpenChange={(o) => !o && !removing && setConfirming(null)}>
+        <DialogContent maxW={440} showCloseButton={false} gap="$3">
+          <DialogTitle>{confirming ? t('Remove {repo}?', { repo: confirming.repo }) : t('Remove project?')}</DialogTitle>
+          {confirming ? (
+            <SizableText size="$2" color="$soft">
+              {confirming.says}
+            </SizableText>
+          ) : null}
+          <XStack gap="$2" justify="flex-end">
+            <Button size="sm" variant="ghost" disabled={removing} onPress={() => setConfirming(null)}>
+              {t('Cancel')}
+            </Button>
+            <Button size="sm" variant="destructive" disabled={removing || !confirming} onPress={() => confirming && void remove(confirming)}>
+              {removing ? t('Removing…') : t('Remove')}
+            </Button>
+          </XStack>
+        </DialogContent>
+      </Dialog>
     </YStack>
   )
 }
@@ -411,11 +579,13 @@ function Projects() {
 function Choice({ label, icon, says, onPress }: { label: string; icon: ReactNode; says: string; onPress: () => void }) {
   return (
     <YStack
-      render="button"
+      render={<button type="button" />}
       aria-label={label}
-      onPress={onPress}
+      onClick={onPress}
       flex={1}
-      minW={240}
+      flexBasis={240}
+      $max-sm={{ flexBasis: '100%' }}
+      minW={0}
       gap="$2"
       p="$4"
       rounded="$4"
@@ -423,15 +593,16 @@ function Choice({ label, icon, says, onPress }: { label: string; icon: ReactNode
       borderColor="$borderColor"
       bg="$panel"
       items="flex-start"
-      hoverStyle={{ borderColor: '$edge', bg: '$hover' }}
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+      cursor="pointer"
+      hoverStyle={{ borderColor: 'var(--border-strong)', bg: '$hover' }}
+      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
     >
       {icon}
       <XStack items="center" gap="$1.5">
         <SizableText size="$4" color="$ink" fontWeight="500">
           {label}
         </SizableText>
-        <ArrowRight size={14} {...{ 'data-i18n-mirror': '' }} />
+        <ArrowRight size={14} color="$soft" {...{ 'data-i18n-mirror': '' }} />
       </XStack>
       <SizableText size="$2" color="$soft" text="start">
         {says}
@@ -521,7 +692,7 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
       flexWrap="wrap"
     >
       <Github size={16} />
-      <YStack flex={1} minW={200}>
+      <YStack flex={1} minW={0} $sm={{ minW: 200 }}>
         <SizableText size="$2" color="$ink">
           {c.connected ? t('GitHub connected as {login}', { login: `@${c.login}` }) : t('Connect GitHub to bring your repositories here')}
         </SizableText>
@@ -534,28 +705,28 @@ function GitHubLink({ onSync }: { onSync: () => void }) {
         </SizableText>
       </YStack>
       {c.connected && asking ? (
-        <XStack gap="$2">
-          <Button size="sm" variant="outline" disabled={busy} onPress={() => setAsking(false)}>
+        <XStack gap="$2" flexWrap="wrap">
+          <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={busy} onPress={() => setAsking(false)}>
             {t('Cancel')}
           </Button>
-          <Button size="sm" variant="primary" disabled={busy} onPress={() => void drop()}>
+          <Button size="sm" variant="destructive" disabled={busy} onPress={() => void drop()}>
             {busy ? t('Disconnecting…') : t('Confirm disconnect')}
           </Button>
         </XStack>
       ) : c.connected ? (
-        <XStack gap="$2">
-          <Button size="sm" variant="outline" onPress={onSync}>
+        <XStack gap="$2" flexWrap="wrap">
+          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={onSync}>
             <RefreshCw size={14} />
             {t('Sync repositories')}
           </Button>
           {leave ? (
-            <Button size="sm" variant="outline" disabled={busy} onPress={() => setAsking(true)}>
+            <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={busy} onPress={() => setAsking(true)}>
               {t('Disconnect')}
             </Button>
           ) : null}
         </XStack>
       ) : (
-        <Button size="sm" variant="primary" disabled={busy} onPress={() => void link()}>
+        <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={busy} onPress={() => void link()}>
           <Github size={14} />
           {busy ? t('Opening GitHub…') : t('Connect GitHub')}
         </Button>
@@ -604,15 +775,32 @@ function ref(i: Issue): string {
 }
 
 /** A dropdown that picks one of `options`, its trigger naming the choice. */
-function Pick<K extends string>({ label, value, options, onPick }: { label: string; value: K; options: Record<K, string>; onPick: (k: K) => void }) {
+function Pick<K extends string>({ label, value, options, active = false, onPick }: { label: string; value: K; options: Record<K, string>; active?: boolean; onPick: (k: K) => void }) {
   return (
     <DropdownMenu
       trigger={
-        <XStack render="button" aria-label={label} items="center" gap="$1" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-          <SizableText size="$2" color="$soft" numberOfLines={1}>
+        <XStack
+          render={<button type="button" />}
+          aria-label={label}
+          items="center"
+          gap="$1"
+          px="$2"
+          py="$1"
+          minH={30}
+          $touchable={{ minH: 44 }}
+          $max-sm={{ minH: 44 }}
+          rounded="$2"
+          borderWidth={1}
+          borderColor={active ? 'var(--border-strong)' : 'transparent'}
+          bg={active ? '$raised' : 'transparent'}
+          cursor="pointer"
+          hoverStyle={{ bg: active ? '$raised' : '$hover', borderColor: 'var(--border-strong)' }}
+          focusVisibleStyle={RING}
+        >
+          <SizableText size="$2" color={active ? '$ink' : '$soft'} fontWeight={active ? '500' : '400'} numberOfLines={1}>
             {options[value]}
           </SizableText>
-          <ChevronDown size={12} />
+          <ChevronDown size={12} color={active ? '$ink' : '$soft'} />
         </XStack>
       }
       items={(Object.keys(options) as K[]).map((k) => ({
@@ -689,6 +877,9 @@ function useOpen(list: Project[], work: Issue[]) {
 function Which({ issue, list, onPick, onClose }: { issue: Issue | null; list: Project[]; onPick: (p: Project) => void; onClose: () => void }) {
   const { t } = useI18n()
   const [q, setQ] = useState('')
+  useEffect(() => {
+    if (!issue) setQ('')
+  }, [issue])
   const shown = pickProjects(
     list.filter((p) => p.forge || p.linked),
     { q },
@@ -705,13 +896,37 @@ function Which({ issue, list, onPick, onClose }: { issue: Issue | null; list: Pr
               ? t('This issue names no repository: it is on the {board} board. Choose the one the run works on.', { board: issue.board })
               : t('This issue names no repository. Choose the one the run works on.')}
         </SizableText>
-        <Input value={q} onChangeText={setQ} placeholder={t('Find a project…')} aria-label={t('Find a project')} />
+        <Input
+          value={q}
+          onChangeText={setQ}
+          placeholder={t('Find a project…')}
+          aria-label={t('Find a project')}
+          borderColor="var(--border-strong)"
+          bg="$panel"
+          startAdornment={<Search size={14} color="$soft" />}
+        />
         <YStack gap="$1" maxH={320} overflow="scroll">
           {shown.length === 0 ? (
             <Note>{list.length ? t('Nothing matches.') : t('No projects are linked yet.')}</Note>
           ) : (
             shown.map((p) => (
-              <XStack key={p.key} render="button" aria-label={t('Work on {repo}', { repo: `${p.owner}/${p.name}` })} onPress={() => onPick(p)} px="$2.5" py="$2" rounded="$3" items="center" justify="flex-start" hoverStyle={{ bg: '$hover' }}>
+              <XStack
+                key={p.key}
+                render={<button type="button" />}
+                aria-label={t('Work on {repo}', { repo: `${p.owner}/${p.name}` })}
+                onClick={() => onPick(p)}
+                px="$2.5"
+                py="$2"
+                minH={38}
+                $touchable={{ minH: 44 }}
+                $max-sm={{ minH: 44 }}
+                rounded="$3"
+                items="center"
+                justify="flex-start"
+                cursor="pointer"
+                hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
+              >
                 {/* `owner/name` is an address: it keeps its own order in a right-to-left page. */}
                 <XStack minW={0} shrink={1} {...{ 'data-i18n-ltr': '' }}>
                   <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
@@ -726,7 +941,7 @@ function Which({ issue, list, onPick, onClose }: { issue: Issue | null; list: Pr
           )}
         </YStack>
         <XStack justify="flex-end">
-          <Button size="sm" variant="outline" onPress={onClose}>
+          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={onClose}>
             {t('Cancel')}
           </Button>
         </XStack>
@@ -746,6 +961,10 @@ function Issues() {
   const host = useHost()
   const target = useTarget()
   const { t } = useI18n()
+  const media = useMedia()
+  const wideNav = Boolean(media.md)
+  const wideFilters = Boolean(media.sm)
+  const [devMode] = useDevMode()
   const signed = Boolean(host.person)
   const [board, setBoard] = useKept<string>(boardKey(host.org), '')
   const [state, setState] = useState<State>('open')
@@ -755,6 +974,8 @@ function Issues() {
   const [label, setLabel] = useState('')
   const [assignee, setAssignee] = useState('')
   const [q, setQ] = useState('')
+  const [moreBoards, setMoreBoards] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
   const [pulled, setPulled] = useState(0)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<{ text: string; connect?: boolean } | null>(null)
@@ -789,6 +1010,21 @@ function Issues() {
   const current = board ? column.get(board.toLowerCase()) : undefined
   const title = current?.name ?? board
 
+  // Progressive disclosure: cap visible project filters to 6 on desktop (4 on compact screens), keeping the selected project visible.
+  const allBoardChips = [{ key: '', name: t('All projects'), open: work.filter((i) => !closed(i)).length }, ...rows]
+  const boardCap = wideNav ? 6 : 4
+  const boardOverflow = allBoardChips.length > boardCap
+  const visibleBoards =
+    !moreBoards && boardOverflow
+      ? (() => {
+          const base = allBoardChips.slice(0, boardCap)
+          if (base.some((b) => b.key.toLowerCase() === board.toLowerCase())) return base
+          const active = allBoardChips.find((b) => b.key.toLowerCase() === board.toLowerCase())
+          return active ? [...base.slice(0, Math.max(1, boardCap - 1)), active] : base
+        })()
+      : allBoardChips
+  const hiddenBoardCount = allBoardChips.length - visibleBoards.length
+
   const inBoard = work.filter((i) => !board || inProject(i, board))
   const { labels, assignees } = facets(inBoard)
   const scoped = inBoard
@@ -804,7 +1040,15 @@ function Issues() {
     if (order === 'oldest') return ms(a.created) - ms(b.created)
     return ms(b.created) - ms(a.created)
   })
-  const narrowed = q.trim() !== '' || kind !== 'all' || origin !== 'all' || label !== '' || assignee !== ''
+  const secondaryFilterCount = (label ? 1 : 0) + (assignee ? 1 : 0) + (origin !== 'all' ? 1 : 0)
+  const narrowed = q.trim() !== '' || kind !== 'all' || secondaryFilterCount > 0
+  const clearFilters = () => {
+    setQ('')
+    setKind('all')
+    setOrigin('all')
+    setLabel('')
+    setAssignee('')
+  }
 
   const pull = async () => {
     setBusy(true)
@@ -836,29 +1080,43 @@ function Issues() {
     }
   }
 
+  const copyRef = (named: string) => {
+    void navigator.clipboard
+      ?.writeText(named)
+      .then(() => toast.success(t('Copied {ref}', { ref: named })))
+      .catch(() => toast.error(t('Could not copy reference')))
+  }
+
   const chip = (key: string, name: string, count: number | null) => {
     const on = key.toLowerCase() === board.toLowerCase()
     return (
       <XStack
         key={key || '*'}
-        render="button"
+        render={<button type="button" />}
         aria-label={key ? t('Show {project}', { project: name }) : t('Show every project')}
         aria-pressed={on}
-        onPress={() => setBoard(key)}
+        onClick={() => setBoard(key)}
         items="center"
         gap="$2"
         px="$2.5"
         py="$1.5"
+        minH={32}
+        $touchable={{ minH: 44 }}
+        $max-sm={{ minH: 44 }}
         rounded="$3"
-        bg={on ? '$hover' : 'transparent'}
-        hoverStyle={{ bg: '$hover' }}
+        borderWidth={1}
+        borderColor={on ? 'var(--border-strong)' : 'transparent'}
+        bg={on ? '$raised' : 'transparent'}
+        hoverStyle={{ bg: on ? '$raised' : '$hover' }}
+        cursor="pointer"
         shrink={0}
+        focusVisibleStyle={RING}
       >
-        <SizableText flex={1} size="$2" color={on ? '$ink' : '$soft'} numberOfLines={1} text="start">
+        <SizableText flex={1} size="$2" fontWeight={on ? '500' : '400'} color={on ? '$ink' : '$soft'} numberOfLines={1} text="start">
           {name}
         </SizableText>
         {count ? (
-          <SizableText size="$1" color="$soft">
+          <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
             {count}
           </SizableText>
         ) : null}
@@ -867,11 +1125,11 @@ function Issues() {
   }
 
   return (
-    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4' }}>
+    <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
       <YStack width="100%" maxW={1120} mx="auto" gap="$4">
-        <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap">
-          <YStack gap="$1" flex={1} minW={240}>
-            <SizableText render="h1" size="$6" fontWeight="500" color="$ink">
+        <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap" rowGap="$3">
+          <YStack gap="$1" flex={1} minW={0} $sm={{ minW: 240 }}>
+            <SizableText render="h1" size="$7" fontWeight="600" color="$ink">
               {board ? t('Issues · {project}', { project: title }) : t('Issues')}
             </SizableText>
             <SizableText size="$2" color="$soft">
@@ -880,7 +1138,7 @@ function Issues() {
                 : t('Work across every project. Choosing an issue starts the next run on its own repository.')}
             </SizableText>
           </YStack>
-          <Button size="sm" variant="outline" disabled={!signed || busy} onPress={() => void pull()}>
+          <Button size="sm" variant="outline" borderColor="var(--border-strong)" maxW="100%" disabled={!signed || busy} onPress={() => void pull()}>
             <Github size={14} />
             {busy ? t('Syncing…') : board ? t('Sync {project} from GitHub', { project: title }) : t('Sync all from GitHub')}
           </Button>
@@ -903,57 +1161,210 @@ function Issues() {
             width={220}
             shrink={0}
             gap="$0.5"
-            $max-md={{ width: '100%', flexDirection: 'row', overflow: 'scroll', gap: '$1' }}
+            $max-md={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: '$1.5', pb: '$1' }}
           >
             <SizableText size="$1" color="$soft" px="$2.5" pb="$1" $max-md={{ display: 'none' }}>
               {t('Projects')}
             </SizableText>
-            {chip('', t('All projects'), work.filter((i) => !closed(i)).length)}
-            {rows.map((p) => chip(p.key, p.name, p.open))}
+            {visibleBoards.map((p) => chip(p.key, p.name, p.open))}
+            {boardOverflow ? (
+              <XStack
+                render={<button type="button" />}
+                aria-expanded={moreBoards}
+                aria-label={moreBoards ? t('Show fewer projects') : t('Show {n} more projects', { n: hiddenBoardCount })}
+                onClick={() => setMoreBoards((v) => !v)}
+                items="center"
+                px="$2.5"
+                py="$1.5"
+                minH={32}
+                $touchable={{ minH: 44 }}
+                $max-sm={{ minH: 44 }}
+                rounded="$3"
+                borderWidth={1}
+                borderColor="var(--border-strong)"
+                bg="$panel"
+                cursor="pointer"
+                shrink={0}
+                hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
+              >
+                <SizableText size="$1" fontWeight="500" color="$ink">
+                  {moreBoards ? t('Show less') : t('+{n} more', { n: hiddenBoardCount })}
+                </SizableText>
+              </XStack>
+            ) : null}
           </YStack>
-          <YStack flex={1} minW={0} gap="$3" width="100%">
-            <Input value={q} onChangeText={setQ} placeholder={t('Search issues')} aria-label={t('Search issues')} disabled={!signed} />
+          <YStack flex={1} minW={0} gap="$3" width="100%" $max-md={{ flexBasis: 'auto', grow: 0, minW: 0, width: '100%' }} $max-sm={{ flexBasis: 'auto', grow: 0, minW: 0, width: '100%' }}>
+            <Input
+              value={q}
+              onChangeText={setQ}
+              placeholder={t('Search issues')}
+              aria-label={t('Search issues')}
+              disabled={!signed}
+              borderColor="var(--border-strong)"
+              bg="$panel"
+              startAdornment={<Search size={14} color="$soft" />}
+              endAdornment={
+                q ? (
+                  <XStack
+                    render={<button type="button" />}
+                    aria-label={t('Clear search')}
+                    onClick={() => setQ('')}
+                    minW={24}
+                    minH={24}
+                    $touchable={{ minW: 44, minH: 44 }}
+                    $max-sm={{ minW: 44, minH: 44 }}
+                    items="center"
+                    justify="center"
+                    rounded="$2"
+                    cursor="pointer"
+                    hoverStyle={{ bg: '$hover' }}
+                    focusVisibleStyle={RING}
+                  >
+                    <X size={13} color="$soft" />
+                  </XStack>
+                ) : undefined
+              }
+              onKeyDown={(e: { key?: string }) => {
+                if (e.key === 'Escape' && q) setQ('')
+              }}
+            />
             {list.error ? (
-              <Note>{list.error.message}</Note>
+              <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+                <SizableText size="$2" color="var(--state-error)" text="center">
+                  {list.error.message}
+                </SizableText>
+                <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={list.reload}>
+                  {t('Try again')}
+                </Button>
+              </YStack>
             ) : !signed ? (
-              <Note>{t("Sign in to see this organization's issues.")}</Note>
+              <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+                <SizableText size="$2" color="$soft" text="center">
+                  {t("Sign in to see this organization's issues.")}
+                </SizableText>
+                <Button size="sm" variant="primary" onPress={() => host.signIn?.()}>
+                  {t('Sign in')}
+                </Button>
+              </YStack>
             ) : list.loading && list.value.length === 0 ? (
-              <Note>{t('Reading the forge…')}</Note>
+              <YStack gap="$3" aria-busy={true}>
+                <Note>{t('Loading issues…')}</Note>
+                <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" bg="$panel" overflow="hidden">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <XStack key={i} items="center" gap="$3" px="$3" py="$3" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
+                      <Skeleton layout="block" width={16} height={16} rounded={999} shrink={0} />
+                      <YStack flex={1} gap="$1.5">
+                        <Skeleton layout="block" width="54%" height={14} rounded="$2" />
+                        <Skeleton layout="block" width="36%" height={12} rounded="$2" />
+                      </YStack>
+                    </XStack>
+                  ))}
+                </YStack>
+              </YStack>
             ) : (
-              <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-                <XStack px="$3" py="$2" gap="$3" items="center" bg="$panel" flexWrap="wrap">
-                  <XStack gap="$3" items="center" flex={1} minW={0}>
-                    <XStack render="button" aria-label={t('Open issues')} aria-pressed={state === 'open'} items="center" gap="$1.5" onPress={() => setState('open')}>
+              <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" bg="$panel" overflow="hidden">
+                <XStack px="$3" py="$2" gap="$3" rowGap="$1.5" items="center" bg="$panel" flexWrap="wrap">
+                  <XStack gap="$2" items="center" shrink={0}>
+                    <XStack
+                      render={<button type="button" />}
+                      aria-label={t('Open issues')}
+                      aria-pressed={state === 'open'}
+                      items="center"
+                      gap="$1.5"
+                      px="$1.5"
+                      py="$1"
+                      minH={30}
+                      $touchable={{ minH: 44 }}
+                      $max-sm={{ minH: 44 }}
+                      rounded="$2"
+                      cursor="pointer"
+                      hoverStyle={{ bg: '$hover' }}
+                      focusVisibleStyle={RING}
+                      onClick={() => setState('open')}
+                    >
                       <CircleDot size={14} color={state === 'open' ? '$ink' : '$soft'} />
-                      <SizableText size="$2" color={state === 'open' ? '$ink' : '$soft'} fontWeight={state === 'open' ? '500' : '400'}>
-                        {t('{n} Open', { n: opened.length })}
+                      <SizableText size="$2" color={state === 'open' ? '$ink' : '$soft'} fontWeight={state === 'open' ? '500' : '400'} fontVariant={['tabular-nums']}>
+                        {t('{n} open', { n: opened.length })}
                       </SizableText>
                     </XStack>
-                    <XStack render="button" aria-label={t('Closed issues')} aria-pressed={state === 'closed'} items="center" gap="$1.5" onPress={() => setState('closed')}>
+                    <XStack
+                      render={<button type="button" />}
+                      aria-label={t('Closed issues')}
+                      aria-pressed={state === 'closed'}
+                      items="center"
+                      gap="$1.5"
+                      px="$1.5"
+                      py="$1"
+                      minH={30}
+                      $touchable={{ minH: 44 }}
+                      $max-sm={{ minH: 44 }}
+                      rounded="$2"
+                      cursor="pointer"
+                      hoverStyle={{ bg: '$hover' }}
+                      focusVisibleStyle={RING}
+                      onClick={() => setState('closed')}
+                    >
                       <Check size={14} color={state === 'closed' ? '$ink' : '$soft'} />
-                      <SizableText size="$2" color={state === 'closed' ? '$ink' : '$soft'} fontWeight={state === 'closed' ? '500' : '400'}>
-                        {t('{n} Closed', { n: shut.length })}
+                      <SizableText size="$2" color={state === 'closed' ? '$ink' : '$soft'} fontWeight={state === 'closed' ? '500' : '400'} fontVariant={['tabular-nums']}>
+                        {t('{n} closed', { n: shut.length })}
                       </SizableText>
                     </XStack>
                   </XStack>
-                  <XStack gap="$1" items="center" flexWrap="wrap" shrink={1} minW={0}>
-                    <Pick label={t('Label')} value={label} options={menu(t('Any label'), labels)} onPick={setLabel} />
-                    <Pick label={t('Assignee')} value={assignee} options={menu(t('Anyone'), assignees)} onPick={setAssignee} />
-                    <Pick label={t('Kind')} value={kind} options={{ all: t(KINDS.all), issue: t(KINDS.issue), pr: t(KINDS.pr) }} onPick={setKind} />
-                    <Pick label={t('Source')} value={origin} options={{ ...ORIGINS, all: t(ORIGINS.all) }} onPick={setOrigin} />
-                    <Pick label={t('Sort')} value={order} options={{ newest: t(ORDERS.newest), oldest: t(ORDERS.oldest), updated: t(ORDERS.updated) }} onPick={setOrder} />
+                  <XStack flex={1} $max-sm={{ display: 'none' }} />
+                  <XStack gap="$1" rowGap="$1" items="center" flexWrap="wrap" shrink={1} minW={0}>
+                    {wideFilters || showFilters ? (
+                      <>
+                        <Pick label={t('Label')} value={label} active={Boolean(label)} options={menu(t('Any label'), labels)} onPick={setLabel} />
+                        <Pick label={t('Assignee')} value={assignee} active={Boolean(assignee)} options={menu(t('Anyone'), assignees)} onPick={setAssignee} />
+                      </>
+                    ) : null}
+                    <Pick label={t('Kind')} value={kind} active={kind !== 'all'} options={{ all: t(KINDS.all), issue: t(KINDS.issue), pr: t(KINDS.pr) }} onPick={setKind} />
+                    {wideFilters || showFilters ? (
+                      <Pick label={t('Source')} value={origin} active={origin !== 'all'} options={{ ...ORIGINS, all: t(ORIGINS.all) }} onPick={setOrigin} />
+                    ) : null}
+                    <Pick label={t('Sort')} value={order} active={order !== 'newest'} options={{ newest: t(ORDERS.newest), oldest: t(ORDERS.oldest), updated: t(ORDERS.updated) }} onPick={setOrder} />
+                    {!wideFilters ? (
+                      <XStack
+                        render={<button type="button" />}
+                        aria-expanded={showFilters}
+                        aria-label={showFilters ? t('Hide filters') : t('More filters')}
+                        onClick={() => setShowFilters((v) => !v)}
+                        items="center"
+                        gap="$1.5"
+                        px="$2"
+                        py="$1"
+                        minH={44}
+                        rounded="$2"
+                        borderWidth={1}
+                        borderColor={showFilters || secondaryFilterCount ? 'var(--border-strong)' : 'transparent'}
+                        bg={showFilters || secondaryFilterCount ? '$raised' : 'transparent'}
+                        cursor="pointer"
+                        hoverStyle={{ bg: '$hover' }}
+                        focusVisibleStyle={RING}
+                      >
+                        <SlidersHorizontal size={13} color={showFilters || secondaryFilterCount ? '$ink' : '$soft'} />
+                        <SizableText size="$2" color={showFilters || secondaryFilterCount ? '$ink' : '$soft'}>
+                          {secondaryFilterCount ? t('Filters ({n})', { n: secondaryFilterCount }) : t('Filters')}
+                        </SizableText>
+                      </XStack>
+                    ) : null}
                   </XStack>
                 </XStack>
                 {shown.length === 0 ? (
-                  <YStack px="$3" py="$6" gap="$3" items="center" borderTopWidth={1} borderColor="$borderColor">
+                  <YStack px="$4" py="$8" gap="$3" items="center" borderTopWidth={1} borderColor="$borderColor">
                     <Note>{state === 'open' ? (narrowed ? t('No open issues match.') : t('Nothing open.')) : t('Nothing closed.')}</Note>
-                    {list.value.length === 0 ? (
+                    {narrowed ? (
+                      <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={clearFilters}>
+                        {t('Clear filters')}
+                      </Button>
+                    ) : list.value.length === 0 ? (
                       <XStack gap="$2" flexWrap="wrap" justify="center">
-                        <Button size="sm" variant="outline" disabled={busy} onPress={() => void pull()}>
+                        <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={busy} onPress={() => void pull()}>
                           <Github size={14} />
                           {t('Sync from GitHub')}
                         </Button>
-                        <Button size="sm" onPress={() => host.go('')}>
+                        <Button size="sm" variant="primary" onPress={() => host.go('')}>
                           {t('Start a new run')}
                         </Button>
                       </XStack>
@@ -963,11 +1374,11 @@ function Issues() {
                   shown.map((i) => {
                     const named = ref(i)
                     return (
-                      <XStack key={i.key || `${i.board}:${i.title}`} items="center" gap="$2" paddingInlineEnd="$3" borderTopWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
+                      <XStack key={i.key || `${i.board}:${i.title}`} items="center" gap="$1.5" paddingInlineEnd="$2.5" borderTopWidth={1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
                         <XStack
-                          render="button"
+                          render={<button type="button" />}
                           aria-label={t('Build {issue}', { issue: named || i.title })}
-                          onPress={() => open(i)}
+                          onClick={() => open(i)}
                           disabled={finding === i.key && i.key !== ''}
                           flex={1}
                           minW={0}
@@ -975,7 +1386,10 @@ function Issues() {
                           gap="$3"
                           paddingInlineStart="$3"
                           py="$2.5"
-                          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+                          minH={44}
+                          cursor="pointer"
+                          $platform-web={{ textAlign: 'start' }}
+                          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
                         >
                           <YStack pt={2}>
                             <Mark i={i} />
@@ -994,7 +1408,7 @@ function Issues() {
                             </XStack>
                             <SizableText size="$1" color="$soft" numberOfLines={1}>
                               {[
-                                named || (i.pull ? t('pr') : i.kind),
+                                named || (i.pull ? (devMode ? t('pr') : t('Pull request')) : i.kind),
                                 !board && projectOf(i) && !named.startsWith(projectOf(i)) ? projectOf(i) : '',
                                 i.created ? t('opened {when}', { when: ago(i.created) }) : '',
                                 i.assignees.length ? t('assigned to {people}', { people: i.assignees.join(', ') }) : '',
@@ -1007,10 +1421,48 @@ function Issues() {
                           </YStack>
                         </XStack>
                         {i.url ? (
-                          <Out href={i.url} label={fromGitHub(i) ? t('Open {issue} on GitHub', { issue: named || i.title }) : t('Open {issue} on the forge', { issue: named || i.title })}>
-                            <ExternalLink size={14} opacity={0.6} />
+                          <Out href={i.url} label={fromGitHub(i) ? t('Open {issue} on GitHub', { issue: named || i.title }) : t('Open {issue} in project', { issue: named || i.title })}>
+                            <XStack width={32} height={32} $touchable={{ minW: 44, minH: 44 }} $max-sm={{ minW: 44, minH: 44 }} items="center" justify="center" rounded="$2" hoverStyle={{ bg: '$raised' }}>
+                              <ExternalLink size={14} color="$soft" />
+                            </XStack>
                           </Out>
                         ) : null}
+                        <DropdownMenu
+                          trigger={
+                            <XStack
+                              render={<button type="button" />}
+                              aria-label={t('Actions for {issue}', { issue: named || i.title })}
+                              width={32}
+                              height={32}
+                              $touchable={{ minW: 44, minH: 44 }}
+                              $max-sm={{ minW: 44, minH: 44 }}
+                              items="center"
+                              justify="center"
+                              rounded="$2"
+                              cursor="pointer"
+                              hoverStyle={{ bg: '$raised' }}
+                              focusVisibleStyle={RING}
+                            >
+                              <MoreHorizontal size={16} color="$soft" />
+                            </XStack>
+                          }
+                          items={[
+                            { key: 'work', label: t('Work on this issue'), icon: <ArrowRight size={14} />, onSelect: () => open(i) },
+                            ...(named
+                              ? [{ key: 'copy', label: t('Copy reference'), icon: <Copy size={14} />, onSelect: () => copyRef(named) }]
+                              : []),
+                            ...(i.url
+                              ? [
+                                  {
+                                    key: 'external',
+                                    label: fromGitHub(i) ? t('Open on GitHub') : t('Open in project'),
+                                    icon: <ExternalLink size={14} />,
+                                    onSelect: () => window.open(i.url, '_blank', 'noopener,noreferrer'),
+                                  },
+                                ]
+                              : []),
+                          ]}
+                        />
                       </XStack>
                     )
                   })

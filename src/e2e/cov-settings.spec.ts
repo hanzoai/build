@@ -957,12 +957,12 @@ test('Machines re-reads on the beat without a flash: an empty list stays empty w
   })
   await page.clock.install()
   await page.goto('/-/settings/machines')
-  await expect(page.getByText('No machine is linked yet.')).toBeVisible()
+  await expect(page.getByText('No computer is linked yet.')).toBeVisible()
   const release = p.hold((s) => s.method === 'GET' && s.path === '/v1/agent/targets')
   await page.clock.runFor(31_000)
   await expect.poll(() => p.sent.filter((s) => s.method === 'GET' && s.path === '/v1/agent/targets').length).toBe(2)
-  await expect(page.getByText('No machine is linked yet.')).toBeVisible()
-  await expect(page.getByText('Reading machines…')).toHaveCount(0)
+  await expect(page.getByText('No computer is linked yet.')).toBeVisible()
+  await expect(page.getByText('Loading devices…')).toHaveCount(0)
   p.w.targets = [{ id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', host: 'spark', metricsAt: '2026-09-27T12:00:00Z' }]
   release()
   await expect(page.getByText('online · gpu · spark', { exact: true })).toBeVisible()
@@ -1855,7 +1855,7 @@ test('every section says it is reading until the platform answers', async ({ pag
     ['capabilities', ['Reading tools…']],
     ['memory', ['Reading memories…']],
     ['environments', ['Reading environments…']],
-    ['machines', ['Reading machines…']],
+    ['machines', ['Loading devices…']],
     ['keys', ['Reading your keys…']],
     ['members', ['Reading members…']],
     ['integrations', ['Reading…']],
@@ -1973,7 +1973,7 @@ test('every section says when there is nothing yet', async ({ page }) => {
     ['capabilities', ['No tools are available to this organization yet.']],
     ['memory', ['Nothing yet. What you tell Hanzo to remember shows here.']],
     ['environments', ['No codebase has an environment yet. Set one up from New, or from a run’s Environment tab.']],
-    ['machines', ['No machine is linked yet.']],
+    ['machines', ['No computer is linked yet.']],
     ['keys', ['For a server. It acts as you, so it never goes in a page. None yet.', 'Safe in a page’s source. None yet.']],
     ['members', ['No one is on this organization’s roster yet.']],
     ['integrations', ['No GitHub accounts installed']],

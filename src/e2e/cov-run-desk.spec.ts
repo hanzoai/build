@@ -359,7 +359,7 @@ test('the pane’s menu does what the title’s does, and Details opens the run�
   await desk(p).getByRole('button', { name: 'Run actions' }).click()
   await expect(p.getByRole('menuitem', { name: 'Rename' })).toBeVisible()
   await p.getByRole('menuitem', { name: 'Details' }).click()
-  await expect(desk(p).getByText('This run has no codebase, so it has no environment.')).toBeVisible()
+  await expect(desk(p).getByText('This session uses an automatic workspace — no custom setup needed.')).toBeVisible()
   for (const [label, value] of [
     ['Run', SESSION],
     ['Repository', '—'],
