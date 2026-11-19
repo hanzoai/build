@@ -10,6 +10,8 @@ import { useEffect, useRef, useState } from 'react'
 
 export interface Lock {
   release: () => Promise<void>
+  /** The browser fires `release` when it takes the lock back (a hidden tab, low power). */
+  addEventListener?: (type: 'release', listener: () => void) => void
 }
 type Wake = { wakeLock?: { request: (type: 'screen') => Promise<Lock> } }
 
@@ -27,14 +29,47 @@ export async function hold(nav: Wake, held: Lock | null, on: boolean): Promise<L
   }
 }
 
+/**
+ * Ask for the lock and see it through: a lock granted after the view has closed
+ * is let go at once, and one the browser later takes back is reported to `dropped`.
+ */
+export async function grant(nav: Wake, held: Lock | null, on: boolean, closed: () => boolean, dropped: (lock: Lock) => void): Promise<Lock | null> {
+  const next = await hold(nav, held, on)
+  if (!next || next === held) return next
+  if (closed()) {
+    await next.release().catch(() => undefined)
+    return null
+  }
+  next.addEventListener?.('release', () => dropped(next))
+  return next
+}
+
 /** [on, set]: `on` follows the lock itself, and the lock goes when the view does. */
 export function useKeepAwake(): [boolean, (on: boolean) => Promise<void>] {
   const [on, setOn] = useState(false)
   const lock = useRef<Lock | null>(null)
-  useEffect(() => () => void lock.current?.release().catch(() => undefined), [])
+  const closed = useRef(false)
+  useEffect(() => {
+    closed.current = false
+    return () => {
+      closed.current = true
+      void lock.current?.release().catch(() => undefined)
+    }
+  }, [])
   const set = async (want: boolean) => {
-    lock.current = await hold(navigator as unknown as Wake, lock.current, want)
-    setOn(lock.current !== null)
+    lock.current = await grant(
+      navigator as unknown as Wake,
+      lock.current,
+      want,
+      () => closed.current,
+      (l) => {
+        if (lock.current === l) {
+          lock.current = null
+          setOn(false)
+        }
+      },
+    )
+    if (!closed.current) setOn(lock.current !== null)
   }
   return [on, set]
 }

@@ -986,87 +986,44 @@ function Terminal({
 }) {
   const { t } = useI18n()
   const reachable = Boolean(sandbox) && held === 'running'
-  // In Simple Mode, default to the clean Activity log instead of raw interactive shell; in Developer Mode, default to Shell when reachable.
-  const [log, setLog] = useState(!devMode)
-  useEffect(() => {
-    if (!devMode) setLog(true)
-  }, [devMode])
+  // The agent log is the tab it opens on; the shell is one press away for everyone whenever the sandbox is reachable.
+  const [log, setLog] = useState(true)
   const showShell = reachable && !log
   return (
     <YStack flex={1} minH={0} bg="$background">
       <XStack px="$2" py="$1.5" gap="$1" rowGap="$1" flexWrap="wrap" borderBottomWidth={1} borderColor="$borderColor" items="center">
-        {devMode ? (
-          <>
-            {reachable ? (
-              <XStack
-                render="button"
-                aria-label={t('Shell')}
-                aria-pressed={showShell}
-                onPress={() => setLog(false)}
-                px="$2.5"
-                py="$1"
-                minH={30}
-                items="center"
-                focusVisibleStyle={RING}
-              >
-                <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
-                  {t('Shell')}
-                </SizableText>
-              </XStack>
-            ) : null}
-            <XStack
-              render="button"
-              aria-label={t('Agent log')}
-              aria-pressed={!showShell}
-              onPress={() => setLog(true)}
-              px="$2.5"
-              py="$1"
-              minH={30}
-              items="center"
-              focusVisibleStyle={RING}
-            >
-              <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
-                {t('Agent log')}
-              </SizableText>
-            </XStack>
-          </>
-        ) : (
-          <>
-            <XStack
-              render="button"
-              aria-label={t('Activity')}
-              aria-pressed={!showShell}
-              onPress={() => setLog(true)}
-              px="$2.5"
-              py="$1"
-              minH={30}
-              items="center"
-              focusVisibleStyle={RING}
-            >
-              <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
-                {t('Activity')}
-              </SizableText>
-            </XStack>
-            <XStack flex={1} />
-            {reachable ? (
-              <XStack
-                render="button"
-                aria-label={t('Open terminal')}
-                aria-pressed={showShell}
-                onPress={() => setLog((v) => !v)}
-                px="$2.5"
-                py="$1"
-                minH={30}
-                items="center"
-                focusVisibleStyle={RING}
-              >
-                <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
-                  {showShell ? t('Back to activity') : t('Open terminal')}
-                </SizableText>
-              </XStack>
-            ) : null}
-          </>
-        )}
+        {reachable ? (
+          <XStack
+            render="button"
+            aria-label={t('Shell')}
+            aria-pressed={showShell}
+            onPress={() => setLog(false)}
+            px="$2.5"
+            py="$1"
+            minH={30}
+            items="center"
+            focusVisibleStyle={RING}
+          >
+            <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
+              {t('Shell')}
+            </SizableText>
+          </XStack>
+        ) : null}
+        <XStack
+          render="button"
+          aria-label={t('Agent log')}
+          aria-pressed={!showShell}
+          onPress={() => setLog(true)}
+          px="$2.5"
+          py="$1"
+          minH={30}
+          items="center"
+          focusVisibleStyle={RING}
+        >
+          <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
+            {t('Agent log')}
+          </SizableText>
+        </XStack>
       </XStack>
       {showShell ? <Door which="terminal" sandbox={sandbox} held={held} session={`run-${id.replace(/^sess_/, '').slice(0, 12)}`} /> : <Log lines={lines} live={live} failed={failed} refused={refused} retry={retry} onRetry={onRetry} />}
     </YStack>

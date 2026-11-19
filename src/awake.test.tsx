@@ -13,7 +13,7 @@ const { seen, box } = vi.hoisted(() => {
 vi.mock('@hanzo/gui', () => ({ SizableText: box('text'), YStack: box('ystack') }))
 vi.mock('@hanzo/ui', () => ({ DropdownMenuCheckboxItem: box('item') }))
 
-const { hold, KeepAwake } = await import('./awake.tsx')
+const { grant, hold, KeepAwake } = await import('./awake.tsx')
 
 const lock = () => {
   const l = { released: 0, release: async () => void l.released++ }
@@ -41,5 +41,21 @@ describe('Keep computer awake', () => {
     expect(await hold({ wakeLock: { request: async () => lock() } }, l, true)).toBe(l)
     expect(await hold({}, l, false)).toBeNull()
     expect(l.released).toBe(1)
+  })
+
+  it('lets go of a lock that is granted after the run view has closed', async () => {
+    const l = lock()
+    expect(await grant({ wakeLock: { request: async () => l } }, null, true, () => true, () => {})).toBeNull()
+    expect(l.released).toBe(1)
+  })
+
+  it('reports it when the browser takes the lock back', async () => {
+    let fire = () => {}
+    const l = { ...lock(), addEventListener: (_: 'release', f: () => void) => void (fire = f) }
+    const dropped: unknown[] = []
+    expect(await grant({ wakeLock: { request: async () => l } }, null, true, () => false, (x) => dropped.push(x))).toBe(l)
+    expect(dropped).toEqual([])
+    fire()
+    expect(dropped).toEqual([l])
   })
 })

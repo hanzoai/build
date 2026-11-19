@@ -368,7 +368,7 @@ export function Machines() {
                           </TooltipProvider>
                         ) : null}
                         <StatusBadge m={m} />
-                        {m.serving && devMode ? (
+                        {m.serving ? (
                           <XStack px="$1.5" py="$0.5" rounded="$10" borderWidth={1} borderColor="$green10">
                             <SizableText size="$1" color="$green10">
                               {t('Serving')}
