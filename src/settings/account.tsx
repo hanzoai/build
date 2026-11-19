@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react'
 import { told } from '../api/call.ts'
 import type { Patch } from '../api/pref.ts'
 import { PHOTO, photo, rename } from '../api/profile.ts'
+import { copy } from '../clipboard.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { usePrefs } from '../prefs.tsx'
 import { Card, Field, Group, Heading, Note, Row, Soft } from './ui.tsx'
@@ -240,7 +241,7 @@ export function Account() {
                   size="icon-sm"
                   variant="ghost"
                   aria-label={copied ? t('Organization ID copied') : t('Copy organization ID')}
-                  onPress={() => void navigator.clipboard?.writeText(org).then(() => setCopied(true))}
+                  onPress={() => void copy(org).then((ok) => ok && setCopied(true))}
                 >
                   {copied ? <Check size={14} /> : <Copy size={14} />}
                 </Button>
