@@ -13,17 +13,38 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n, type Say } from '@hanzo/i18n/react'
-import { ChevronRight, ExternalLink, Folder, GitBranch, GitPullRequest, Globe, Info, Laptop, Maximize2, MoreHorizontal, RefreshCcw, Square, SquareTerminal, X } from '@hanzogui/lucide-icons-2'
-import { Button, DropdownMenu, Switch, type DropdownMenuProps } from '@hanzo/ui'
-import { PreviewFrame, type PreviewHandle } from '@hanzo/ui/agents'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  AlertCircle,
+  Check,
+  Copy,
+  ExternalLink,
+  Folder,
+  GitBranch,
+  GitPullRequest,
+  Globe,
+  Info,
+  Laptop,
+  Maximize2,
+  Monitor,
+  MoreHorizontal,
+  RefreshCcw,
+  Smartphone,
+  SquareTerminal,
+  Tablet,
+  X,
+} from '@hanzogui/lucide-icons-2'
+import { Button, DropdownMenu, toast, type DropdownMenuProps } from '@hanzo/ui'
+import { PreviewFrame, type FrameEvent, type PreviewHandle } from '@hanzo/ui/agents'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
+import { RING } from './pane.ts'
 import { read as readChanges, type Changes } from './api/changes.ts'
 import { read as readEnvironment } from './api/environment.ts'
 import { park, ports as listening, preview, sandbox as look, serve, served, wake, type Box, type Port } from './api/sandbox.ts'
 import type { Event } from './api/sessions.ts'
 import { cards, failure, shell, steps, type ShellLine } from './api/turn.ts'
-import { useKept, useRead } from './data.ts'
+import { useRead } from './data.ts'
+import { formatDeviceLabel, useDevMode } from './dev-mode.ts'
 import { Door } from './door.tsx'
 import { Environment } from './environment.tsx'
 import { Artifacts, Files } from './files.tsx'
@@ -33,7 +54,7 @@ import { away, Out } from './out.tsx'
 import { Panel, type Kind } from './panel.tsx'
 import type { Deck, Tabs } from './tabs.ts'
 
-/** A run's panel before anyone has arranged it: what a run is read by, the terminal chosen. */
+/** A run's panel before anyone has arranged it: Preview chosen first so live output opens immediately. */
 export const SEED: Tabs = {
   tabs: [
     { id: 'preview', kind: 'preview', title: 'Preview' },
@@ -42,7 +63,7 @@ export const SEED: Tabs = {
     { id: 'diff', kind: 'diff', title: 'Diff' },
     { id: 'terminal', kind: 'terminal', title: 'Terminal' },
   ],
-  at: 'terminal',
+  at: 'preview',
 }
 
 /** How often the sandbox's state, and what it serves, is read while the panel is open. */
@@ -110,6 +131,7 @@ export function Desk({
   onExpandSplitPane?: (paneId: string) => void
 }) {
   const { t: say } = useI18n()
+  const [devMode] = useDevMode()
   const name = repo.split('/').filter(Boolean).pop() || repo
   const lines = shell(events)
   const failed = failure(events, say)
@@ -118,12 +140,19 @@ export function Desk({
   const held = box.value?.state ?? ''
   const environ = () => side.open({ kind: 'environment', title: say('Environment') })
 
+  const visibleSide: Deck = devMode
+    ? side
+    : {
+        ...side,
+        tabs: side.tabs.filter((tab) => tab.kind !== 'diff' || side.at === tab.id),
+      }
+
   const kinds: Kind[] = [
     {
       id: 'preview',
       label: say('Preview'),
       bleed: true,
-      render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} repo={repo} onEnvironment={environ} />,
+      render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} repo={repo} onEnvironment={environ} devMode={devMode} />,
     },
     {
       id: 'artifacts',
@@ -131,29 +160,42 @@ export function Desk({
       render: () => <Artifacts session={id} sandbox={sandbox} repo={repo} branch={branch} mode={mode} project={project} site={site} pr={pr} onEnvironment={environ} />,
     },
     { id: 'files', label: say('Files'), render: () => <Files session={id} repo={repo} branch={branch} sandbox={sandbox} live={held === 'running'} /> },
-    { id: 'diff', label: say('Diff'), render: () => <Git session={id} title={title} live={live} /> },
+    { id: 'diff', label: devMode ? say('Diff') : say('Changes'), render: () => <Git session={id} title={title} live={live} /> },
     {
       id: 'terminal',
-      label: say('Terminal'),
+      label: devMode ? say('Terminal') : say('Activity'),
       bleed: true,
-      render: () => <Terminal id={id} sandbox={sandbox} held={held} lines={lines} live={live} failed={failed} refused={refused} retry={retry} onRetry={onRetry} />,
+      render: () => (
+        <Terminal
+          id={id}
+          sandbox={sandbox}
+          held={held}
+          lines={lines}
+          live={live}
+          failed={failed}
+          refused={refused}
+          retry={retry}
+          onRetry={onRetry}
+          devMode={devMode}
+        />
+      ),
     },
     { id: 'desktop', label: say('Desktop'), bleed: true, render: () => <Door which="screen" sandbox={sandbox} held={held} session={id} /> },
     {
       id: 'environment',
       label: say('Environment'),
       render: () => (
-        <YStack gap="$2">
+        <YStack gap="$3">
           <Environment repo={name} busy={live && mode === 'setup'} />
-          <SizableText size="$2" color="$ink" pt="$4">
+          <SizableText size="$3" fontWeight="600" color="$ink" pt="$4">
             {say('This run')}
           </SizableText>
           <Fact label={say('Run')} value={id} />
-          <Fact label={say('Repository')} value={name || '—'} />
-          <Fact label={say('Branch')} value={branch || '—'} />
-          <Fact label={say('Base')} value={base || '—'} />
-          <Fact label={say('Runs on')} value={environment || 'sandbox'} />
-          <Fact label={say('Sandbox')} value={sandbox || '—'} />
+          <Fact label={say('Project')} value={name || '—'} />
+          {devMode || branch ? <Fact label={say('Branch')} value={branch || '—'} /> : null}
+          {devMode ? <Fact label={say('Base')} value={base || '—'} /> : null}
+          <Fact label={say('Runs on')} value={environment && environment !== 'sandbox' ? environment : devMode ? 'sandbox' : say('Cloud workspace')} />
+          {devMode ? <Fact label={say('Sandbox')} value={sandbox || '—'} /> : null}
           <Fact label={say('Mode')} value={mode || 'build'} />
         </YStack>
       ),
@@ -168,6 +210,7 @@ export function Desk({
         minH={0}
         display="grid"
         gridTemplateColumns={splitPanes.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)'}
+        $max-lg={{ gridTemplateColumns: 'minmax(0, 1fr)' }}
         gridTemplateRows={splitPanes.length > 2 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)'}
         bg="$background"
       >
@@ -176,11 +219,15 @@ export function Desk({
           if (!k) return null
           const headerTitle =
             pid === 'diff'
-              ? `${base || 'main'} → ${branch || 'HEAD'}`
+              ? devMode
+                ? `${base || 'main'} → ${branch || 'HEAD'}`
+                : say('Changes')
               : pid === 'terminal'
-                ? `${say('Terminal')} ${name || 'workspace'}`
+                ? devMode
+                  ? `${say('Terminal')} ${name || 'workspace'}`
+                  : say('Activity')
                 : pid === 'preview'
-                  ? say('New tab')
+                  ? say('Preview')
                   : k.label
           return (
             <YStack
@@ -189,6 +236,7 @@ export function Desk({
               minH={0}
               borderLeftWidth={idx % 2 === 1 ? 1 : 0}
               borderTopWidth={idx >= 2 ? 1 : 0}
+              $max-lg={{ borderLeftWidth: 0, borderTopWidth: idx > 0 ? 1 : 0 }}
               borderColor="$borderColor"
               display="grid"
               gridTemplateRows="auto minmax(0, 1fr)"
@@ -199,24 +247,42 @@ export function Desk({
                 </SizableText>
                 {onExpandSplitPane ? (
                   <XStack
-                    render="button"
+                    render={<button type="button" />}
                     aria-label={say('Expand {pane}', { pane: k.label })}
-                    onPress={() => onExpandSplitPane(pid)}
-                    p="$1"
+                    onClick={() => onExpandSplitPane(pid)}
+                    minW={30}
+                    minH={30}
+                    $touchable={{ minW: 44, minH: 44 }}
+                    $max-sm={{ minW: 44, minH: 44 }}
+                    items="center"
+                    justify="center"
                     rounded="$2"
+                    borderWidth={0}
+                    bg="transparent"
+                    cursor="pointer"
                     hoverStyle={{ bg: '$hover' }}
+                    focusVisibleStyle={RING}
                   >
                     <Maximize2 size={13} opacity={0.7} />
                   </XStack>
                 ) : null}
                 {onCloseSplitPane ? (
                   <XStack
-                    render="button"
+                    render={<button type="button" />}
                     aria-label={say('Close {pane}', { pane: k.label })}
-                    onPress={() => onCloseSplitPane(pid)}
-                    p="$1"
+                    onClick={() => onCloseSplitPane(pid)}
+                    minW={30}
+                    minH={30}
+                    $touchable={{ minW: 44, minH: 44 }}
+                    $max-sm={{ minW: 44, minH: 44 }}
+                    items="center"
+                    justify="center"
                     rounded="$2"
+                    borderWidth={0}
+                    bg="transparent"
+                    cursor="pointer"
                     hoverStyle={{ bg: '$hover' }}
+                    focusVisibleStyle={RING}
                   >
                     <X size={14} opacity={0.7} />
                   </XStack>
@@ -231,18 +297,31 @@ export function Desk({
       </YStack>
     ) : (
       <Panel
-        side={side}
+        side={visibleSide}
         kinds={kinds}
         sheet={sheet}
         onHide={onHide}
         label={say('Run details')}
         // An empty tab offers what this run made: its site and its pull request.
         suggested={[...(site ? [{ title: name || site, url: site }] : []), ...(pr.href ? [{ title: say('Pull request {pr}', { pr: pr.label }), url: pr.href }] : [])]}
-        bar={sandbox ? <Held box={box} live={live} /> : null}
+        bar={sandbox ? <Held box={box} live={live} devMode={devMode} /> : null}
         menu={
           <DropdownMenu
             trigger={
-              <XStack render="button" aria-label={say('Run actions')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+              <XStack
+                render={<button type="button" />}
+                aria-label={say('Run actions')}
+                minW={32}
+                minH={32}
+                $touchable={{ minW: 44, minH: 44 }}
+                $max-sm={{ minW: 44, minH: 44 }}
+                items="center"
+                justify="center"
+                rounded="$2"
+                cursor="pointer"
+                hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
+              >
                 <MoreHorizontal size={16} />
               </XStack>
             }
@@ -265,8 +344,9 @@ export function Desk({
           title={title}
           events={events}
           live={live}
+          devMode={devMode}
           onOpenEnvironment={environ}
-          onOpenDiff={() => side.open({ kind: 'diff', title: say('Diff') })}
+          onOpenDiff={() => side.open({ kind: 'diff', title: devMode ? say('Diff') : say('Changes') })}
         />
         <YStack flex={1} minW={0} minH={0} borderLeftWidth={1} borderColor="$borderColor">
           {panelNode}
@@ -335,12 +415,12 @@ const until = (ms: number): string => new Date(ms).toLocaleString(undefined, { w
  * The sandbox's line under the tabs: where it is, and the one thing to do to it.
  * A sandbox a run is working in is not suspended from here.
  */
-function Held({ box, live }: { box: Watch; live: boolean }) {
+function Held({ box, live, devMode }: { box: Watch; live: boolean; devMode: boolean }) {
   const { t } = useI18n()
   const b = box.value
   const state = b?.state ?? 'pending'
-  const says =
-    state === 'running'
+  const says = devMode
+    ? state === 'running'
       ? t('Sandbox running')
       : state === 'parked'
         ? b?.ends
@@ -353,19 +433,30 @@ function Held({ box, live }: { box: Watch; live: boolean }) {
             : b?.error
               ? t('Sandbox unavailable · {error}', { error: b.error })
               : t('Sandbox unavailable')
+    : state === 'running'
+      ? t('Cloud workspace ready')
+      : state === 'parked'
+        ? t('Cloud workspace sleeping · files saved')
+        : state === 'pending'
+          ? t('Starting cloud workspace…')
+          : state === 'gone'
+            ? t('Cloud workspace closed')
+            : b?.error
+              ? t('Cloud workspace unavailable · {error}', { error: b.error })
+              : t('Cloud workspace unavailable')
   return (
-    <XStack px="$3" py="$1.5" gap="$2" items="center" borderBottomWidth={1} borderColor="$borderColor" aria-label={t('Sandbox')}>
-      <YStack width={7} height={7} rounded={99} bg={state === 'running' ? '$green10' : state === 'parked' ? '$soft' : '$borderColor'} />
-      <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1}>
+    <XStack px="$3" py="$1.5" gap="$2" rowGap="$1.5" items="center" flexWrap="wrap" borderBottomWidth={1} borderColor="$borderColor" aria-label={devMode ? t('Sandbox') : t('Workspace status')}>
+      <YStack width={7} height={7} rounded={99} bg={state === 'running' ? 'var(--state-online)' : state === 'parked' ? '$soft' : '$borderColor'} shrink={0} />
+      <SizableText flex={1} minW={120} size="$1" color="$soft" numberOfLines={1}>
         {box.note || says}
       </SizableText>
-      {state === 'running' && !live ? (
+      {devMode && state === 'running' && !live ? (
         <Button size="sm" variant="ghost" disabled={box.busy} onPress={() => box.act('park')}>
           {t('Suspend')}
         </Button>
       ) : state === 'parked' ? (
-        <Button size="sm" variant="outline" disabled={box.busy} onPress={() => box.act('wake')}>
-          {box.busy ? t('Resuming…') : t('Resume')}
+        <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={box.busy} onPress={() => box.act('wake')}>
+          {box.busy ? t('Resuming…') : devMode ? t('Resume') : t('Wake')}
         </Button>
       ) : null}
     </XStack>
@@ -385,6 +476,351 @@ const SAYS: Record<number, (port: number, say: Say) => string> = {
   502: (port, say) => `${say('Nothing answered on port {port}.', { port })} ${say('Start the server, then Retry.')}`,
 }
 
+type PreviewViewport = 'desktop' | 'tablet' | 'mobile'
+
+interface ConsoleEntry {
+  id: number
+  level: 'error' | 'warn' | 'log' | 'info'
+  text: string
+  at: string
+}
+
+const VIEWPORT_WIDTH: Record<PreviewViewport, number | '100%'> = {
+  desktop: '100%',
+  tablet: 768,
+  mobile: 390,
+}
+
+/**
+ * Sleek monochrome browser toolbar shared by both live sandbox previews (`Browser`) and
+ * published site previews (`Site`): reload, optional port pills, copyable URL bar,
+ * Desktop/Tablet/Mobile viewport switcher (100% / 768px / 390px), quiet console status pill,
+ * and open-in-new-tab control.
+ */
+function PreviewToolbar({
+  displayUrl,
+  copyUrl,
+  hasActiveUrl,
+  viewport,
+  onViewport,
+  onReload,
+  openAction,
+  ports,
+  consoleEntries,
+  loadError,
+  consoleOpen,
+  onToggleConsole,
+}: {
+  displayUrl: string
+  copyUrl: string
+  hasActiveUrl: boolean
+  viewport: PreviewViewport
+  onViewport: (next: PreviewViewport) => void
+  onReload: () => void
+  openAction?: ReactNode
+  ports?: ReactNode
+  consoleEntries: readonly ConsoleEntry[]
+  loadError: string
+  consoleOpen: boolean
+  onToggleConsole: () => void
+}) {
+  const { t } = useI18n()
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+    },
+    [],
+  )
+
+  const copyAddress = async () => {
+    if (!copyUrl) return
+    try {
+      await navigator.clipboard.writeText(copyUrl)
+      setCopiedUrl(true)
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+      copyTimer.current = setTimeout(() => setCopiedUrl(false), 1800)
+      toast.success(t('Preview URL copied'))
+    } catch {
+      toast.error(t('Could not copy preview URL'))
+    }
+  }
+
+  const errorCount = consoleEntries.filter((c) => c.level === 'error').length + (loadError ? 1 : 0)
+  const warnCount = consoleEntries.filter((c) => c.level === 'warn').length
+  const statusLabel =
+    errorCount > 0
+      ? errorCount === 1
+        ? t('1 error')
+        : t('{n} errors', { n: errorCount })
+      : warnCount > 0
+        ? t('{n} warn', { n: warnCount })
+        : t('Console')
+
+  const viewports: readonly { id: PreviewViewport; label: string; sizeText: string; icon: ReactNode }[] = [
+    { id: 'desktop', label: t('Desktop viewport (100%)'), sizeText: '100%', icon: <Monitor size={13} /> },
+    { id: 'tablet', label: t('Tablet viewport (768px)'), sizeText: '768px', icon: <Tablet size={13} /> },
+    { id: 'mobile', label: t('Mobile viewport (390px)'), sizeText: '390px', icon: <Smartphone size={13} /> },
+  ]
+
+  return (
+    <XStack px="$2.5" py="$2" gap="$2" rowGap="$1.5" items="center" flexWrap="wrap" borderBottomWidth={1} borderColor="$borderColor" bg="$background">
+      <XStack
+        render={<button type="button" />}
+        aria-label={t('Reload preview')}
+        onClick={onReload}
+        minW={30}
+        minH={30}
+        $touchable={{ minW: 44, minH: 44 }}
+        $max-sm={{ minW: 44, minH: 44 }}
+        items="center"
+        justify="center"
+        rounded="$2"
+        borderWidth={0}
+        bg="transparent"
+        cursor="pointer"
+        hoverStyle={{ bg: '$hover' }}
+        focusVisibleStyle={RING}
+        shrink={0}
+      >
+        <RefreshCcw size={14} color="$ink" />
+      </XStack>
+
+      {ports}
+
+      <XStack
+        render={<button type="button" />}
+        aria-label={copyUrl ? t('Copy preview URL: {url}', { url: copyUrl }) : displayUrl}
+        aria-disabled={!copyUrl || undefined}
+        onClick={() => {
+          if (copyUrl) void copyAddress()
+        }}
+        flex={1}
+        minW={120}
+        minH={30}
+        $touchable={{ minH: 44 }}
+        $max-sm={{ minH: 44 }}
+        px="$2.5"
+        gap="$1.5"
+        items="center"
+        rounded="$3"
+        borderWidth={1}
+        borderColor="$borderColor"
+        bg="$panel"
+        cursor={copyUrl ? 'pointer' : 'default'}
+        hoverStyle={copyUrl ? { bg: '$hover', borderColor: 'var(--border-strong)' } : undefined}
+        focusVisibleStyle={RING}
+      >
+        <Globe size={12} color="$soft" />
+        <SizableText flex={1} minW={0} size="$1" color={copyUrl ? '$ink' : '$soft'} numberOfLines={1} fontFamily="$mono" text="start">
+          {displayUrl}
+        </SizableText>
+        {copyUrl ? (
+          <XStack shrink={0} items="center">
+            {copiedUrl ? <Check size={12} color="var(--state-success)" /> : <Copy size={12} color="$soft" />}
+          </XStack>
+        ) : null}
+      </XStack>
+
+      <XStack
+        role="group"
+        aria-label={t('Viewport size')}
+        p={2}
+        gap={2}
+        rounded="$3"
+        borderWidth={1}
+        borderColor="$borderColor"
+        bg="$panel"
+        items="center"
+        shrink={0}
+      >
+        {viewports.map((v) => {
+          const active = viewport === v.id
+          return (
+            <XStack
+              key={v.id}
+              render={<button type="button" />}
+              aria-label={v.label}
+              aria-pressed={active}
+              onClick={() => onViewport(v.id)}
+              minW={28}
+              minH={26}
+              $touchable={{ minW: 44, minH: 44 }}
+              $max-sm={{ minW: 44, minH: 44 }}
+              px="$1.5"
+              gap="$1"
+              items="center"
+              justify="center"
+              rounded="$2"
+              borderWidth={0}
+              cursor="pointer"
+              bg={active ? '$raised' : 'transparent'}
+              opacity={active ? 1 : 0.72}
+              hoverStyle={{ bg: active ? '$raised' : '$hover', opacity: 1 }}
+              focusVisibleStyle={RING}
+            >
+              {v.icon}
+              <SizableText size="$1" color={active ? '$ink' : '$soft'} $max-lg={{ display: 'none' }}>
+                {v.sizeText}
+              </SizableText>
+            </XStack>
+          )
+        })}
+      </XStack>
+
+      <XStack
+        render={<button type="button" />}
+        aria-label={t('Toggle preview console ({status})', { status: statusLabel })}
+        aria-expanded={consoleOpen}
+        onClick={onToggleConsole}
+        px="$2"
+        minH={30}
+        $touchable={{ minH: 44 }}
+        $max-sm={{ minH: 44 }}
+        gap="$1.5"
+        items="center"
+        rounded={999}
+        borderWidth={1}
+        borderColor={errorCount > 0 ? 'var(--state-error)' : consoleOpen ? 'var(--border-strong)' : '$borderColor'}
+        bg={errorCount > 0 ? 'var(--state-error-bg)' : consoleOpen ? '$hover' : '$panel'}
+        cursor="pointer"
+        hoverStyle={{ bg: '$hover', borderColor: 'var(--border-strong)' }}
+        focusVisibleStyle={RING}
+        shrink={0}
+      >
+        <YStack
+          width={6}
+          height={6}
+          rounded={99}
+          bg={errorCount > 0 ? 'var(--state-error)' : hasActiveUrl ? 'var(--state-success)' : '$soft'}
+          shrink={0}
+        />
+        <SizableText size="$1" color={errorCount > 0 ? 'var(--state-error)' : '$soft'} fontVariant={['tabular-nums']}>
+          {statusLabel}
+        </SizableText>
+      </XStack>
+
+      {openAction}
+    </XStack>
+  )
+}
+
+function ConsoleDrawer({
+  entries,
+  loadError,
+  onClear,
+  onClose,
+}: {
+  entries: readonly ConsoleEntry[]
+  loadError: string
+  onClear: () => void
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  return (
+    <YStack borderTopWidth={1} borderColor="$borderColor" bg="$panel" maxH={184} shrink={0}>
+      <XStack px="$3" py="$1.5" items="center" gap="$2" borderBottomWidth={1} borderColor="$borderColor">
+        <SizableText size="$1" fontWeight="500" color="$ink" flex={1}>
+          {t('Preview console')}
+        </SizableText>
+        {entries.length > 0 ? (
+          <XStack
+            render={<button type="button" />}
+            aria-label={t('Clear console')}
+            onClick={onClear}
+            px="$2"
+            minH={26}
+            $touchable={{ minH: 44 }}
+            $max-sm={{ minH: 44 }}
+            items="center"
+            rounded="$2"
+            borderWidth={0}
+            bg="transparent"
+            cursor="pointer"
+            hoverStyle={{ bg: '$hover' }}
+            focusVisibleStyle={RING}
+          >
+            <SizableText size="$1" color="$soft">
+              {t('Clear')}
+            </SizableText>
+          </XStack>
+        ) : null}
+        <XStack
+          render={<button type="button" />}
+          aria-label={t('Close console')}
+          onClick={onClose}
+          minW={26}
+          minH={26}
+          $touchable={{ minW: 44, minH: 44 }}
+          $max-sm={{ minW: 44, minH: 44 }}
+          items="center"
+          justify="center"
+          rounded="$2"
+          borderWidth={0}
+          bg="transparent"
+          cursor="pointer"
+          hoverStyle={{ bg: '$hover' }}
+          focusVisibleStyle={RING}
+        >
+          <X size={13} color="$soft" />
+        </XStack>
+      </XStack>
+      <YStack overflow="scroll" px="$3" py="$2" gap="$1" maxH={140}>
+        {loadError ? (
+          <XStack gap="$2" items="flex-start" px="$2" py="$1" rounded="$2" bg="var(--state-error-bg)">
+            <AlertCircle size={13} color="var(--state-error)" />
+            <SizableText flex={1} size="$1" color="var(--state-error)" fontFamily="$mono">
+              {loadError}
+            </SizableText>
+          </XStack>
+        ) : null}
+        {entries.length === 0 && !loadError ? (
+          <SizableText size="$1" color="$soft">
+            {t('No console errors recorded.')}
+          </SizableText>
+        ) : (
+          entries.map((entry) => (
+            <XStack
+              key={entry.id}
+              gap="$2"
+              items="baseline"
+              px="$2"
+              py="$1"
+              rounded="$2"
+              bg={entry.level === 'error' ? 'var(--state-error-bg)' : 'transparent'}
+            >
+              <SizableText size="$1" color="$soft" fontFamily="$mono" shrink={0}>
+                {entry.at}
+              </SizableText>
+              <SizableText
+                size="$1"
+                color={entry.level === 'error' ? 'var(--state-error)' : '$soft'}
+                fontFamily="$mono"
+                width={40}
+                shrink={0}
+              >
+                {entry.level}
+              </SizableText>
+              <SizableText
+                flex={1}
+                minW={0}
+                size="$1"
+                color={entry.level === 'error' ? 'var(--state-error)' : '$ink'}
+                fontFamily="$mono"
+                $platform-web={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+              >
+                {entry.text}
+              </SizableText>
+            </XStack>
+          ))
+        )}
+      </YStack>
+    </YStack>
+  )
+}
+
 /**
  * The Browser tab: what the run's sandbox serves, one port at a time, framed at
  * its own origin; or, with nothing serving, where the run is published. Only a
@@ -399,6 +835,7 @@ function Browser({
   live,
   repo,
   onEnvironment,
+  devMode,
 }: {
   sandbox: string
   held: Box['state'] | ''
@@ -406,6 +843,7 @@ function Browser({
   live: boolean
   repo: string
   onEnvironment: () => void
+  devMode: boolean
 }) {
   const { t: say } = useI18n()
   const t = useTarget()
@@ -415,6 +853,10 @@ function Browser({
   const [why, setWhy] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [serving, setServing] = useState<Serving | null>(null)
+  const [viewport, setViewport] = useState<PreviewViewport>('desktop')
+  const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([])
+  const [consoleOpen, setConsoleOpen] = useState(false)
+  const nextConsoleId = useRef(1)
   const reopened = useRef<number[]>([])
   const frame = useRef<HTMLIFrameElement>(null)
   const running = Boolean(sandbox) && held === 'running'
@@ -452,6 +894,7 @@ function Browser({
   useEffect(() => {
     setSrc('')
     setWhy('')
+    setConsoleEntries([])
     if (!port || !sandbox) return
     let gone = false
     preview(t, sandbox, port).then(
@@ -464,12 +907,19 @@ function Browser({
   }, [t, sandbox, port, attempt])
 
   // A preview that can no longer serve says so; one whose sandbox stopped is opened again, a little.
+  // Also records opt-in console messages from the preview frame's origin.
   useEffect(() => {
     if (!src) return
     const origin = new URL(src).origin
     const hear = (e: MessageEvent) => {
       if (e.origin !== origin || e.source !== frame.current?.contentWindow) return
-      const m = e.data as { source?: unknown; status?: unknown } | null
+      const m = e.data as { source?: unknown; status?: unknown; type?: unknown; level?: unknown; text?: unknown } | null
+      if (m?.type === 'preview:console' && typeof m.text === 'string') {
+        const lvl = m.level === 'error' || m.level === 'warn' || m.level === 'info' ? m.level : 'log'
+        const at = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        setConsoleEntries((prev) => [...prev.slice(-49), { id: nextConsoleId.current++, level: lvl, text: m.text as string, at }])
+        return
+      }
       if (m?.source !== PREVIEW || typeof m.status !== 'number') return
       const now = Date.now()
       reopened.current = reopened.current.filter((at) => now - at < REMINT)
@@ -530,56 +980,135 @@ function Browser({
     }
   }, [t, sandbox, coming, say])
 
-  const nothing = <Site site={site} live={live} held={held} serving={serving} onStart={startable ? () => void start() : undefined} onEnvironment={repo ? onEnvironment : undefined} />
+  const nothing = (
+    <Site
+      site={site}
+      live={live}
+      held={held}
+      serving={serving}
+      devMode={devMode}
+      onStart={startable ? () => void start() : undefined}
+      onEnvironment={repo && devMode ? onEnvironment : undefined}
+    />
+  )
   if (!running) return nothing
   if (!port) return nothing
   const host = open.find((p) => p.port === port)?.host ?? ''
+  const previewAddress = host ? (host.startsWith('http://') || host.startsWith('https://') ? host : `https://${host}`) : src
+  const maxWidth = VIEWPORT_WIDTH[viewport]
+
   return (
     <YStack flex={1} minH={0}>
-      <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
-        <XStack render="button" aria-label={say('Reload the page')} onPress={() => setAttempt((a) => a + 1)} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-          <RefreshCcw size={14} />
-        </XStack>
-        {open.length > 1 ? (
-          <XStack gap="$1">
-            {open.map((p) => (
-              <XStack key={p.port} render="button" aria-label={say('Port {port}', { port: p.port })} onPress={() => setPort(p.port)} px="$2" py="$1" rounded="$2" bg={p.port === port ? '$hover' : 'transparent'}>
-                <SizableText size="$1" color={p.port === port ? '$ink' : '$soft'}>
-                  {String(p.port)}
-                </SizableText>
-              </XStack>
-            ))}
+      <PreviewToolbar
+        displayUrl={host || say('port {port}', { port })}
+        copyUrl={previewAddress}
+        hasActiveUrl={Boolean(src) && !why}
+        viewport={viewport}
+        onViewport={setViewport}
+        onReload={() => {
+          setConsoleEntries([])
+          setAttempt((a) => a + 1)
+        }}
+        consoleEntries={consoleEntries}
+        loadError={why}
+        consoleOpen={consoleOpen}
+        onToggleConsole={() => setConsoleOpen((o) => !o)}
+        ports={
+          open.length > 1 ? (
+            <XStack gap="$1" flexWrap="wrap" shrink={0}>
+              {open.map((p) => (
+                <XStack
+                  key={p.port}
+                  render={<button type="button" />}
+                  aria-label={say('Port {port}', { port: p.port })}
+                  aria-pressed={p.port === port}
+                  onClick={() => setPort(p.port)}
+                  px="$2"
+                  py="$1"
+                  minH={28}
+                  $touchable={{ minH: 44 }}
+                  $max-sm={{ minH: 44 }}
+                  items="center"
+                  rounded="$2"
+                  borderWidth={1}
+                  borderColor={p.port === port ? 'var(--border-strong)' : 'transparent'}
+                  bg={p.port === port ? '$hover' : 'transparent'}
+                  cursor="pointer"
+                  focusVisibleStyle={RING}
+                >
+                  <SizableText size="$1" color={p.port === port ? '$ink' : '$soft'}>
+                    {String(p.port)}
+                  </SizableText>
+                </XStack>
+              ))}
+            </XStack>
+          ) : undefined
+        }
+        openAction={
+          <XStack
+            render={<button type="button" />}
+            aria-label={say('Open in a new tab')}
+            onClick={() => void tab()}
+            minW={30}
+            minH={30}
+            $touchable={{ minW: 44, minH: 44 }}
+            $max-sm={{ minW: 44, minH: 44 }}
+            items="center"
+            justify="center"
+            rounded="$2"
+            borderWidth={0}
+            bg="transparent"
+            cursor="pointer"
+            hoverStyle={{ bg: '$hover' }}
+            focusVisibleStyle={RING}
+            shrink={0}
+          >
+            <ExternalLink size={14} color="$ink" />
           </XStack>
-        ) : null}
-        <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
-          {host || say('port {port}', { port })}
-        </SizableText>
-        <XStack render="button" aria-label={say('Open in a new tab')} onPress={() => void tab()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-          <ExternalLink size={14} />
-        </XStack>
-      </XStack>
+        }
+      />
       {why ? (
         <YStack flex={1} items="center" justify="center" gap="$2" p="$6">
-          <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+          <SizableText size="$2" color="$soft" text="center">
             {why}
           </SizableText>
-          <XStack gap="$2">
-            <Button size="sm" variant="outline" onPress={() => setAttempt((a) => a + 1)}>
+          <XStack gap="$2" flexWrap="wrap" justify="center">
+            <Button size="sm" variant="primary" onPress={() => setAttempt((a) => a + 1)}>
               {say('Retry')}
             </Button>
-            <Button size="sm" variant="outline" onPress={() => void tab()}>
+            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => void tab()}>
               {say('Open in a new tab')}
             </Button>
           </XStack>
         </YStack>
       ) : src ? (
-        <iframe
-          ref={frame}
-          src={src}
-          title={say('What the run serves on port {port}', { port })}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          style={{ border: 0, width: '100%', height: '100%', display: 'block', background: '#fff' }}
-        />
+        <YStack flex={1} minH={0} width="100%" items="center" bg="$sunken" overflowX="auto">
+          <YStack
+            flex={1}
+            minH={0}
+            width="100%"
+            maxW={maxWidth}
+            borderLeftWidth={viewport === 'desktop' ? 0 : 1}
+            borderRightWidth={viewport === 'desktop' ? 0 : 1}
+            borderColor="$borderColor"
+            overflow="hidden"
+          >
+            <YStack
+              render="iframe"
+              ref={frame as never}
+              {...({
+                src,
+                title: say('What the run serves on port {port}', { port }),
+                sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups',
+              } as object)}
+              borderWidth={0}
+              width="100%"
+              height="100%"
+              display="block"
+              bg="$background"
+            />
+          </YStack>
+        </YStack>
       ) : (
         <YStack flex={1} items="center" justify="center">
           <SizableText size="$2" color="$soft">
@@ -587,6 +1116,9 @@ function Browser({
           </SizableText>
         </YStack>
       )}
+      {consoleOpen ? (
+        <ConsoleDrawer entries={consoleEntries} loadError={why} onClear={() => setConsoleEntries([])} onClose={() => setConsoleOpen(false)} />
+      ) : null}
     </YStack>
   )
 }
@@ -614,6 +1146,7 @@ function Site({
   live,
   held,
   serving,
+  devMode,
   onStart,
   onEnvironment,
 }: {
@@ -621,75 +1154,126 @@ function Site({
   live: boolean
   held: Box['state'] | ''
   serving?: Serving | null
+  devMode: boolean
   onStart?: () => void
   onEnvironment?: () => void
 }) {
   const { t } = useI18n()
   const frame = useRef<PreviewHandle | null>(null)
+  const [viewport, setViewport] = useState<PreviewViewport>('desktop')
+  const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([])
+  const [consoleOpen, setConsoleOpen] = useState(false)
+  const nextConsoleId = useRef(1)
+
+  const onBridge = useCallback((event: FrameEvent) => {
+    if (event.type !== 'preview:console') return
+    const lvl = event.level === 'error' || event.level === 'warn' || event.level === 'info' ? event.level : 'log'
+    const at = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setConsoleEntries((prev) => [...prev.slice(-49), { id: nextConsoleId.current++, level: lvl, text: event.text, at }])
+  }, [])
+
+  const tabletConstrained = Boolean(site) && viewport === 'tablet'
+
   return (
     <YStack flex={1} minH={0}>
-      <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
-        <XStack render="button" aria-label={t('Reload the page')} onPress={() => frame.current?.reload()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-          <RefreshCcw size={14} />
-        </XStack>
-        <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
-          {site || t('Nothing is serving yet')}
-        </SizableText>
-        {site ? (
-          <Out href={site} label={t('Open in a new tab')}>
-            <XStack p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-              <ExternalLink size={14} />
-            </XStack>
-          </Out>
-        ) : null}
-      </XStack>
-      <PreviewFrame
-        ref={frame}
-        src={site}
-        title={t('Where this run is published')}
-        device="desktop"
-        empty={
-          <YStack items="center" gap="$2.5" p="$6">
-            <Globe size={28} opacity={0.45} />
-            <SizableText size="$3" color="$ink">
-              {t('Nothing is serving yet')}
-            </SizableText>
-            <SizableText size="$2" color="$soft" style={{ textAlign: 'center', maxWidth: 280 }}>
-              {held === 'parked'
-                ? `${t('The run’s sandbox is suspended.')} ${t('Resume it to see what it serves.')}`
-                : live
-                  ? t('When the run starts a server in its sandbox, the page opens here.')
-                  : `${t('Nothing listens in this run’s sandbox, and it published no site.')} ${t('A server the run started stopped when the run ended.')}`}
-            </SizableText>
-            {serving ? (
-              <YStack items="center" gap="$2" width="100%">
-                <SizableText size="$2" color="$ink" role="status" style={{ textAlign: 'center', maxWidth: 320 }}>
-                  {serving.why || (serving.command ? t('Starting {command}…', { command: serving.command }) : t('Starting the dev server…'))}
-                </SizableText>
-                {serving.log ? <Tail log={serving.log} /> : null}
-                {serving.why ? (
-                  <XStack gap="$2" flexWrap="wrap" justify="center">
-                    {onStart ? (
-                      <Button size="sm" variant="outline" onPress={onStart}>
-                        {t('Try again')}
-                      </Button>
-                    ) : null}
-                    {onEnvironment ? (
-                      <Button size="sm" variant="outline" onPress={onEnvironment}>
-                        {t('Set a start command')}
-                      </Button>
-                    ) : null}
-                  </XStack>
-                ) : null}
-              </YStack>
-            ) : onStart ? (
-              <Button size="sm" onPress={onStart}>
-                {t('Start dev server')}
-              </Button>
-            ) : null}
-          </YStack>
+      <PreviewToolbar
+        displayUrl={site || (devMode ? t('Nothing is serving yet') : t('Live preview'))}
+        copyUrl={site}
+        hasActiveUrl={Boolean(site)}
+        viewport={viewport}
+        onViewport={setViewport}
+        onReload={() => {
+          setConsoleEntries([])
+          frame.current?.reload()
+        }}
+        consoleEntries={consoleEntries}
+        loadError=""
+        consoleOpen={consoleOpen}
+        onToggleConsole={() => setConsoleOpen((o) => !o)}
+        openAction={
+          site ? (
+            <Out href={site} label={t('Open in a new tab')}>
+              <XStack
+                minW={30}
+                minH={30}
+                $touchable={{ minW: 44, minH: 44 }}
+                $max-sm={{ minW: 44, minH: 44 }}
+                items="center"
+                justify="center"
+                rounded="$2"
+                hoverStyle={{ bg: '$hover' }}
+              >
+                <ExternalLink size={14} color="$ink" />
+              </XStack>
+            </Out>
+          ) : undefined
         }
       />
+      <YStack flex={1} minH={0} width="100%" items="center" bg="$sunken" overflowX="auto">
+        <YStack flex={1} minH={0} width="100%" maxW={tabletConstrained ? 768 : '100%'}>
+          <PreviewFrame
+            ref={frame}
+            src={site}
+            title={t('Where this run is published')}
+            device={viewport === 'mobile' ? 'mobile' : 'desktop'}
+            onBridge={onBridge}
+            rounded={0}
+            borderWidth={0}
+            empty={
+              <YStack items="center" gap="$3" p="$6">
+                <Globe size={28} opacity={0.45} />
+                <YStack items="center" gap="$1.5">
+                  <SizableText size="$4" fontWeight="600" color="$ink" text="center">
+                    {devMode ? t('Nothing is serving yet') : t('Live preview will appear here')}
+                  </SizableText>
+                  <SizableText size="$2" color="$soft" text="center" maxW={280}>
+                    {held === 'parked'
+                      ? devMode
+                        ? `${t('The run’s sandbox is suspended.')} ${t('Resume it to see what it serves.')}`
+                        : `${t('Your cloud workspace is sleeping.')} ${t('Wake it above to view the preview.')}`
+                      : live
+                        ? devMode
+                          ? t('When the run starts a server in its sandbox, the page opens here.')
+                          : t('Once your app starts running, you can interact with it right here.')
+                        : devMode
+                          ? `${t('Nothing listens in this run’s sandbox, and it published no site.')} ${t('A server the run started stopped when the run ended.')}`
+                          : t('No live preview is running right now.')}
+                  </SizableText>
+                </YStack>
+                {serving ? (
+                  <YStack items="center" gap="$2" width="100%">
+                    <SizableText size="$2" color="$ink" role="status" text="center" maxW={320}>
+                      {serving.why || (serving.command && devMode ? t('Starting {command}…', { command: serving.command }) : t('Starting preview…'))}
+                    </SizableText>
+                    {serving.log && devMode ? <Tail log={serving.log} /> : null}
+                    {serving.why ? (
+                      <XStack gap="$2" flexWrap="wrap" justify="center">
+                        {onStart ? (
+                          <Button size="sm" variant="primary" onPress={onStart}>
+                            {t('Try again')}
+                          </Button>
+                        ) : null}
+                        {onEnvironment ? (
+                          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={onEnvironment}>
+                            {t('Set a start command')}
+                          </Button>
+                        ) : null}
+                      </XStack>
+                    ) : null}
+                  </YStack>
+                ) : onStart ? (
+                  <Button size="sm" variant="primary" onPress={onStart}>
+                    {devMode ? t('Start dev server') : t('Start preview')}
+                  </Button>
+                ) : null}
+              </YStack>
+            }
+          />
+        </YStack>
+      </YStack>
+      {consoleOpen ? (
+        <ConsoleDrawer entries={consoleEntries} loadError="" onClear={() => setConsoleEntries([])} onClose={() => setConsoleOpen(false)} />
+      ) : null}
     </YStack>
   )
 }
@@ -698,7 +1282,7 @@ function Site({
 function Tail({ log }: { log: string }) {
   return (
     <YStack width="100%" maxW={460} maxH={200} overflow="scroll" rounded="$2" borderWidth={1} borderColor="$borderColor" p="$2">
-      <SizableText size="$1" color="$soft" style={{ ...mono, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      <SizableText size="$1" color="$soft" fontFamily="$mono" $platform-web={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
         {log.split('\n').slice(-12).join('\n')}
       </SizableText>
     </YStack>
@@ -715,6 +1299,7 @@ function EnvironmentInspection({
   title,
   events,
   live,
+  devMode,
   onOpenEnvironment,
   onOpenDiff,
 }: {
@@ -727,6 +1312,7 @@ function EnvironmentInspection({
   title: string
   events: Event[]
   live: boolean
+  devMode: boolean
   onOpenEnvironment: () => void
   onOpenDiff: () => void
 }) {
@@ -734,7 +1320,6 @@ function EnvironmentInspection({
   const host = useHost()
   const target = useTarget()
   const signed = Boolean(host.person)
-  const [remoteControl, setRemoteControl] = useKept('hanzo.build.remote.control', true)
   const changes = useRead(signed ? () => readChanges(target, id) : null, null as Changes | null, [target, id, signed])
   const allCards = cards(events, '', t)
   const shellCards = allCards.filter((c): c is Extract<typeof c, { kind: 'shell' }> => c.kind === 'shell')
@@ -746,24 +1331,42 @@ function EnvironmentInspection({
 
   const added = changes.value?.files.reduce((n, f) => n + f.additions, 0) ?? 0
   const removed = changes.value?.files.reduce((n, f) => n + f.deletions, 0) ?? 0
+  const envDisplay = formatDeviceLabel(environment || 'sandbox', { devMode })
 
   return (
-    <YStack width={264} shrink={0} minH={0} overflow="scroll" bg="$background" px="$3" py="$2.5" gap="$3">
+    <YStack width={264} $max-lg={{ width: 220 }} shrink={0} minW={0} minH={0} overflow="scroll" bg="$background" px="$3.5" py="$3" gap="$4">
       <SizableText size="$2" color="$ink" fontWeight="600">
-        {t('Environment')}
+        {devMode ? t('Environment') : t('Workspace')}
       </SizableText>
 
       <YStack gap="$2">
         <XStack items="center" gap="$2">
           <Laptop size={14} opacity={0.7} />
           <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
-            {environment && environment !== 'sandbox' ? environment : t('This computer')}
+            {envDisplay.title}
           </SizableText>
-          <XStack render="button" onPress={onOpenEnvironment} px="$1.5" py="$0.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-            <SizableText size="$1" color="$ink" style={{ textDecorationLine: 'underline' }}>
-              {t('Save')}
-            </SizableText>
-          </XStack>
+          {devMode ? (
+            <XStack
+              render={<button type="button" />}
+              onClick={onOpenEnvironment}
+              px="$1.5"
+              py="$0.5"
+              minH={28}
+              $touchable={{ minH: 44 }}
+              $max-sm={{ minH: 44 }}
+              items="center"
+              rounded="$2"
+              borderWidth={0}
+              bg="transparent"
+              cursor="pointer"
+              hoverStyle={{ bg: '$hover' }}
+              focusVisibleStyle={RING}
+            >
+              <SizableText size="$1" color="$ink" textDecorationLine="underline">
+                {t('Save')}
+              </SizableText>
+            </XStack>
+          ) : null}
         </XStack>
 
         <XStack items="center" gap="$2">
@@ -785,7 +1388,7 @@ function EnvironmentInspection({
           </XStack>
         ) : null}
 
-        {branch ? (
+        {devMode && branch ? (
           <XStack items="center" gap="$2">
             <GitBranch size={14} opacity={0.7} />
             <SizableText size="$2" color="$ink" numberOfLines={1}>
@@ -793,51 +1396,61 @@ function EnvironmentInspection({
             </SizableText>
           </XStack>
         ) : null}
-
-        <XStack items="center" gap="$2" pt="$1">
-          <SizableText flex={1} size="$2" color="$ink">
-            {t('Remote Control')}
-          </SizableText>
-          <Switch checked={remoteControl} onCheckedChange={setRemoteControl} size="sm" aria-label={t('Remote Control')} />
-        </XStack>
       </YStack>
 
-      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
-        <XStack items="center" gap="$1.5">
-          <SizableText size="$2" color="$ink" fontWeight="500">
-            {t('Context')}
-          </SizableText>
-          <ChevronRight size={12} opacity={0.6} />
-          <SizableText flex={1} size="$1" color="$soft" text="end">
-            {`${contextPct}%`}
-          </SizableText>
-          <YStack width={28} height={6} rounded={99} bg="$borderColor" overflow="hidden">
-            <YStack width={`${contextPct}%`} height="100%" bg="$blue10" />
-          </YStack>
-        </XStack>
-      </YStack>
+      {devMode ? (
+        <YStack borderTopWidth={1} borderColor="$borderColor" pt="$3" gap="$2">
+          <XStack items="center" gap="$1.5">
+            <SizableText size="$2" color="$ink" fontWeight="600">
+              {t('Context')}
+            </SizableText>
+            <SizableText flex={1} size="$1" color="$soft" text="end" fontVariant={['tabular-nums']}>
+              {`${contextPct}%`}
+            </SizableText>
+            <YStack width={28} height={6} rounded={99} bg="$borderColor" overflow="hidden">
+              <YStack width={`${contextPct}%`} height="100%" bg="$ink" />
+            </YStack>
+          </XStack>
+        </YStack>
+      ) : null}
 
-      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$3" gap="$2">
         <XStack items="center" gap="$1.5">
-          <SizableText size="$2" color="$ink" fontWeight="500">
+          <SizableText size="$2" color="$ink" fontWeight="600">
             {t('Connectors')}
           </SizableText>
-          <ChevronRight size={12} opacity={0.6} />
           <SizableText flex={1} size="$1" color="$soft" text="end">
             {t('Connected')}
           </SizableText>
         </XStack>
       </YStack>
 
-      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$1.5">
-        <SizableText size="$2" color="$ink" fontWeight="500">
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$3" gap="$1.5">
+        <SizableText size="$2" color="$ink" fontWeight="600">
           {t('Changes')}
         </SizableText>
-        <XStack render="button" onPress={onOpenDiff} items="flex-start" gap="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-          <GitPullRequest size={14} color="$green10" />
+        <XStack
+          render={<button type="button" />}
+          onClick={onOpenDiff}
+          width="100%"
+          items="flex-start"
+          gap="$2"
+          px="$1.5"
+          py="$1"
+          minH={36}
+          $touchable={{ minH: 44 }}
+          $max-sm={{ minH: 44 }}
+          rounded="$2"
+          borderWidth={0}
+          bg="transparent"
+          cursor="pointer"
+          hoverStyle={{ bg: '$hover' }}
+          focusVisibleStyle={RING}
+        >
+          <GitPullRequest size={14} color="var(--state-success)" />
           <YStack flex={1} minW={0} gap="$0.5">
             <SizableText size="$2" color="$ink" numberOfLines={1} text="start">
-              {title || branch || t('Working tree')}
+              {title || branch || (devMode ? t('Working tree') : t('Latest changes'))}
             </SizableText>
             <XStack gap="$1.5" items="center">
               {pr.label ? (
@@ -845,10 +1458,10 @@ function EnvironmentInspection({
                   {pr.label}
                 </SizableText>
               ) : null}
-              <SizableText size="$1" color="$green10">
+              <SizableText size="$1" color="var(--state-success)" fontVariant={['tabular-nums']}>
                 {`+${added}`}
               </SizableText>
-              <SizableText size="$1" color="$red10">
+              <SizableText size="$1" color="var(--state-error)" fontVariant={['tabular-nums']}>
                 {`−${removed}`}
               </SizableText>
             </XStack>
@@ -856,8 +1469,8 @@ function EnvironmentInspection({
         </XStack>
       </YStack>
 
-      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
-        <SizableText size="$2" color="$ink" fontWeight="500">
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$3" gap="$2">
+        <SizableText size="$2" color="$ink" fontWeight="600">
           {t('Background tasks')}
         </SizableText>
         {runningTasks.map((task) => (
@@ -866,7 +1479,6 @@ function EnvironmentInspection({
             <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1}>
               {task.command}
             </SizableText>
-            <Square size={10} fill="currentColor" />
           </XStack>
         ))}
         <XStack items="center" gap="$2" py="$0.5">
@@ -893,8 +1505,6 @@ function Fact({ label, value }: { label: string; value: string }) {
   )
 }
 
-const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)', whiteSpace: 'pre' as const }
-
 /**
  * The Terminal tab: a shell in the run's sandbox, in the same working tree as the
  * agent, while the sandbox is kept; and the agent's log, which outlives it. The
@@ -910,6 +1520,7 @@ function Terminal({
   refused,
   retry,
   onRetry,
+  devMode,
 }: {
   id: string
   sandbox: string
@@ -921,27 +1532,120 @@ function Terminal({
   refused: string
   retry: string
   onRetry: () => void
+  devMode: boolean
 }) {
   const { t } = useI18n()
   const reachable = Boolean(sandbox) && held === 'running'
-  // The shell while there is one, unless the log was asked for.
-  const [log, setLog] = useState(false)
+  // In Simple Mode, default to the clean Activity log instead of raw interactive shell; in Developer Mode, default to Shell when reachable.
+  const [log, setLog] = useState(!devMode)
+  useEffect(() => {
+    if (!devMode) setLog(true)
+  }, [devMode])
   const showShell = reachable && !log
   return (
     <YStack flex={1} minH={0} bg="$background">
-      <XStack px="$2" py="$1.5" gap="$1" borderBottomWidth={1} borderColor="$borderColor" items="center">
-        {reachable ? (
-          <XStack render="button" aria-label={t('Shell')} onPress={() => setLog(false)} px="$2" py="$1" rounded="$2" bg={showShell ? '$hover' : 'transparent'}>
-            <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
-              {t('Shell')}
-            </SizableText>
-          </XStack>
-        ) : null}
-        <XStack render="button" aria-label={t('Agent log')} onPress={() => setLog(true)} px="$2" py="$1" rounded="$2" bg={showShell ? 'transparent' : '$hover'}>
-          <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
-            {t('Agent log')}
-          </SizableText>
-        </XStack>
+      <XStack px="$2" py="$1.5" gap="$1" rowGap="$1" flexWrap="wrap" borderBottomWidth={1} borderColor="$borderColor" items="center">
+        {devMode ? (
+          <>
+            {reachable ? (
+              <XStack
+                render={<button type="button" />}
+                aria-label={t('Shell')}
+                aria-pressed={showShell}
+                onClick={() => setLog(false)}
+                px="$2.5"
+                py="$1"
+                minH={30}
+                $touchable={{ minH: 44 }}
+                $max-sm={{ minH: 44 }}
+                items="center"
+                rounded="$2"
+                borderWidth={1}
+                borderColor={showShell ? 'var(--border-strong)' : 'transparent'}
+                bg={showShell ? '$hover' : 'transparent'}
+                cursor="pointer"
+                focusVisibleStyle={RING}
+              >
+                <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
+                  {t('Shell')}
+                </SizableText>
+              </XStack>
+            ) : null}
+            <XStack
+              render={<button type="button" />}
+              aria-label={t('Agent log')}
+              aria-pressed={!showShell}
+              onClick={() => setLog(true)}
+              px="$2.5"
+              py="$1"
+              minH={30}
+              $touchable={{ minH: 44 }}
+              $max-sm={{ minH: 44 }}
+              items="center"
+              rounded="$2"
+              borderWidth={1}
+              borderColor={showShell ? 'transparent' : 'var(--border-strong)'}
+              bg={showShell ? 'transparent' : '$hover'}
+              cursor="pointer"
+              focusVisibleStyle={RING}
+            >
+              <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
+                {t('Agent log')}
+              </SizableText>
+            </XStack>
+          </>
+        ) : (
+          <>
+            <XStack
+              render={<button type="button" />}
+              aria-label={t('Activity')}
+              aria-pressed={!showShell}
+              onClick={() => setLog(true)}
+              px="$2.5"
+              py="$1"
+              minH={30}
+              $touchable={{ minH: 44 }}
+              $max-sm={{ minH: 44 }}
+              items="center"
+              rounded="$2"
+              borderWidth={1}
+              borderColor={showShell ? 'transparent' : 'var(--border-strong)'}
+              bg={showShell ? 'transparent' : '$hover'}
+              cursor="pointer"
+              focusVisibleStyle={RING}
+            >
+              <SizableText size="$1" color={showShell ? '$soft' : '$ink'}>
+                {t('Activity')}
+              </SizableText>
+            </XStack>
+            <XStack flex={1} />
+            {reachable ? (
+              <XStack
+                render={<button type="button" />}
+                aria-label={t('Open terminal')}
+                aria-pressed={showShell}
+                onClick={() => setLog((v) => !v)}
+                px="$2.5"
+                py="$1"
+                minH={30}
+                $touchable={{ minH: 44 }}
+                $max-sm={{ minH: 44 }}
+                items="center"
+                rounded="$2"
+                borderWidth={1}
+                borderColor={showShell ? 'var(--border-strong)' : 'transparent'}
+                bg={showShell ? '$hover' : 'transparent'}
+                hoverStyle={{ bg: '$hover', borderColor: 'var(--border-strong)' }}
+                cursor="pointer"
+                focusVisibleStyle={RING}
+              >
+                <SizableText size="$1" color={showShell ? '$ink' : '$soft'}>
+                  {showShell ? t('Back to activity') : t('Open terminal')}
+                </SizableText>
+              </XStack>
+            ) : null}
+          </>
+        )}
       </XStack>
       {showShell ? <Door which="terminal" sandbox={sandbox} held={held} session={`run-${id.replace(/^sess_/, '').slice(0, 12)}`} /> : <Log lines={lines} live={live} failed={failed} refused={refused} retry={retry} onRetry={onRetry} />}
     </YStack>
@@ -971,11 +1675,11 @@ function Log({
       <YStack flex={1} minH={0} overflow="scroll" px="$3" py="$3" gap="$1">
         {idle ? (
           <YStack flex={1} items="center" justify="center" gap="$3" py="$8">
-            <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+            <SizableText size="$2" color="$soft" text="center">
               {refused || (failed ? t('This run stopped before its first command: {reason}', { reason: failed }) : t('This run finished without writing a command.'))}
             </SizableText>
             {refused ? (
-              <Button size="sm" variant="outline" onPress={onRetry}>
+              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={onRetry}>
                 {retry}
               </Button>
             ) : null}
@@ -984,15 +1688,15 @@ function Log({
           lines.map((line, i) =>
             line.role === 'cmd' ? (
               <XStack key={i} gap="$2">
-                <SizableText size="$1" color="$soft" style={mono}>
+                <SizableText size="$1" color="$soft" fontFamily="$mono" $platform-web={{ whiteSpace: 'pre' }}>
                   {`${prompt} $`}
                 </SizableText>
-                <SizableText flex={1} size="$1" color="$ink" style={mono}>
+                <SizableText flex={1} size="$1" color="$ink" fontFamily="$mono" $platform-web={{ whiteSpace: 'pre' }}>
                   {line.text}
                 </SizableText>
               </XStack>
             ) : (
-              <SizableText key={i} size="$1" color="$ink" style={mono}>
+              <SizableText key={i} size="$1" color="$ink" fontFamily="$mono" $platform-web={{ whiteSpace: 'pre' }}>
                 {line.text}
               </SizableText>
             ),
@@ -1000,7 +1704,7 @@ function Log({
         )}
         {live ? (
           <XStack gap="$2" items="center">
-            <SizableText size="$1" color="$soft" style={mono}>
+            <SizableText size="$1" color="$soft" fontFamily="$mono" $platform-web={{ whiteSpace: 'pre' }}>
               {`${prompt} $`}
             </SizableText>
             <YStack width={7} height={14} bg="$ink" />
