@@ -55,6 +55,7 @@ export function Billing() {
   const bills = useRead(signed ? () => invoices(target) : null, [] as Invoice[], [target, signed])
   const billed = useRead(signed ? () => tier(target) : null, null, [target, signed])
   const [adding, setAdding] = useState(false)
+  const [cardsVersion, setCardsVersion] = useState(0)
   const [ending, setEnding] = useState(false)
   const [editingBilling, setEditingBilling] = useState<Method | null>(null)
   const [open, setOpen] = useState<Invoice | null>(null)
@@ -79,6 +80,11 @@ export function Billing() {
   const reading = (subs.loading && !subs.value.length) || (billed.value === null && !billed.error && !subs.error)
   const empty = !cards.error && !cards.loading && cards.value.length === 0
   const defaultCard = chosen(cards.value)
+
+  const reloadCards = () => {
+    cards.reload()
+    setCardsVersion((v) => v + 1)
+  }
 
   // A done act is a toast; a refused one stays on the page, beside what was tried.
   const act = async (what: () => Promise<unknown>, done: string, after: () => void) => {
@@ -120,7 +126,7 @@ export function Billing() {
         </Button>
       </XStack>
 
-      <Credits target={target} admin={host.admin} onCard={() => setAdding(true)} />
+      <Credits target={target} admin={host.admin} cardsVersion={cardsVersion} onCard={() => setAdding(true)} />
 
       <Group
         title={t('Payment')}
@@ -180,7 +186,7 @@ export function Billing() {
                           variant="ghost"
                           aria-label={t('Make {card} default', { card: method(m, t) })}
                           disabled={working}
-                          onPress={() => void act(() => makeDefault(target, m.id), t('{card} is now the default', { card: method(m, t) }), cards.reload)}
+                          onPress={() => void act(() => makeDefault(target, m.id), t('{card} is now the default', { card: method(m, t) }), reloadCards)}
                         >
                           {t('Make default')}
                         </Button>
@@ -199,7 +205,7 @@ export function Billing() {
                         variant="ghost"
                         aria-label={t('Remove {card}', { card: method(m, t) })}
                         disabled={working}
-                        onPress={() => void act(() => detach(target, m.id), t('{card} is removed', { card: method(m, t) }), cards.reload)}
+                        onPress={() => void act(() => detach(target, m.id), t('{card} is removed', { card: method(m, t) }), reloadCards)}
                       >
                         {t('Remove')}
                       </Button>
@@ -353,7 +359,7 @@ export function Billing() {
         open={adding}
         onOpenChange={setAdding}
         onSaved={(m) => {
-          cards.reload()
+          reloadCards()
           toast.success(t('{card} is saved', { card: method(m, t) }))
         }}
       />
@@ -362,7 +368,7 @@ export function Billing() {
         onOpenChange={(o) => !o && setEditingBilling(null)}
         card={editingBilling}
         onSaved={() => {
-          cards.reload()
+          reloadCards()
         }}
       />
       {plan ? (

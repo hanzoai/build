@@ -93,7 +93,7 @@ function Meter({ title, used, of, says, first, limit = true }: { title: string; 
 /** `Resets Oct 1, 2026`, or '' for none. */
 const resets = (iso: string, t: Say): string => (day(iso) ? t('Resets {date}', { date: day(iso) }) : '')
 
-export function Credits({ target, admin, add, onCard }: { target: Target; admin: boolean; add?: string; onCard?: () => void }) {
+export function Credits({ target, admin, add, onCard, cardsVersion = 0 }: { target: Target; admin: boolean; add?: string; onCard?: () => void; cardsVersion?: number }) {
   const { t } = useI18n()
   const left = useRead(() => balance(target), 0, [target])
   const granted = useRead(() => credit(target), 0, [target])
@@ -101,7 +101,7 @@ export function Credits({ target, admin, add, onCard }: { target: Target; admin:
   const spent = useRead(() => spend(target), null as Spend | null, [target])
   const rule = useRead(() => recharge(target), null as Recharge | null, [target])
   const ceilings = useRead(() => caps(target), [] as Cap[], [target])
-  const cards = useRead(add ? null : () => methods(target), [] as Method[], [target, add])
+  const cards = useRead(add ? null : () => methods(target), [] as Method[], [target, add, cardsVersion])
   const [buying, setBuying] = useState(false)
   const [amount, setAmount] = useState('25')
   const [ceiling, setCeiling] = useState('')
