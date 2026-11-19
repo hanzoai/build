@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement as h } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-// Each piece keeps the props it was drawn with, so the test sees which handlers the row carries.
 const { seen, box } = vi.hoisted(() => {
   const seen: Record<string, Record<string, unknown>> = {}
   const box = (name: string) => (p: Record<string, unknown>) => {
@@ -11,18 +10,36 @@ const { seen, box } = vi.hoisted(() => {
   }
   return { seen, box }
 })
-vi.mock('@hanzo/gui', () => ({ SizableText: box('text'), XStack: box('xstack'), YStack: box('ystack') }))
-vi.mock('@hanzo/ui', () => ({ DropdownMenuItem: box('item'), Switch: box('switch') }))
+vi.mock('@hanzo/gui', () => ({ SizableText: box('text'), YStack: box('ystack') }))
+vi.mock('@hanzo/ui', () => ({ DropdownMenuCheckboxItem: box('item') }))
 
-const { KeepAwake } = await import('./awake.tsx')
+const { hold, KeepAwake } = await import('./awake.tsx')
+
+const lock = () => {
+  const l = { released: 0, release: async () => void l.released++ }
+  return l
+}
 
 describe('Keep computer awake', () => {
-  it('is toggled by its row alone: the switch shows the state and takes no press of its own', () => {
+  it('is one checkbox row that reports its new state once', () => {
     const calls: boolean[] = []
     renderToStaticMarkup(h(KeepAwake, { on: false, onToggle: (on: boolean) => calls.push(on) }))
-    expect(seen.switch).toMatchObject({ checked: false })
-    expect(seen.switch).not.toHaveProperty('onCheckedChange')
-    ;(seen.item!.onSelect as () => void)()
+    expect(seen.item).toMatchObject({ checked: false })
+    ;(seen.item!.onCheckedChange as (on: boolean) => void)(true)
     expect(calls).toEqual([true])
+  })
+
+  it('is on only once the browser grants the lock', async () => {
+    const l = lock()
+    expect(await hold({ wakeLock: { request: async () => l } }, null, true)).toBe(l)
+    expect(await hold({ wakeLock: { request: async () => Promise.reject(new Error('denied')) } }, null, true)).toBeNull()
+    expect(await hold({}, null, true)).toBeNull()
+  })
+
+  it('lets the lock go when switched off, and asks for no second one while it is held', async () => {
+    const l = lock()
+    expect(await hold({ wakeLock: { request: async () => lock() } }, l, true)).toBe(l)
+    expect(await hold({}, l, false)).toBeNull()
+    expect(l.released).toBe(1)
   })
 })

@@ -1,15 +1,48 @@
 /**
- * The run menu's "Keep computer awake" row. The row is the one control: its
- * switch only shows the state, so a press on the switch toggles once, not twice.
+ * The run menu's "Keep computer awake": a checkbox row (so a screen reader hears
+ * on or off) over the browser's screen wake lock. It reads "on" only once the
+ * lock is granted, and the lock is let go when the run view closes.
  */
-import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { SizableText, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
-import { DropdownMenuItem, Switch } from '@hanzo/ui'
+import { DropdownMenuCheckboxItem } from '@hanzo/ui'
+import { useEffect, useRef, useState } from 'react'
+
+export interface Lock {
+  release: () => Promise<void>
+}
+type Wake = { wakeLock?: { request: (type: 'screen') => Promise<Lock> } }
+
+/** The lock held after asking for `on`: a new one when it is granted, none when it is refused, unsupported or let go. */
+export async function hold(nav: Wake, held: Lock | null, on: boolean): Promise<Lock | null> {
+  if (!on) {
+    await held?.release().catch(() => undefined)
+    return null
+  }
+  if (held) return held
+  try {
+    return (await nav.wakeLock?.request('screen')) ?? null
+  } catch {
+    return null
+  }
+}
+
+/** [on, set]: `on` follows the lock itself, and the lock goes when the view does. */
+export function useKeepAwake(): [boolean, (on: boolean) => Promise<void>] {
+  const [on, setOn] = useState(false)
+  const lock = useRef<Lock | null>(null)
+  useEffect(() => () => void lock.current?.release().catch(() => undefined), [])
+  const set = async (want: boolean) => {
+    lock.current = await hold(navigator as unknown as Wake, lock.current, want)
+    setOn(lock.current !== null)
+  }
+  return [on, set]
+}
 
 export function KeepAwake({ on, onToggle }: { on: boolean; onToggle: (on: boolean) => void }) {
   const { t } = useI18n()
   return (
-    <DropdownMenuItem preventCloseOnSelect onSelect={() => onToggle(!on)}>
+    <DropdownMenuCheckboxItem checked={on} onCheckedChange={onToggle}>
       <YStack flex={1} minW={0}>
         <SizableText size="$2" color="$ink">
           {t('Keep computer awake')}
@@ -18,9 +51,6 @@ export function KeepAwake({ on, onToggle }: { on: boolean; onToggle: (on: boolea
           {t('Only for this session')}
         </SizableText>
       </YStack>
-      <XStack pointerEvents="none" shrink={0} aria-hidden>
-        <Switch checked={on} size="sm" tabIndex={-1} aria-hidden />
-      </XStack>
-    </DropdownMenuItem>
+    </DropdownMenuCheckboxItem>
   )
 }
