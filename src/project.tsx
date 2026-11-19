@@ -85,6 +85,7 @@ import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { copy as toClipboard } from './clipboard.ts'
 import { RING } from './pane.ts'
 import { read as pushed, type Pull } from './api/changes.ts'
 import { codebases, one, type Codebase } from './api/codebases.ts'
@@ -504,12 +505,7 @@ export function Project({ at }: { at: Where }) {
 
   const share = async () => {
     const link = project?.live || `${window.location.origin}${window.location.pathname}`
-    try {
-      await navigator.clipboard.writeText(link)
-      setNote(t('Copied {link}', { link }))
-    } catch {
-      setNote(link)
-    }
+    setNote((await toClipboard(link)) ? t('Copied {link}', { link }) : link)
   }
 
   if (!signed) {
@@ -775,7 +771,7 @@ export function Project({ at }: { at: Where }) {
               bg={editing ? '$ink' : '$panel'}
               cursor="pointer"
               hoverStyle={{ bg: editing ? '$ink' : '$hover' }}
-              focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+              focusVisibleStyle={RING}
             >
               <MousePointerClick size={16} color={editing ? '$background' : '$ink'} />
             </XStack>

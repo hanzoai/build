@@ -48,6 +48,7 @@ import { Button, Dialog, DialogContent, DialogTitle, DropdownMenu, Input, Skelet
 import { ChipSelect } from '@hanzo/ui/product'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
+import { copy as toClipboard } from './clipboard.ts'
 import { ago } from './ago.ts'
 import { told } from './api/call.ts'
 import { change, days, get, items as list, KINDS, remove, size, SOURCE, type Item, type Kind as ItemKind, type Scope, type Source } from './api/library.ts'
@@ -58,7 +59,7 @@ import { Make } from './make.tsx'
 import { KEPT } from './nav.tsx'
 import { path, route } from './route.ts'
 import { Panel, type Kind } from './panel.tsx'
-import { gap, pane, RING } from './pane.ts'
+import { gap, pane, RING, RING_INSET } from './pane.ts'
 import { Sites } from './shelf.tsx'
 import { useDeck } from './tabs.ts'
 
@@ -225,7 +226,7 @@ function useActs(onChanged: (x: Item) => void, onGone: (id: string) => void) {
   }
   const copy = (text: string, said: string) =>
     act(async () => {
-      await navigator.clipboard.writeText(text)
+      if (!(await toClipboard(text))) throw new Error(t('This browser would not copy.'))
       toast.success(said)
     })
 
@@ -350,7 +351,7 @@ function Move({ item: x, onClose, onMoved }: { item: Item | null; onClose: () =>
             onChangeText={setQ}
             placeholder={t('Find a project…')}
             aria-label={t('Find a project')}
-            borderColor="var(--border-strong)"
+            borderColor="$borderColor"
             bg="$panel"
             startAdornment={<Search size={14} color="$soft" />}
           />
@@ -470,7 +471,7 @@ function Tile({ x, onOpen, rows }: { x: Item; onOpen: () => void; rows: MenuItem
         overflow="hidden"
         cursor="pointer"
         hoverStyle={{ borderColor: 'var(--border-strong)', opacity: 0.92 }}
-        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+        focusVisibleStyle={RING}
       >
         <Thumb x={x} />
       </YStack>
@@ -507,7 +508,7 @@ function Row({ x, first, onOpen, rows }: { x: Item; first?: boolean; onOpen: () 
         gap="$3"
         cursor="pointer"
         $platform-web={{ textAlign: 'start' }}
-        focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: -2 }}
+        focusVisibleStyle={RING_INSET}
       >
         <Thumb x={x} size={40} />
         <YStack flex={1} minW={0} gap="$0.5">
@@ -548,7 +549,7 @@ export function Preview({ id, rows }: { id: string; rows?: (x: Item) => MenuItem
           <SizableText size="$2" color="var(--state-error)">
             {told(one.error, t)}
           </SizableText>
-          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={one.reload}>
+          <Button size="sm" variant="outline" onPress={one.reload}>
             {t('Try again')}
           </Button>
         </YStack>
@@ -585,13 +586,13 @@ export function Preview({ id, rows }: { id: string; rows?: (x: Item) => MenuItem
       </XStack>
       <XStack gap="$2" flexWrap="wrap" rowGap="$2">
         {x.origin ? (
-          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => host.open(x.origin)}>
+          <Button size="sm" variant="outline" onPress={() => host.open(x.origin)}>
             <ExternalLink size={14} />
             {t('Open where it was made')}
           </Button>
         ) : null}
         {x.download ? (
-          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => window.open(x.download, '_blank', 'noopener,noreferrer')}>
+          <Button size="sm" variant="outline" onPress={() => window.open(x.download, '_blank', 'noopener,noreferrer')}>
             <Download size={14} />
             {t('Download')}
           </Button>
@@ -946,14 +947,14 @@ export function Library() {
       <YStack flex={1} minH={0} minW={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
         <YStack width="100%" maxW={1120} mx="auto" gap="$4">
           <XStack items="center" gap="$3" flexWrap="wrap" rowGap="$2">
-            <SizableText render="h1" size="$7" fontWeight="600" color="$ink" flex={1} minW={140}>
+            <SizableText render="h1" size="$7" color="$ink" flex={1} minW={140}>
               {sitesOnly ? t('Sites') : KINDS.find((k) => k.id === kind)?.id ? t(KINDS.find((k) => k.id === kind)!.label) : t('Library')}
             </SizableText>
             <XStack items="center" gap="$2" shrink={0}>
               {/* A host whose sidebar lists the kinds has Make something new there. */}
               {host.sections ? null : make(!emptyUnfiltered && signed)}
               {sitesOnly ? null : (
-                <XStack role="radiogroup" aria-label={t('View')} p={2} gap={2} rounded="$3" borderWidth={1} borderColor="var(--border-strong)" bg="$panel">
+                <XStack role="radiogroup" aria-label={t('View')} p={2} gap={2} rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$panel">
                   <ViewMark label={t('Grid')} on={view === 'grid'} onPress={() => setView('grid')}>
                     <LayoutGrid size={15} color={view === 'grid' ? '$ink' : '$soft'} />
                   </ViewMark>
@@ -986,11 +987,11 @@ export function Library() {
                     $max-sm={{ minH: 44 }}
                     rounded={999}
                     borderWidth={1}
-                    borderColor="var(--border-strong)"
+                    borderColor="$borderColor"
                     bg="$panel"
                     cursor="pointer"
                     hoverStyle={{ bg: '$hover', borderColor: '$ink' }}
-                    focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+                    focusVisibleStyle={RING}
                   >
                     <SizableText size="$1" fontWeight="500" color="$ink">
                       {moreKinds ? t('Show less') : t('+{n} more', { n: hiddenKindCount })}
@@ -1008,7 +1009,7 @@ export function Library() {
                     placeholder={t('Search your library')}
                     aria-label={t('Search your library')}
                     disabled={!signed}
-                    borderColor="var(--border-strong)"
+                    borderColor="$borderColor"
                     bg="$panel"
                     startAdornment={<Search size={14} color="$soft" />}
                     endAdornment={
@@ -1082,7 +1083,7 @@ export function Library() {
             </Said>
           ) : pages.error && !pages.rows.length ? (
             <Said says={told(pages.error, t)} error>
-              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={pages.reload}>
+              <Button size="sm" variant="outline" onPress={pages.reload}>
                 {t('Try again')}
               </Button>
             </Said>
@@ -1121,7 +1122,7 @@ export function Library() {
                 {showSites ? <Sites q={q} onMatch={setSiteMatches} /> : null}
                 {!showSites || siteMatches === 0 ? (
                   <Said says={t('Nothing matches.')}>
-                    <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={clearFilters}>
+                    <Button size="sm" variant="outline" onPress={clearFilters}>
                       {t('Clear filters')}
                     </Button>
                   </Said>
@@ -1212,7 +1213,7 @@ function KindChip({ label, on, onClick }: { label: string; on: boolean; onClick:
       bg={on ? '$ink' : 'transparent'}
       hoverStyle={on ? undefined : { bg: '$hover', borderColor: '$ink' }}
       cursor="pointer"
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--ring)', outlineOffset: 2 }}
+      focusVisibleStyle={RING}
     >
       <SizableText size="$1" fontWeight={on ? '500' : '400'} color={on ? '$background' : '$soft'}>
         {label}
@@ -1248,7 +1249,7 @@ function ViewMark({ label, on, onPress, children }: { label: string; on: boolean
 
 function Said({ says, error = false, children }: { says: string; error?: boolean; children?: ReactNode }) {
   return (
-    <YStack rounded="$4" borderWidth={1} borderColor="var(--border-strong)" bg="$panel" px="$5" py="$8" gap="$3" items="center">
+    <YStack rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" px="$5" py="$8" gap="$3" items="center">
       <SizableText size="$2" color={error ? 'var(--state-error)' : '$soft'} text="center">
         {says}
       </SizableText>
