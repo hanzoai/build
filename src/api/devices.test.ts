@@ -14,8 +14,12 @@ describe('device names a person reads', () => {
       metricsAt: '2026-10-04T06:00:00Z',
       spec: { os: 'darwin', arch: 'arm64', cpus: 16, memory: 64 * 1024 * 1024 * 1024, gpus: [{ model: 'Apple M2' }] },
     })
-    expect(displayMachine(m, { devMode: false })).toEqual({ title: 'MacBook-Pro', detail: 'Apple M2 · 64 GB · MacBook-Pro.local' })
+    expect(displayMachine(m, { devMode: false })).toEqual({ title: 'MacBook Pro', detail: 'Apple M2 · 64 GB · MacBook-Pro.local' })
     expect(displayMachine(m, { devMode: true }).title).toBe('MacBook-Pro.local')
+    // A name the person gave it wins, for a developer too, with the machine's own name beneath.
+    const names = { 'macbook-pro': 'Work laptop' }
+    expect(displayMachine(m, { devMode: false, names })).toEqual({ title: 'Work laptop', detail: 'Apple M2 · 64 GB · MacBook-Pro.local' })
+    expect(displayMachine(m, { devMode: true, names }).title).toBe('Work laptop')
   })
 
   it('names the cloud workspace Auto (Cloud), or Cloud for a developer', () => {

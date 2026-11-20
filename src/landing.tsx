@@ -38,6 +38,7 @@ import { homes as readHomes, type Home, type Homes } from './api/work.ts'
 import { SetupDialog } from './environment.tsx'
 import { limits as readLimits } from './api/models.ts'
 import { displayPlace, ready, SANDBOX, type Place } from './api/places.ts'
+import { useDeviceNames } from './names.ts'
 import type { At } from './address.ts'
 import { Address } from './ask.tsx'
 import { asHub, gone, isForge, isHub, settle, type HubRepo } from './choice.ts'
@@ -176,6 +177,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   }, [])
 
   const places = usePlaces(target, signed)
+  const names = useDeviceNames(signed ? target : null)
   // The model and effort Chat shares, and dictation into the ask.
   const { limits } = useLimits(signed ? (signal) => readLimits(target, signal) : null, target)
   const mind = useMind(target, (limits as { plan?: string } | null)?.plan, host.topUp)
@@ -439,7 +441,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const placeItems = useMemo(
     () =>
       (places.value.length ? places.value : [SANDBOX]).map((p) => {
-        const display = displayPlace(p, { devMode, say: t })
+        const display = displayPlace(p, { devMode, say: t, names })
         return {
           id: p.id || 'sandbox',
           label: display.title,
@@ -458,12 +460,12 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           place: p,
         }
       }),
-    [places.value, devMode, t],
+    [places.value, devMode, t, names],
   )
 
   const activePlaceDisplay = useMemo(
-    () => displayPlace(place, { devMode, say: t }),
-    [place, devMode, t],
+    () => displayPlace(place, { devMode, say: t, names }),
+    [place, devMode, t, names],
   )
   const placeTooltip = place.id
     ? t('Runs locally in your Hanzo folder')

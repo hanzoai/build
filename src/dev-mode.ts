@@ -1,6 +1,7 @@
 import type { Say } from '@hanzo/i18n/react'
 import { useCallback, useSyncExternalStore } from 'react'
 
+import { friendly } from './names.ts'
 import { english } from './say.ts'
 
 export const DEV_MODE_KEY = 'hanzo.dev_mode'
@@ -48,6 +49,8 @@ export function useDevMode(): [boolean, (next: boolean) => void] {
 export interface DeviceLabelOptions {
   hardware?: string | null
   host?: string | null
+  /** The name the person gave it (names.ts): it wins, for a developer too. */
+  name?: string | null
   devMode?: boolean
   /** The reader's `t`; English where none is given. */
   say?: Say
@@ -69,13 +72,17 @@ function mergeDetail(...parts: (string | null | undefined)[]): string | undefine
 }
 
 /**
- * A device as a person reads it. A developer sees the name the machine reports.
- * Anyone else sees that name tidied (`MacBook-Pro.local` → `MacBook-Pro`) with
- * the hardware beneath, and the cloud workspace in plain words.
+ * A device as a person reads it. A name the person gave it wins. Otherwise a
+ * developer sees the name the machine reports, and anyone else sees it as a
+ * person says it (`Alexs-MacBook-Pro.local` → "Alex's MacBook Pro", names.ts
+ * `friendly`), with the hardware and the hostname beneath, and the cloud
+ * workspace in plain words.
  */
 export function formatDeviceLabel(raw: string | null | undefined, opts: DeviceLabelOptions = {}): { title: string; detail?: string } {
   const say = opts.say ?? english
   const name = (raw ?? '').trim()
+  const own = (opts.name ?? '').trim()
+  if (own) return { title: own, detail: mergeDetail(opts.hardware, opts.host, name !== own ? name : undefined) }
   if (opts.devMode) return name ? { title: name, detail: mergeDetail(opts.hardware, opts.host && opts.host !== name ? opts.host : undefined) } : { title: 'Cloud' }
   const lower = name.toLowerCase()
   if (!name || /^(hanzo sandbox|sandbox|cloud|cloud workspace)$/.test(lower) || /^cloud-\d+(\s|·|$)/.test(lower)) {
@@ -84,7 +91,7 @@ export function formatDeviceLabel(raw: string | null | undefined, opts: DeviceLa
   const tidy = name
     .split(/\s*·\s*/)[0]!
     .replace(/\s*\((?:shell|desk|tmux|tty)[^)]*\)\s*$/i, '')
-    .replace(/\.(local|lan|home|internal)$/i, '')
     .trim()
-  return { title: tidy || name, detail: mergeDetail(opts.hardware, opts.host, name !== tidy ? name : undefined) }
+  const title = friendly(tidy) || name
+  return { title, detail: mergeDetail(opts.hardware, opts.host, name !== title ? name : undefined) }
 }

@@ -50,6 +50,8 @@ export interface Prefs {
   side?: Side
   /** The suggestions under the composer: when made, from what, the rows, and those dismissed (suggest.ts). */
   suggest?: Kept
+  /** What the person calls their devices and shells, by device key (names.ts). */
+  deviceNames?: Record<string, string>
 }
 
 /** A change: a key set to a value, or to null to delete it. */
@@ -78,6 +80,24 @@ export function code(raw: unknown): Code | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
+/** The longest device or shell name kept, in characters: a menu row's worth. */
+export const NAME_MAX = 60
+
+/** A name as kept: trimmed, one line, at most `NAME_MAX` characters; '' for none. */
+export function tidyName(name: unknown): string {
+  return typeof name === 'string' ? name.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX) : ''
+}
+
+/** Device and shell names from a stored value, dropping what is not a name; undefined for none. */
+export function deviceNames(raw: unknown): Record<string, string> | undefined {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(obj(raw))) {
+    const name = tidyName(v)
+    if (k && name) out[k] = name
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
 export function side(raw: unknown): Side | undefined {
   const w = obj(raw).width
   return typeof w === 'number' && Number.isFinite(w) && w > 0 ? { width: Math.round(w) } : undefined
@@ -97,6 +117,7 @@ export function prefs(raw: unknown): Prefs {
     code: code(p.code),
     side: side(p.side),
     suggest: kept(p.suggest),
+    deviceNames: deviceNames(p.deviceNames),
   })
 }
 

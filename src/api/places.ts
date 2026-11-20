@@ -12,6 +12,7 @@ import { phrase } from '@hanzo/i18n'
 import type { Say } from '@hanzo/i18n/react'
 
 import { formatDeviceLabel } from '../dev-mode.ts'
+import { deviceKey, type Names } from '../names.ts'
 import { english } from '../say.ts'
 import type { Target } from './call.ts'
 import { machines, state } from './machines.ts'
@@ -26,6 +27,8 @@ export interface Place {
   status: string
   /** "10 vCPU / 122G / 1× GB10", when the machine reported one. */
   capacity: string
+  /** The hostname its runs report, or '' (the cloud workspace, or a machine addressed by id only). */
+  host?: string
 }
 
 /** The cloud workspace, named in English and marked (`phrase`): a screen draws its label through `t`. */
@@ -33,13 +36,14 @@ export const SANDBOX: Place = { id: '', label: phrase('Hanzo sandbox'), kind: 's
 
 export async function places(t: Target): Promise<Place[]> {
   const list = await machines(t)
-  return [SANDBOX, ...list.map((m) => ({ id: m.id, label: m.label, kind: m.kind, status: state(m), capacity: m.capacity }))]
+  return [SANDBOX, ...list.map((m) => ({ id: m.id, label: m.label, kind: m.kind, status: state(m), capacity: m.capacity, ...(m.host ? { host: m.host } : {}) }))]
 }
 
-export function displayPlace(p: Place, opts?: { devMode?: boolean; say?: Say }): { title: string; detail?: string } {
+/** A place as a person reads it: the name they gave the machine (`names`, from `useDeviceNames`), else its own as a person says it. */
+export function displayPlace(p: Place, opts?: { devMode?: boolean; say?: Say; names?: Names }): { title: string; detail?: string } {
   const say = opts?.say ?? english
   if (!p.id) return opts?.devMode ? { title: 'Cloud' } : { title: say('Auto (Cloud)'), detail: say('Runs automatically in your Hanzo cloud workspace') }
-  return formatDeviceLabel(p.label, { hardware: p.capacity, devMode: opts?.devMode, say })
+  return formatDeviceLabel(p.label, { hardware: p.capacity, host: p.host, name: opts?.names?.[deviceKey(p.host, p.label, p.id)], devMode: opts?.devMode, say })
 }
 
 /** Whether a run sent here now would be taken. */

@@ -1,6 +1,6 @@
 {
   "name": "@hanzo/build",
-  "version": "0.2.128",
+  "version": "0.2.129",
   "type": "module",
   "license": "Apache-2.0 OR MIT",
   "description": "Hanzo Build — say what you want, watch it built, deployed and running. The builder as a component, mounted by the Hanzo app at hanzo.ai.",
@@ -77,6 +77,11 @@
       "types": "./lib/dev-mode.d.ts",
       "import": "./lib/dev-mode.js",
       "default": "./lib/dev-mode.js"
+    },
+    "./names": {
+      "types": "./lib/names.d.ts",
+      "import": "./lib/names.js",
+      "default": "./lib/names.js"
     },
     "./package.json": "./package.json"
   },

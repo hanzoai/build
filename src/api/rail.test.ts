@@ -121,7 +121,7 @@ describe('machines', () => {
 
   it('keeps the places New offers the same rows', async () => {
     answer(200, { targets: [row] })
-    expect(await places(T)).toEqual([SANDBOX, { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10' }])
+    expect(await places(T)).toEqual([SANDBOX, { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark' }])
   })
 
   it('registers one by hand, sending a hostname only when there is one', async () => {
