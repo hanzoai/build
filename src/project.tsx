@@ -8,7 +8,7 @@
  * opened by its slug (Artifacts), and works the same way.
  *
  *   bar     mark · project · history · chat toggle | Preview Files Code Layers |
- *           Share · Publish
+ *           Share · Publish; on a phone the views (with Chat) are a row under it
  *   left    the project's runs as a conversation, suggestions, and the ask
  *   right   the deployed page, framed under its own bar (reload · page · device
  *           · open), and kept loaded while another view is open; the repository
@@ -814,6 +814,29 @@ export function Project({ at }: { at: Where }) {
       </YStack>
     )
 
+  const views = (
+    <Views
+      views={[CHAT, ...VIEWS]}
+      value={pane === 'chat' && !wide ? 'chat' : view}
+      onChange={(v) => {
+        if (v === 'chat') return setPane('chat')
+        setView(v as ViewId)
+        setPane('view')
+      }}
+      label={t('View')}
+    />
+  )
+  // On a phone the bar has no room for the views beside the project: there
+  // they were a scroller of the bar's leftovers, 49px at 375 beside a project
+  // named "Instrument", showing part of Chat and none of Code (hanzo-inc/app#305).
+  // So below md they take a row of their own under the bar, in whichever pane
+  // shows (one pane at a time there, so one row).
+  const row = wide ? null : (
+    <XStack data-slot="views-row" justify="center" px="$3" pb="$2" shrink={0}>
+      {views}
+    </XStack>
+  )
+
   return (
     <>
       <Workspace
@@ -848,18 +871,7 @@ export function Project({ at }: { at: Where }) {
             </XStack>
           </XStack>
         }
-        middle={
-          <Views
-            views={[CHAT, ...VIEWS]}
-            value={pane === 'chat' && !wide ? 'chat' : view}
-            onChange={(v) => {
-              if (v === 'chat') return setPane('chat')
-              setView(v as ViewId)
-              setPane('view')
-            }}
-            label={t('View')}
-          />
-        }
+        middle={wide ? views : undefined}
         end={
           <XStack items="center" gap="$2">
             {/* Share gives way on a phone, where Publish is the one that matters. */}
@@ -883,7 +895,12 @@ export function Project({ at }: { at: Where }) {
             </Button>
           </XStack>
         }
-        chat={chat}
+        chat={
+          <>
+            {row}
+            {chat}
+          </>
+        }
         dock={
           <Console
             lines={lines}
@@ -899,6 +916,7 @@ export function Project({ at }: { at: Where }) {
         width={across}
         onLayout={(e) => setRoom(e.nativeEvent.layout.width)}
       >
+        {row}
         {preview}
         {body}
       </Workspace>

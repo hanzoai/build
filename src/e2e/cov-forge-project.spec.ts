@@ -563,6 +563,42 @@ test.describe('the workspace', () => {
     await page.getByRole('tab', { name: 'Chat' }).click()
     await expect(box(page)).toBeVisible()
   })
+
+  // hanzo-inc/app#305: at 375 beside a project named "Instrument" the views were
+  // a 49px scroller in the bar, part of Chat and none of Code in sight.
+  for (const width of [360, 375, 390]) {
+    test(`on a phone ${width} wide every view is whole on screen beside a long project name, and Code opens a file`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 844 })
+      const projects = PROJECTS().map((p) => (p.slug === 'shop' ? { ...p, name: 'Instrument Portfolio Studio' } : p))
+      await studio(page, { projects })
+      await page.goto('/shop')
+      await expect(box(page)).toBeVisible()
+      const tabs = page.getByRole('tablist', { name: 'View' })
+      await expect(tabs).toHaveCount(1)
+      const whole = await tabs.evaluate((list) =>
+        [...list.querySelectorAll('[role="tab"]')].map((el) => {
+          const b = el.getBoundingClientRect()
+          // What is drawn at the tab's middle is the tab, not something over it.
+          const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
+          return { name: el.getAttribute('aria-label'), l: b.left, r: b.right, on: Boolean(top && el.contains(top)) }
+        }),
+      )
+      expect(whole.map((w) => w.name)).toEqual(['Chat', 'Preview', 'Files', 'Code', 'Layers'])
+      for (const w of whole) {
+        expect(w.l, `${w.name} starts on screen`).toBeGreaterThanOrEqual(0)
+        expect(w.r, `${w.name} ends on screen`).toBeLessThanOrEqual(width)
+        expect(w.on, `${w.name} is not covered`).toBe(true)
+      }
+      await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+
+      await page.getByRole('tab', { name: 'Files' }).click()
+      await page.getByLabel('shop at agent/cart').getByText('index.html').click()
+      await expect(page.getByRole('tab', { name: 'Code' })).toHaveAttribute('aria-selected', 'true')
+      await expect(page.getByRole('tabpanel', { name: 'index.html' })).toContainText('<h1>Shop</h1>')
+      await page.screenshot({ path: info.outputPath(`phone-${width}.png`) })
+    })
+  }
 })
 
 test.describe('a repository’s workspace', () => {
