@@ -511,10 +511,16 @@ export const shown = (k: Kept | null | undefined): Suggestion[] => (k ? k.rows.f
  * person's activity and signup do not. The one copy here that is authored, so
  * its words are marked (`phrase`) and drawn in the reader's language, the
  * prompt too: it is sent as their message and shown as theirs.
+ *
+ * Dev's starter asks before it builds. A press names no project, no audience
+ * and no content, and a model handed "build a landing site for my project"
+ * with none of that invents all three: it built a Hanzo AI showcase nobody
+ * asked for (hanzo-inc/app#442). So the press starts the conversation about
+ * the page, and the build follows the answers.
  */
 export const STARTERS: readonly Suggestion[] = [
   { id: 'start:chat', icon: 'chat', title: phrase('Ask what Hanzo can do for you'), summary: '', act: { kind: 'send', prompt: phrase('What can you do for me? Give me three concrete things to try today.') } },
-  { id: 'start:dev', icon: 'agent', title: phrase('Build a landing page with Dev'), summary: '', act: { kind: 'task', prompt: phrase('Build a one-page landing site for my project and give me the preview link.') } },
+  { id: 'start:dev', icon: 'agent', title: phrase('Build a landing page with Dev'), summary: '', act: { kind: 'task', prompt: phrase('I want a one-page landing page. Before you build anything, ask me what it is for, who it is for and what it should say.') } },
   { id: 'start:research', icon: 'file', title: phrase('Get a cited brief on AI agents'), summary: '', act: { kind: 'send', prompt: phrase('Research the state of AI coding agents this month and give me a short brief with sources.') } },
 ]
 

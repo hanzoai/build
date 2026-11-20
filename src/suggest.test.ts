@@ -314,6 +314,14 @@ describe('what the account keeps', () => {
     for (const r of STARTERS) expect(r.title.split(' ').length).toBeLessThanOrEqual(7)
   })
 
+  it('asks what the page is for before Dev builds one', () => {
+    const dev = STARTERS.find((r) => r.id === 'start:dev')!
+    expect(dev.act.kind).toBe('task')
+    const prompt = 'prompt' in dev.act ? dev.act.prompt : ''
+    expect(prompt).toMatch(/^I want a one-page landing page\. Before you build anything, ask me /)
+    for (const what of ['what it is for', 'who it is for', 'what it should say']) expect(prompt).toContain(what)
+  })
+
   it('knows a starter, whose words are authored and translated, from a row of the person’s own', () => {
     expect(STARTERS.every(starter)).toBe(true)
     expect(STARTERS.map((r) => r.title)).toEqual(['Ask what Hanzo can do for you', 'Build a landing page with Dev', 'Get a cited brief on AI agents'])
