@@ -62,6 +62,9 @@ export { artifacts, blob, lead, renders, Reply, Served, speakable, speaker, type
 export { frames, Page, Panel, PanelToggle, type Kind, type PageProps, type PanelProps, type Suggestion } from './panel.tsx'
 export { SideProvider, useSplit, type Split } from './side.tsx'
 export { PrefsProvider } from './prefs.tsx'
+export { deviceKey, friendly, heldNames, NAMES_KEY, rename, shellKey, useDeviceNames, type Names } from './names.ts'
+export { formatDeviceLabel, type DeviceLabelOptions } from './dev-mode.ts'
+export { Rename } from './ask.tsx'
 export { kinds, Summary, useKinds, type Entry, type Section } from './summary.tsx'
 
 /**

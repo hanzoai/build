@@ -33,9 +33,9 @@ describe('Developer mode and friendly device labels', () => {
     expect(DEV_MODE_EVENT).toBe('hanzo:dev-mode')
   })
 
-  it('keeps a machine\u2019s own name, tidied, with its hardware beneath', () => {
+  it('keeps a machine\u2019s own name, as a person says it, with its hardware beneath', () => {
     expect(formatDeviceLabel('MacBook-Pro.local \u00b7 16 vCPU / 64G', { devMode: false })).toEqual({
-      title: 'MacBook-Pro',
+      title: 'MacBook Pro',
       detail: 'MacBook-Pro.local \u00b7 16 vCPU / 64G',
     })
     expect(formatDeviceLabel('dgx (shell-1)', { devMode: false, hardware: '1\u00d7 GB10' })).toEqual({ title: 'dgx', detail: '1\u00d7 GB10 \u00b7 dgx (shell-1)' })

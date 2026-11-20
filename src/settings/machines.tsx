@@ -40,6 +40,7 @@ import {
   formatRelative,
   key,
   KINDS,
+  machineKey,
   machines,
   remove,
   state,
@@ -50,6 +51,7 @@ import { Confirm, Rename } from '../ask.tsx'
 import { useRead } from '../data.ts'
 import { useDevMode } from '../dev-mode.ts'
 import { useHost, useTarget } from '../host.tsx'
+import { rename, useDeviceNames } from '../names.ts'
 import { Card, Field, Group, Heading, Note, Once, Row, Soft } from './ui.tsx'
 
 /** What `hanzo link` needs, in the order it is typed on the machine. */
@@ -149,6 +151,7 @@ export function Machines() {
   const host = useHost()
   const target = useTarget()
   const signed = Boolean(host.person)
+  const names = useDeviceNames(signed ? target : null)
   const [devMode] = useDevMode()
   const list = useRead(signed ? () => machines(target) : null, UNREAD, [target, signed])
   const [adding, setAdding] = useState(false)
@@ -181,7 +184,7 @@ export function Machines() {
   const drain = async (m: Machine, status: 'online' | 'draining') => {
     setNote('')
     try {
-      const display = displayMachine(m, { devMode, say: t })
+      const display = displayMachine(m, { devMode, say: t, names })
       await change(target, m.id, { status })
       setNote(status === 'draining' ? t('{name} takes no new runs', { name: display.title }) : t('{name} takes runs again', { name: display.title }))
       list.reload()
@@ -312,7 +315,7 @@ export function Machines() {
         ) : (
           <Card>
             {list.value.map((m, i) => {
-              const display = displayMachine(m, { devMode, say: t })
+              const display = displayMachine(m, { devMode, say: t, names })
               const showDetails = devMode ? !collapsedDevIds[m.id] : expandedId === m.id
               const toggleDetails = () => {
                 if (devMode) {
@@ -574,30 +577,32 @@ export function Machines() {
         open={renaming !== null}
         onOpenChange={(o) => !o && setRenaming(null)}
         title={t('Rename machine')}
-        name={renaming?.label ?? ''}
-        // Each dialog acts only while it is open, which is while its machine is chosen.
+        name={renaming ? displayMachine(renaming, { devMode, say: t, names }).title : ''}
+        // Each dialog acts only while it is open, which is while its machine is chosen. The name is the person's, kept on
+        // their account (names.ts): the machine's own record is renamed back to its hostname by its next heartbeat.
         run={async (label) => {
-          await change(target, renaming!.id, { label })
+          // Typed back to the name it has by default, it keeps no name of the person's.
+          const own = displayMachine(renaming!, { devMode, say: t }).title
+          await rename(machineKey(renaming!), label === own ? '' : label, target)
           setNote(t('Renamed to {name}', { name: label }))
-          list.reload()
         }}
       />
       <Confirm
         open={removing !== null}
         onOpenChange={(o) => !o && setRemoving(null)}
-        title={removing ? t('Remove {name}?', { name: removing.label }) : t('Remove this machine?')}
+        title={removing ? t('Remove {name}?', { name: displayMachine(removing, { devMode, say: t, names }).title }) : t('Remove this machine?')}
         says={t('Runs can no longer be sent to it, and its claim key stops working. Linking it again registers it anew.')}
         act={t('Remove')}
         run={async () => {
           await remove(target, removing!.id)
-          setNote(t('{name} is removed', { name: removing!.label }))
+          setNote(t('{name} is removed', { name: displayMachine(removing!, { devMode, say: t, names }).title }))
           list.reload()
         }}
       />
       <Confirm
         open={keying !== null}
         onOpenChange={(o) => !o && setKeying(null)}
-        title={keying ? t('Mint a claim key for {name}?', { name: keying.label }) : t('Mint a claim key for this machine?')}
+        title={keying ? t('Mint a claim key for {name}?', { name: displayMachine(keying, { devMode, say: t, names }).title }) : t('Mint a claim key for this machine?')}
         says={t('A key it had before stops working, so a runner using it stops getting runs until it has the new one. The new key is shown once.')}
         act={t('Mint key')}
         run={async () => {
@@ -607,7 +612,7 @@ export function Machines() {
       />
       <Dialog open={minted !== null} onOpenChange={(o) => !o && setMinted(null)}>
         <DialogContent maxW={480} showCloseButton={false}>
-          <DialogTitle>{t('Claim key for {name}', { name: minted?.machine.label ?? '' })}</DialogTitle>
+          <DialogTitle>{t('Claim key for {name}', { name: minted ? displayMachine(minted.machine, { devMode, say: t, names }).title : '' })}</DialogTitle>
           {minted ? (
             <YStack gap="$3">
               <Once value={minted.key} label={t('Claim key')} copy={t('Copy claim key')}>

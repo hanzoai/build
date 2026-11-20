@@ -17,6 +17,7 @@ import { phrase } from '@hanzo/i18n'
 import type { Say } from '@hanzo/i18n/react'
 
 import { formatDeviceLabel } from '../dev-mode.ts'
+import { deviceKey, type Names } from '../names.ts'
 import { call, Refusal, seg, type Target } from './call.ts'
 
 export const KINDS = ['laptop', 'gpu', 'cloud', 'cluster', 'machine'] as const
@@ -140,8 +141,12 @@ function hardwareSummary(m: Machine): string {
   return [hw, host].filter(Boolean).join(' · ')
 }
 
-export function displayMachine(m: Machine, opts?: { devMode?: boolean; say?: Say }): { title: string; detail?: string } {
-  return formatDeviceLabel(m.label, { hardware: hardwareSummary(m), host: m.host, devMode: opts?.devMode, say: opts?.say })
+/** The key a machine's name is kept under (names.ts): its hostname, else its label, else its id. */
+export const machineKey = (m: Pick<Machine, 'host' | 'label' | 'id'>): string => deviceKey(m.host, m.label, m.id)
+
+/** A machine as a person reads it: the name they gave it (`names`, from `useDeviceNames`), else its own as a person says it. */
+export function displayMachine(m: Machine, opts?: { devMode?: boolean; say?: Say; names?: Names }): { title: string; detail?: string } {
+  return formatDeviceLabel(m.label, { hardware: hardwareSummary(m), host: m.host, name: opts?.names?.[machineKey(m)], devMode: opts?.devMode, say: opts?.say })
 }
 
 export function machine(raw: unknown): Machine {
