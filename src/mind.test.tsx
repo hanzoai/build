@@ -63,11 +63,11 @@ describe('the kept choice', () => {
   it('reads an effort it does not know, a blank model and a broken entry as the defaults', () => {
     browser({ 'hanzo.mind': JSON.stringify({ model: '  ', effort: 'extreme' }) })
     expect(kept()).toEqual(FIRST)
-    // Low and Medium were offered once; a choice kept from then opens on Auto, which a run sends as medium.
-    for (const effort of ['low', 'medium']) {
-      browser({ 'hanzo.mind': JSON.stringify({ model: 'zen6', effort }) })
-      expect(kept()).toEqual({ model: 'zen6', effort: 'auto' })
-    }
+    // Low is Dev's Fast effort, so a saved 'low' is kept; Medium was offered once and opens on Auto, which a run sends as medium.
+    browser({ 'hanzo.mind': JSON.stringify({ model: 'zen6', effort: 'low' }) })
+    expect(kept()).toEqual({ model: 'zen6', effort: 'low' })
+    browser({ 'hanzo.mind': JSON.stringify({ model: 'zen6', effort: 'medium' }) })
+    expect(kept()).toEqual({ model: 'zen6', effort: 'auto' })
     browser({ 'hanzo.mind': '{not json' })
     expect(kept()).toEqual(FIRST)
   })
@@ -75,10 +75,12 @@ describe('the kept choice', () => {
   it('keeps only an effort it offers, whoever asks', () => {
     const { items } = browser()
     keep({ model: 'zen6', effort: 'max' })
-    keep({ effort: 'low' as never })
+    keep({ effort: 'medium' as never })
     expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'auto' })
+    keep({ effort: 'low' })
+    expect(JSON.parse(items.get('hanzo.mind')!)).toEqual({ model: 'zen6', effort: 'low' })
     keep({ model: 'zen6-flash' })
-    expect(kept()).toEqual({ model: 'zen6-flash', effort: 'auto' })
+    expect(kept()).toEqual({ model: 'zen6-flash', effort: 'low' })
   })
 
   it('holds a choice for the page where the browser refuses to store it', () => {
@@ -95,12 +97,12 @@ describe('the kept choice', () => {
     expect(kept()).toEqual({ model: 'zen6', effort: 'auto' })
   })
 
-  it('offers Auto, High and Max, in that order, and nothing else', () => {
-    expect(EFFORTS.map((e) => e.label)).toEqual(['Auto', 'High', 'Max'])
+  it('offers Auto, Fast, High and Max, in that order, and nothing else', () => {
+    expect(EFFORTS.map((e) => e.label)).toEqual(['Auto', 'Fast', 'High', 'Max'])
   })
 
-  it('names to a coding run only an effort it takes: medium for Auto, high for the rest', () => {
-    expect(EFFORTS.map((e) => level(e.id))).toEqual(['medium', 'high', 'high'])
+  it('names to a coding run only an effort it takes: medium for Auto, low for Fast, high for the rest', () => {
+    expect(EFFORTS.map((e) => level(e.id))).toEqual(['medium', 'low', 'high', 'high'])
   })
 })
 

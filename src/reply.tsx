@@ -41,6 +41,7 @@ import {
 import { mouth, speech } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
+import { copy as toClipboard } from './clipboard.ts'
 import type { Target } from './api/call.ts'
 
 /** A fenced block an answer wrote out. */
@@ -148,6 +149,26 @@ export function speaker(t: Target): Listen {
   }
 }
 
+export type Vote = 'up' | 'down'
+
+/** Show a verdict at once and send it; if sending fails, put the earlier one back, unless the person has voted again since (`last` counts the votes). */
+export function rated(
+  prev: Vote | null,
+  next: Vote,
+  send: ((vote: Vote) => void | Promise<void>) | undefined,
+  set: (to: Vote | null) => void,
+  last: { n: number },
+): void {
+  const mine = ++last.n
+  set(next)
+  if (!send) return
+  Promise.resolve()
+    .then(() => send(next))
+    .catch(() => {
+      if (last.n === mine) set(prev)
+    })
+}
+
 /** One quiet control in the row. It rests dim and comes up under a pointer or focus. */
 function Act({
   label,
@@ -205,14 +226,15 @@ export function Reply({
   onOpen?: () => void
   onRedo?: (action: RedoAction) => void
   onBranch?: () => void
-  onRate?: (vote: 'up' | 'down') => void
+  onRate?: (vote: Vote) => void | Promise<void>
   timestamp?: string
   children?: ReactNode
 }) {
   const { t: say } = useI18n()
   const [took, setTook] = useState(false)
   const [speaking, setSpeaking] = useState(false)
-  const [vote, setVote] = useState<'up' | 'down' | null>(null)
+  const [vote, setVote] = useState<Vote | null>(null)
+  const votes = useRef({ n: 0 })
   const [redoOpen, setRedoOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
@@ -259,13 +281,15 @@ export function Reply({
     onRedo?.(payload)
   }
 
+  const rate = (next: Vote) => rated(vote, next, onRate, setVote, votes.current)
+
   return (
     <XStack data-slot="reply" ml="$-1" items="center" gap="$1" flexWrap="wrap">
       <Act
         slot="reply-copy"
         label={took ? say('Copied') : say('Copy this answer')}
         lit={took}
-        onPress={() => void navigator.clipboard?.writeText(text).then(() => setTook(true), () => {})}
+        onPress={() => void toClipboard(text).then((ok) => ok && setTook(true))}
       >
         {took ? <Check size={15} /> : <Copy size={15} />}
       </Act>
@@ -279,10 +303,7 @@ export function Reply({
         <DropdownMenuContent align="start" minW={176} data-slot="reply-rate-menu">
           <DropdownMenuItem
             data-slot="reply-rate-up"
-            onSelect={() => {
-              setVote('up')
-              onRate?.('up')
-            }}
+            onSelect={() => rate('up')}
           >
             <XStack items="center" gap="$2">
               <ThumbsUp size={15} />
@@ -293,10 +314,7 @@ export function Reply({
           </DropdownMenuItem>
           <DropdownMenuItem
             data-slot="reply-rate-down"
-            onSelect={() => {
-              setVote('down')
-              onRate?.('down')
-            }}
+            onSelect={() => rate('down')}
           >
             <XStack items="center" gap="$2">
               <ThumbsDown size={15} />
@@ -331,71 +349,73 @@ export function Reply({
         <Share size={15} />
       </Act>
 
-      <DropdownMenu open={redoOpen} onOpenChange={setRedoOpen}>
-        <DropdownMenuTrigger asChild>
-          <Act slot="reply-redo" label={say('Regenerate response')} lit={redoOpen}>
-            <RefreshCw size={15} />
-          </Act>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" minW={232} data-slot="reply-redo-menu">
-          <XStack items="center" gap="$1.5" px="$2" py="$1.5">
-            <Input
-              data-slot="reply-redo-input"
-              placeholder={say('Ask to change response')}
-              value={redoPrompt}
-              onChangeText={setRedoPrompt}
-              onKeyDown={(e: { key?: string; preventDefault?: () => void; stopPropagation?: () => void }) => {
-                e.stopPropagation?.()
-                if (e.key === 'Enter' && redoPrompt.trim()) {
-                  e.preventDefault?.()
-                  triggerRedo({ mode: 'prompt', prompt: redoPrompt.trim() })
-                }
-              }}
-              flex={1}
-              size="sm"
-            />
-            <Act
-              label={say('Submit change')}
-              lit={Boolean(redoPrompt.trim())}
-              onPress={() => {
-                if (redoPrompt.trim()) {
-                  triggerRedo({ mode: 'prompt', prompt: redoPrompt.trim() })
-                }
-              }}
-            >
-              <ArrowUp size={14} />
-            </Act>
-          </XStack>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem data-slot="redo-retry" onSelect={() => triggerRedo({ mode: 'retry' })}>
-            <XStack items="center" gap="$2">
+      {onRedo ? (
+        <DropdownMenu open={redoOpen} onOpenChange={setRedoOpen}>
+          <DropdownMenuTrigger asChild>
+            <Act slot="reply-redo" label={say('Regenerate response')} lit={redoOpen}>
               <RefreshCw size={15} />
-              <SizableText size="$2" color="$ink">
-                {say('Try again')}
-              </SizableText>
-              <SizableText size="$2" color="$hint">
-                · Auto
-              </SizableText>
+            </Act>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" minW={232} data-slot="reply-redo-menu">
+            <XStack items="center" gap="$1.5" px="$2" py="$1.5">
+              <Input
+                data-slot="reply-redo-input"
+                placeholder={say('Ask to change response')}
+                value={redoPrompt}
+                onChangeText={setRedoPrompt}
+                onKeyDown={(e: { key?: string; preventDefault?: () => void; stopPropagation?: () => void }) => {
+                  e.stopPropagation?.()
+                  if (e.key === 'Enter' && redoPrompt.trim()) {
+                    e.preventDefault?.()
+                    triggerRedo({ mode: 'prompt', prompt: redoPrompt.trim() })
+                  }
+                }}
+                flex={1}
+                size="sm"
+              />
+              <Act
+                label={say('Submit change')}
+                lit={Boolean(redoPrompt.trim())}
+                onPress={() => {
+                  if (redoPrompt.trim()) {
+                    triggerRedo({ mode: 'prompt', prompt: redoPrompt.trim() })
+                  }
+                }}
+              >
+                <ArrowUp size={14} />
+              </Act>
             </XStack>
-          </DropdownMenuItem>
-          <DropdownMenuItem data-slot="redo-think" onSelect={() => triggerRedo({ mode: 'think' })}>
-            <XStack items="center" gap="$2">
-              <Lightbulb size={15} />
-              <SizableText size="$2" color="$ink">
-                {say('Think longer')}
-              </SizableText>
-            </XStack>
-          </DropdownMenuItem>
-          <DropdownMenuItem data-slot="redo-web" onSelect={() => triggerRedo({ mode: 'web' })}>
-            <XStack items="center" gap="$2">
-              <Globe size={15} />
-              <SizableText size="$2" color="$ink">
-                {say('Search the web')}
-              </SizableText>
-            </XStack>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem data-slot="redo-retry" onSelect={() => triggerRedo({ mode: 'retry' })}>
+              <XStack items="center" gap="$2">
+                <RefreshCw size={15} />
+                <SizableText size="$2" color="$ink">
+                  {say('Try again')}
+                </SizableText>
+                <SizableText size="$2" color="$hint">
+                  · Auto
+                </SizableText>
+              </XStack>
+            </DropdownMenuItem>
+            <DropdownMenuItem data-slot="redo-think" onSelect={() => triggerRedo({ mode: 'think' })}>
+              <XStack items="center" gap="$2">
+                <Lightbulb size={15} />
+                <SizableText size="$2" color="$ink">
+                  {say('Think longer')}
+                </SizableText>
+              </XStack>
+            </DropdownMenuItem>
+            <DropdownMenuItem data-slot="redo-web" onSelect={() => triggerRedo({ mode: 'web' })}>
+              <XStack items="center" gap="$2">
+                <Globe size={15} />
+                <SizableText size="$2" color="$ink">
+                  {say('Search the web')}
+                </SizableText>
+              </XStack>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
 
       {onOpen ? (
         <Act slot="reply-open" label={say('Open in the side panel')} onPress={onOpen}>
@@ -425,13 +445,13 @@ export function Reply({
             </SizableText>
           </YStack>
           <XStack items="flex-start" gap="$2.5">
-            <Globe size={16} />
+            <Link2 size={16} />
             <YStack gap="$0.5" flex={1}>
               <SizableText size="$2" fontWeight="600" color="$ink">
-                {say('Share a public link to this message')}
+                {say('Copy link to this run')}
               </SizableText>
               <SizableText size="$1" color="$soft">
-                {say('Anyone with this link can access this message.')}
+                {say('Members of your workspace with access can open this link.')}
               </SizableText>
             </YStack>
           </XStack>
@@ -443,7 +463,7 @@ export function Reply({
               items="center"
               gap="$1.5"
               cursor="pointer"
-              onPress={() => void navigator.clipboard?.writeText(shareUrl).then(() => setShareCopied(true), () => {})}
+              onPress={() => void toClipboard(shareUrl).then((ok) => ok && setShareCopied(true))}
             >
               <XStack width={44} height={44} rounded={999} bg="$hover" items="center" justify="center">
                 {shareCopied ? <Check size={17} /> : <Link2 size={17} />}

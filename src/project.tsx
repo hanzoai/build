@@ -44,11 +44,15 @@
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import {
+  AlertCircle,
+  Check,
   Clock,
   ExternalLink,
+  Globe,
   MousePointerClick,
   PanelLeft,
   RefreshCcw,
+  Search,
   Share2,
   Upload,
 } from '@hanzogui/lucide-icons-2'
@@ -75,12 +79,14 @@ import {
   type Verdict,
 } from '@hanzo/ui/agents'
 import { Composer, Message } from '@hanzo/ui/chat'
-import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
+import { Button, Dialog, DialogContent, DialogTitle, Input, Skeleton, toast } from '@hanzo/ui'
 import { HanzoMark } from '@hanzo/ui/product'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { copy as toClipboard } from './clipboard.ts'
+import { RING } from './pane.ts'
 import { read as pushed, type Pull } from './api/changes.ts'
 import { codebases, one, type Codebase } from './api/codebases.ts'
 import { start, type Mode } from './api/coding.ts'
@@ -176,7 +182,15 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
               </SizableText>
             ) : null}
             {!open ? (
-              <XStack render="button" onPress={onOpen} hitSlop={8}>
+              <XStack
+                render="button"
+                onPress={onOpen}
+                px="$1.5"
+                py="$1"
+                minH={28}
+                items="center"
+                focusVisibleStyle={RING}
+              >
                 <SizableText size="$1" color="$soft" textDecorationLine="underline">
                   {t('Show steps')}
                 </SizableText>
@@ -240,6 +254,7 @@ export function Project({ at }: { at: Where }) {
       setNow(Date.now())
       again()
       setRedo({ busy: false, error: '' })
+      toast.success(t('Publish queued for {name}', { name: title }))
     } catch (e) {
       setRedo({ busy: false, error: (e as Error).message })
     }
@@ -299,7 +314,12 @@ export function Project({ at }: { at: Where }) {
   const [history, setHistory] = useState(false)
   const [publish, setPublish] = useState<Source | null>(null)
   const [switcher, setSwitcher] = useState(false)
+  const [switchQ, setSwitchQ] = useState('')
   const repos = useRead(switcher && signed ? () => codebases(target) : null, [] as Codebase[], [target, switcher, signed])
+  const filteredRepos = useMemo(() => {
+    const needle = switchQ.trim().toLowerCase()
+    return needle ? repos.value.filter((c) => `${c.org}/${c.name}`.toLowerCase().includes(needle)) : repos.value
+  }, [repos.value, switchQ])
   const frame = useRef<PreviewHandle | null>(null)
 
   // What was published may be new files at the same address: the project is read
@@ -480,21 +500,20 @@ export function Project({ at }: { at: Where }) {
 
   const share = async () => {
     const link = project?.live || `${window.location.origin}${window.location.pathname}`
-    try {
-      await navigator.clipboard.writeText(link)
-      setNote(t('Copied {link}', { link }))
-    } catch {
-      setNote(link)
-    }
+    setNote((await toClipboard(link)) ? t('Copied {link}', { link }) : link)
   }
 
   if (!signed) {
     return (
-      <YStack flex={1} items="center" justify="center" gap="$3">
-        <SizableText size="$4" color="$ink">
-          {t('Sign in to open this project.')}
-        </SizableText>
-        <Button onPress={() => host.signIn?.()}>{t('Sign in')}</Button>
+      <YStack flex={1} items="center" justify="center" px="$4">
+        <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$6" py="$8" gap="$3" items="center" width="100%" maxW={440}>
+          <SizableText size="$4" fontWeight="500" color="$ink" text="center">
+            {t('Sign in to open this project.')}
+          </SizableText>
+          <Button size="sm" variant="primary" onPress={() => host.signIn?.()}>
+            {t('Sign in')}
+          </Button>
+        </YStack>
       </YStack>
     )
   }
@@ -503,38 +522,42 @@ export function Project({ at }: { at: Where }) {
   if (named && host.org && named.org.toLowerCase() !== host.org.toLowerCase()) {
     const member = host.memberships?.some((m) => m.toLowerCase() === named.org.toLowerCase()) && host.chooseOrg
     return (
-      <YStack flex={1} items="center" justify="center" gap="$3" px="$4">
-        <SizableText size="$4" color="$ink" text="center">
-          {t('{repo} is in {org}, and you are working in {current}.', { repo: `${named.org}/${named.name}`, org: named.org, current: host.org })}
-        </SizableText>
-        {member ? (
-          <Button variant="outline" onPress={() => host.chooseOrg?.(named.org)}>
-            {t('Switch to {org}', { org: named.org })}
-          </Button>
-        ) : (
-          <Button variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: 'projects' }))}>
-            {t('See this organization’s projects')}
-          </Button>
-        )}
+      <YStack flex={1} items="center" justify="center" px="$4">
+        <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$6" py="$8" gap="$3" items="center" width="100%" maxW={480}>
+          <SizableText size="$4" fontWeight="500" color="$ink" text="center">
+            {t('{repo} is in {org}, and you are working in {current}.', { repo: `${named.org}/${named.name}`, org: named.org, current: host.org })}
+          </SizableText>
+          {member ? (
+            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => host.chooseOrg?.(named.org)}>
+              {t('Switch to {org}', { org: named.org })}
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => host.go(path({ kind: 'screen', screen: 'projects' }))}>
+              {t('See this organization’s projects')}
+            </Button>
+          )}
+        </YStack>
       </YStack>
     )
   }
 
   if (named ? !forge.loading && !forge.value : !all.loading && !project && !all.error) {
     return (
-      <YStack flex={1} items="center" justify="center" gap="$3" px="$4">
-        <SizableText size="$4" color="$ink" text="center">
-          {named
-            ? forge.error && !/not found|404/i.test(forge.error.message)
-              ? forge.error.message
-              : t('{org} has no repository named {name}.', { org: named.org, name: named.name })
-            : host.org
-              ? t('{org} has no project named {name}.', { org: host.org, name: slug })
-              : t('There is no project named {name}.', { name: slug })}
-        </SizableText>
-        <Button variant="outline" onPress={() => host.go(path({ kind: 'screen', screen: named ? 'projects' : 'artifacts' }))}>
-          {named ? t('See this organization’s projects') : t('See what this organization has built')}
-        </Button>
+      <YStack flex={1} items="center" justify="center" px="$4">
+        <YStack borderWidth={1} borderColor="var(--border-strong)" rounded="$4" bg="$panel" px="$6" py="$8" gap="$3" items="center" width="100%" maxW={480}>
+          <SizableText size="$4" fontWeight="500" color="$ink" text="center">
+            {named
+              ? forge.error && !/not found|404/i.test(forge.error.message)
+                ? forge.error.message
+                : t('{org} has no repository named {name}.', { org: named.org, name: named.name })
+              : host.org
+                ? t('{org} has no project named {name}.', { org: host.org, name: slug })
+                : t('There is no project named {name}.', { name: slug })}
+          </SizableText>
+          <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => host.go(path({ kind: 'screen', screen: named ? 'projects' : 'artifacts' }))}>
+            {named ? t('See this organization’s projects') : t('See what this organization has built')}
+          </Button>
+        </YStack>
       </YStack>
     )
   }
@@ -544,25 +567,34 @@ export function Project({ at }: { at: Where }) {
       {/* Its first line sits level with the preview's toolbar beside it. */}
       <YStack flex={1} minH={0} overflow="scroll" px="$3" pt="$2" pb="$4" gap="$4" $md={{ pr: 0 }}>
         {ordered.length === 0 ? (
-          <SizableText size="$2" color="$ink">
-            {runs.loading
-              ? t('Reading this project’s runs…')
-              : project?.live
+          runs.loading ? (
+            <YStack gap="$3" aria-busy={true}>
+              <SizableText size="$2" color="$soft">
+                {t('Reading this project’s runs…')}
+              </SizableText>
+              <Skeleton layout="block" width="84%" height={14} rounded="$2" />
+              <Skeleton layout="block" width="66%" height={14} rounded="$2" />
+              <Skeleton layout="block" width="92%" height={56} rounded="$3" />
+            </YStack>
+          ) : (
+            <SizableText size="$2" color="$ink">
+              {project?.live
                 ? t('{name} is loaded — it is in the preview, and every run on it is under the clock above. Say what to change and it gets built.', { name: project.name })
                 : stalled
                   ? t('{name} has been publishing for {minutes} minutes without finishing. Publish it again from the preview, or say what to change and it gets built.', { name: project?.name ?? '', minutes: Math.floor(ran / 60) })
                   : failed
                     ? t('{name} could not be published. Publish it again from the preview, or say what to change and it gets built.', { name: project?.name ?? '' })
                     : building
-                  ? t('{name} is being published — it appears in the preview when its build finishes. Say what to change and it gets built.', { name: project?.name ?? '' })
-                  : starter
-                    ? t('{name} is loaded — the preview shows the {starter} starter until your copy is published. Say what to change and it gets built.', { name: project?.name ?? '', starter: starter.title })
-                    : project
-                      ? t('{name} is loaded and nothing is published yet. Say what to change and it gets built.', { name: project.name })
-                      : named
-                        ? t('{repo} is open on {branch}. Say what to change and it gets built there.', { repo: `${named.org}/${named.name}`, branch: home })
-                        : t('{name} is loaded. Say what to change and it gets built.', { name: slug })}
-          </SizableText>
+                      ? t('{name} is being published — it appears in the preview when its build finishes. Say what to change and it gets built.', { name: project?.name ?? '' })
+                      : starter
+                        ? t('{name} is loaded — the preview shows the {starter} starter until your copy is published. Say what to change and it gets built.', { name: project?.name ?? '', starter: starter.title })
+                        : project
+                          ? t('{name} is loaded and nothing is published yet. Say what to change and it gets built.', { name: project.name })
+                          : named
+                            ? t('{repo} is open on {branch}. Say what to change and it gets built there.', { repo: `${named.org}/${named.name}`, branch: home })
+                            : t('{name} is loaded. Say what to change and it gets built.', { name: slug })}
+            </SizableText>
+          )
         ) : (
           ordered.map((r) => (
             <YStack key={r.id} gap="$2">
@@ -659,37 +691,42 @@ export function Project({ at }: { at: Where }) {
         device={device}
         onBridge={onBridge}
         empty={
-          <YStack items="center" gap="$2" p="$6">
-            <SizableText size="$3" color="$ink">
-              {stalled
-                ? t('Publishing is taking too long')
-                : building
-                  ? project?.forked
-                    ? t('Publishing your copy…')
-                    : t('Publishing…')
-                  : failed
-                    ? t('Publishing failed')
-                    : t('Nothing deployed yet')}
-            </SizableText>
-            <SizableText size="$2" color="$soft" text="center">
-              {stalled
-                ? t('Its build started {minutes} minutes ago and has not finished.', { minutes: Math.floor(ran / 60) })
-                : building
-                  ? t('Its page appears here when the build finishes.')
-                  : failed
-                    ? why
-                    : t('Publish this project and its page appears here.')}
-            </SizableText>
-            {(stalled || failed) && clone ? (
-              <Button variant="outline" disabled={redo.busy} onPress={() => void retry()}>
-                {t('Publish again')}
-              </Button>
-            ) : null}
-            {redo.error ? (
-              <SizableText size="$2" color="$soft" text="center" role="alert">
-                {redo.error}
+          <YStack items="center" justify="center" p="$6" width="100%">
+            <YStack items="center" gap="$2.5" px="$5" py="$6" rounded="$4" borderWidth={1} borderColor="var(--border-strong)" bg="$panel" width="100%" maxW={420}>
+              <YStack width={36} height={36} rounded="$3" bg="$raised" items="center" justify="center" aria-hidden>
+                {stalled || failed ? <AlertCircle size={18} color="var(--state-error)" /> : <Globe size={18} color="$soft" />}
+              </YStack>
+              <SizableText size="$3" fontWeight="500" color="$ink" text="center">
+                {stalled
+                  ? t('Publishing is taking too long')
+                  : building
+                    ? project?.forked
+                      ? t('Publishing your copy…')
+                      : t('Publishing…')
+                    : failed
+                      ? t('Publishing failed')
+                      : t('Nothing deployed yet')}
               </SizableText>
-            ) : null}
+              <SizableText size="$2" color="$soft" text="center">
+                {stalled
+                  ? t('Its build started {minutes} minutes ago and has not finished.', { minutes: Math.floor(ran / 60) })
+                  : building
+                    ? t('Its page appears here when the build finishes.')
+                    : failed
+                      ? why
+                      : t('Publish this project and its page appears here.')}
+              </SizableText>
+              {(stalled || failed) && clone ? (
+                <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={redo.busy} onPress={() => void retry()}>
+                  {redo.busy ? t('Publishing…') : t('Publish again')}
+                </Button>
+              ) : null}
+              {redo.error ? (
+                <SizableText size="$2" color="var(--state-error)" text="center" role="alert">
+                  {redo.error}
+                </SizableText>
+              ) : null}
+            </YStack>
           </YStack>
         }
         toolbar={
@@ -703,8 +740,12 @@ export function Project({ at }: { at: Where }) {
                 setEditing(next)
                 frame.current?.post({ type: 'preview:editable', active: next })
               }}
-              p="$2"
+              minW={36}
+              minH={36}
+              items="center"
+              justify="center"
               rounded="$10"
+              focusVisibleStyle={RING}
             >
               <MousePointerClick size={16} />
             </XStack>
@@ -717,9 +758,11 @@ export function Project({ at }: { at: Where }) {
   const body =
     view === 'preview' ? null : view === 'files' ? (
       repo && root.error ? (
-        <SizableText size="$2" color="$soft" p="$4" role="status">
-          {t('Nothing to show for {repo} at {ref}: the forge answered “{reason}”.', { repo, ref, reason: root.error.message })}
-        </SizableText>
+        <YStack p="$4">
+          <SizableText size="$2" color="var(--state-error)" role="status">
+            {t('Nothing to show for {repo} at {ref}: the forge answered “{reason}”.', { repo, ref, reason: root.error.message })}
+          </SizableText>
+        </YStack>
       ) : repo ? (
         <FileTree
           key={round}
@@ -752,16 +795,21 @@ export function Project({ at }: { at: Where }) {
       <YStack p="$4" gap="$2">
         {picked.length ? (
           picked.map((p) => (
-            <SizableText key={p.id} size="$2" color="$ink">
-              {p.label} — {p.id}
-            </SizableText>
+            <XStack key={p.id} items="center" gap="$2.5" px="$3" py="$2.5" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$panel">
+              <MousePointerClick size={14} color="$soft" />
+              <SizableText size="$2" color="$ink" fontFamily="$mono" flex={1} minW={0}>
+                {p.label} — {p.id}
+              </SizableText>
+            </XStack>
           ))
         ) : (
-          <SizableText size="$2" color="$soft">
-            {bridge
-              ? t('Pick an element in the preview to see it here and attach it to your next ask.')
-              : t('Layers are read through the preview bridge, and this page does not run it. Its elements cannot be listed from here.')}
-          </SizableText>
+          <YStack p="$5" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" items="center" gap="$2">
+            <SizableText size="$2" color="$soft" text="center">
+              {bridge
+                ? t('Pick an element in the preview to see it here and attach it to your next ask.')
+                : t('Layers are read through the preview bridge, and this page does not run it. Its elements cannot be listed from here.')}
+            </SizableText>
+          </YStack>
         )}
       </YStack>
     )
@@ -785,11 +833,15 @@ export function Project({ at }: { at: Where }) {
               render="button"
               aria-label={shut ? t('Show the chat') : t('Hide the chat')}
               aria-pressed={!shut}
-              onPress={() => (cramped ? setAsked(!asked) : setCollapsed(!collapsed))}
-              p="$1.5"
+              onClick={() => (cramped ? setAsked(!asked) : setCollapsed(!collapsed))}
+              minW={32}
+              minH={32}
+              items="center"
+              justify="center"
               rounded="$3"
               shrink={0}
               hoverStyle={{ bg: '$hover' }}
+              focusVisibleStyle={RING}
               $max-md={{ display: 'none' }}
             >
               <PanelLeft size={16} />
@@ -818,6 +870,7 @@ export function Project({ at }: { at: Where }) {
             </XStack>
             <Button
               size="sm"
+              variant="primary"
               aria-label={t('Publish')}
               disabled={!clone || !slug}
               onPress={() => setPublish({ repo: clone, title, ref, name: slug, project: slug })}
@@ -859,47 +912,78 @@ export function Project({ at }: { at: Where }) {
                 {t('No runs yet.')}
               </SizableText>
             ) : (
-              runs.value.map((r) => (
-                <XStack
-                  key={r.id}
-                  render="button"
-                  onPress={() => {
-                    setChosen(r.id)
-                    setHistory(false)
-                  }}
-                  justify="space-between"
-                  px="$2"
-                  py="$1.5"
-                  rounded="$3"
-                  hoverStyle={{ bg: '$hover' }}
-                >
-                  <SizableText size="$2" color="$ink" numberOfLines={1} flex={1}>
-                    {r.title || t('Untitled run')}
-                  </SizableText>
-                  <SizableText size="$1" color="$soft">
-                    {r.status}
-                  </SizableText>
-                </XStack>
-              ))
+              runs.value.map((r) => {
+                const active = r.id === current
+                return (
+                  <XStack
+                    key={r.id}
+                    render="button"
+                    aria-current={active ? 'true' : undefined}
+                    onPress={() => {
+                      setChosen(r.id)
+                      setHistory(false)
+                    }}
+                    justify="space-between"
+                    items="center"
+                    gap="$2"
+                    px="$2.5"
+                    py="$2"
+                    minH={40}
+                    $platform-web={{ textAlign: 'start' }}
+                    focusVisibleStyle={RING}
+                  >
+                    <SizableText size="$2" color="$ink" fontWeight={active ? '500' : '400'} numberOfLines={1} flex={1}>
+                      {r.title || t('Untitled run')}
+                    </SizableText>
+                    <SizableText size="$1" color="$soft" shrink={0}>
+                      {r.status}
+                    </SizableText>
+                  </XStack>
+                )
+              })
             )}
           </YStack>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={switcher} onOpenChange={setSwitcher}>
-        <DialogContent maxW={420}>
+      <Dialog
+        open={switcher}
+        onOpenChange={(o) => {
+          setSwitcher(o)
+          if (!o) setSwitchQ('')
+        }}
+      >
+        <DialogContent maxW={420} gap="$3">
           <DialogTitle>{t('Projects')}</DialogTitle>
+          {repos.value.length > 6 ? (
+            <Input
+              value={switchQ}
+              onChangeText={setSwitchQ}
+              placeholder={t('Find a project…')}
+              aria-label={t('Find a project')}
+              startAdornment={<Search size={14} color="$soft" />}
+            />
+          ) : null}
           <YStack gap="$1" maxH={420} overflow="scroll">
             {repos.error ? (
               <SizableText size="$2" color="$soft">
                 {repos.error.message}
               </SizableText>
             ) : repos.loading && repos.value.length === 0 ? (
-              <SizableText size="$2" color="$soft">
-                {t('Reading the forge…')}
+              <YStack gap="$2">
+                <SizableText size="$2" color="$soft">
+                  {t('Reading the forge…')}
+                </SizableText>
+                <Skeleton layout="block" height={36} rounded="$3" />
+                <Skeleton layout="block" height={36} rounded="$3" />
+                <Skeleton layout="block" height={36} rounded="$3" />
+              </YStack>
+            ) : filteredRepos.length === 0 ? (
+              <SizableText size="$2" color="$soft" py="$2">
+                {t('Nothing matches.')}
               </SizableText>
             ) : (
-              repos.value.map((c) => {
+              filteredRepos.map((c) => {
                 const here = Boolean(named) && c.name === named?.name
                 return (
                   <XStack
@@ -909,17 +993,24 @@ export function Project({ at }: { at: Where }) {
                     aria-current={here ? 'page' : undefined}
                     onPress={() => {
                       setSwitcher(false)
+                      setSwitchQ('')
                       host.go(path({ kind: 'repo', org: c.org || host.org || '', name: c.name }))
                     }}
-                    px="$2"
-                    py="$1.5"
+                    px="$2.5"
+                    py="$2"
+                    minH={40}
+                    items="center"
+                    justify="space-between"
+                    gap="$2"
                     rounded="$3"
-                    bg={here ? '$hover' : undefined}
                     hoverStyle={{ bg: '$hover' }}
+                    $platform-web={{ textAlign: 'start' }}
+                    focusVisibleStyle={RING}
                   >
                     <SizableText size="$2" color="$ink" numberOfLines={1}>
                       {c.name}
                     </SizableText>
+                    {here ? <Check size={14} color="$ink" /> : null}
                   </XStack>
                 )
               })
@@ -930,6 +1021,7 @@ export function Project({ at }: { at: Where }) {
             size="sm"
             onPress={() => {
               setSwitcher(false)
+              setSwitchQ('')
               host.go(path({ kind: 'screen', screen: 'projects' }))
             }}
           >

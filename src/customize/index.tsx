@@ -11,13 +11,14 @@
  *
  * Its words are the reader's language (@hanzo/i18n `t`).
  */
-import { SizableText, XStack, YStack } from '@hanzo/gui'
+import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { BookOpen, Bot, Plug, Plus, Puzzle, Users } from '@hanzogui/lucide-icons-2'
+import { BookOpen, Bot, Plug, Plus, Puzzle, Search, Users, X } from '@hanzogui/lucide-icons-2'
 import { Button, Input } from '@hanzo/ui'
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useId, useState, type ReactNode } from 'react'
 
+import { RING, RING_INSET } from '../pane.ts'
 import { useHost } from '../host.tsx'
 import { path, TABS, type Tab } from '../route.ts'
 import { Agents } from './agents.tsx'
@@ -75,6 +76,8 @@ const LABEL: Record<Tab, { title: string; says: string; add: string; find: strin
 export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
   const { t } = useI18n()
   const host = useHost()
+  const wide = Boolean(useMedia().sm)
+  const tabId = useId()
   const [view, setView] = useState<View>(first ?? 'discover')
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
@@ -90,6 +93,75 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
   const pane: Pane = { view, q, adding, onAdding: setAdding, onView: setView, onCount }
   const kit = ORG_KIT.includes(tab)
   const may = Boolean(host.person) && (host.admin || !kit)
+  const inlineCreator = tab === 'agents' || tab === 'bots'
+  // Keep one primary white action per view: soften the toolbar button when an empty state or open creator panel owns the primary CTA.
+  const quietToolbarAdd = (view === 'yours' && count === 0) || (inlineCreator && adding)
+
+  const choice = (
+    <Choice
+      label={t('Show')}
+      value={view}
+      options={[
+        { id: 'discover', label: t('Browse') },
+        { id: 'yours', label: t('Yours'), count },
+      ]}
+      onChange={setView}
+    />
+  )
+
+  const search = (
+    <XStack
+      items="center"
+      gap="$2"
+      px="$3"
+      height={36}
+      focusWithinStyle={{ borderColor: '$outlineColor' }}
+    >
+      <Search size={14} color="$soft" shrink={0} aria-hidden />
+      <Input
+        unstyled
+        flex={1}
+        minW={0}
+        height="100%"
+        p={0}
+        fontSize="$2"
+        color="$ink"
+        value={q}
+        onChangeText={setQ}
+        placeholder={t(LABEL[tab].typing)}
+        aria-label={t(LABEL[tab].find)}
+        onKeyDown={(e: { key?: string }) => {
+          if (e.key === 'Escape' && q) setQ('')
+        }}
+      />
+      {q ? (
+        <XStack
+          render="button"
+          aria-label={t('Clear search')}
+          onPress={() => setQ('')}
+          minW={24}
+          minH={24}
+          items="center"
+          justify="center"
+          focusVisibleStyle={RING}
+        >
+          <X size={13} color="$soft" />
+        </XStack>
+      ) : null}
+    </XStack>
+  )
+
+  const addButton = may ? (
+    <Button
+      size="sm"
+      variant={quietToolbarAdd ? 'outline' : 'primary'}
+      shrink={0}
+      aria-expanded={inlineCreator ? adding : undefined}
+      onPress={() => setAdding(inlineCreator ? !adding : true)}
+    >
+      <Plus size={14} /> {t(LABEL[tab].add)}
+    </Button>
+  ) : null
 
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
@@ -104,78 +176,109 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
           </SizableText>
         </YStack>
 
-        {host.sections ? null : (
-        <XStack role="tablist" aria-label={t('Customize')} gap="$4" borderBottomWidth={1} borderColor="$borderColor" $max-md={{ gap: '$3' }}>
-          {TABS.map((id) => {
-            const on = id === tab
-            return (
-              <XStack
-                key={id}
-                role="tab"
-                render="button"
-                aria-selected={on}
-                onPress={() => pick(id)}
-                items="center"
-                gap="$1.5"
-                pb="$2"
-                mb={-1}
-                borderBottomWidth={2}
-                borderColor={on ? '$ink' : 'transparent'}
-                hoverStyle={{ borderColor: on ? '$ink' : '$edge' }}
-              >
-                <XStack opacity={on ? 1 : 0.6} $max-md={{ display: 'none' }}>
-                  {LABEL[id].icon}
-                </XStack>
-                <SizableText size="$3" color={on ? '$ink' : '$soft'}>
-                  {t(LABEL[id].title)}
-                </SizableText>
+        <YStack gap="$3">
+          {host.sections ? null : (
+            <XStack
+              role="tablist"
+              aria-label={t('Customize')}
+              gap="$4"
+              borderBottomWidth={1}
+              overflowX="auto"
+              overflowY="hidden"
+              $platform-web={{ scrollbarWidth: 'none' }}
+            >
+              {TABS.map((id, idx) => {
+                const on = id === tab
+                return (
+                  <XStack
+                    key={id}
+                    id={`${tabId}-${id}`}
+                    role="tab"
+                    render="button"
+                    aria-selected={on}
+                    aria-controls={`${tabId}-panel`}
+                    tabIndex={on ? 0 : -1}
+                    onPress={() => pick(id)}
+                    onKeyDown={(e: { key?: string; preventDefault?: () => void }) => {
+                      let nextIdx: number | null = null
+                      if (e.key === 'ArrowRight') nextIdx = (idx + 1) % TABS.length
+                      else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + TABS.length) % TABS.length
+                      else if (e.key === 'Home') nextIdx = 0
+                      else if (e.key === 'End') nextIdx = TABS.length - 1
+                      if (nextIdx === null) return
+                      e.preventDefault?.()
+                      const nextTab = TABS[nextIdx]
+                      if (!nextTab) return
+                      pick(nextTab)
+                      queueMicrotask(() => document.getElementById(`${tabId}-${nextTab}`)?.focus())
+                    }}
+                    items="center"
+                    gap="$1.5"
+                    pb="$2"
+                    minH={36}
+                    mb={-1}
+                    shrink={0}
+                    borderTopWidth={0}
+                    borderLeftWidth={0}
+                    borderRightWidth={0}
+                    borderBottomWidth={2}
+                    focusVisibleStyle={RING_INSET}
+                  >
+                    <XStack opacity={on ? 1 : 0.7} $max-md={{ display: 'none' }}>
+                      {LABEL[id].icon}
+                    </XStack>
+                    <SizableText size="$3" fontWeight={on ? '500' : '400'} color={on ? '$ink' : '$soft'}>
+                      {t(LABEL[id].title)}
+                    </SizableText>
+                  </XStack>
+                )
+              })}
+            </XStack>
+          )}
+
+          {host.sections ? null : (
+            <SizableText size="$2" color="$soft">
+              {t(LABEL[tab].says)}
+            </SizableText>
+          )}
+
+          {wide ? (
+            <XStack items="center" gap="$2.5">
+              {choice}
+              <YStack flex={1} minW={0}>
+                {search}
+              </YStack>
+              {addButton}
+            </XStack>
+          ) : (
+            <YStack gap="$2.5">
+              <XStack items="center" justify="space-between" gap="$2" flexWrap="wrap">
+                {choice}
+                {addButton}
               </XStack>
-            )
-          })}
-        </XStack>
-        )}
-
-        {host.sections ? null : (
-          <SizableText size="$2" color="$soft">
-            {t(LABEL[tab].says)}
-          </SizableText>
-        )}
-
-        <XStack items="center" gap="$2">
-          <Choice
-            label={t('Show')}
-            value={view}
-            options={[
-              { id: 'discover', label: t('Browse') },
-              { id: 'yours', label: t('Yours'), count },
-            ]}
-            onChange={setView}
-          />
-          <XStack flex={1} />
-          {may ? (
-            <Button size="sm" onPress={() => setAdding(true)}>
-              <Plus size={14} /> {t(LABEL[tab].add)}
-            </Button>
+              {search}
+            </YStack>
+          )}
+          {host.person && kit && !host.admin && LABEL[tab].admin ? (
+            <SizableText size="$1" color="$soft">
+              {t(LABEL[tab].admin)}
+            </SizableText>
           ) : null}
-        </XStack>
-        <Input value={q} onChangeText={setQ} placeholder={t(LABEL[tab].typing)} aria-label={t(LABEL[tab].find)} />
-        {host.person && kit && !host.admin && LABEL[tab].admin ? (
-          <SizableText size="$1" color="$soft">
-            {t(LABEL[tab].admin)}
-          </SizableText>
-        ) : null}
 
-        {tab === 'skills' ? (
-          <Skills {...pane} />
-        ) : tab === 'connectors' ? (
-          <Connectors {...pane} />
-        ) : tab === 'plugins' ? (
-          <Plugins {...pane} />
-        ) : tab === 'bots' ? (
-          <Agents {...pane} mode="bots" />
-        ) : (
-          <Agents {...pane} mode="agents" />
-        )}
+          <YStack role="tabpanel" id={`${tabId}-panel`} aria-labelledby={host.sections ? undefined : `${tabId}-${tab}`}>
+            {tab === 'skills' ? (
+              <Skills {...pane} />
+            ) : tab === 'connectors' ? (
+              <Connectors {...pane} />
+            ) : tab === 'plugins' ? (
+              <Plugins {...pane} />
+            ) : tab === 'bots' ? (
+              <Agents {...pane} mode="bots" />
+            ) : (
+              <Agents {...pane} mode="agents" />
+            )}
+          </YStack>
+        </YStack>
       </YStack>
     </YStack>
   )

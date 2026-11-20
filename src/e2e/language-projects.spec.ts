@@ -22,7 +22,7 @@ const REPOS = [
 /** A French catalog this spec writes, so what is drawn is checked against what was written. */
 const FR: Record<string, string> = {
   Projects: 'Projets',
-  '{org}’s repositories on the forge. Open one to work on it.': 'Les dépôts de {org} sur la forge. Ouvrez-en un pour y travailler.',
+  '{org}’s projects and linked GitHub repositories. Open one to work on it.': 'Les dépôts de {org} sur la forge. Ouvrez-en un pour y travailler.',
   'Create from template': 'Créer depuis un modèle',
   'Link a GitHub repo': 'Lier un dépôt GitHub',
   'Connect GitHub to bring your repositories here': 'Connectez GitHub pour amener vos dépôts ici',

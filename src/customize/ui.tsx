@@ -11,14 +11,14 @@
  */
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
-import { Check, Plus, X } from '@hanzogui/lucide-icons-2'
-import { Button, Dialog, DialogContent, DialogTitle } from '@hanzo/ui'
-import { useEffect, useState, type ReactNode } from 'react'
+import { Check, MoreHorizontal, Plus, X } from '@hanzogui/lucide-icons-2'
+import { Button, Dialog, DialogContent, DialogTitle, Skeleton } from '@hanzo/ui'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 
+import { RING } from '../pane.ts'
 import { useHost } from '../host.tsx'
 import { say } from './say.ts'
 
-export const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 /** Which half of a tab: what there is to browse and add (first), or what the org already has. */
 export type View = 'discover' | 'yours'
 
@@ -43,13 +43,16 @@ export { matches } from '../merge.ts'
 /** Cards in as many columns as fit, one column on a phone. */
 export function Grid({ children, label }: { children: ReactNode; label: string }) {
   return (
-    <div
+    <YStack
       role="list"
       aria-label={label}
-      style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: 12 }}
+      display="grid"
+      gridTemplateColumns="repeat(auto-fill, minmax(min(100%, 290px), 1fr))"
+      gap="$3.5"
+      width="100%"
     >
       {children}
-    </div>
+    </YStack>
   )
 }
 
@@ -59,7 +62,13 @@ export function Mark({ name, logo, icon, size = 32 }: { name: string; logo?: str
   return (
     <YStack width={size} height={size} rounded="$3" bg="$raised" items="center" justify="center" shrink={0} overflow="hidden" aria-hidden>
       {logo && !gone ? (
-        <img src={logo} alt="" width={size} height={size} onError={() => setGone(true)} style={{ objectFit: 'contain' }} />
+        <YStack
+          render="img"
+          {...({ src: logo, alt: '', onError: () => setGone(true) } as object)}
+          width={size}
+          height={size}
+          $platform-web={{ objectFit: 'contain' }}
+        />
       ) : (
         (icon ?? (
           <SizableText size="$3" color="$ink">
@@ -125,7 +134,7 @@ export function Tile({
           cursor="pointer"
           // A button centres its words unless told: a card reads from the line's start.
           $platform-web={{ textAlign: 'start' }}
-          focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+          focusVisibleStyle={RING}
         >
           {body}
         </XStack>
@@ -147,7 +156,7 @@ export function Featured({ title, detail, meta, mark, action, onOpen }: { title:
       <XStack render="button" aria-label={title} onPress={onOpen} flex={1} minW={220} gap="$4" items="flex-start" cursor="pointer" $platform-web={{ textAlign: 'start' }}>
         {mark}
         <YStack flex={1} minW={0} gap="$1.5">
-          <SizableText size="$1" color="$soft" textTransform="uppercase" letterSpacing={1}>
+          <SizableText size="$1" color="$soft" fontWeight="500">
             {t('Featured')}
           </SizableText>
           <SizableText size="$6" color="$ink" numberOfLines={1}>
@@ -239,6 +248,7 @@ export function Sheet({ title, open, onOpenChange, width = 560, full = false, ch
             shrink={0}
             cursor="pointer"
             hoverStyle={{ bg: '$hover' }}
+            focusVisibleStyle={RING}
             $max-sm={{ width: 44, height: 44, mr: -12 }}
           >
             <X size={16} />
@@ -317,14 +327,16 @@ export function Failed({ error, onRetry }: { error: unknown; onRetry: () => void
 /** Nothing here yet: what this place holds, and the next step, as buttons. */
 export function Empty({ title, detail, children }: { title: string; detail: string; children?: ReactNode }) {
   return (
-    <YStack py="$8" px="$4" items="center" gap="$3" rounded="$4" borderWidth={1} borderStyle="dashed" borderColor="$borderColor">
-      <YStack items="center" gap="$1" maxW={420}>
-        <SizableText size="$4" color="$ink" text="center">
+    <YStack py="$8" px="$5" items="center" gap="$3" rounded="$4" borderWidth={1} borderColor="var(--border-strong)" bg="$panel">
+      <YStack items="center" gap="$1.5" maxW={420}>
+        <SizableText size="$4" fontWeight="600" color="$ink" text="center">
           {title}
         </SizableText>
-        <SizableText size="$2" color="$soft" text="center">
-          {detail}
-        </SizableText>
+        {detail ? (
+          <SizableText size="$2" color="$soft" text="center">
+            {detail}
+          </SizableText>
+        ) : null}
       </YStack>
       {children ? (
         <XStack gap="$2" flexWrap="wrap" justify="center">
@@ -371,9 +383,11 @@ export function Part({ title, detail, action, children }: { title: string; detai
           <SizableText render="h2" size="$4" color="$ink">
             {title}
           </SizableText>
-          <SizableText size="$2" color="$soft">
-            {detail}
-          </SizableText>
+          {detail ? (
+            <SizableText size="$2" color="$soft">
+              {detail}
+            </SizableText>
+          ) : null}
         </YStack>
         {action}
       </XStack>
@@ -412,36 +426,226 @@ export function Choice<T extends string>({
   label: string
 }) {
   const { t } = useI18n()
+  const groupId = useId()
   return (
-    <XStack role="group" aria-label={label} p={2} gap={2} rounded="$3" borderWidth={1} borderColor="$borderColor" self="flex-start" shrink={0}>
-      {options.map((o) => (
+    <XStack role="group" aria-label={label} p={2} gap={2} rounded="$3" borderWidth={1} borderColor="var(--border-strong)" bg="$panel" self="flex-start" shrink={0}>
+      {options.map((o, idx) => {
+        const active = o.id === value
+        return (
+          <XStack
+            key={o.id}
+            id={`${groupId}-${idx}`}
+            render="button"
+            aria-pressed={active}
+            aria-label={o.count ? t('{label}, {count}', { label: o.label, count: o.count }) : o.label}
+            onPress={() => onChange(o.id)}
+            onKeyDown={(e: { key?: string; preventDefault?: () => void }) => {
+              const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+              if (!step) return
+              e.preventDefault?.()
+              const nextIdx = (idx + step + options.length) % options.length
+              const next = options[nextIdx]
+              if (!next) return
+              onChange(next.id)
+              queueMicrotask(() => document.getElementById(`${groupId}-${nextIdx}`)?.focus())
+            }}
+            items="center"
+            gap="$1.5"
+            px="$3"
+            py="$1"
+            minH={30}
+            focusVisibleStyle={RING}
+          >
+            <SizableText size="$2" fontWeight={active ? '500' : '400'} color={active ? '$ink' : '$soft'}>
+              {o.label}
+            </SizableText>
+            {o.count ? (
+              <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
+                {o.count}
+              </SizableText>
+            ) : null}
+          </XStack>
+        )
+      })}
+    </XStack>
+  )
+}
+
+/**
+ * Compact filter pills for long category lists (e.g., agent categories): shows one clean
+ * primary row on desktop (`maxVisibleDesktop`, default 6) and `mobileLimit` (default 4)
+ * on narrow screens, collapsing the rest behind a `+{n} more` / `Show less` toggle pill
+ * while keeping the active category always visible in the primary row.
+ */
+export function FilterPills<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+  mobileLimit = 4,
+  maxVisibleDesktop = 6,
+}: {
+  value: T
+  options: readonly { id: T; label: string }[]
+  onChange: (v: T) => void
+  label: string
+  mobileLimit?: number
+  maxVisibleDesktop?: number
+}) {
+  const { t } = useI18n()
+  const wide = Boolean(useMedia().sm)
+  const groupId = useId()
+  const [expanded, setExpanded] = useState(false)
+  const limit = Math.max(1, wide ? maxVisibleDesktop : mobileLimit)
+  const hasOverflow = options.length > limit
+  const compact = !expanded && hasOverflow
+  const visible = compact
+    ? (() => {
+        const base = options.slice(0, limit)
+        if (base.some((o) => o.id === value)) return base
+        const chosen = options.find((o) => o.id === value)
+        return chosen ? [...base.slice(0, Math.max(1, limit - 1)), chosen] : base
+      })()
+    : options
+  const hiddenCount = options.length - visible.length
+
+  const moveFocus = (nextIdx: number) => {
+    const clamped = (nextIdx + visible.length) % visible.length
+    queueMicrotask(() => document.getElementById(`${groupId}-pill-${clamped}`)?.focus())
+  }
+
+  return (
+    <XStack
+      role="group"
+      aria-label={label}
+      flexWrap="wrap"
+      gap="$1.5"
+      rowGap="$1.5"
+      width="100%"
+      onKeyDown={((e: { key?: string }) => {
+        if (e.key === 'Escape' && expanded) setExpanded(false)
+      }) as never}
+    >
+      {visible.map((o, idx) => {
+        const active = o.id === value
+        return (
+          <XStack
+            key={o.id}
+            id={`${groupId}-pill-${idx}`}
+            render="button"
+            aria-pressed={active}
+            aria-label={o.label}
+            onPress={() => onChange(o.id)}
+            onKeyDown={((e: { key?: string; preventDefault?: () => void }) => {
+              if (e.key === 'ArrowRight') {
+                e.preventDefault?.()
+                moveFocus(idx + 1)
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault?.()
+                moveFocus(idx - 1)
+              } else if (e.key === 'Home') {
+                e.preventDefault?.()
+                moveFocus(0)
+              } else if (e.key === 'End') {
+                e.preventDefault?.()
+                moveFocus(visible.length - 1)
+              }
+            }) as never}
+            items="center"
+            px="$3"
+            py="$1"
+            minH={30}
+            focusVisibleStyle={RING}
+          >
+            <SizableText size="$1" fontWeight={active ? '500' : '400'} color={active ? '$background' : '$soft'}>
+              {o.label}
+            </SizableText>
+          </XStack>
+        )
+      })}
+      {hasOverflow ? (
         <XStack
-          key={o.id}
           render="button"
-          aria-pressed={o.id === value}
-          aria-label={o.count ? t('{label}, {count}', { label: o.label, count: o.count }) : o.label}
-          onPress={() => onChange(o.id)}
+          aria-expanded={expanded}
+          aria-label={expanded ? t('Show fewer categories') : t('Show {n} more categories', { n: hiddenCount })}
+          onPress={() => setExpanded((e) => !e)}
           items="center"
-          gap="$1.5"
           px="$3"
           py="$1"
-          rounded="$2"
-          bg={o.id === value ? '$hover' : 'transparent'}
-          hoverStyle={{ bg: '$hover' }}
+          minH={30}
+          focusVisibleStyle={RING}
         >
-          <SizableText size="$2" color={o.id === value ? '$ink' : '$soft'}>
-            {o.label}
+          <SizableText size="$1" fontWeight="500" color="$ink">
+            {expanded ? t('Show less') : t('+{n} more', { n: hiddenCount })}
           </SizableText>
-          {o.count ? (
-            <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
-              {o.count}
-            </SizableText>
-          ) : null}
         </XStack>
-      ))}
+      ) : null}
     </XStack>
   )
 }
 
 /** A date from Unix seconds, or ''. */
 export const day = (s: number): string => (s ? new Date(s * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '')
+
+export function TilesSkeleton({ label, count = 6, withHero = false }: { label: string; count?: number; withHero?: boolean }) {
+  return (
+    <YStack role="status" aria-busy={true} aria-label={label} gap="$3" width="100%">
+      {withHero ? (
+        <XStack items="flex-start" gap="$4" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel">
+          <Skeleton layout="block" width={48} height={48} rounded="$3" shrink={0} />
+          <YStack flex={1} minW={0} gap="$2">
+            <Skeleton layout="block" width={64} height={10} rounded="$2" />
+            <Skeleton layout="block" width="42%" height={18} rounded="$2" />
+            <Skeleton layout="block" width="84%" height={12} rounded="$2" />
+            <Skeleton layout="block" width="32%" height={10} rounded="$2" />
+          </YStack>
+        </XStack>
+      ) : null}
+      <Grid label={label}>
+        {Array.from({ length: count }, (_, i) => (
+          <XStack key={i} items="flex-start" gap="$3" p="$3" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel">
+            <Skeleton layout="block" width={32} height={32} rounded="$3" shrink={0} />
+            <YStack flex={1} minW={0} gap="$1.5">
+              <Skeleton layout="block" width={i % 2 === 0 ? '54%' : '44%'} height={14} rounded="$2" />
+              <Skeleton layout="block" width="90%" height={11} rounded="$2" />
+              <Skeleton layout="block" width={i % 2 === 0 ? '64%' : '72%'} height={11} rounded="$2" />
+            </YStack>
+          </XStack>
+        ))}
+      </Grid>
+    </YStack>
+  )
+}
+
+export function RowsSkeleton({ label, count = 4 }: { label: string; count?: number }) {
+  return (
+    <YStack role="status" aria-busy={true} aria-label={label} gap="$2" width="100%">
+      {Array.from({ length: count }, (_, i) => (
+        <XStack key={i} items="center" gap="$3" px="$3" py="$2.5" minH={48} rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$panel">
+          <YStack flex={1} minW={0} gap="$1.5">
+            <Skeleton layout="block" width={i % 2 === 0 ? '38%' : '48%'} height={13} rounded="$2" />
+            <Skeleton layout="block" width={i % 2 === 0 ? '74%' : '62%'} height={10} rounded="$2" />
+          </YStack>
+          <Skeleton layout="block" width={28} height={14} rounded="$2" shrink={0} />
+        </XStack>
+      ))}
+    </YStack>
+  )
+}
+
+export function MenuTrigger({ label }: { label: string }) {
+  return (
+    <XStack
+      render="button"
+      aria-label={label}
+      width={32}
+      height={32}
+      items="center"
+      justify="center"
+      shrink={0}
+      focusVisibleStyle={RING}
+    >
+      <MoreHorizontal size={15} color="$soft" aria-hidden />
+    </XStack>
+  )
+}

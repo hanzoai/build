@@ -1,6 +1,6 @@
 {
   "name": "@hanzo/build",
-  "version": "0.2.126",
+  "version": "0.2.127",
   "type": "module",
   "license": "Apache-2.0 OR MIT",
   "description": "Hanzo Build — say what you want, watch it built, deployed and running. The builder as a component, mounted by the Hanzo app at hanzo.ai.",
@@ -67,6 +67,16 @@
       "types": "./lib/mind.d.ts",
       "import": "./lib/mind.js",
       "default": "./lib/mind.js"
+    },
+    "./handoff": {
+      "types": "./lib/handoff.d.ts",
+      "import": "./lib/handoff.js",
+      "default": "./lib/handoff.js"
+    },
+    "./dev-mode": {
+      "types": "./lib/dev-mode.d.ts",
+      "import": "./lib/dev-mode.js",
+      "default": "./lib/dev-mode.js"
     },
     "./package.json": "./package.json"
   },

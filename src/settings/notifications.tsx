@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { told } from '../api/call.ts'
 import { add, deliveries, endpoints, patterns, refuse, remove, test, type Attempt, type Endpoint } from '../api/webhooks.ts'
 import { useRead } from '../data.ts'
+import { copy } from '../clipboard.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Card, day, Field, Group, Heading, Note, Row, Soft } from './ui.tsx'
 
@@ -161,7 +162,7 @@ export function Notifications() {
             <SizableText flex={1} size="$2" color="$ink" fontFamily="$mono" $platform-web={{ wordBreak: 'break-all' }} aria-label={t('Signing secret')}>
               {secret}
             </SizableText>
-            <Button size="sm" variant="outline" onPress={() => void navigator.clipboard?.writeText(secret).then(() => setNote(t('The secret is copied')))}>
+            <Button size="sm" variant="outline" onPress={() => void copy(secret).then((ok) => ok && setNote(t('The secret is copied')))}>
               <Copy size={14} /> {t('Copy')}
             </Button>
             <XStack render="button" aria-label={t('Hide the secret')} p="$1" onPress={() => setSecret('')}>

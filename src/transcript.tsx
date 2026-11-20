@@ -18,6 +18,7 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
+import { GitBranch } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
 import { Feedback, type Verdict } from '@hanzo/ui/agents'
 import { Code, GAP, MEASURE, Message, Step, Thread } from '@hanzo/ui/chat'
@@ -37,15 +38,18 @@ const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 /** What a thought is about: its first line, without the markdown that bolds it. */
 const firstLine = (text: string): string => text.trim().split('\n')[0]!.replace(/[*_#`]/g, '').slice(0, 120)
 
-function UserSaid({ text }: { text: string }) {
+/** A user turn: a tight bubble holding only the text; Show more and Send now sit outside, below it. */
+function UserSaid({ text, after }: { text: string; after?: ReactNode }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const long = text.length > 180 || text.includes('\n')
   return (
-    <YStack gap="$1">
-      <YStack {...(long && !open ? { maxHeight: 72, overflow: 'hidden' } : null)}>
-        <Prose text={text} />
-      </YStack>
+    <YStack width="100%" items="flex-end" gap="$1">
+      <Message role="user">
+        <YStack {...(long && !open ? { maxHeight: 72, overflow: 'hidden' } : null)}>
+          <Prose text={text} />
+        </YStack>
+      </Message>
       {long ? (
         <XStack render="button" aria-expanded={open} onPress={() => setOpen((v) => !v)} self="flex-start" px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
           <SizableText size="$1" color="$soft">
@@ -53,6 +57,7 @@ function UserSaid({ text }: { text: string }) {
           </SizableText>
         </XStack>
       ) : null}
+      {after}
     </YStack>
   )
 }
@@ -126,11 +131,7 @@ export function Transcript({
         switch (c.kind) {
           case 'said': {
             if (c.who === 'person')
-              return (
-                <Message key={c.key} role="user">
-                  <UserSaid text={c.text} />
-                </Message>
-              )
+              return <UserSaid key={c.key} text={c.text} />
             const made = artifacts(c.text)
             const first = lead(made)
             return (
@@ -242,12 +243,32 @@ export function Transcript({
                 ) : undefined}
               </Step>
             )
-          case 'note':
+          case 'note': {
+            const noteText = t(c.text)
+            if (/^Pushed\s+/i.test(c.text) || /^Pushed\s+/i.test(noteText)) {
+              return (
+                <XStack key={c.key} role="note" self="flex-start">
+                  <XStack
+                    items="center"
+                    gap="$1.5"
+                    px="$2.5"
+                    py="$1"
+                    $platform-web={{ display: 'inline-flex' }}
+                  >
+                    <GitBranch size={12} color="$soft" shrink={0} aria-hidden />
+                    <SizableText size="$1" color="$soft">
+                      {noteText}
+                    </SizableText>
+                  </XStack>
+                </XStack>
+              )
+            }
             return (
               <SizableText key={c.key} size="$1" color="$soft" role="note">
-                {t(c.text)}
+                {noteText}
               </SizableText>
             )
+          }
           case 'run':
             return (
               <XStack key={c.key} items="center" gap="$2" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Coding run')}>
@@ -301,26 +322,25 @@ export function Transcript({
         }
       })}
       {queued.map((q) => (
-        <YStack key={q.id} gap="$1" items="flex-end">
-          <Message role="user">
-            <UserSaid text={q.text} />
-          </Message>
-          {onSendQueued ? (
-            <XStack
-              render="button"
-              aria-label={t('Send now')}
-              onPress={() => onSendQueued(q.id)}
-              px="$2"
-              py="$0.5"
-              rounded="$2"
-              hoverStyle={{ bg: '$hover' }}
-            >
-              <SizableText size="$1" color="$soft">
-                {t('Send now')}
-              </SizableText>
-            </XStack>
-          ) : null}
-        </YStack>
+        <UserSaid
+          key={q.id}
+          text={q.text}
+          after={
+            onSendQueued ? (
+              <XStack
+                render="button"
+                aria-label={t('Send now')}
+                onPress={() => onSendQueued(q.id)}
+                px="$2"
+                py="$0.5"
+              >
+                <SizableText size="$1" color="$soft">
+                  {t('Send now')}
+                </SizableText>
+              </XStack>
+            ) : undefined
+          }
+        />
       ))}
       {end}
     </Thread>

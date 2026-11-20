@@ -17,6 +17,7 @@ import { Bot, Globe, Search, X } from '@hanzogui/lucide-icons-2'
 import { Button, Dialog, DialogContent, DialogTitle, Input } from '@hanzo/ui'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { RING } from './pane.ts'
 import { use } from './api/agents.ts'
 import { told } from './api/call.ts'
 import { APP, catalogue, KIND, KINDS, narrow, type Kind, type Template } from './api/gallery.ts'
@@ -44,7 +45,7 @@ export function Chip({ label, on, onPress }: { label: string; on: boolean; onPre
       bg={on ? '$ink' : 'transparent'}
       hoverStyle={{ bg: on ? '$ink' : '$hover' }}
       cursor="pointer"
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+      focusVisibleStyle={RING}
     >
       <SizableText size="$2" color={on ? '$background' : '$ink'}>
         {label}
@@ -205,7 +206,7 @@ export function Make({ open, onClose }: { open: boolean; onClose: () => void }) 
                     overflow="hidden"
                     cursor="pointer"
                     hoverStyle={{ bg: '$hover' }}
-                    focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+                    focusVisibleStyle={RING}
                     $platform-web={{ textAlign: 'start' }}
                   >
                     <Still x={x} />

@@ -692,7 +692,7 @@ test.describe('Projects', () => {
   test('says it is reading, and says why a read was refused', async ({ page }) => {
     const { world } = await forge(page, { repos: REPOS(), slow: { 'GET /v1/git/repos': 3000 } })
     await page.goto('/-/projects')
-    await expect(page.getByText('Reading the forge…')).toBeVisible()
+    await expect(page.getByText('Loading projects…')).toBeVisible()
     await expect(page.getByText('Showing 1–25 of 27')).toBeVisible()
     world.slow = {}
     world.down['GET /v1/git/repos'] = 'The forge did not answer'
@@ -751,7 +751,7 @@ test.describe('Projects', () => {
     await forge(page, { grants: [] }, { sub: 'solo/sam', name: 'Sam', email: 'sam@solo.test', orgs: [] })
     await queued(page, 'none', [{ fullName: 'sam/notes', name: 'notes' }])
     await page.goto('/-/projects')
-    await expect(page.getByText('This organization’s repositories on the forge. Open one to work on it.')).toBeVisible()
+    await expect(page.getByText('Projects and linked GitHub repositories. Open one to work on it.')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Open notes' })).toContainText('Syncing…')
   })
 })
@@ -1218,7 +1218,7 @@ test.describe('Issues', () => {
   test('Issues says it is reading, why a read failed, and when there is nothing', async ({ page }) => {
     const { world } = await forge(page, { slow: { 'GET /v1/task/projects': 3000, 'GET /v1/task/board': 3000 } })
     await page.goto('/-/issues')
-    await expect(page.getByText('Reading the forge…')).toBeVisible()
+    await expect(page.getByText('Loading projects…')).toBeVisible()
     await expect(page.getByText('Nothing open.')).toBeVisible()
     world.slow = {}
     world.down = { 'GET /v1/task/projects': 'Boards are down', 'GET /v1/task/board': 'Issues are down' }

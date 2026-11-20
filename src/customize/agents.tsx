@@ -21,11 +21,12 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n, type Say } from '@hanzo/i18n/react'
-import { ArrowLeft, Upload } from '@hanzogui/lucide-icons-2'
+import { ArrowLeft, Upload, X } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Switch, Textarea } from '@hanzo/ui'
 import { ModelPicker } from '@hanzo/ui/models'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
+import { RING } from '../pane.ts'
 import { agents, ALL, CAST_CAP, CAST_TASK, create, draft, EMPTY, one, PERIODS, person, profile, remove, SCHEDULES, TRIGGERS, update, use, type Agent, type Cast, type Draft, type Period, type Run, type Trigger } from '../api/agents.ts'
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
@@ -37,11 +38,45 @@ import { Inventory, Traits } from './inventory.tsx'
 import { useLoad } from './load.ts'
 import { keep, kept, nature, score, type Answers, type Form } from './ocean.ts'
 import { say } from './say.ts'
-import { Add, Choice, Confirm, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
+import { Add, Choice, Confirm, Empty, Failed, Field, FilterPills, Grid, Line, Mark, matches, Part, Sheet, Soft, useCount, Visitor, type Pane } from './ui.tsx'
 
 /** How many cards Browse draws at a time. */
-const PAGE = 36
+const PAGE = 24
 const ANY = phrase('All')
+
+type AgentDomain = 'all' | 'team' | 'engineering' | 'business' | 'creative' | 'thinking'
+type AgentSort = 'recommended' | 'az'
+
+const DOMAIN_DEFS: ReadonlyArray<{ id: AgentDomain; label: string }> = [
+  { id: 'all', label: phrase('All') },
+  { id: 'team', label: phrase('Core team') },
+  { id: 'engineering', label: phrase('Engineering & science') },
+  { id: 'business', label: phrase('Business & strategy') },
+  { id: 'creative', label: phrase('Design & creative') },
+  { id: 'thinking', label: phrase('Writing & thinking') },
+]
+
+const ENGINEERING_CATS = new Set([
+  'engineer', 'programmer', 'tech leader', 'cryptographer', 'scientist',
+  'mathematician', 'physicist', 'innovator', 'logician', 'architect',
+])
+const BUSINESS_CATS = new Set([
+  'executive', 'leader', 'investor', 'economist', 'management',
+  'accountant', 'merchant', 'advertiser', 'jurist', 'diplomat', 'statesman',
+])
+const CREATIVE_CATS = new Set([
+  'designer', 'artist', 'filmmaker', 'musician', 'composer',
+  'photographer', 'sculptor', 'choreographer', 'singer', 'comedian',
+])
+
+function domainOf(c: Cast, isTeam: boolean): Exclude<AgentDomain, 'all'> {
+  if (isTeam || c.category.toLowerCase() === 'team') return 'team'
+  const cat = c.category.toLowerCase()
+  if (ENGINEERING_CATS.has(cat)) return 'engineering'
+  if (BUSINESS_CATS.has(cat)) return 'business'
+  if (CREATIVE_CATS.has(cat)) return 'creative'
+  return 'thinking'
+}
 
 const TRIGGER_LABELS: Record<Trigger, { title: string; detail: string }> = {
   webhook: { title: phrase('Webhook & API events'), detail: phrase('Wake immediately when an inbound webhook or API event fires.') },
@@ -109,6 +144,119 @@ const SO_FAR: Record<Period | '', string> = {
 const EACH: Record<Period, string> = { day: phrase('Each day, USD'), week: phrase('Each week, USD'), month: phrase('Each month, USD') }
 const PERIOD: Record<Period, string> = { day: phrase('Day'), week: phrase('Week'), month: phrase('Month') }
 
+const CARD = { rounded: '$4', borderWidth: 1, borderColor: '$borderColor', bg: '$panel' } as const
+const CARD_HOVER = { borderColor: 'var(--border-strong)', bg: '$hover' } as const
+
+/**
+ * Agent card: top row is [Avatar] [Name + short Role] [flex={1}] [+ Use], and
+ * the 2-line description spans full card width underneath so copy never crushes.
+ */
+function AgentCard({
+  title,
+  role,
+  detail,
+  meta,
+  mark,
+  action,
+  onOpen,
+}: {
+  title: string
+  role?: string
+  detail?: string
+  meta?: string
+  mark?: ReactNode
+  action?: ReactNode
+  onOpen?: () => void
+}) {
+  const identity = (
+    <>
+      {mark}
+      <YStack flex={1} minW={0} gap="$0.5">
+        <SizableText size="$3" color="$ink" numberOfLines={1}>
+          {title}
+        </SizableText>
+        {role ? (
+          <SizableText size="$1" color="$soft" numberOfLines={1}>
+            {role}
+          </SizableText>
+        ) : null}
+      </YStack>
+    </>
+  )
+  const footer =
+    detail || meta ? (
+      <YStack width="100%" minW={0} gap="$1.5">
+        {detail ? (
+          <SizableText size="$2" color="$soft" numberOfLines={2}>
+            {detail}
+          </SizableText>
+        ) : null}
+        {meta ? (
+          <SizableText size="$1" color="$hint" numberOfLines={1}>
+            {meta}
+          </SizableText>
+        ) : null}
+      </YStack>
+    ) : null
+
+  if (onOpen && !action) {
+    return (
+      <YStack role="listitem" minW={0} {...CARD} hoverStyle={CARD_HOVER}>
+        <YStack
+          render="button"
+          aria-label={title}
+          onPress={onOpen}
+          width="100%"
+          minW={0}
+          p="$4"
+          gap="$3"
+          $platform-web={{ textAlign: 'start' }}
+          focusVisibleStyle={RING}
+        >
+          <XStack items="center" gap="$3" width="100%" minW={0}>
+            {identity}
+          </XStack>
+          {footer}
+        </YStack>
+      </YStack>
+    )
+  }
+
+  return (
+    <YStack
+      role="listitem"
+      gap="$3"
+      p="$4"
+      minW={0}
+      {...CARD}
+    >
+      <XStack items="center" gap="$3" width="100%" minW={0}>
+        {onOpen ? (
+          <XStack
+            render="button"
+            aria-label={title}
+            onPress={onOpen}
+            flex={1}
+            minW={0}
+            gap="$3"
+            items="center"
+            $platform-web={{ textAlign: 'start' }}
+            focusVisibleStyle={RING}
+          >
+            {identity}
+          </XStack>
+        ) : (
+          <XStack flex={1} minW={0} gap="$3" items="center">
+            {identity}
+          </XStack>
+        )}
+        {action}
+      </XStack>
+      {footer}
+    </YStack>
+  )
+}
+
 export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'agents' }: Pane & { mode?: 'agents' | 'bots' }) {
   const { t } = useI18n()
   const host = useHost()
@@ -124,12 +272,21 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
   )
   useCount(yoursList.length, onCount)
   const [note, setNote] = useState('')
-  const [kind, setKind] = useState(ANY)
+  const [domain, setDomain] = useState<AgentDomain>('all')
+  const [sortBy, setSortBy] = useState<AgentSort>('recommended')
+  const [showSpecialists, setShowSpecialists] = useState(false)
   const [more, setMore] = useState(PAGE)
   const [using, setUsing] = useState<Cast | null>(null)
+  const [scratch, setScratch] = useState(false)
   const [making, setMaking] = useState<'self' | 'person' | null>(null)
   const [electing, setElecting] = useState<Cast | null>(null)
-  useEffect(() => setMore(PAGE), [q, kind, botsMode])
+  useEffect(() => setMore(PAGE), [q, domain, sortBy, botsMode])
+
+  const allCast = host.cast ?? []
+  const isBotCast = (c: Cast) => c.category === 'Bot' || c.executionMode === 'long-running'
+  const first: readonly Cast[] = botsMode
+    ? allCast.map(asBot)
+    : allCast.map((c): Cast => (isBotCast(c) ? { ...c, category: 'Team', executionMode: undefined, schedule: undefined, triggers: undefined } : c))
 
   const opened = (a: Agent) => host.go(path({ kind: 'agent', name: a.name }))
   const take = async (c: Cast) => {
@@ -157,112 +314,339 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
     }
   }
 
-  const editor = adding ? (
-    <Editor
-      defaultBot={botsMode}
-      onClose={() => onAdding(false)}
-      onSaved={(a) => {
-        onAdding(false)
-        onView('yours')
-        mine.reload()
-        setNote(t('{name} is saved', { name: a.name }))
-      }}
-    />
-  ) : null
-
-  if (browsing) {
-    const allCast = host.cast ?? []
-    const isBotCast = (c: Cast) => c.category === 'Bot' || c.executionMode === 'long-running'
-    const first: readonly Cast[] = botsMode
-      ? allCast.map(asBot)
-      : allCast.map((c): Cast => (isBotCast(c) ? { ...c, category: 'Team', executionMode: undefined, schedule: undefined, triggers: undefined } : c))
-    const rest = botsMode ? ([] as readonly Cast[]) : figures.value.filter((c) => !isBotCast(c))
-    const all = [...first, ...rest]
-    const shown = all.filter((c) => (botsMode || kind === ANY || c.category === kind) && matches(q, c.title, c.name, c.description, c.category, ...(c.after ?? [])))
-    const card = (c: Cast) => (
-      <Tile
-        key={`${c.category}/${c.name}/${c.title}`}
-        title={c.title}
-        detail={[c.description === c.title || c.description === c.category ? '' : c.description, c.after?.length ? t('after {names}', { names: c.after.join(', ') }) : ''].filter(Boolean).join(' · ') || undefined}
-        meta={[botsMode ? t('Bot') : category(c.category, t), c.executionMode === 'long-running' ? t('24/7 · Proactive · Event-driven') : '', c.schedule].filter(Boolean).join(' · ')}
-        mark={<Mark name={c.title} size={40} logo={c.avatar} />}
-        onOpen={signed && botsMode ? () => setElecting(c) : undefined}
-        action={
-          signed ? (
-            <XStack items="center" gap="$1.5">
-              {botsMode ? (
-                <XStack $max-sm={{ display: 'none' }}>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={using !== null}
-                    aria-label={t('Elect {name} to run 24/7', { name: c.title })}
-                    onPress={() => setElecting(c)}
-                  >
-                    {t('Configure 24/7')}
-                  </Button>
-                </XStack>
-              ) : null}
-              <Add name={c.title} use added={false} busy={using !== null} onPress={() => void take(c)} />
-            </XStack>
-          ) : undefined
-        }
-      />
-    )
-    return (
-      <YStack gap="$3">
-        {signed && !botsMode ? <Drafted onMade={opened} /> : null}
-        {signed ? (
-          <XStack gap="$2" flexWrap="wrap">
-            <Button size="sm" variant="outline" onPress={() => onAdding(true)}>
-              {t('Start from scratch')}
-            </Button>
-            {botsMode ? (
-              allCast.length ? (
-                <Button size="sm" variant="outline" onPress={() => setElecting((first[0] ?? allCast[0])!)}>
+  // Toggleable creation panel opened by `+ New agent` / `+ New bot` — closed by default when browsing so the grid starts immediately.
+  const creator =
+    adding && signed ? (
+      <YStack gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel">
+        <XStack items="center" justify="space-between" gap="$2">
+          <SizableText size="$3" fontWeight="500" color="$ink">
+            {botsMode ? t('Create a new bot') : t('Create a new agent')}
+          </SizableText>
+          <XStack
+            render="button"
+            aria-label={t('Close')}
+            onPress={() => onAdding(false)}
+            width={32}
+            height={32}
+            items="center"
+            justify="center"
+            shrink={0}
+            focusVisibleStyle={RING}
+          >
+            <X size={15} color="$soft" />
+          </XStack>
+        </XStack>
+        {botsMode ? (
+          <>
+            <SizableText size="$2" color="$soft">
+              {t('Build a persistent 24/7 bot from scratch, or elect a preset to run on a schedule and event triggers.')}
+            </SizableText>
+            <XStack gap="$2" flexWrap="wrap">
+              <Button
+                size="sm"
+                variant="primary"
+                onPress={() => {
+                  onAdding(false)
+                  setScratch(true)
+                }}
+              >
+                {t('Start from scratch')}
+              </Button>
+              {allCast.length ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={() => {
+                    onAdding(false)
+                    setElecting((first[0] ?? allCast[0])!)
+                  }}
+                >
                   {t('Elect 24/7 preset')}
                 </Button>
-              ) : null
-            ) : (
-              <>
-                <Button size="sm" variant="outline" onPress={() => setMaking('self')}>
-                  {t('Clone yourself')}
-                </Button>
-                <Button size="sm" variant="outline" onPress={() => setMaking('person')}>
-                  {t('Create from a person')}
-                </Button>
-              </>
-            )}
-          </XStack>
-        ) : null}
-        {!botsMode ? (
-          <XStack overflowX="auto" overflowY="hidden" pb="$1">
-            <Choice label={t('Category')} value={kind} options={kinds(first, rest).map((id) => ({ id, label: category(id, t) }))} onChange={setKind} />
+              ) : null}
+            </XStack>
+          </>
+        ) : (
+          <>
+            <Drafted onMade={opened} />
+            <XStack gap="$2" flexWrap="wrap" items="center" pt="$1" borderTopWidth={1} borderColor="$borderColor">
+              <SizableText size="$1" color="$soft" paddingInlineEnd="$1">
+                {t('Or start another way')}
+              </SizableText>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => {
+                  onAdding(false)
+                  setScratch(true)
+                }}
+              >
+                {t('Start from scratch')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => {
+                  onAdding(false)
+                  setMaking('self')
+                }}
+              >
+                {t('Clone yourself')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => {
+                  onAdding(false)
+                  setMaking('person')
+                }}
+              >
+                {t('Create from a person')}
+              </Button>
+            </XStack>
+          </>
+        )}
+      </YStack>
+    ) : null
+
+  const modals = (
+    <>
+      {scratch ? (
+        <Editor
+          defaultBot={botsMode}
+          onClose={() => setScratch(false)}
+          onSaved={(a) => {
+            setScratch(false)
+            onAdding(false)
+            onView('yours')
+            mine.reload()
+            setNote(t('{name} is saved', { name: a.name }))
+          }}
+        />
+      ) : null}
+      {making ? <Person self={making === 'self'} onClose={() => setMaking(null)} onMade={opened} /> : null}
+      {electing ? <Elect preset={electing} all={allCast} onClose={() => setElecting(null)} onElected={opened} /> : null}
+    </>
+  )
+
+  if (browsing) {
+    const rest = botsMode ? ([] as readonly Cast[]) : figures.value.filter((c) => !isBotCast(c))
+    const teamSet = new Set(first.map((c) => `${c.name}/${c.title}`))
+    const sortList = (list: readonly Cast[]) =>
+      sortBy === 'az' ? [...list].sort((a, b) => a.title.localeCompare(b.title)) : [...list]
+
+    const queryText = q.trim()
+    const matchCast = (c: Cast) =>
+      matches(q, c.title, c.name, c.description, c.category, ...(c.after ?? []))
+
+    const teamFiltered = sortList(first.filter((c) => (botsMode || domain === 'all' || domain === 'team') && matchCast(c)))
+    const specialistsFiltered = sortList(
+      rest.filter(
+        (c) =>
+          !botsMode &&
+          (domain === 'all' || domainOf(c, teamSet.has(`${c.name}/${c.title}`)) === domain) &&
+          matchCast(c),
+      ),
+    )
+
+    const card = (c: Cast, inCoreTeam = false) => {
+      const cat = botsMode ? t('Bot') : category(c.category, t)
+      const hideTeamLabel = inCoreTeam && !botsMode && c.category.toLowerCase() === 'team'
+      const role = hideTeamLabel
+        ? c.after?.length
+          ? t('after {names}', { names: c.after.join(', ') })
+          : undefined
+        : cat || undefined
+      const detail =
+        [
+          c.description === c.title || c.description === c.category ? '' : c.description,
+          !hideTeamLabel && c.after?.length ? t('after {names}', { names: c.after.join(', ') }) : '',
+        ]
+          .filter(Boolean)
+          .join(' · ') || undefined
+      const meta = botsMode
+        ? [c.executionMode === 'long-running' ? t('24/7 · proactive · event-driven') : '', c.schedule].filter(Boolean).join(' · ') || undefined
+        : undefined
+      return (
+        <AgentCard
+          key={`${c.category}/${c.name}/${c.title}`}
+          title={c.title}
+          role={role}
+          detail={detail}
+          meta={meta}
+          mark={<Mark name={c.title} size={40} logo={c.avatar} />}
+          onOpen={signed && botsMode ? () => setElecting(c) : undefined}
+          action={
+            signed ? (
+              <XStack items="center" gap="$1.5" shrink={0}>
+                {botsMode ? (
+                  <XStack $max-sm={{ display: 'none' }}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={using !== null}
+                      aria-label={t('Elect {name} to run 24/7', { name: c.title })}
+                      onPress={() => setElecting(c)}
+                    >
+                      {t('Configure 24/7')}
+                    </Button>
+                  </XStack>
+                ) : null}
+                <Add name={c.title} use added={false} busy={using !== null} onPress={() => void take(c)} />
+              </XStack>
+            ) : undefined
+          }
+        />
+      )
+    }
+
+    const domainCounts: Record<AgentDomain, number> = {
+      all: first.length + rest.length,
+      team: first.length,
+      engineering: rest.filter((c) => domainOf(c, false) === 'engineering').length,
+      business: rest.filter((c) => domainOf(c, false) === 'business').length,
+      creative: rest.filter((c) => domainOf(c, false) === 'creative').length,
+      thinking: rest.filter((c) => domainOf(c, false) === 'thinking').length,
+    }
+
+    const domainOptions = DOMAIN_DEFS.filter((d) => d.id === 'all' || d.id === 'team' || domainCounts[d.id] > 0).map((d) => ({
+      id: d.id,
+      label: d.id === 'all' ? t(d.label) : `${t(d.label)}`,
+    }))
+
+    const hasAnyMatch = teamFiltered.length > 0 || specialistsFiltered.length > 0
+    const showGroupedAll = !botsMode && domain === 'all' && !queryText
+    const specialistsVisible = showGroupedAll ? showSpecialists : true
+
+    return (
+      <YStack gap="$4">
+        {creator}
+        {!botsMode && domainOptions.length > 1 ? (
+          <XStack items="center" justify="space-between" gap="$3" flexWrap="wrap">
+            <XStack grow={1} shrink={1} minW={0}>
+              <FilterPills
+                label={t('Category')}
+                value={domain}
+                options={domainOptions}
+                onChange={(next) => setDomain(next as AgentDomain)}
+                maxVisibleDesktop={6}
+                mobileLimit={4}
+              />
+            </XStack>
+            <XStack
+              role="radiogroup"
+              aria-label={t('Sort agents')}
+              items="center"
+              gap={2}
+              p={2}
+              shrink={0}
+            >
+              {(
+                [
+                  { id: 'recommended', label: t('Recommended') },
+                  { id: 'az', label: t('A–Z') },
+                ] as const
+              ).map((opt) => {
+                const active = sortBy === opt.id
+                return (
+                  <XStack
+                    key={opt.id}
+                    render="button"
+                    role="radio"
+                    aria-checked={active}
+                    onPress={() => setSortBy(opt.id)}
+                    px="$2.5"
+                    py="$1"
+                    minH={28}
+                    focusVisibleStyle={RING}
+                    items="center"
+                    justify="center"
+                  >
+                    <SizableText size="$1" fontWeight={active ? '600' : '400'} color={active ? '$ink' : '$soft'}>
+                      {opt.label}
+                    </SizableText>
+                  </XStack>
+                )
+              })}
+            </XStack>
           </XStack>
         ) : null}
         <Line>{note}</Line>
-        {shown.length ? (
-          <Grid label={botsMode ? t('Bots to start from') : t('Agents to start from')}>
-            {shown.slice(0, more).map(card)}
-          </Grid>
-        ) : figures.loading ? null : q.trim() ? (
-          <Soft>{t(botsMode ? 'No bot matches “{q}”.' : 'No agent matches “{q}”.', { q: q.trim() })}</Soft>
-        ) : botsMode ? (
-          <Soft>{t('Create a persistent 24/7 bot from scratch or elect any preset.')}</Soft>
+
+        {!hasAnyMatch ? (
+          figures.loading ? null : queryText ? (
+            <Soft>{t(botsMode ? 'No bot matches “{q}”.' : 'No agent matches “{q}”.', { q: queryText })}</Soft>
+          ) : botsMode ? (
+            <Soft>{t('Create a persistent 24/7 bot from scratch or elect any preset.')}</Soft>
+          ) : (
+            <Soft>{t('No agent matches “{q}”.', { q: queryText })}</Soft>
+          )
         ) : (
-          <Soft>{t('No agent matches “{q}”.', { q: q.trim() })}</Soft>
+          <YStack gap="$5">
+            {teamFiltered.length > 0 ? (
+              <YStack gap="$3">
+                {!botsMode ? (
+                  <XStack items="baseline" justify="space-between" gap="$2">
+                    <SizableText render="h2" size="$4" color="$ink">
+                      {t('Core team')}
+                    </SizableText>
+                    <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
+                      {t('{n} ready-to-use specialists', { n: teamFiltered.length })}
+                    </SizableText>
+                  </XStack>
+                ) : null}
+                <Grid label={botsMode ? t('Bots to start from') : t('Core team agents')}>
+                  {teamFiltered.map((c) => card(c, !botsMode))}
+                </Grid>
+              </YStack>
+            ) : null}
+
+            {specialistsFiltered.length > 0 ? (
+              <YStack
+                gap="$3"
+                pt={teamFiltered.length > 0 ? '$5' : 0}
+                borderTopWidth={teamFiltered.length > 0 ? 1 : 0}
+              >
+                <XStack items="center" justify="space-between" gap="$3" flexWrap="wrap">
+                  <YStack gap="$1.5" flex={1} minW={200}>
+                    <SizableText render="h2" size="$4" color="$ink">
+                      {domain === 'all' ? t('Domain thinkers & personas') : t(DOMAIN_DEFS.find((d) => d.id === domain)?.label ?? 'Personas')}
+                    </SizableText>
+                    <SizableText size="$2" color="$soft">
+                      {t('{n} curated personas across science, strategy, design, and writing', { n: specialistsFiltered.length })}
+                    </SizableText>
+                  </YStack>
+                  {showGroupedAll ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onPress={() => setShowSpecialists((v) => !v)}
+                    >
+                      {showSpecialists ? t('Hide personas') : t('Browse {n} personas', { n: specialistsFiltered.length })}
+                    </Button>
+                  ) : null}
+                </XStack>
+                {specialistsVisible ? (
+                  <>
+                    <Grid label={t('Domain thinkers & personas')}>
+                      {specialistsFiltered.slice(0, more).map((c) => card(c, false))}
+                    </Grid>
+                    {specialistsFiltered.length > more ? (
+                      <XStack>
+                        <Button size="sm" variant="outline" onPress={() => setMore(more + PAGE)}>
+                          {t('Show more ({remaining} left)', { remaining: specialistsFiltered.length - more })}
+                        </Button>
+                      </XStack>
+                    ) : null}
+                  </>
+                ) : null}
+              </YStack>
+            ) : null}
+          </YStack>
         )}
-        {shown.length > more ? (
-          <XStack>
-            <Button size="sm" variant="ghost" onPress={() => setMore(more + PAGE)}>
-              {t('More')}
-            </Button>
-          </XStack>
-        ) : null}
+
         {figures.error ? <Failed error={figures.error} onRetry={figures.reload} /> : figures.loading ? <Soft>{t('Loading…')}</Soft> : null}
-        {editor}
-        {making ? <Person self={making === 'self'} onClose={() => setMaking(null)} onMade={opened} /> : null}
-        {electing ? <Elect preset={electing} all={allCast} onClose={() => setElecting(null)} onElected={opened} /> : null}
+        {modals}
       </YStack>
     )
   }
@@ -273,13 +657,17 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
   const shown = yoursList.filter((a) => matches(q, a.name, a.description, a.model))
   return (
     <YStack gap="$3">
+      {creator}
       <Line>{note}</Line>
       {mine.error && !yoursList.length ? (
         <Failed error={mine.error} onRetry={mine.reload} />
       ) : mine.loading && !yoursList.length ? (
         <Soft>{t(botsMode ? 'Loading your bots…' : 'Loading your agents…')}</Soft>
       ) : !yoursList.length ? (
-        <Empty title={t(botsMode ? 'No bots yet' : 'No agents yet')} detail="">
+        <Empty
+          title={t(botsMode ? 'No bots yet' : 'No agents yet')}
+          detail={t(botsMode ? 'Create a 24/7 bot from scratch or browse presets to start from.' : 'Create one with AI, from scratch, or browse agents to start from.')}
+        >
           <Button size="sm" variant="outline" onPress={() => onView('discover')}>
             {t(botsMode ? 'Browse bots' : 'Browse agents')}
           </Button>
@@ -292,12 +680,12 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
       ) : (
         <Grid label={t(botsMode ? 'Your bots' : 'Your agents')}>
           {shown.map((a) => (
-            <Tile
+            <AgentCard
               key={a.id || a.name}
               title={a.name}
+              role={a.model || undefined}
               detail={a.description || t('No description.')}
               meta={[
-                a.model,
                 a.executionMode === 'long-running' ? t('24/7') : '',
                 a.schedule || '',
                 a.runs === 1 ? t('1 run') : t('{n} runs', { n: a.runs }),
@@ -312,7 +700,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
           ))}
         </Grid>
       )}
-      {editor}
+      {modals}
     </YStack>
   )
 }
@@ -384,12 +772,18 @@ function Elect({
         </YStack>
       </XStack>
       {all.length > 1 ? (
-        <Field label={t('Preset')} hint={t('Select any Agent or Bot preset to elect as an autonomous 24/7 worker.')}>
-          <XStack gap="$1.5" flexWrap="wrap" maxH={136} overflow="scroll" p="$1" borderWidth={1} borderColor="$borderColor" rounded="$3">
+        <Field label={t('Preset')} hint={t('Select any agent or bot preset to elect as an autonomous 24/7 worker.')}>
+          <XStack gap="$1.5" flexWrap="wrap" maxH={136} overflow="scroll" p="$1" borderWidth={1} borderColor="$borderColor" bg="$panel" rounded="$3">
             {all.map((c) => {
               const active = c.name === picked.name && c.category === picked.category
               return (
-                <Button key={`${c.category}/${c.name}`} size="sm" variant={active ? 'primary' : 'ghost'} onPress={() => selectPreset(c)}>
+                <Button
+                  key={`${c.category}/${c.name}`}
+                  size="sm"
+                  variant={active ? 'outline' : 'ghost'}
+                  aria-pressed={active}
+                  onPress={() => selectPreset(c)}
+                >
                   {c.title}
                 </Button>
               )
@@ -413,11 +807,20 @@ function Elect({
           <Field label={t('Proactive schedule')} hint={t('Choose how often this agent wakes proactively, or enter any 5-field cron expression.')}>
             <YStack gap="$2">
               <XStack gap="$1.5" flexWrap="wrap">
-                {SCHEDULES.map((s) => (
-                  <Button key={s.cron} size="sm" variant={schedule.trim() === s.cron ? 'primary' : 'outline'} onPress={() => setSchedule(s.cron)}>
-                    {t(s.label)}
-                  </Button>
-                ))}
+                {SCHEDULES.map((s) => {
+                  const active = schedule.trim() === s.cron
+                  return (
+                    <Button
+                      key={s.cron}
+                      size="sm"
+                      variant="outline"
+                      aria-pressed={active}
+                      onPress={() => setSchedule(s.cron)}
+                    >
+                      {t(s.label)}
+                    </Button>
+                  )
+                })}
               </XStack>
               <Input value={schedule} onChangeText={setSchedule} placeholder="*/15 * * * *" aria-label={t('Proactive schedule')} />
             </YStack>
@@ -470,8 +873,8 @@ function Elect({
         <Button size="sm" variant="ghost" onPress={onClose}>
           {t('Cancel')}
         </Button>
-        <Button size="sm" disabled={working || (autonomous && !schedule.trim())} onPress={() => void save()}>
-          {autonomous ? t('Elect & Run 24/7') : t('Create')}
+        <Button size="sm" variant="primary" disabled={working || (autonomous && !schedule.trim())} onPress={() => void save()}>
+          {autonomous ? t('Elect and run 24/7') : t('Create')}
         </Button>
       </XStack>
     </Sheet>
@@ -648,7 +1051,7 @@ export function Profile({ name }: { name: string }) {
             </XStack>
             <Part title={t('Model')} detail={a.model || t('The deployment’s default')} />
             <Part
-              title={t('Autonomous & Event-Driven')}
+              title={t('Autonomous and event-driven')}
               detail={
                 a.executionMode === 'long-running'
                   ? [t('Runs autonomously 24/7'), a.schedule ? `${t('Schedule')}: ${a.schedule}` : '', a.triggers?.length ? `${t('Triggers')}: ${a.triggers.join(', ')}` : '']
@@ -659,8 +1062,8 @@ export function Profile({ name }: { name: string }) {
             />
             <Part title={t('Instructions')} detail={a.instructions ? '' : t('None written: it runs on its model alone.')}>
               {a.instructions ? (
-                <YStack p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" maxH={320} overflow="scroll">
-                  <SizableText size="$2" color="$ink" style={{ whiteSpace: 'pre-wrap' }}>
+                <YStack p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$panel" maxH={320} overflow="scroll">
+                  <SizableText size="$2" color="$ink" $platform-web={{ whiteSpace: 'pre-wrap' }}>
                     {a.instructions}
                   </SizableText>
                 </YStack>
@@ -847,7 +1250,7 @@ function Editor({
                     shownTools.map((x, i) => (
                       <XStack key={x.name} items="center" gap="$3" px="$3" py="$2" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
                         <YStack flex={1} minW={0}>
-                          <SizableText size="$2" color="$ink" style={mono} numberOfLines={1}>
+                          <SizableText size="$2" color="$ink" fontFamily="$mono" numberOfLines={1}>
                             {x.name}
                           </SizableText>
                           <SizableText size="$1" color="$soft" numberOfLines={1}>
@@ -866,7 +1269,7 @@ function Editor({
             <XStack items="center" gap="$3">
               <YStack flex={1} minW={0}>
                 <SizableText size="$2" color="$ink">
-                  {t('Autonomous & Event-Driven (24/7)')}
+                  {t('Autonomous and event-driven (24/7)')}
                 </SizableText>
                 <SizableText size="$1" color="$soft">
                   {d.executionMode === 'long-running'
@@ -892,11 +1295,20 @@ function Editor({
                   {t('Proactive schedule (5-field cron)')}
                 </SizableText>
                 <XStack gap="$1.5" flexWrap="wrap">
-                  {SCHEDULES.map((s) => (
-                    <Button key={s.cron} size="sm" variant={(d.schedule ?? '').trim() === s.cron ? 'primary' : 'outline'} onPress={() => set({ schedule: s.cron })}>
-                      {t(s.label)}
-                    </Button>
-                  ))}
+                  {SCHEDULES.map((s) => {
+                    const active = (d.schedule ?? '').trim() === s.cron
+                    return (
+                      <Button
+                        key={s.cron}
+                        size="sm"
+                        variant="outline"
+                        aria-pressed={active}
+                        onPress={() => set({ schedule: s.cron })}
+                      >
+                        {t(s.label)}
+                      </Button>
+                    )
+                  })}
                 </XStack>
                 <Input value={d.schedule ?? ''} onChangeText={(v: string) => set({ schedule: v })} placeholder="*/15 * * * *" aria-label={t('Proactive schedule')} />
                 <SizableText size="$1" color="$soft">
@@ -909,7 +1321,8 @@ function Editor({
                       <Button
                         key={tr}
                         size="sm"
-                        variant={active ? 'primary' : 'outline'}
+                        variant="outline"
+                        aria-pressed={active}
                         onPress={() => set({ triggers: active ? (d.triggers ?? []).filter((x) => x !== tr) : [...(d.triggers ?? []), tr] })}
                       >
                         {t(TRIGGER_LABELS[tr].title)}

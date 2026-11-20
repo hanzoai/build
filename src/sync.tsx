@@ -171,7 +171,7 @@ export function Sync() {
                 <SizableText size="$5" color="$ink">
                   {t('Select repositories')}
                 </SizableText>
-                <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+                <SizableText size="$2" color="$soft" text="center">
                   {t('Choose repositories to bring into {place}', { place: dest })}
                 </SizableText>
               </YStack>
@@ -239,7 +239,7 @@ export function Sync() {
                 <SizableText size="$5" color="$ink">
                   {t('Select repositories')}
                 </SizableText>
-                <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+                <SizableText size="$2" color="$soft" text="center">
                   {t('Choose repositories to bring into {place}', { place: dest })}
                 </SizableText>
               </YStack>
@@ -285,7 +285,7 @@ export function Sync() {
                 <SizableText size="$5" color="$ink">
                   {t('Repository access')}
                 </SizableText>
-                <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+                <SizableText size="$2" color="$soft" text="center">
                   {t('Review who can read these repositories')}
                 </SizableText>
               </YStack>
@@ -320,7 +320,7 @@ export function Sync() {
                   </SizableText>
                 </YStack>
               </XStack>
-              <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+              <SizableText size="$2" color="$soft" text="center">
                 {t('Anyone with access to {place}', { place: dest })}
               </SizableText>
             </>
@@ -372,9 +372,7 @@ function Step({ label, done, current }: { label: string; done: boolean; current:
         width={14}
         height={14}
         rounded={999}
-        bg={done ? '$green10' : 'transparent'}
         borderWidth={1}
-        borderColor={done || current ? '$ink' : '$borderColor'}
         items="center"
         justify="center"
       >

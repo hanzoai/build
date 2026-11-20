@@ -31,6 +31,7 @@ import { useI18n } from '@hanzo/i18n/react'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@hanzo/ui'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
+import { RING } from './pane.ts'
 import { automations, create, type Automation, type Source } from './api/auto.ts'
 import { call, Refusal, unwrap, type Target } from './api/call.ts'
 import { conversations } from './api/conversations.ts'
@@ -248,7 +249,6 @@ function Row({ row: kept, touch, onAct, onDismiss }: { row: Suggestion; touch: b
       data-act={row.act.kind}
       aria-label={row.title}
       onPress={handleAct}
-      onClick={handleAct}
       flex={1}
       minW={0}
       self="stretch"
@@ -257,7 +257,7 @@ function Row({ row: kept, touch, onAct, onDismiss }: { row: Suggestion; touch: b
       paddingInlineStart="$3"
       rounded="$4"
       cursor="pointer"
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+      focusVisibleStyle={RING}
     >
       <Mark size={18} color="$soft" />
       <SizableText fontSize={15} color="$soft" numberOfLines={1} shrink={1} minW={0}>

@@ -16,21 +16,43 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n, type Say } from '@hanzo/i18n/react'
-import { ChevronDown, ExternalLink, KeyRound, Server as ServerIcon } from '@hanzogui/lucide-icons-2'
-import { Button, Input, Switch } from '@hanzo/ui'
+import { AlertCircle, Check, ChevronDown, ChevronUp, ExternalLink, KeyRound, Plug, Search, Server as ServerIcon, SlidersHorizontal, Trash2, X } from '@hanzogui/lucide-icons-2'
+import { Button, DropdownMenu, Input, Switch } from '@hanzo/ui'
 import { useEffect, useMemo, useState } from 'react'
 
 import { add, one, owns, ready, remove, servers, shelf, titleOf, type Adding, type Listing, type Page, type Server } from '../api/connectors.ts'
 import { natives, type Native } from '../api/mcp.ts'
 import { toggle, tools, type Tool } from '../api/tools.ts'
+import { RING, RING_INSET } from '../pane.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { Out } from '../out.tsx'
 import { route } from '../route.ts'
 import { useLoad } from './load.ts'
 import { say } from './say.ts'
-import { Add, Confirm, Empty, Failed, Featured, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
+import { Add, Confirm, Empty, Failed, Featured, Field, FilterPills, Grid, Mark, matches, MenuTrigger, Part, RowsSkeleton, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
 
 const PAGE = 48
+const BUILTIN_INITIAL = 6
+
+
+type ShelfFilter = 'all' | 'hosted' | 'official'
+
+interface Notice {
+  text: string
+  error?: boolean
+}
+
+function StatusBanner({ notice }: { notice: Notice | null }) {
+  if (!notice?.text) return null
+  return (
+    <XStack items="center" gap="$1.5" role={notice.error ? 'alert' : 'status'}>
+      {notice.error ? <AlertCircle size={14} color="var(--state-error)" aria-hidden /> : <Check size={14} color="var(--state-success)" aria-hidden />}
+      <SizableText size="$1" color={notice.error ? 'var(--state-error)' : '$soft'} flex={1} minW={0}>
+        {notice.text}
+      </SizableText>
+    </XStack>
+  )
+}
 
 /** The part of a URL a person reads: its host and path. */
 const where = (url: string): string => url.replace(/^https?:\/\//, '').replace(/\/$/, '')
@@ -46,10 +68,11 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
   // Every server's tools, for the switch on each card; read once for all of them.
   const plane = useLoad(signed && view === 'yours' && mine.value.length ? () => tools(target, { source: 'mcp' }) : null, [] as Tool[], [target, signed, view, mine.value])
   const [opened, setOpened] = useState<Server | null>(null)
+  const [removing, setRemoving] = useState<Server | null>(null)
   const [listing, setListing] = useState<Listing | null>(null)
   const [connecting, setConnecting] = useState<Listing | null>(null)
   const [busy, setBusy] = useState('')
-  const [note, setNote] = useState('')
+  const [notice, setNotice] = useState<Notice | null>(null)
   useCount(mine.value.length, onCount)
 
   /** Switch every tool a server brings on or off at once, then read them again. */
@@ -57,13 +80,13 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
     const its = plane.value.filter((x) => owns(s, x.name)).map((x) => x.name)
     if (!its.length) return
     setBusy(s.id)
-    setNote('')
+    setNotice(null)
     try {
       await toggle(target, next ? its : [], next ? [] : its)
       plane.reload()
-      setNote(next ? t('{name} is on', { name: s.name }) : t('{name} is off', { name: s.name }))
+      setNotice({ text: next ? t('{name} is on', { name: s.name }) : t('{name} is off', { name: s.name }) })
     } catch (e) {
-      setNote(say(e, t))
+      setNotice({ text: say(e, t), error: true })
     } finally {
       setBusy('')
     }
@@ -82,7 +105,7 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
           onAdding(false)
           mine.reload()
           onView('yours')
-          setNote(said)
+          setNotice({ text: said })
         }}
       />
     ) : null
@@ -98,11 +121,26 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
       onClose={() => setListing(null)}
     />
   ) : null
+  const confirmRemove = removing ? (
+    <Confirm
+      what={removing.name}
+      says={t('Its tools leave your organization and every agent, and its sealed secret is destroyed.')}
+      open
+      onOpenChange={(o) => !o && setRemoving(null)}
+      onYes={async () => {
+        const gone = removing
+        await remove(target, gone.id)
+        setRemoving(null)
+        mine.reload()
+        setNotice({ text: t('{name} is removed', { name: gone.name }) })
+      }}
+    />
+  ) : null
 
   if (view === 'discover') {
     return (
       <YStack gap="$6">
-        <Line>{note}</Line>
+        <StatusBanner notice={notice} />
         <Shelf
           q={q}
           signed={signed}
@@ -124,11 +162,11 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
   const shown = mine.value.filter((s) => matches(q, s.name, s.url, s.listing))
   return (
     <YStack gap="$3">
-      <Line>{note}</Line>
+      <StatusBanner notice={notice} />
       {mine.error && !mine.value.length ? (
         <Failed error={mine.error} onRetry={mine.reload} />
       ) : mine.loading && !mine.value.length ? (
-        <Soft>{t('Loading your connectors…')}</Soft>
+        <TilesSkeleton label={t('Loading your connectors')} count={4} />
       ) : !mine.value.length ? (
         <Empty title={t('No connectors yet')} detail={may ? t('Connect an app from Browse, or add any MCP server by its URL.') : t('An org admin adds connectors. Browse what there is.')}>
           <Button size="sm" variant="outline" onPress={() => onView('discover')}>
@@ -160,23 +198,50 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
                 ]
                   .filter(Boolean)
                   .join(' · ')}
-                mark={<Mark name={s.name} />}
+                mark={<Mark name={s.name} icon={<Plug size={15} color="$soft" aria-hidden />} />}
                 onOpen={() => setOpened(s)}
                 action={
-                  may && its.length ? (
-                    <Switch checked={lit > 0} disabled={busy === s.id} onCheckedChange={(v: boolean) => void flip(s, v)} aria-label={t('{name} on', { name: s.name })} />
-                  ) : its.length ? (
-                    <SizableText size="$1" color="$soft">
-                      {lit ? t('On') : t('Off')}
-                    </SizableText>
-                  ) : undefined
+                  <XStack items="center" gap="$1.5" shrink={0}>
+                    {may && its.length ? (
+                      <Switch checked={lit > 0} disabled={busy === s.id} onCheckedChange={(v: boolean) => void flip(s, v)} aria-label={t('{name} on', { name: s.name })} />
+                    ) : its.length ? (
+                      <SizableText size="$1" color="$soft">
+                        {lit ? t('On') : t('Off')}
+                      </SizableText>
+                    ) : null}
+                    <DropdownMenu
+                      placement="bottom-end"
+                      offset={6}
+                      trigger={<MenuTrigger label={t('Actions for {name}', { name: s.name })} />}
+                      items={[
+                        { key: 'inspect', label: t('Inspect tools'), icon: <SlidersHorizontal size={15} />, onSelect: () => setOpened(s) },
+                        ...(may && its.length
+                          ? [
+                              {
+                                key: 'toggle',
+                                label: lit > 0 ? t('Turn all off') : t('Turn all on'),
+                                icon: <Check size={15} />,
+                                disabled: busy === s.id,
+                                onSelect: () => void flip(s, lit === 0),
+                              },
+                            ]
+                          : []),
+                        ...(may
+                          ? [
+                              { type: 'separator' as const },
+                              { key: 'remove', label: t('Remove connector'), icon: <Trash2 size={15} />, destructive: true, onSelect: () => setRemoving(s) },
+                            ]
+                          : []),
+                      ]}
+                    />
+                  </XStack>
                 }
               />
             )
           })}
         </Grid>
       )}
-      {plane.error && mine.value.length ? <Line>{t('Tools: {reason}', { reason: say(plane.error, t) })}</Line> : null}
+      {plane.error && mine.value.length ? <StatusBanner notice={{ text: t('Tools: {reason}', { reason: say(plane.error, t) }), error: true }} /> : null}
       {opened ? (
         <Detail
           server={opened}
@@ -186,12 +251,13 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
             plane.reload()
           }}
           onDeleted={() => {
-            setNote(t('{name} is removed', { name: opened.name }))
+            setNotice({ text: t('{name} is removed', { name: opened.name }) })
             setOpened(null)
             mine.reload()
           }}
         />
       ) : null}
+      {confirmRemove}
       {connect}
     </YStack>
   )
@@ -204,6 +270,7 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
   const text = useSettled(q.trim(), 300)
   const first = useLoad(signed ? () => shelf(target, { text, limit: PAGE }) : null, null as Page | null, [target, signed, text])
   const [more, setMore] = useState<Listing[]>([])
+  const [filter, setFilter] = useState<ShelfFilter>('all')
   const [paging, setPaging] = useState(false)
   const [note, setNote] = useState('')
   useEffect(() => setMore([]), [first.value])
@@ -216,8 +283,9 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
     )
   }
   const page = first.value
-  const list = [...(page?.listings ?? []), ...more]
-  const hero = !text ? list.find((l) => l.featured) : undefined
+  const loaded = [...(page?.listings ?? []), ...more]
+  const list = loaded.filter((l) => (filter === 'hosted' ? ready(l) : filter === 'official' ? l.official : true))
+  const hero = !text && filter === 'all' ? list.find((l) => l.featured) : undefined
   const rest = hero ? list.filter((l) => l !== hero) : list
   // A listing that ships only as a package has no Add: its card says it needs a place to run.
   const action = (l: Listing) => (may && ready(l) ? <Add name={titleOf(l)} added={added.has(l.id)} onPress={() => onAdd(l)} /> : undefined)
@@ -226,7 +294,7 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
     setPaging(true)
     setNote('')
     try {
-      const got = await shelf(target, { text, limit: PAGE, offset: list.length })
+      const got = await shelf(target, { text, limit: PAGE, offset: loaded.length })
       setMore((m) => [...m, ...got.listings])
     } catch (e) {
       setNote(say(e, t))
@@ -240,37 +308,73 @@ function Shelf({ q, signed, may, added, onOpen, onAdd }: { q: string; signed: bo
       {first.error && !page ? (
         <Failed error={first.error} onRetry={first.reload} />
       ) : !page ? (
-        <Soft>{t('Loading connectors…')}</Soft>
-      ) : !list.length ? (
-        <Soft>{text ? t('No connector matches “{q}”.', { q: text }) : t('There are no connectors to add yet.')}</Soft>
+        <TilesSkeleton label={t('Loading connectors')} withHero />
       ) : (
         <YStack gap="$3">
-          {hero ? (
-            <Featured
-              title={titleOf(hero)}
-              detail={hero.description}
-              meta={facts(hero, t)}
-              mark={<Mark name={titleOf(hero)} logo={hero.logo} size={48} />}
-              onOpen={() => onOpen(hero)}
-              action={action(hero)}
+          {loaded.length > 0 ? (
+            <FilterPills<ShelfFilter>
+              label={t('Filter connectors')}
+              value={filter}
+              options={[
+                { id: 'all', label: t('All') },
+                { id: 'hosted', label: t('Hosted') },
+                { id: 'official', label: t('Official') },
+              ]}
+              onChange={setFilter}
+              maxVisibleDesktop={6}
+              mobileLimit={4}
             />
           ) : null}
-          <SizableText size="$1" color="$soft">
-            {list.length < page.total ? t('{shown} of {n} connectors', { shown: list.length, n: page.total }) : t('{n} connectors', { n: page.total })}
-          </SizableText>
-          <Grid label={t('Servers on the shelf')}>
-            {rest.map((l) => (
-              <Tile key={l.id} title={titleOf(l)} detail={l.description} meta={facts(l, t)} mark={<Mark name={titleOf(l)} logo={l.logo} />} onOpen={() => onOpen(l)} action={action(l)} />
-            ))}
-          </Grid>
-          <Line>{note}</Line>
-          {list.length < page.total ? (
-            <XStack justify="center">
-              <Button size="sm" variant="outline" disabled={paging} onPress={() => void next()}>
-                {t('Show more')}
-              </Button>
-            </XStack>
-          ) : null}
+          {!list.length ? (
+            <Soft
+              action={
+                filter !== 'all' ? (
+                  <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setFilter('all')}>
+                    {t('Show all connectors')}
+                  </Button>
+                ) : undefined
+              }
+            >
+              {text
+                ? t('No connector matches “{q}”.', { q: text })
+                : filter !== 'all'
+                  ? t('No connectors in this view on the loaded page.')
+                  : t('There are no connectors to add yet.')}
+            </Soft>
+          ) : (
+            <>
+              {hero ? (
+                <Featured
+                  title={titleOf(hero)}
+                  detail={hero.description}
+                  meta={facts(hero, t)}
+                  mark={<Mark name={titleOf(hero)} logo={hero.logo} size={48} />}
+                  onOpen={() => onOpen(hero)}
+                  action={action(hero)}
+                />
+              ) : null}
+              <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
+                {filter !== 'all'
+                  ? t('{shown} matching in {loaded} loaded', { shown: list.length, loaded: loaded.length })
+                  : loaded.length < page.total
+                    ? t('{shown} of {n} connectors', { shown: loaded.length, n: page.total })
+                    : t('{n} connectors', { n: page.total })}
+              </SizableText>
+              <Grid label={t('Servers on the shelf')}>
+                {rest.map((l) => (
+                  <Tile key={l.id} title={titleOf(l)} detail={l.description} meta={facts(l, t)} mark={<Mark name={titleOf(l)} logo={l.logo} />} onOpen={() => onOpen(l)} action={action(l)} />
+                ))}
+              </Grid>
+              {note ? <StatusBanner notice={{ text: note, error: true }} /> : null}
+              {loaded.length < page.total ? (
+                <XStack justify="center">
+                  <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={paging} onPress={() => void next()}>
+                    {paging ? t('Loading…') : t('Show more')}
+                  </Button>
+                </XStack>
+              ) : null}
+            </>
+          )}
         </YStack>
       )}
     </Part>
@@ -303,8 +407,11 @@ function Natives({ q }: { q: string }) {
   const [asked, setAsked] = useState(r.kind === 'screen' && r.screen === 'mcp')
   const list = useLoad(asked ? () => natives(target) : null, [] as Native[], [target, asked])
   const [open, setOpen] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
   const shown = list.value.filter((s) => matches(q, s.name, s.description, ...s.ops))
   const ops = shown.reduce((n, s) => n + s.ops.length, 0)
+  const searching = Boolean(q.trim())
+  const visible = searching || showAll ? shown : shown.slice(0, BUILTIN_INITIAL)
   return (
     <Part
       title={t('Built in')}
@@ -318,22 +425,36 @@ function Natives({ q }: { q: string }) {
       }
     >
       {!asked ? null : list.loading && !list.value.length ? (
-        <Soft>{t('Loading built-in servers…')}</Soft>
+        <RowsSkeleton label={t('Loading built-in servers')} />
       ) : list.error && !list.value.length ? (
         <Failed error={list.error} onRetry={list.reload} />
       ) : !shown.length ? (
         <Soft>{list.value.length ? t('No built-in server matches “{q}”.', { q: q.trim() }) : t('No built-in servers are listed.')}</Soft>
       ) : (
-        <YStack gap="$1">
-          <SizableText size="$1" color="$soft">
+        <YStack gap="$2">
+          <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
             {t('{servers} servers · {ops} operations', { servers: shown.length, ops })}
           </SizableText>
-          {shown.map((s) => {
+          {visible.map((s) => {
             const on = open === s.name
             return (
-              <YStack key={s.name} borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-                <XStack render="button" aria-expanded={on} aria-label={s.name} items="center" gap="$3" px="$3" py="$2.5" hoverStyle={{ bg: '$hover' }} $platform-web={{ textAlign: 'start' }} onPress={() => setOpen(on ? null : s.name)}>
-                  <YStack flex={1} minW={0} gap="$1">
+              <YStack key={s.name} borderWidth={1} borderColor="$borderColor" bg="$panel" rounded="$3" overflow="hidden">
+                <XStack
+                  render="button"
+                  aria-expanded={on}
+                  aria-label={s.name}
+                  width="100%"
+                  items="center"
+                  gap="$3"
+                  px="$3"
+                  py="$2.5"
+                  minH={44}
+                  focusVisibleStyle={RING_INSET}
+                  $platform-web={{ textAlign: 'start' }}
+                  onPress={() => setOpen(on ? null : s.name)}
+                >
+                  <ServerIcon size={14} color="$soft" aria-hidden />
+                  <YStack flex={1} minW={0} gap="$0.5">
                     <SizableText size="$3" color="$ink">
                       {s.name}
                     </SizableText>
@@ -343,16 +464,16 @@ function Natives({ q }: { q: string }) {
                       </SizableText>
                     ) : null}
                   </YStack>
-                  <SizableText size="$1" color="$soft">
+                  <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']} shrink={0}>
                     {s.ops.length}
                   </SizableText>
-                  <ChevronDown size={14} style={{ transform: on ? 'rotate(180deg)' : undefined }} />
+                  {on ? <ChevronUp size={14} color="$soft" aria-hidden /> : <ChevronDown size={14} color="$soft" aria-hidden />}
                 </XStack>
                 {on ? (
                   <YStack px="$3" py="$2" gap="$1" borderTopWidth={1} borderColor="$borderColor">
                     {s.ops.length ? (
                       s.ops.map((op) => (
-                        <SizableText key={op} size="$1" color="$ink" style={mono}>
+                        <SizableText key={op} size="$1" color="$ink" fontFamily="$mono">
                           {op}
                         </SizableText>
                       ))
@@ -366,6 +487,13 @@ function Natives({ q }: { q: string }) {
               </YStack>
             )
           })}
+          {!searching && shown.length > BUILTIN_INITIAL ? (
+            <XStack justify="flex-start">
+              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setShowAll((v) => !v)}>
+                {showAll ? t('Show fewer') : t('Show all {n} built-in servers', { n: shown.length })}
+              </Button>
+            </XStack>
+          ) : null}
         </YStack>
       )}
     </Part>
@@ -384,7 +512,7 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
       <XStack gap="$3" items="center">
         <Mark name={titleOf(l)} logo={l.logo} size={40} />
         <YStack flex={1} minW={0}>
-          <SizableText size="$2" color="$ink" numberOfLines={1} style={mono}>
+          <SizableText size="$2" color="$ink" numberOfLines={1} fontFamily="$mono">
             {l.name}
           </SizableText>
           <SizableText size="$1" color="$soft" numberOfLines={1}>
@@ -400,7 +528,7 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
       {l.remotes.length ? (
         <Field label={t('Served at')}>
           {l.remotes.map((r) => (
-            <SizableText key={r.url} size="$1" color="$ink" style={mono} numberOfLines={1}>
+            <SizableText key={r.url} size="$1" color="$ink" fontFamily="$mono" numberOfLines={1}>
               {r.url} · {r.transport}
             </SizableText>
           ))}
@@ -409,7 +537,7 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
       {l.packages.length ? (
         <Field label={t('Packages')} hint={ready(l) ? undefined : t('It ships only as a package, so it needs a place to run before it can be added here.')}>
           {l.packages.map((p) => (
-            <SizableText key={`${p.registry}:${p.identifier}`} size="$1" color="$ink" style={mono} numberOfLines={1}>
+            <SizableText key={`${p.registry}:${p.identifier}`} size="$1" color="$ink" fontFamily="$mono" numberOfLines={1}>
               {[p.registry, p.identifier, p.version, p.runtime].filter(Boolean).join(' · ')}
             </SizableText>
           ))}
@@ -422,12 +550,12 @@ function About({ listing, added, signed, onAdd, onClose }: { listing: Listing; a
               <SizableText size="$2" color="$soft">
                 {where(u)}
               </SizableText>
-              <ExternalLink size={12} opacity={0.6} />
+              <ExternalLink size={12} color="$soft" aria-hidden />
             </Out>
           ))}
         </XStack>
       ) : null}
-      {full.error ? <Line>{t('Showing what Browse listed. {reason}', { reason: say(full.error, t) })}</Line> : null}
+      {full.error ? <StatusBanner notice={{ text: t('Showing what Browse listed. {reason}', { reason: say(full.error, t) }), error: true }} /> : null}
       {signed && ready(l) ? (
         <XStack justify="flex-end">
           <Button size="sm" disabled={added} onPress={onAdd}>
@@ -451,11 +579,13 @@ function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClo
   const [header, setHeader] = useState('Authorization')
   const [secret, setSecret] = useState('')
   const [working, setWorking] = useState(false)
-  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+
+  const canSubmit = !working && (Boolean(listing) || (Boolean(name.trim()) && Boolean(url.trim()))) && (!secret || Boolean(header.trim()))
 
   const save = async () => {
     setWorking(true)
-    setNote('')
+    setError('')
     const a: Adding = listing ? { listing: listing.id, name, header, secret } : { name, url, header, secret }
     try {
       const s = await add(target, a)
@@ -469,7 +599,7 @@ function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClo
       }
       onAdded(said)
     } catch (e) {
-      setNote(say(e, t))
+      setError(say(e, t))
     } finally {
       setWorking(false)
     }
@@ -502,13 +632,13 @@ function Connect({ listing, onClose, onAdded }: { listing: Listing | null; onClo
           <Input value={header} onChangeText={setHeader} aria-label={t('Header')} autoCapitalize="none" />
         </Field>
       ) : null}
-      <Line>{note}</Line>
+      {error ? <StatusBanner notice={{ text: error, error: true }} /> : null}
       <XStack gap="$2" justify="flex-end">
         <Button size="sm" variant="ghost" onPress={onClose}>
           {t('Cancel')}
         </Button>
-        <Button size="sm" disabled={working} onPress={() => void save()}>
-          {t('Add')}
+        <Button size="sm" variant="primary" disabled={!canSubmit} onPress={() => void save()}>
+          {working ? t('Adding…') : t('Add')}
         </Button>
       </XStack>
     </Sheet>
@@ -521,19 +651,24 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
   const target = useTarget()
   const list = useLoad(() => tools(target, { source: 'mcp' }), [] as Tool[], [target, server.id])
   const its = useMemo(() => list.value.filter((x) => owns(server, x.name)), [list.value, server])
+  const [toolQuery, setToolQuery] = useState('')
   const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
   const [asking, setAsking] = useState(false)
   const off = its.filter((x) => !x.activated).map((x) => x.name)
+  const filteredTools = useMemo(
+    () => (toolQuery.trim() ? its.filter((x) => matches(toolQuery, x.name.slice(server.id.length + 1), x.description)) : its),
+    [its, server.id, toolQuery],
+  )
 
   const flip = async (on: string[], offNames: string[]) => {
     setBusy(true)
-    setNote('')
+    setError('')
     try {
       await toggle(target, on, offNames)
       list.reload()
     } catch (e) {
-      setNote(say(e, t))
+      setError(say(e, t))
     } finally {
       setBusy(false)
     }
@@ -541,13 +676,13 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
 
   return (
     <Sheet title={server.name} open onOpenChange={(o) => !o && onClose()}>
-      <YStack gap="$1">
-        <SizableText size="$1" color="$ink" style={mono} numberOfLines={2}>
+      <YStack gap="$1.5" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$panel">
+        <SizableText size="$1" color="$ink" fontFamily="$mono" numberOfLines={2}>
           {server.url}
         </SizableText>
         <XStack items="center" gap="$1.5">
-          {server.secret ? <KeyRound size={12} opacity={0.7} /> : <ServerIcon size={12} opacity={0.7} />}
-          <SizableText size="$1" color="$soft">
+          {server.secret ? <KeyRound size={12} color="$soft" aria-hidden /> : <ServerIcon size={12} color="$soft" aria-hidden />}
+          <SizableText size="$1" color="$soft" flex={1} minW={0}>
             {server.secret
               ? server.header
                 ? t('A secret is sealed in KMS and sent in {header}.', { header: server.header })
@@ -557,8 +692,8 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
         </XStack>
       </YStack>
       <XStack items="center" gap="$2">
-        <SizableText size="$3" color="$ink" flex={1}>
-          {t('Tools')}
+        <SizableText size="$3" fontWeight="500" color="$ink" flex={1}>
+          {its.length ? t('Tools ({n})', { n: its.length }) : t('Tools')}
         </SizableText>
         {its.length && may ? (
           <Button size="sm" variant="outline" disabled={busy} onPress={() => void (off.length ? flip(off, []) : flip([], its.map((x) => x.name)))}>
@@ -566,20 +701,50 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
           </Button>
         ) : null}
       </XStack>
+      {its.length > 8 ? (
+        <Input
+          value={toolQuery}
+          onChangeText={setToolQuery}
+          placeholder={t('Filter tools…')}
+          aria-label={t('Filter tools')}
+          startAdornment={<Search size={14} color="$soft" aria-hidden />}
+          endAdornment={
+            toolQuery ? (
+              <XStack
+                render="button"
+                aria-label={t('Clear search')}
+                onPress={() => setToolQuery('')}
+                minW={24}
+                minH={24}
+                items="center"
+                justify="center"
+                focusVisibleStyle={RING}
+              >
+                <X size={13} color="$soft" aria-hidden />
+              </XStack>
+            ) : undefined
+          }
+          onKeyDown={(e: { key?: string }) => {
+            if (e.key === 'Escape' && toolQuery) setToolQuery('')
+          }}
+        />
+      ) : null}
       {list.loading && !list.value.length ? (
-        <Soft>{t('Loading its tools…')}</Soft>
+        <RowsSkeleton label={t('Loading tools')} />
       ) : list.error && !list.value.length ? (
         <Failed error={list.error} onRetry={list.reload} />
       ) : !its.length ? (
         <Soft>{t('No tools listed yet. A server that does not answer shows its tools once it does.')}</Soft>
+      ) : !filteredTools.length ? (
+        <Soft>{t('No tool matches “{q}”.', { q: toolQuery.trim() })}</Soft>
       ) : (
-        <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-          {its.map((x, i) => {
+        <YStack borderWidth={1} borderColor="$borderColor" bg="$panel" rounded="$3" overflow="hidden">
+          {filteredTools.map((x, i) => {
             const short = x.name.slice(server.id.length + 1)
             return (
               <XStack key={x.name} items="center" gap="$3" px="$3" py="$2" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
                 <YStack flex={1} minW={0} gap="$0.5">
-                  <SizableText size="$2" color="$ink" style={mono} numberOfLines={1}>
+                  <SizableText size="$2" color="$ink" fontFamily="$mono" numberOfLines={1}>
                     {short}
                   </SizableText>
                   {x.description ? (
@@ -600,11 +765,17 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
           })}
         </YStack>
       )}
-      <Line>{note || (may ? '' : t('Only an org admin can switch or remove connectors.'))}</Line>
+      {error ? (
+        <StatusBanner notice={{ text: error, error: true }} />
+      ) : !may ? (
+        <SizableText size="$1" color="$soft" role="status">
+          {t('Only an org admin can switch or remove connectors.')}
+        </SizableText>
+      ) : null}
       {may ? (
         <XStack justify="flex-start">
-          <Button size="sm" variant="ghost" onPress={() => setAsking(true)}>
-            {t('Remove connector')}
+          <Button size="sm" variant="ghost" tone="danger" onPress={() => setAsking(true)}>
+            <Trash2 size={14} /> {t('Remove connector')}
           </Button>
         </XStack>
       ) : null}

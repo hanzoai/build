@@ -17,14 +17,15 @@
  * are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { Clock, ExternalLink, MoreHorizontal, Pencil, Play, Plus, ScrollText, Trash2 } from '@hanzogui/lucide-icons-2'
+import { ChevronDown, ChevronRight, Clock, ExternalLink, MoreHorizontal, Pencil, Play, Plus, ScrollText, Trash2 } from '@hanzogui/lucide-icons-2'
 import { useI18n } from '@hanzo/i18n/react'
-import { Button, DropdownMenu, Input, Switch, Textarea } from '@hanzo/ui'
+import { Button, DropdownMenu, Input, Skeleton, Switch, Textarea, toast } from '@hanzo/ui'
 import { StatusDot } from '@hanzo/ui/chat'
 import { ModelPicker } from '@hanzo/ui/models'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
+import { RING, RING_INSET } from './pane.ts'
 import { automations, create, cron, events, jobs, remove, save, start, words, type Automation, type Draft, type Job, type Parsed, type Schedule } from './api/auto.ts'
 import { Refusal, told } from './api/call.ts'
 import { ENSO, limits as readLimits, models } from './api/models.ts'
@@ -112,9 +113,11 @@ export function Scheduled() {
   useEffect(() => setTasks(tasks.value), [tasks.value])
   useEffect(() => setRuns(runs.value), [runs.value])
   const [problem, setProblem] = useState('')
+  const [problemError, setProblemError] = useState(false)
   const [making, setMaking] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Automation | null>(null)
   const [looking, setLooking] = useState<Job | null>(null)
+  const [allActivity, setAllActivity] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   // Dev's "Schedule this" arrives with the prompt the sheet starts from.
@@ -139,24 +142,36 @@ export function Scheduled() {
 
   const act = async (what: string, work: () => Promise<void>) => {
     setProblem('')
+    setProblemError(false)
     try {
       await work()
     } catch (e) {
       setProblem(unplanned(e) ? t(PLAN) : t('{name}: {error}', { name: what, error: told(e, t) }))
+      setProblemError(true)
     }
   }
   const flip = (a: Automation, on: boolean) =>
     act(a.name, async () => {
       const next = await save(target, a.id, { enabled: on })
       setTasks((was) => was.map((x) => (x.id === next.id ? next : x)))
+      toast.success(on ? t('{name} turned on', { name: a.name }) : t('{name} paused', { name: a.name }))
     })
   const run = (a: Automation) =>
     act(a.name, async () => {
       const r = await start(target, a.id)
-      if (r.status === 'skipped') setProblem(t('{name}: not started, the previous run is still going.', { name: a.name }))
+      if (r.status === 'skipped') {
+        setProblem(t('{name}: not started, the previous run is still going.', { name: a.name }))
+        setProblemError(true)
+      } else {
+        toast.success(t('Started {name}', { name: a.name }))
+      }
       setTick((n) => n + 1)
     })
   const edit = (id: string) => host.go(path({ kind: 'automation', id }))
+
+  const activityCap = 10
+  const activityOverflow = shownRuns.length > activityCap
+  const visibleRuns = !allActivity && activityOverflow ? shownRuns.slice(0, activityCap) : shownRuns
 
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
@@ -175,7 +190,11 @@ export function Scheduled() {
             {t('New task')}
           </Button>
         </XStack>
-        <Line>{problem}</Line>
+        {problem ? (
+          <SizableText size="$2" color={problemError ? 'var(--state-error)' : '$soft'} role="status">
+            {problem}
+          </SizableText>
+        ) : null}
 
         <YStack gap="$2">
           <SizableText render="h2" size="$3" color="$ink" fontWeight="500">
@@ -188,12 +207,33 @@ export function Scheduled() {
               </Button>
             </Said>
           ) : tasks.error && !shownTasks.length ? (
-            <Said says={told(tasks.error, t)} />
+            <Said says={told(tasks.error, t)} error>
+              <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setTick((n) => n + 1)}>
+                {t('Try again')}
+              </Button>
+            </Said>
           ) : tasks.loading && !shownTasks.length ? (
-            <Said says={t('Reading your tasks…')} />
+            <YStack gap="$2.5" aria-busy={true}>
+              <SizableText size="$2" color="$soft">
+                {t('Reading your tasks…')}
+              </SizableText>
+              <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" overflow="hidden">
+                {[0, 1, 2].map((i) => (
+                  <XStack key={i} items="center" gap="$3" px="$3" py="$3" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
+                    <Skeleton layout="block" width={32} height={32} rounded="$3" shrink={0} />
+                    <YStack flex={1} gap="$1.5">
+                      <Skeleton layout="block" width="42%" height={14} rounded="$2" />
+                      <Skeleton layout="block" width="58%" height={12} rounded="$2" />
+                    </YStack>
+                    <Skeleton layout="block" width={36} height={20} rounded={999} shrink={0} />
+                  </XStack>
+                ))}
+              </YStack>
+            </YStack>
           ) : !shownTasks.length ? (
             <Said says={t('No scheduled tasks yet. Ask Chat or Dev to do something on a schedule, or start one here.')}>
-              <Button size="sm" onPress={() => setMaking('')}>
+              <Button size="sm" variant="primary" onPress={() => setMaking('')}>
+                <Plus size={14} />
                 {t('New task')}
               </Button>
             </Said>
@@ -212,21 +252,66 @@ export function Scheduled() {
               <SizableText render="h2" size="$3" color="$ink" fontWeight="500" flex={1}>
                 {t('Activity')}
               </SizableText>
-              <SizableText size="$1" color="$soft">
-                {live ? t('Live') : ''}
-              </SizableText>
+              {live ? (
+                <XStack items="center" gap="$1.5">
+                  <YStack width={6} height={6} rounded={99} bg="var(--state-online)" />
+                  <SizableText size="$1" color="$soft">
+                    {t('Live')}
+                  </SizableText>
+                </XStack>
+              ) : null}
             </XStack>
             {runs.error && !shownRuns.length ? (
-              <Said says={told(runs.error, t)} />
+              <Said says={told(runs.error, t)} error>
+                <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setTick((n) => n + 1)}>
+                  {t('Try again')}
+                </Button>
+              </Said>
             ) : runs.loading && !shownRuns.length ? (
-              <Said says={t('Reading what ran…')} />
+              <YStack gap="$2.5" aria-busy={true}>
+                <SizableText size="$2" color="$soft">
+                  {t('Reading what ran…')}
+                </SizableText>
+                <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" overflow="hidden">
+                  {[0, 1, 2, 3].map((i) => (
+                    <XStack key={i} items="center" gap="$3" px="$3" py="$2.5" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
+                      <Skeleton layout="block" width={10} height={10} rounded={999} shrink={0} />
+                      <YStack flex={1} gap="$1.5">
+                        <Skeleton layout="block" width="46%" height={14} rounded="$2" />
+                        <Skeleton layout="block" width="34%" height={12} rounded="$2" />
+                      </YStack>
+                      <Skeleton layout="block" width={54} height={12} rounded="$2" shrink={0} />
+                    </XStack>
+                  ))}
+                </YStack>
+              </YStack>
             ) : !shownRuns.length ? (
               <Said says={t("Nothing has run yet. A task's runs, Dev's background runs and Studio's renders show here as they go.")} />
             ) : (
-              <YStack role="list" aria-label={t('Activity')} borderWidth={1} borderColor="$borderColor" rounded="$4" overflow="hidden">
-                {shownRuns.map((j, i) => (
-                  <Ran key={j.id} j={j} first={i === 0} now={now} onOpen={() => setLooking(j)} />
-                ))}
+              <YStack gap="$2">
+                <YStack role="list" aria-label={t('Activity')} borderWidth={1} borderColor="$borderColor" rounded="$4" bg="$panel" overflow="hidden">
+                  {visibleRuns.map((j, i) => (
+                    <Ran key={j.id} j={j} first={i === 0} now={now} onOpen={() => setLooking(j)} />
+                  ))}
+                </YStack>
+                {activityOverflow ? (
+                  <XStack>
+                    <XStack
+                      render="button"
+                      aria-expanded={allActivity}
+                      onPress={() => setAllActivity((v) => !v)}
+                      px="$2.5"
+                      py="$1.5"
+                      minH={32}
+                      items="center"
+                      focusVisibleStyle={RING}
+                    >
+                      <SizableText size="$1" fontWeight="500" color="$soft">
+                        {allActivity ? t('Show fewer runs') : t('Show all {n} runs', { n: shownRuns.length })}
+                      </SizableText>
+                    </XStack>
+                  </XStack>
+                ) : null}
               </YStack>
             )}
           </YStack>
@@ -238,6 +323,7 @@ export function Scheduled() {
         onClose={() => setMaking(null)}
         onMade={(a) => {
           setTasks((was) => [a, ...was.filter((x) => x.id !== a.id)])
+          setProblemError(false)
           setProblem(t('Scheduled: {name}.', { name: a.name }))
         }}
       />
@@ -249,9 +335,11 @@ export function Scheduled() {
           open
           onOpenChange={(o) => !o && setDeleting(null)}
           onYes={async () => {
-            await remove(target, deleting.id)
-            setTasks((was) => was.filter((x) => x.id !== deleting.id))
+            const dead = deleting
+            await remove(target, dead.id)
+            setTasks((was) => was.filter((x) => x.id !== dead.id))
             setDeleting(null)
+            toast.success(t('{name} deleted', { name: dead.name }))
           }}
         />
       ) : null}
@@ -266,8 +354,21 @@ function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; 
     ? t('Needs instructions')
     : [words(a.schedule, t), a.enabled && a.next ? t('next {when}', { when: local(a.next) }) : a.schedule.kind !== 'manual' && !a.enabled ? t('paused') : ''].filter(Boolean).join(' · ')
   return (
-    <XStack role="listitem" items="center" gap="$3" px="$3" py="$3" borderTopWidth={first ? 0 : 1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
-      <XStack render="button" aria-label={t('Open {name}', { name: a.name })} onPress={onOpen} flex={1} minW={0} items="center" gap="$3" cursor="pointer" $platform-web={{ textAlign: 'start' }}>
+    <XStack role="listitem" items="center" gap="$2.5" pr="$2.5" borderTopWidth={first ? 0 : 1} borderColor="$borderColor" hoverStyle={{ bg: '$hover' }}>
+      <XStack
+        render="button"
+        aria-label={t('Open {name}', { name: a.name })}
+        onPress={onOpen}
+        flex={1}
+        minW={0}
+        minH={44}
+        px="$3"
+        py="$3"
+        items="center"
+        gap="$3"
+        $platform-web={{ textAlign: 'start' }}
+        focusVisibleStyle={RING_INSET}
+      >
         <YStack width={32} height={32} rounded="$3" bg="$raised" items="center" justify="center" shrink={0} aria-hidden>
           <Clock size={16} />
         </YStack>
@@ -284,19 +385,30 @@ function Task({ a, first, onOpen, onSwitch, onRun, onDelete }: { a: Automation; 
           </SizableText>
         </YStack>
       </XStack>
-      <Switch checked={a.enabled} disabled={a.draft} onCheckedChange={onSwitch} aria-label={t('{name} on', { name: a.name })} />
-      <DropdownMenu
-        trigger={
-          <XStack render="button" aria-label={t('Actions for {name}', { name: a.name })} width={30} height={30} items="center" justify="center" rounded="$2" hoverStyle={{ bg: '$hover' }} cursor="pointer">
-            <MoreHorizontal size={16} />
-          </XStack>
-        }
-        items={[
-          ...(a.draft ? [] : [{ key: 'run', label: t('Run now'), icon: <Play size={16} />, onSelect: onRun }]),
-          { key: 'edit', label: t('Edit'), icon: <Pencil size={16} />, onSelect: onOpen },
-          { key: 'delete', label: t('Delete'), icon: <Trash2 size={16} />, onSelect: onDelete },
-        ]}
-      />
+      <XStack shrink={0} items="center" gap="$1.5">
+        <Switch checked={a.enabled} disabled={a.draft} onCheckedChange={onSwitch} aria-label={t('{name} on', { name: a.name })} />
+        <DropdownMenu
+          trigger={
+            <XStack
+              render="button"
+              aria-label={t('Actions for {name}', { name: a.name })}
+              width={32}
+              height={32}
+              items="center"
+              justify="center"
+              focusVisibleStyle={RING}
+            >
+              <MoreHorizontal size={16} color="$soft" />
+            </XStack>
+          }
+          items={[
+            ...(a.draft ? [] : [{ key: 'run', label: t('Run now'), icon: <Play size={14} />, onSelect: onRun }]),
+            { key: 'edit', label: t('Edit'), icon: <Pencil size={14} />, onSelect: onOpen },
+            { type: 'separator' },
+            { key: 'delete', label: t('Delete'), icon: <Trash2 size={14} />, destructive: true, onSelect: onDelete },
+          ]}
+        />
+      </XStack>
     </XStack>
   )
 }
@@ -316,7 +428,7 @@ function Ran({ j, first, now, onOpen }: { j: Job; first: boolean; now: number; o
             {about(j, now, t)}
           </SizableText>
         </YStack>
-        <SizableText size="$1" color="$soft" shrink={0}>
+        <SizableText size="$1" color="$soft" shrink={0} fontVariant={['tabular-nums']}>
           {j.state === 'running' && j.progress !== null ? `${Math.round(j.progress * 100)}%` : t(SAID[j.state])}
         </SizableText>
       </XStack>
@@ -347,12 +459,12 @@ function Detail({ j, onClose, now }: { j: Job | null; onClose: () => void; now: 
             ]}
           />
           {j.error ? (
-            <SizableText size="$2" color="$soft" style={{ whiteSpace: 'pre-wrap' }}>
+            <SizableText size="$2" color="var(--state-error)" $platform-web={{ whiteSpace: 'pre-wrap' }}>
               {j.error}
             </SizableText>
           ) : null}
           {j.summary ? (
-            <SizableText size="$2" color="$ink" style={{ whiteSpace: 'pre-wrap' }}>
+            <SizableText size="$2" color="$ink" $platform-web={{ whiteSpace: 'pre-wrap' }}>
               {j.summary}
             </SizableText>
           ) : null}
@@ -407,6 +519,7 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
   const [picking, setPicking] = useState(false)
   const [picked, setPicked] = useState<Schedule>(() => shaped('daily', { kind: 'manual' }))
   const [model, setModel] = useState<string | null>(null)
+  const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const catalog = useRead(signed && open ? () => models(target) : null, [], [target, signed, open])
@@ -421,6 +534,7 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
     setRead(null)
     setUnread(null)
     setPicking(false)
+    setAdvanced(false)
     setNote('')
   }, [prompt])
 
@@ -509,21 +623,44 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
             </YStack>
           )}
         </Field>
-        <Field label={t('Model')}>
-          <XStack>
-            <ModelPicker
-              size="sm"
-              name={t('Model')}
-              models={catalog.value}
-              scope="chat"
-              limits={limits}
-              value={model ?? ENSO}
-              onChange={(id) => setModel(id === ENSO ? null : id)}
-              loading={catalog.loading}
-              error={catalog.error ? told(catalog.error, t) : null}
-            />
+        <YStack gap="$2">
+          <XStack
+            render="button"
+            aria-expanded={advanced}
+            onPress={() => setAdvanced((v) => !v)}
+            items="center"
+            gap="$1.5"
+            self="flex-start"
+            px="$2"
+            ml="$-2"
+            minH={32}
+            focusVisibleStyle={RING}
+          >
+            {advanced ? <ChevronDown size={14} color="$soft" /> : <ChevronRight size={14} color="$soft" />}
+            <SizableText size="$2" color="$soft">
+              {model ? t('Model · {name}', { name: catalog.value.find((m) => m.id === model)?.name ?? model }) : t('Advanced options')}
+            </SizableText>
           </XStack>
-        </Field>
+          {advanced ? (
+            <YStack p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" bg="$panel">
+              <Field label={t('Model')}>
+                <XStack>
+                  <ModelPicker
+                    size="sm"
+                    name={t('Model')}
+                    models={catalog.value}
+                    scope="chat"
+                    limits={limits}
+                    value={model ?? ENSO}
+                    onChange={(id) => setModel(id === ENSO ? null : id)}
+                    loading={catalog.loading}
+                    error={catalog.error ? told(catalog.error, t) : null}
+                  />
+                </XStack>
+              </Field>
+            </YStack>
+          ) : null}
+        </YStack>
         <Line>{note}</Line>
         <XStack gap="$2" justify="flex-end">
           <Button size="sm" variant="ghost" disabled={busy} onPress={onClose}>
@@ -563,10 +700,10 @@ function Facts({ rows }: { rows: [string, string][] }) {
   )
 }
 
-function Said({ says, children }: { says: string; children?: ReactNode }) {
+function Said({ says, error = false, children }: { says: string; error?: boolean; children?: ReactNode }) {
   return (
-    <YStack borderWidth={1} borderColor="$borderColor" rounded="$4" px="$4" py="$8" gap="$3" items="center">
-      <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+    <YStack borderWidth={1} borderColor="var(--border-strong)" bg="$panel" rounded="$4" px="$5" py="$8" gap="$3" items="center">
+      <SizableText size="$2" color={error ? 'var(--state-error)' : '$soft'} text="center">
         {says}
       </SizableText>
       {children}

@@ -16,3 +16,9 @@ export const pane = {
 } as const
 
 export const gap = 'var(--pane-gap, var(--space-2))'
+
+/** The ring a control wears while the keyboard is on it: the colour and stroke of @hanzo/ui's own press ring (backends/gui/press.ts). */
+export const RING = { outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' } as const
+
+/** The same ring drawn inside a control's edge, for a row that fills its box. */
+export const RING_INSET = { ...RING, outlineOffset: -2 } as const

@@ -14,8 +14,8 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
-import { Puzzle } from '@hanzogui/lucide-icons-2'
-import { Button, Input, Textarea } from '@hanzo/ui'
+import { AlertCircle, Check, Code2, Puzzle, Trash2 } from '@hanzogui/lucide-icons-2'
+import { Button, DropdownMenu, Input, Textarea } from '@hanzo/ui'
 import { Code } from '@hanzo/ui/chat'
 import { useState } from 'react'
 
@@ -23,9 +23,28 @@ import { authored, build, mounted, remove, type Mount, type Plugin } from '../ap
 import { useHost, useTarget } from '../host.tsx'
 import { useLoad } from './load.ts'
 import { say } from './say.ts'
-import { Choice, Confirm, day, Empty, Failed, Field, Grid, Line, Mark, matches, mono, Part, Sheet, Soft, Tile, useCount, Visitor, type Pane } from './ui.tsx'
+import { Choice, Confirm, day, Empty, Failed, Field, Grid, Mark, matches, MenuTrigger, Part, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
+
+const INITIAL_MOUNTS = 6
 
 const kb = (n: number): string => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`)
+
+interface Notice {
+  text: string
+  error?: boolean
+}
+
+function StatusBanner({ notice }: { notice: Notice | null }) {
+  if (!notice?.text) return null
+  return (
+    <XStack items="center" gap="$1.5" role={notice.error ? 'alert' : 'status'}>
+      {notice.error ? <AlertCircle size={14} color="var(--state-error)" aria-hidden /> : <Check size={14} color="var(--state-success)" aria-hidden />}
+      <SizableText size="$1" color={notice.error ? 'var(--state-error)' : '$soft'} flex={1} minW={0}>
+        {notice.text}
+      </SizableText>
+    </XStack>
+  )
+}
 
 export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const { t } = useI18n()
@@ -35,7 +54,10 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const mine = useLoad(signed ? () => authored(target) : null, [] as Plugin[], [target, signed])
   const mounts = useLoad(signed && view === 'discover' ? () => mounted(target) : null, [] as Mount[], [target, signed, view])
   const [opened, setOpened] = useState<Plugin | null>(null)
-  const [note, setNote] = useState('')
+  const [deleting, setDeleting] = useState<Plugin | null>(null)
+  const [mountDetail, setMountDetail] = useState<Mount | null>(null)
+  const [showAllMounts, setShowAllMounts] = useState(false)
+  const [notice, setNotice] = useState<Notice | null>(null)
   useCount(mine.value.length, onCount)
 
   const sheets = (
@@ -47,7 +69,7 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
             onAdding(false)
             onView('yours')
             mine.reload()
-            setNote(said)
+            setNotice({ text: said })
             setOpened(p)
           }}
         />
@@ -57,12 +79,28 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
           plugin={opened}
           onClose={() => setOpened(null)}
           onDeleted={() => {
-            setNote(t('{name} is deleted', { name: opened.name }))
+            setNotice({ text: t('{name} is deleted', { name: opened.name }) })
             setOpened(null)
             mine.reload()
           }}
         />
       ) : null}
+      {deleting ? (
+        <Confirm
+          what={deleting.name}
+          says={t('The runtime can no longer load it.')}
+          open
+          onOpenChange={(o) => !o && setDeleting(null)}
+          onYes={async () => {
+            const gone = deleting
+            await remove(target, gone.id)
+            setDeleting(null)
+            setNotice({ text: t('{name} is deleted', { name: gone.name }) })
+            mine.reload()
+          }}
+        />
+      ) : null}
+      {mountDetail ? <MountSheet mount={mountDetail} onClose={() => setMountDetail(null)} /> : null}
     </>
   )
 
@@ -72,34 +110,61 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
 
   if (view === 'discover') {
     const shown = mounts.value.filter((m) => matches(q, m.name, ...m.prefixes))
+    const searching = Boolean(q.trim())
+    const visible = searching || showAllMounts ? shown : shown.slice(0, INITIAL_MOUNTS)
     return (
       <YStack gap="$6">
-        <Line>{note}</Line>
-        <Part title={t('Build your own')} detail={t('Write a connector in TypeScript, or describe an API and Hanzo writes it.')}>
-          <XStack>
-            <Button size="sm" onPress={() => onAdding(true)}>
-              {t('Build a plugin')}
-            </Button>
-          </XStack>
-        </Part>
+        <StatusBanner notice={notice} />
+        <XStack
+          items="center"
+          gap="$3"
+          p="$4"
+        >
+          <Mark name={t('Build your own')} size={36} icon={<Code2 size={16} color="$soft" aria-hidden />} />
+          <YStack flex={1} minW={0} gap="$0.5" $max-sm={{ flexBasis: 'auto', grow: 0, minW: 0, width: '100%' }}>
+            <SizableText size="$3" fontWeight="500" color="$ink">
+              {t('Build your own')}
+            </SizableText>
+            <SizableText size="$2" color="$soft">
+              {t('Write a connector in TypeScript, or describe an API and Hanzo writes it.')}
+            </SizableText>
+          </YStack>
+          <Button size="sm" variant="outline" borderColor="var(--border-strong)" shrink={0} onPress={() => onAdding(true)}>
+            {t('Build a plugin')}
+          </Button>
+        </XStack>
         <Part title={t('Built in')} detail={t('Part of Hanzo. Always on, nothing to add.')}>
           {mounts.error && !mounts.value.length ? (
             <Failed error={mounts.error} onRetry={mounts.reload} />
           ) : mounts.loading && !mounts.value.length ? (
-            <Soft>{t('Loading built-in plugins…')}</Soft>
+            <TilesSkeleton label={t('Loading built-in plugins')} />
           ) : !shown.length ? (
             <Soft>{mounts.value.length ? t('Nothing built in matches “{q}”.', { q: q.trim() }) : t('Nothing built in is listed.')}</Soft>
           ) : (
-            <>
-              <SizableText size="$1" color="$soft">
+            <YStack gap="$3">
+              <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
                 {t('{n} built in', { n: shown.length })}
               </SizableText>
               <Grid label={t('Mounted subsystems')}>
-                {shown.map((m) => (
-                  <Tile key={m.name} title={m.name} detail={m.prefixes.join('  ')} meta={m.enabled ? t('On') : t('Off')} mark={<Mark name={m.name} icon={<Puzzle size={15} />} />} />
+                {visible.map((m) => (
+                  <Tile
+                    key={m.name}
+                    title={m.name}
+                    detail={m.prefixes.join(' · ')}
+                    meta={m.enabled ? t('On') : t('Off')}
+                    mark={<Mark name={m.name} icon={<Puzzle size={15} color="$soft" aria-hidden />} />}
+                    onOpen={() => setMountDetail(m)}
+                  />
                 ))}
               </Grid>
-            </>
+              {!searching && shown.length > INITIAL_MOUNTS ? (
+                <XStack justify="flex-start">
+                  <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setShowAllMounts((v) => !v)}>
+                    {showAllMounts ? t('Show fewer') : t('Show all {n} built-in plugins', { n: shown.length })}
+                  </Button>
+                </XStack>
+              ) : null}
+            </YStack>
           )}
         </Part>
         {sheets}
@@ -110,11 +175,11 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
   const shown = mine.value.filter((p) => matches(q, p.name, p.provider))
   return (
     <YStack gap="$3">
-      <Line>{note}</Line>
+      <StatusBanner notice={notice} />
       {mine.error && !mine.value.length ? (
         <Failed error={mine.error} onRetry={mine.reload} />
       ) : mine.loading && !mine.value.length ? (
-        <Soft>{t('Loading your plugins…')}</Soft>
+        <TilesSkeleton label={t('Loading your plugins')} count={4} />
       ) : !mine.value.length ? (
         <Empty title={t('No plugins yet')} detail={t('Write a connector in TypeScript, or describe an API and Hanzo writes it.')}>
           <Button size="sm" onPress={() => onAdding(true)}>
@@ -131,14 +196,60 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
               title={p.name}
               detail={p.provider ? t('Reads the {provider} connector’s credential when it runs.', { provider: p.provider }) : t('Needs no credential.')}
               meta={day(p.built) ? t('Built {date}', { date: day(p.built) }) : undefined}
-              mark={<Mark name={p.name} />}
+              mark={<Mark name={p.name} icon={<Code2 size={15} color="$soft" aria-hidden />} />}
               onOpen={() => setOpened(p)}
+              action={
+                <DropdownMenu
+                  placement="bottom-end"
+                  offset={6}
+                  trigger={<MenuTrigger label={t('Actions for {name}', { name: p.name })} />}
+                  items={[
+                    { key: 'source', label: t('View source'), icon: <Code2 size={15} />, onSelect: () => setOpened(p) },
+                    { type: 'separator' as const },
+                    { key: 'delete', label: t('Delete plugin'), icon: <Trash2 size={15} />, destructive: true, onSelect: () => setDeleting(p) },
+                  ]}
+                />
+              }
             />
           ))}
         </Grid>
       )}
       {sheets}
     </YStack>
+  )
+}
+
+/** Read-only inspection sheet for a built-in mounted subsystem. */
+function MountSheet({ mount, onClose }: { mount: Mount; onClose: () => void }) {
+  const { t } = useI18n()
+  return (
+    <Sheet title={mount.name} open onOpenChange={(o) => !o && onClose()} width={480}>
+      <XStack items="center" gap="$2">
+        <YStack width={8} height={8} rounded={999} bg={mount.enabled ? 'var(--state-success)' : '$soft'} shrink={0} aria-hidden />
+        <SizableText size="$2" color="$soft">
+          {mount.enabled ? t('Built in and always on for every run.') : t('Built in, currently off in this deployment.')}
+        </SizableText>
+      </XStack>
+      <Field label={t('Route prefixes')}>
+        <YStack borderWidth={1} borderColor="$borderColor" bg="$panel" rounded="$3" overflow="hidden">
+          {mount.prefixes.length ? (
+            mount.prefixes.map((prefix, i) => (
+              <XStack key={prefix} px="$3" py="$2" borderTopWidth={i ? 1 : 0} borderColor="$borderColor">
+                <SizableText size="$1" color="$ink" fontFamily="$mono">
+                  {prefix}
+                </SizableText>
+              </XStack>
+            ))
+          ) : (
+            <XStack px="$3" py="$2">
+              <SizableText size="$1" color="$soft">
+                {t('No route prefixes listed.')}
+              </SizableText>
+            </XStack>
+          )}
+        </YStack>
+      </Field>
+    </Sheet>
   )
 }
 
@@ -153,17 +264,20 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
   const [source, setSource] = useState('')
   const [spec, setSpec] = useState('')
   const [working, setWorking] = useState(false)
-  const [note, setNote] = useState('')
+  const [notice, setNotice] = useState<Notice | null>(null)
+
+  const body = way === 'source' ? source : spec
+  const canBuild = !working && Boolean(name.trim()) && Boolean(body.trim())
 
   const go = async () => {
     setWorking(true)
-    setNote(way === 'spec' ? t('Writing and building it…') : t('Building it…'))
+    setNotice({ text: way === 'spec' ? t('Writing and building it…') : t('Building it…') })
     try {
       const out = await build(target, { name: name.trim(), provider, source: way === 'source' ? source : '', spec: way === 'spec' ? spec : '' })
       const built = { name: out.plugin.name, size: kb(out.bytes) }
       onBuilt(out.plugin, out.generated ? t('{name} built: {size}, written from your description — read it below.', built) : t('{name} built: {size}.', built))
     } catch (e) {
-      setNote(say(e, t))
+      setNotice({ text: say(e, t), error: true })
     } finally {
       setWorking(false)
     }
@@ -172,10 +286,10 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
   return (
     <Sheet title={t('Build a plugin')} open onOpenChange={(o) => !o && onClose()} width={680}>
       <Field label={t('Name')} hint={t('One lowercase word: letters, digits, _ or -.')}>
-        <Input value={name} onChangeText={setName} aria-label={t('Name')} autoCapitalize="none" />
+        <Input value={name} onChangeText={setName} placeholder="acme-crm" aria-label={t('Name')} autoCapitalize="none" borderColor="var(--border-strong)" />
       </Field>
       <Field label={t('Connector')} hint={t('Optional. The connector whose key it uses when it runs; a plugin never holds a key itself.')}>
-        <Input value={provider} onChangeText={setProvider} aria-label={t('Connector')} autoCapitalize="none" />
+        <Input value={provider} onChangeText={setProvider} placeholder="acme" aria-label={t('Connector')} autoCapitalize="none" borderColor="var(--border-strong)" />
       </Field>
       <Choice
         label={t('Build from')}
@@ -195,21 +309,29 @@ function Build({ onClose, onBuilt }: { onClose: () => void; onBuilt: (p: Plugin,
         }
       >
         <Textarea
-          value={way === 'source' ? source : spec}
+          value={body}
           onChangeText={way === 'source' ? setSource : setSpec}
           aria-label={way === 'source' ? t('Source') : t('The API')}
           placeholder={way === 'source' ? 'export const acme = createProvider({ … })' : t('POST /v1/things creates a thing…')}
           rows={14}
-          style={mono}
+          fontFamily="$mono"
         />
       </Field>
-      <Line>{note}</Line>
+      {notice ? (
+        notice.error ? (
+          <StatusBanner notice={notice} />
+        ) : (
+          <SizableText size="$1" color="$soft" role="status">
+            {notice.text}
+          </SizableText>
+        )
+      ) : null}
       <XStack gap="$2" justify="flex-end">
         <Button size="sm" variant="ghost" onPress={onClose}>
           {t('Cancel')}
         </Button>
-        <Button size="sm" disabled={working} onPress={() => void go()}>
-          {t('Build')}
+        <Button size="sm" variant="primary" disabled={!canBuild} onPress={() => void go()}>
+          {working ? (way === 'spec' ? t('Writing & building…') : t('Building…')) : t('Build')}
         </Button>
       </XStack>
     </Sheet>
@@ -232,13 +354,13 @@ function Source({ plugin, onClose, onDeleted }: { plugin: Plugin; onClose: () =>
           .join(' ')}
       </SizableText>
       <Code language="TypeScript" value={plugin.source}>
-        <SizableText size="$1" color="$ink" style={{ ...mono, whiteSpace: 'pre' }}>
+        <SizableText size="$1" color="$ink" fontFamily="$mono" $platform-web={{ whiteSpace: 'pre' }}>
           {plugin.source}
         </SizableText>
       </Code>
       <YStack items="flex-start">
-        <Button size="sm" variant="ghost" onPress={() => setAsking(true)}>
-          {t('Delete plugin')}
+        <Button size="sm" variant="ghost" tone="danger" onPress={() => setAsking(true)}>
+          <Trash2 size={14} /> {t('Delete plugin')}
         </Button>
       </YStack>
       <Confirm

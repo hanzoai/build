@@ -61,15 +61,15 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
-  Switch,
   type DropdownMenuProps,
 } from '@hanzo/ui'
 import { Steer, type Command } from '@hanzo/ui/agents'
 import { Composer, Failure, measure } from '@hanzo/ui/chat'
 import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
+import { copy as toClipboard } from './clipboard.ts'
 import { approve, followUp, headline, retry, start, steer, type Ask, type Earlier } from './api/coding.ts'
 import { limits as readLimits } from './api/models.ts'
 import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
@@ -78,11 +78,13 @@ import { answer as reply, say as talk, talks } from './api/talk.ts'
 import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun, type RunState } from './data.ts'
 import { Desk, SEED } from './desk.tsx'
+import { useDevMode } from './dev-mode.ts'
+import { KeepAwake, useKeepAwake } from './awake.tsx'
 import { useHost, useTarget } from './host.tsx'
 import { level, pacing, useMind } from './mind.ts'
 import { Out } from './out.tsx'
 import { Gutter } from './gutter.tsx'
-import { gap, pane } from './pane.ts'
+import { gap, pane, RING, RING_INSET } from './pane.ts'
 import { useEar, useSpoken } from './voice.ts'
 import { speaker, type Artifact } from './reply.tsx'
 import { PanelToggle } from './panel.tsx'
@@ -120,6 +122,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
+  const [devMode] = useDevMode()
   const { detail, record, events, status, refused } = read
   const [draft, setDraft] = useState('')
   const [files, setFiles] = useState<Attached[]>([])
@@ -141,13 +144,12 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const [name, setName] = useState('')
   const [copied, setCopied] = useState('')
   const [unfolded, setUnfolded] = useState(false)
-  const [transcriptView, setTranscriptView] = useKept<TranscriptView>('hanzo.build.transcript.view', 'normal')
   const [outputStyle, setOutputStyle] = useKept<string>('hanzo.build.output.style', 'default')
+  const [transcriptView, setTranscriptView] = useKept<TranscriptView>('hanzo.build.transcript.view', 'normal')
   const [envColumn, setEnvColumn] = useState(false)
   const [splitPanes, setSplitPanes] = useState<string[]>([])
   const [queued, setQueued] = useState<QueuedMessage[]>([])
-  const [keepAwake, setKeepAwake] = useState(false)
-  const wakeLockRef = useRef<{ release?: () => Promise<void> } | null>(null)
+  const [keepAwake, setKeepAwake] = useKeepAwake()
   const [nowMs, setNowMs] = useState(() => Date.now())
   // The model and effort a run started here uses: the one choice Chat and New share.
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
@@ -372,12 +374,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   }
 
   const copy = async (what: string, value: string) => {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(what)
-    } catch {
-      setNote(say('This browser would not copy.'))
-    }
+    if (await toClipboard(value)) setCopied(what)
+    else setNote(say('This browser would not copy.'))
   }
 
   const share = (on: boolean) =>
@@ -455,21 +453,6 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     const timer = setInterval(() => setNowMs(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [running, paused])
-
-  const toggleKeepAwake = async (on: boolean) => {
-    setKeepAwake(on)
-    try {
-      const nav = navigator as unknown as { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }
-      if (on && nav.wakeLock) {
-        wakeLockRef.current = await nav.wakeLock.request('screen')
-      } else if (!on && wakeLockRef.current?.release) {
-        await wakeLockRef.current.release()
-        wakeLockRef.current = null
-      }
-    } catch {
-      /* WakeLock API optional */
-    }
-  }
 
   const toggleDockPane = (kind: 'terminal' | 'preview' | 'diff' | 'files', label: string) => {
     if (!desk) setDesk(true)
@@ -583,8 +566,10 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
       px="$1.5"
       mx="$-1.5"
       py="$0.5"
+      minH={32}
       rounded="$2"
       hoverStyle={{ bg: '$hover' }}
+      focusVisibleStyle={RING}
     >
       <SizableText render="h1" size="$5" color="$ink" numberOfLines={1} minW={0}>
         {title}
@@ -630,12 +615,12 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() => {
-                            side.open({ kind: 'terminal', title: say('Terminal') })
+                            side.open({ kind: 'terminal', title: say(devMode ? 'Terminal' : 'Activity') })
                             setDesk(true)
                           }}
                         >
                           <SizableText size="$2" color="$ink">
-                            {say('Terminal')}
+                            {say(devMode ? 'Terminal' : 'Activity')}
                           </SizableText>
                         </DropdownMenuItem>
                         {record.repo ? (
@@ -834,22 +819,30 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                   if (!desk) setDesk(true)
                   setEnvColumn((v) => !v)
                 }}
-                p="$1.5"
+                minW={32}
+                minH={32}
+                items="center"
+                justify="center"
                 rounded="$2"
                 bg={envColumn ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
               >
                 <SlidersHorizontal size={15} opacity={envColumn ? 1 : 0.7} />
               </XStack>
               <XStack
                 render="button"
-                aria-label={say('Toggle terminal pane')}
+                aria-label={say(devMode ? 'Toggle terminal pane' : 'Toggle activity pane')}
                 aria-pressed={splitPanes.includes('terminal')}
-                onPress={() => toggleDockPane('terminal', say('Terminal'))}
-                p="$1.5"
+                onPress={() => toggleDockPane('terminal', say(devMode ? 'Terminal' : 'Activity'))}
+                minW={32}
+                minH={32}
+                items="center"
+                justify="center"
                 rounded="$2"
                 bg={splitPanes.includes('terminal') ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
               >
                 <SquareTerminal size={15} opacity={splitPanes.includes('terminal') ? 1 : 0.7} />
               </XStack>
@@ -857,11 +850,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 render="button"
                 aria-label={say('Toggle diff pane')}
                 aria-pressed={splitPanes.includes('diff')}
-                onPress={() => toggleDockPane('diff', say('Diff'))}
-                p="$1.5"
+                onClick={() => toggleDockPane('diff', say('Diff'))}
+                minW={32}
+                minH={32}
+                items="center"
+                justify="center"
                 rounded="$2"
                 bg={splitPanes.includes('diff') ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
               >
                 <FileDiff size={15} opacity={splitPanes.includes('diff') ? 1 : 0.7} />
               </XStack>
@@ -869,11 +866,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 render="button"
                 aria-label={say('Toggle browser pane')}
                 aria-pressed={splitPanes.includes('preview')}
-                onPress={() => toggleDockPane('preview', say('Preview'))}
-                p="$1.5"
+                onClick={() => toggleDockPane('preview', say('Preview'))}
+                minW={32}
+                minH={32}
+                items="center"
+                justify="center"
                 rounded="$2"
                 bg={splitPanes.includes('preview') ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
               >
                 <Globe size={15} opacity={splitPanes.includes('preview') ? 1 : 0.7} />
               </XStack>
@@ -881,11 +882,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 render="button"
                 aria-label={say('Toggle files pane')}
                 aria-pressed={splitPanes.includes('files')}
-                onPress={() => toggleDockPane('files', say('Files'))}
-                p="$1.5"
+                onClick={() => toggleDockPane('files', say('Files'))}
+                minW={32}
+                minH={32}
+                items="center"
+                justify="center"
                 rounded="$2"
                 bg={splitPanes.includes('files') ? '$hover' : 'transparent'}
                 hoverStyle={{ bg: '$hover' }}
+                focusVisibleStyle={RING}
               >
                 <Folder size={15} opacity={splitPanes.includes('files') ? 1 : 0.7} />
               </XStack>
@@ -925,22 +930,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     </XStack>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    preventCloseOnSelect
-                    onSelect={() => {
-                      void toggleKeepAwake(!keepAwake)
-                    }}
-                  >
-                    <YStack flex={1} minW={0}>
-                      <SizableText size="$2" color="$ink">
-                        {say('Keep computer awake')}
-                      </SizableText>
-                      <SizableText size="$1" color="$soft">
-                        {say('Only for this session')}
-                      </SizableText>
-                    </YStack>
-                    <Switch checked={keepAwake} onCheckedChange={(v) => void toggleKeepAwake(v)} size="sm" aria-label={say('Keep computer awake')} />
-                  </DropdownMenuItem>
+                  <KeepAwake on={keepAwake} onToggle={(on) => void setKeepAwake(on)} />
                 </DropdownMenuContent>
               </DropdownMenu>
             </XStack>
@@ -1032,12 +1022,15 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                   render="button"
                   aria-label={say('Steps · {n}', { n: plan.length })}
                   aria-expanded={unfolded}
-                  onPress={() => setUnfolded(!unfolded)}
+                  onClick={() => setUnfolded(!unfolded)}
+                  width="100%"
                   px="$3"
                   py="$1.5"
+                  minH={36}
                   gap="$2"
                   items="center"
                   hoverStyle={{ bg: '$hover' }}
+                  focusVisibleStyle={RING_INSET}
                 >
                   {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   <SizableText size="$2" color="$ink">
@@ -1069,11 +1062,9 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
             {setup && running && !seen ? <Onboarding onDone={() => setSeen(true)} /> : null}
             {running && !paused ? (
               <XStack items="center" gap="$2" px="$1">
-                <SizableText size="$1" color="$orange10">
-                  •·
-                </SizableText>
-                <SizableText size="$1" color="$soft">
-                  {`${elapsedLabel} · ${tokenLabel} · ${say('Thinking')}`}
+                <YStack width={6} height={6} rounded={99} bg="var(--state-online)" shrink={0} />
+                <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
+                  {devMode ? `${elapsedLabel} · ${tokenLabel} · ${say('Thinking')}` : `${elapsedLabel} · ${say('Working…')}`}
                 </SizableText>
               </XStack>
             ) : null}
@@ -1185,21 +1176,23 @@ function Onboarding({ onDone }: { onDone: () => void }) {
     t('Propose the environment for you to review and save'),
   ]
   return (
-    <YStack gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel">
-      <SizableText size="$4" color="$ink">
-        {t('Set up a cloud environment')}
-      </SizableText>
-      <SizableText size="$2" color="$soft">
-        {[
-          t('An environment lets every later run install, start, test and check its changes the way an engineer does.'),
-          t('Setup is agent-led and takes several minutes.'),
-          t('The agent will:'),
-        ].join(' ')}
-      </SizableText>
+    <YStack gap="$3" p="$5" rounded="$4" borderWidth={1} borderColor="var(--border-strong)" bg="$panel">
+      <YStack gap="$1.5">
+        <SizableText size="$4" fontWeight="600" color="$ink">
+          {t('Set up a cloud environment')}
+        </SizableText>
+        <SizableText size="$2" color="$soft">
+          {[
+            t('An environment lets every later run install, start, test and check its changes the way an engineer does.'),
+            t('Setup is agent-led and takes several minutes.'),
+            t('The agent will:'),
+          ].join(' ')}
+        </SizableText>
+      </YStack>
       <YStack gap="$1.5">
         {steps.map((s, i) => (
-          <XStack key={s} gap="$3">
-            <SizableText size="$2" color="$soft" width={12}>
+          <XStack key={s} gap="$2.5">
+            <SizableText size="$2" color="$soft" width={16} fontVariant={['tabular-nums']}>
               {String(i + 1)}
             </SizableText>
             <SizableText size="$2" color="$ink">

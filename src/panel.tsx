@@ -40,10 +40,12 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@hanzo/ui'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { useBrowse, useBrowser, type Browser } from './host.tsx'
+import { RING, RING_INSET } from './pane.ts'
+import { copy } from './clipboard.ts'
+import { useBrowse, useBrowser, type Browser, type Shown } from './host.tsx'
 import { useSide } from './side.tsx'
 import { destination, PAGE, type Deck, type Tab } from './tabs.ts'
 
@@ -93,11 +95,12 @@ const quiet = (on = false, disabled = false) =>
     justify: 'center',
     shrink: 0,
     rounded: 8,
+    borderWidth: 0,
     cursor: disabled ? 'default' : 'pointer',
     opacity: disabled ? 0.35 : 1,
     bg: on ? '$hover' : 'transparent',
     hoverStyle: disabled ? undefined : ({ bg: '$hover' } as const),
-    focusVisibleStyle: { outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' },
+    focusVisibleStyle: RING,
   }) as const
 
 /**
@@ -112,7 +115,6 @@ export function PanelToggle({ open, onToggle }: { open: boolean; onToggle: () =>
   return (
     <XStack
       render="button"
-      role="button"
       data-slot="side-toggle"
       aria-label={t('Show tabs')}
       aria-expanded={false}
@@ -184,7 +186,10 @@ function Mark({ icon, title }: { icon?: string; title: string }) {
   return (
     <XStack width={40} height={40} rounded={10} items="center" justify="center" bg="$edge" overflow="hidden" shrink={0}>
       {icon && !broken ? (
-        <img src={icon} alt="" width={28} height={28} style={{ objectFit: 'contain' }} onError={() => setBroken(true)} />
+        <YStack
+          render={<img src={icon} alt="" width={28} height={28} onError={() => setBroken(true)} />}
+          $platform-web={{ objectFit: 'contain' }}
+        />
       ) : (
         <SizableText size="$4" fontWeight="600" color="$ink" aria-hidden>
           {(title.trim()[0] ?? '·').toUpperCase()}
@@ -205,27 +210,23 @@ function Suggested({ suggested, onGo }: { suggested: readonly Suggestion[]; onGo
       {suggested.length ? (
         <XStack role="list" aria-label={t('Suggested')} gap="$2" overflowX="auto" overflowY="hidden" pb="$2">
           {suggested.map((s) => (
-            <YStack
-              key={s.url}
-              role="listitem"
-              render="button"
-              aria-label={s.title}
-              onPress={() => onGo(s.url)}
-              width={120}
-              shrink={0}
-              items="center"
-              gap="$2"
-              py="$2.5"
-              px="$1.5"
-              rounded={12}
-              cursor="pointer"
-              hoverStyle={{ bg: '$hover' }}
-              focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
-            >
-              <Mark icon={s.icon} title={s.title} />
-              <SizableText fontSize={13} color="$ink" numberOfLines={1} maxW="100%">
-                {s.title}
-              </SizableText>
+            <YStack key={s.url} role="listitem" shrink={0}>
+              <YStack
+                render="button"
+                aria-label={s.title}
+                onPress={() => onGo(s.url)}
+                width={120}
+                items="center"
+                gap="$2"
+                py="$2.5"
+                px="$1.5"
+                focusVisibleStyle={RING}
+              >
+                <Mark icon={s.icon} title={s.title} />
+                <SizableText size="$2" color="$ink" numberOfLines={1} maxW="100%">
+                  {s.title}
+                </SizableText>
+              </YStack>
             </YStack>
           ))}
         </XStack>
@@ -249,17 +250,17 @@ function Elsewhere({ tab }: { tab: Tab }) {
       </SizableText>
       <XStack
         render="button"
-        role="button"
         onPress={() => popOut(tab)}
         items="center"
         gap="$1.5"
         px="$3"
-        height={32}
+        minH={34}
         rounded={999}
         borderWidth={1}
         borderColor="$borderColor"
         cursor="pointer"
         hoverStyle={{ bg: '$hover' }}
+        focusVisibleStyle={RING}
       >
         <ExternalLink size={13} />
         <SizableText fontSize={13} color="$ink">
@@ -326,6 +327,18 @@ const zoomed = (now: number, way: 1 | -1): number => {
 }
 
 /** A row of the menu: its words, and what stands at its end. */
+/** Hand the page's picture to `onCapture` as a file; a capture the host browser cancels or fails is dropped, with nothing thrown. */
+export async function screenshot(browser: Browser | null, shown: Shown | null, onCapture: Acts['onCapture']): Promise<void> {
+  if (!shown || !browser?.capture || !onCapture) return
+  try {
+    const blob = await browser.capture(shown)
+    const name = `Screenshot ${new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)}.png`
+    onCapture(new File([blob], name, { type: blob.type || 'image/png' }), { url: shown.url, title: shown.title })
+  } catch {
+    // Cancelled or failed in the host browser.
+  }
+}
+
 function Row({ label, onSelect, disabled, end }: { label: string; onSelect: () => void; disabled?: boolean; end?: ReactNode }) {
   return (
     <DropdownMenuItem disabled={disabled} onSelect={onSelect} minH={ROW} py={0}>
@@ -341,8 +354,16 @@ function Row({ label, onSelect, disabled, end }: { label: string; onSelect: () =
 function Zoom({ level, onLevel, disabled }: { level: number; onLevel: (percent: number) => void; disabled: boolean }) {
   const { t } = useI18n()
   const step = (way: 1 | -1) => () => onLevel(zoomed(level, way))
-  const box = (label: string, onPress: () => void, child: ReactNode) => (
-    <XStack render="button" role="button" aria-label={label} aria-disabled={disabled || undefined} onPress={disabled ? undefined : onPress} width={24} height={24} {...quiet(false, disabled)} rounded={6}>
+  const box = (label: string, onSelect: () => void, child: ReactNode) => (
+    <XStack
+      render="button"
+      aria-label={label}
+      aria-disabled={disabled || undefined}
+      onPress={disabled ? undefined : onSelect}
+      width={24}
+      height={24}
+      {...quiet(false, disabled)}
+    >
       {child}
     </XStack>
   )
@@ -353,7 +374,7 @@ function Zoom({ level, onLevel, disabled }: { level: number; onLevel: (percent: 
       </SizableText>
       <XStack items="center" gap={2} borderWidth={1} borderColor="$borderColor" rounded={8} px={2} height={28}>
         {box(t('Zoom out'), step(-1), <Minus size={12} />)}
-        <SizableText fontSize={12} color="$ink" width={40} text="center" aria-live="polite">
+        <SizableText size="$1" color="$ink" width={40} text="center" aria-live="polite" fontVariant={['tabular-nums']}>
           {`${level}%`}
         </SizableText>
         {box(t('Zoom in'), step(1), <Plus size={12} />)}
@@ -439,12 +460,6 @@ function Actions({
     const selection = browser?.selection ? await browser.selection(shown).catch(() => '') : pick()
     acts.onAsk({ url: shown.url, title: shown.title, ...(selection ? { selection } : {}) })
   }
-  const capture = async () => {
-    if (!shown || !browser?.capture || !acts.onCapture) return
-    const blob = await browser.capture(shown)
-    const name = `Screenshot ${new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)}.png`
-    acts.onCapture(new File([blob], name, { type: blob.type || 'image/png' }), { url: shown.url, title: shown.title })
-  }
   const print = browser?.print ?? (same ? () => frame.current?.contentWindow?.print() : undefined)
   const zoom = Boolean(browser?.zoom) || framed
   const ours = [
@@ -452,7 +467,7 @@ function Actions({
     acts.onDev && shown && hosted(shown.url) ? <Row key="dev" label={t('Open in Dev')} onSelect={() => acts.onDev?.({ url: shown.url, title: shown.title })} /> : null,
     acts.skills?.length ? <Skills key="skills" skills={acts.skills} here={here} /> : null,
     <Row key="out" label={t('Open in a new window')} disabled={none} onSelect={() => popOut(tab)} />,
-    <Row key="copy" label={t('Copy link')} disabled={none || !tab.url} onSelect={() => tab.url && void navigator.clipboard?.writeText(tab.url)} />,
+    <Row key="copy" label={t('Copy link')} disabled={none || !tab.url} onSelect={() => tab.url && void copy(tab.url)} />,
     onPin ? <Row key="pin" label={tab.pinned ? t('Unpin tab') : t('Pin tab')} onSelect={() => onPin(!tab.pinned)} /> : null,
   ].filter(Boolean)
   const page = [
@@ -460,7 +475,7 @@ function Actions({
     print ? <Row key="print" label={t('Print')} disabled={none} onSelect={() => shown && print(shown)} /> : null,
     zoom ? <Zoom key="zoom" level={level} onLevel={onLevel} disabled={none} /> : null,
     browser?.devices ? <Row key="devices" label={t('Show device toolbar')} disabled={none} onSelect={() => shown && browser.devices?.(shown)} /> : null,
-    browser?.capture && acts.onCapture ? <Row key="capture" label={t('Take a screenshot')} disabled={none} onSelect={() => void capture()} /> : null,
+    browser?.capture && acts.onCapture ? <Row key="capture" label={t('Take a screenshot')} disabled={none} onSelect={() => void screenshot(browser, shown, acts.onCapture)} /> : null,
   ].filter(Boolean)
   const own = [
     browser?.passwords ? <Row key="passwords" label={t('Passwords and autofill')} onSelect={browser.passwords} end={<ChevronRight size={14} opacity={0.6} />} /> : null,
@@ -473,7 +488,13 @@ function Actions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <XStack render="button" role="button" aria-label={t('Page actions')} width={PILL} height={PILL} {...quiet()} rounded={999} bg="$edge">
+        <XStack
+          render="button"
+          aria-label={t('Page actions')}
+          width={PILL}
+          height={PILL}
+          {...quiet()}
+        >
           <MoreHorizontal size={16} />
         </XStack>
       </DropdownMenuTrigger>
@@ -538,15 +559,38 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
 
   return (
     <YStack flex={1} minH={0} data-slot="side-page">
-      <XStack data-slot="side-bar" height={BAR} px="$2" gap="$2" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
-        <XStack items="center" height={PILL} px={4} gap={2} rounded={999} bg="$edge" shrink={0}>
-          <XStack render="button" role="button" aria-label={t('Back')} aria-disabled={!back || undefined} onPress={back ? onBack : undefined} width={28} height={28} {...quiet(false, !back)} rounded={999}>
+      <XStack data-slot="side-bar" minH={BAR} px="$2" py="$1" gap="$2" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
+        <XStack items="center" minH={PILL} px={4} gap={2} rounded={999} bg="$edge" shrink={0}>
+          <XStack
+            render="button"
+            aria-label={t('Back')}
+            aria-disabled={!back || undefined}
+            onPress={back ? onBack : undefined}
+            width={28}
+            height={28}
+            {...quiet(false, !back)}
+          >
             <ArrowLeft size={15} {...MIRROR} />
           </XStack>
-          <XStack render="button" role="button" aria-label={t('Forward')} aria-disabled={!ahead || undefined} onPress={ahead ? onForward : undefined} width={28} height={28} {...quiet(false, !ahead)} rounded={999}>
+          <XStack
+            render="button"
+            aria-label={t('Forward')}
+            aria-disabled={!ahead || undefined}
+            onPress={ahead ? onForward : undefined}
+            width={28}
+            height={28}
+            {...quiet(false, !ahead)}
+          >
             <ArrowRight size={15} {...MIRROR} />
           </XStack>
-          <XStack render="button" role="button" aria-label={t('Reload this tab')} onPress={() => again((n) => n + 1)} width={28} height={28} {...quiet()} rounded={999}>
+          <XStack
+            render="button"
+            aria-label={t('Reload this tab')}
+            onPress={() => again((n) => n + 1)}
+            width={28}
+            height={28}
+            {...quiet()}
+          >
             <RotateCw size={14} />
           </XStack>
         </XStack>
@@ -554,44 +598,43 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
           flex={1}
           minW={0}
           items="center"
-          height={PILL}
+          minH={PILL}
           px="$3.5"
           rounded={999}
           bg="$edge"
           borderWidth={1}
           // Focused, the address is the bar's one ringed thing, as a browser's is.
-          borderColor={typing ? '$outlineColor' : 'transparent'}
           data-slot="side-address"
         >
-          <input
+          <SizableText
             key={tab.id}
-            value={own ? tab.title : typed}
-            readOnly={own}
-            placeholder={t('Search or enter a URL')}
-            aria-label={t('Address')}
-            spellCheck={false}
-            autoFocus={!own && !tab.url}
-            onFocus={(e) => {
-              setTyping(true)
-              e.currentTarget.select()
-            }}
-            onBlur={() => setTyping(false)}
-            onChange={(e) => setTyped(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') go()
-              if (e.key === 'Escape') setTyped(tab.url ?? '')
-            }}
-            style={{
-              width: '100%',
-              border: 0,
-              outline: 'none',
-              background: 'transparent',
-              color: 'var(--foreground)',
-              font: 'inherit',
-              fontSize: 14,
-              // The resting bar reads centred, as a browser's new tab does; typed in, it reads from the line's start.
-              textAlign: typing || typed ? 'start' : 'center',
-            }}
+            render={
+              <input
+                value={own ? tab.title : typed}
+                readOnly={own}
+                placeholder={t('Search or enter a URL')}
+                aria-label={t('Address')}
+                spellCheck={false}
+                autoFocus={!own && !tab.url}
+                onFocus={(e) => {
+                  setTyping(true)
+                  e.currentTarget.select()
+                }}
+                onBlur={() => setTyping(false)}
+                onChange={(e) => setTyped(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') go()
+                  if (e.key === 'Escape') setTyped(tab.url ?? '')
+                }}
+              />
+            }
+            width="100%"
+            color="$ink"
+            fontFamily="$body"
+            size="$2"
+            // The resting bar reads centred, as a browser's new tab does; typed in, it reads from the line's start.
+            text={typing || typed ? 'start' : 'center'}
+            $platform-web={{ outline: 'none' }}
           />
         </XStack>
         <Actions
@@ -617,17 +660,32 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
         <Elsewhere tab={tab} />
       ) : picture && !own ? (
         <YStack flex={1} minH={0} items="center" justify="center" p="$3" overflowY="auto" overflowX="hidden">
-          <img key={round} src={src} alt={tab.title} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', ...(scale ? { transform: scale.transform } : null) }} />
+          <YStack
+            key={round}
+            render={<img src={src} alt={tab.title} />}
+            maxW="100%"
+            maxH="100%"
+            $platform-web={{ objectFit: 'contain', ...(scale ? { transform: scale.transform } : null) }}
+          />
         </YStack>
       ) : shows ? (
         <YStack flex={1} minH={0} overflow="hidden" position="relative">
-          <iframe
-            ref={frame}
+          <YStack
             key={round}
-            src={src}
-            title={tab.title}
-            sandbox={local ? 'allow-scripts allow-popups allow-forms' : 'allow-same-origin allow-scripts allow-popups allow-forms allow-modals'}
-            style={{ position: 'absolute', top: 0, left: 0, border: 0, width: '100%', height: '100%', display: 'block', background: 'var(--background)', ...scale }}
+            render="iframe"
+            ref={frame as never}
+            {...({
+              src,
+              title: tab.title,
+              sandbox: local ? 'allow-scripts allow-popups allow-forms' : 'allow-same-origin allow-scripts allow-popups allow-forms allow-modals',
+            } as object)}
+            position="absolute"
+            t={0}
+            l={0}
+            width={scale ? (scale.width as never) : '100%'}
+            height={scale ? (scale.height as never) : '100%'}
+            display="block"
+            $platform-web={scale ? { transform: scale.transform, transformOrigin: scale.transformOrigin } : undefined}
           />
         </YStack>
       ) : (
@@ -677,7 +735,7 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
       gap="$1"
       pl="$2.5"
       pr="$1"
-      height={30}
+      minH={30}
       // As wide as a title wants up to a browser tab's width, sharing the strip
       // as a browser's tabs do when there are many.
       flexBasis={236}
@@ -743,9 +801,11 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
         }}
         flex={1}
         minW={0}
+        minH={28}
         items="center"
         gap="$2"
         cursor="pointer"
+        focusVisibleStyle={RING_INSET}
       >
         {icon ? (
           <XStack aria-hidden shrink={0} opacity={on ? 1 : 0.7}>
@@ -760,36 +820,36 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
         // A pinned tab's end is its pin, always shown: pressing it lets the tab go.
         <XStack
           render="button"
-          role="button"
           aria-label={t('Unpin {tab}', { tab: label })}
           tabIndex={-1}
           onPress={() => side.unpin(tab.id)}
-          width={22}
-          height={22}
+          minW={22}
+          minH={22}
           items="center"
           justify="center"
           rounded={6}
           cursor="pointer"
           opacity={on ? 0.8 : 0.55}
           hoverStyle={{ bg: '$hover', opacity: 1 }}
+          focusVisibleStyle={RING}
         >
           <Pin size={12} />
         </XStack>
       ) : (
         <XStack
           render="button"
-          role="button"
           aria-label={t('Close {tab}', { tab: label })}
           tabIndex={-1}
           onPress={() => side.shut(tab.id)}
-          width={22}
-          height={22}
+          minW={22}
+          minH={22}
           items="center"
           justify="center"
           rounded={6}
           cursor="pointer"
           opacity={on ? 0.8 : 0.45}
           hoverStyle={{ bg: '$hover', opacity: 1 }}
+          focusVisibleStyle={RING}
           // The chosen tab's cross: the others keep their room for their titles when the strip is shared.
           display={on ? 'flex' : 'none'}
         >
@@ -835,7 +895,14 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
   const blank = () => side.open({ kind: PAGE, title: BLANK, url: '' })
   const poppable = tab?.kind === PAGE && (tab.body !== undefined || Boolean(tab.url))
   const plus = (
-    <XStack render="button" role="button" aria-label={say('Open a tab')} width={28} height={28} {...quiet()} onPress={closed.length ? undefined : blank}>
+    <XStack
+      render="button"
+      aria-label={say('Open a tab')}
+      width={28}
+      height={28}
+      {...quiet()}
+      onPress={closed.length ? undefined : blank}
+    >
       <Plus size={16} />
     </XStack>
   )
@@ -844,7 +911,15 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
     <YStack role="complementary" aria-label={label ?? say('Side panel')} data-slot="side" flex={1} minW={0} minH={0} overflow="hidden" rounded="inherit">
       <XStack data-slot="side-strip" height={STRIP} px="$2" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
         {column?.hidden && !column.full ? (
-          <XStack render="button" role="button" data-slot="side-show" onPress={column.show} height={32} px="$2" gap="$1.5" {...quiet()}>
+          <XStack
+            render="button"
+            data-slot="side-show"
+            onPress={column.show}
+            minH={32}
+            px="$2"
+            gap="$1.5"
+            {...quiet()}
+          >
             <PanelLeftOpen size={16} />
             <SizableText fontSize={13} color="$ink">
               {column.main === 'run' ? say('Show run') : column.main === 'chat' ? say('Show chat') : say('Show {main}', { main: column.main })}
@@ -872,7 +947,6 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
         {menu}
         <XStack
           render="button"
-          role="button"
           aria-label={say('Open this tab in a new window')}
           aria-disabled={!poppable || undefined}
           onPress={poppable ? () => popOut(tab) : undefined}
@@ -885,7 +959,6 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
         {column ? (
           <XStack
             render="button"
-            role="button"
             data-slot="side-full"
             aria-label={column.full ? say('Exit full screen') : say('Full screen')}
             aria-pressed={column.full}
@@ -901,7 +974,6 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
         ) : null}
         <XStack
           render="button"
-          role="button"
           data-slot="side-toggle"
           aria-label={say('Hide tabs')}
           aria-expanded
@@ -948,7 +1020,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
             {...acts}
           />
         ) : kind ? (
-          kind.render()
+          <Fragment key={tab.id}>{kind.render()}</Fragment>
         ) : (
           <SizableText size="$2" color="$soft">
             {say('This tab is not offered here.')}
@@ -971,7 +1043,8 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
       l={0}
       z={60}
       bg="$background"
-      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      pt={'env(safe-area-inset-top)' as never}
+      pb={'env(safe-area-inset-bottom)' as never}
     >
       {body}
     </YStack>,

@@ -14,6 +14,7 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { FilePlus2, ListTodo } from '@hanzogui/lucide-icons-2'
 import { Popover, PopoverContent, PopoverTrigger } from '@hanzo/ui'
+import { RING } from './pane.ts'
 import type { Kind } from './panel.tsx'
 
 /** One row: what it is called, its mark, and what pressing it opens. */
@@ -59,7 +60,7 @@ function Line({ icon, children, detail, onPress, quiet = false }: { icon?: React
       rounded={4}
       cursor={onPress ? 'pointer' : undefined}
       hoverStyle={onPress ? { bg: '$hover' } : undefined}
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+      focusVisibleStyle={RING}
     >
       {icon ? (
         <XStack width={16} justify="center" shrink={0} opacity={0.75}>
@@ -202,7 +203,7 @@ export function Summary({
       cursor="pointer"
       bg={open ? '$hover' : 'transparent'}
       hoverStyle={{ bg: '$hover' }}
-      focusVisibleStyle={{ outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$outlineColor' }}
+      focusVisibleStyle={RING}
     >
       <ListTodo size={16} aria-hidden />
     </XStack>

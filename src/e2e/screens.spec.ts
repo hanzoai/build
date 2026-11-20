@@ -83,7 +83,7 @@ const customize: Platform = async (page) => {
 const SCREENS: Record<Screen, [Platform, RegExp]> = {
   automations: [scheduled, /What runs without you watching/],
   sync: [forge, /Select repositories/],
-  projects: [forge, /repositories on the forge\. Open one to work on it/],
+  projects: [forge, /projects and linked GitHub repositories\. Open one to work on it/],
   issues: [forge, /Work across every project/],
   artifacts: [library, /Lighthouse at dawn/],
   templates: [rail, /Start from a working app/],
@@ -111,7 +111,7 @@ const screens = Object.entries(SCREENS) as [Screen, [Platform, RegExp]][]
 
 const signedIn: State[] = [
   { name: 'new', path: '/', platform: stub.landing, says: /What.s up next\?/ },
-  { name: 'new-place', path: '/', platform: stub.landing, says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Where the run runs: Cloud' }).click(), over: true },
+  { name: 'new-place', path: '/', platform: stub.landing, says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Where the run runs: Auto (Cloud)' }).click(), over: true },
   { name: 'new-setup', path: '/', platform: stub.setup, says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Set up environment' }).click(), over: true },
   { name: 'issues-which', path: '/-/issues', platform: forge, says: /Console billing page/, act: (p) => p.getByRole('button', { name: 'Build LINEAR-5' }).click(), over: true },
   { name: 'find', path: '/', platform: (p) => stub.session(p), says: /What.s up next\?/, act: (p) => p.getByRole('button', { name: 'Search runs' }).locator('visible=true').first().click(), over: true },
