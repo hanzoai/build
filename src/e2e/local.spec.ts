@@ -148,4 +148,22 @@ test.describe('This computer', () => {
     await expect(here).toContainText('Done in f1')
     await expect(here.locator('[data-slot="ran-setup"]')).toHaveCount(0)
   })
+
+  test('the first-run download can be cancelled: a plain line, and no run is started on the platform', async ({ page }) => {
+    const sent = await quiet(page)
+    await page.goto(`${HOST}?local=1&setup=1`)
+    await ask(page).fill('Add a checkout page')
+    await ask(page).press('Enter')
+    const here = page.locator('[data-slot="ran-here"]')
+    await expect(here.locator('[data-slot="ran-setup"]')).toHaveText('Setting up Hanzo Dev on this computer… 40%', { timeout: 45_000 })
+    await here.getByRole('button', { name: 'Cancel' }).click()
+    // The run is gone, and the person is told in words that were their own choice, not shown a failure.
+    await expect(here).toHaveCount(0)
+    await expect(page.getByText('Setup was cancelled. Send again whenever you like.')).toBeVisible()
+    await expect(page.getByText('cancel setup')).toBeVisible()
+    expect(sent.filter((s) => s.method === 'POST' && s.path.startsWith('/v1/agent'))).toEqual([])
+    // Sending again starts the setup again.
+    await ask(page).press('Enter')
+    await expect(page.locator('[data-slot="ran-here"] [data-slot="ran-setup"]')).toHaveText('Setting up Hanzo Dev on this computer… 40%', { timeout: 45_000 })
+  })
 })

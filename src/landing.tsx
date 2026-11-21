@@ -159,7 +159,7 @@ export function hold(u: Unsent): void {
  * on the way (its commands and what they printed) is drawn only in Developer mode; the first run waits while the host
  * fetches the agent, and says so.
  */
-function RanHere({ ran, setup, devMode }: { ran: Ran; setup: number | null; devMode: boolean }) {
+function RanHere({ ran, setup, devMode, onCancel }: { ran: Ran; setup: number | null; devMode: boolean; onCancel?: () => void }) {
   const { t } = useI18n()
   const fetching = ran.going && setup !== null && setup < 100
   const head = ran.going
@@ -177,9 +177,16 @@ function RanHere({ ran, setup, devMode }: { ran: Ran; setup: number | null; devM
         </SizableText>
       </XStack>
       {fetching ? (
-        <SizableText data-slot="ran-setup" size="$1" color="$soft">
-          {t('Setting up Hanzo Dev on this computer… {percent}%', { percent: setup })}
-        </SizableText>
+        <XStack items="center" gap="$2" minW={0}>
+          <SizableText data-slot="ran-setup" size="$1" color="$soft" flex={1} minW={0}>
+            {t('Setting up Hanzo Dev on this computer… {percent}%', { percent: setup })}
+          </SizableText>
+          {onCancel ? (
+            <Button size="xs" variant="ghost" data-slot="ran-setup-cancel" onPress={onCancel}>
+              {t('Cancel')}
+            </Button>
+          ) : null}
+        </XStack>
       ) : null}
       {said ? (
         <YStack maxH={320} overflowY="auto" minW={0}>
@@ -966,7 +973,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                 </SizableText>
               ) : null}
               {redesign.view}
-              {ran ? <RanHere ran={ran} setup={fetched} devMode={devMode} /> : null}
+              {ran ? <RanHere ran={ran} setup={fetched} devMode={devMode} onCancel={local?.cancel ? () => void local.cancel?.() : undefined} /> : null}
               {/* On Hanzo Desktop's This computer the host redesigns a site itself (redesign.tsx), and its offer is the one shown. */}
               {!redesign.can && pagesIn(draft).length && !critiqued(draft) && !busy ? (
                 <XStack px="$3" data-slot="web-page-offer">

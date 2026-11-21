@@ -16,7 +16,8 @@
  *                 answers /Users/dave/picked, and every run it is asked for is written out under the sidebar (Runs on this computer)
  *   ?folders=a,b  instead of f1..fn: the computer's folders by name, the last one used most recently
  *   ?found=a,b    folders the computer finds a moment after the first read (it says so through `changed`), never opened in Hanzo
- *   ?setup=1      the first run fetches the agent: it says 40% and waits for "Finish setup" before it says 100% and runs
+ *   ?setup=1      the first run fetches the agent: it says 40% and waits for "Finish setup" before it says 100% and runs; the
+ *                 host's `cancel` stops that wait the way Hanzo Desktop does (the run is refused with `Setup was cancelled.`)
  *   ?site=<mode>  the host can redesign a site (Hanzo Desktop's `site`; needs ?local): `ok`, or `fail` where the site will
  *                 not open. Every step it is asked for is written out under the sidebar (Redesign steps)
  */
@@ -35,7 +36,7 @@ const ORG = 'acme'
 const bearer = () => window.localStorage.getItem('hanzo_iam_access_token')
 
 /** A computer with `n` folders opened (the last one used most recently), as Hanzo Desktop's `local` answers. */
-function computer(n: number, ran: (line: string) => void, names: string[], found: string[], setup: { finish: () => void } | null): Local {
+function computer(n: number, ran: (line: string) => void, names: string[], found: string[], setup: { finish: () => void; cancel: () => void } | null): Local {
   const listeners = new Set<() => void>()
   let folders: Folder[] = (names.length ? names : Array.from({ length: n }, (_, i) => `f${i + 1}`)).map((name, i) => ({ path: `/Users/dave/${name}`, name, used: i + 1 }))
   if (found.length) {
@@ -61,12 +62,21 @@ function computer(n: number, ran: (line: string) => void, names: string[], found
       return folders.find((f) => f.path === '/Users/dave/picked') ?? null
     },
     use,
+    ...(setup
+      ? {
+          cancel: async () => {
+            ran('cancel setup')
+            setup.cancel()
+          },
+        }
+      : {}),
     run: async (folder, prompt, fetching) => {
       ran(`${folder} <- ${prompt}`)
       if (setup) {
         fetching?.(40)
-        await new Promise<void>((resolve) => {
+        await new Promise<void>((resolve, reject) => {
           setup.finish = resolve
+          setup.cancel = () => reject(new Error('Setup was cancelled.'))
         })
         fetching?.(100)
       }
@@ -108,7 +118,7 @@ function Page() {
   const [width, setWidth] = useState(264)
   const [shut, setShut] = useState(false)
   const [ran, setRan] = useState<string[]>([])
-  const [setup] = useState(() => (q.get('setup') === '1' ? { finish: () => {} } : null))
+  const [setup] = useState(() => (q.get('setup') === '1' ? { finish: () => {}, cancel: () => {} } : null))
   const [local] = useState(() =>
     q.has('local')
       ? computer(Number(q.get('local')) || 0, (line) => setRan((r) => [...r, line]), (q.get('folders') ?? '').split(',').filter(Boolean), (q.get('found') ?? '').split(',').filter(Boolean), setup)

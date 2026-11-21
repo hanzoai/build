@@ -42,6 +42,11 @@ describe('a folder on this computer (hanzo-inc/app issues 309 and 310)', () => {
     expect(missing).toBe('Hanzo Dev is not set up on this computer yet. Update Hanzo Desktop, then send again.')
     for (const said of [offline, missing, failed(new Error(''))]) expect(said).not.toMatch(/npm|install -g|terminal|repositor|github/i)
     expect(failed(new Error(''))).toBe('The run on this computer could not start. Try again.')
+    // A setup the person cancelled is their own choice, said as one: never a fault, never the host's raw words.
+    for (const e of [new Error('Setup was cancelled.'), 'Setup was cancelled', new Error(' Setup was cancelled. ')]) {
+      expect(failed(e)).toBe('Setup was cancelled. Send again whenever you like.')
+    }
+    expect(failed(new Error('Setup was cancelled by the firewall, retry'))).toContain('firewall')
   })
 
   it("keeps This computer's place id apart from a machine's and the sandbox's", () => {

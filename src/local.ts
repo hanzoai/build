@@ -56,6 +56,8 @@ export interface Local {
   use: (path: string) => void
   /** Run the coding agent in `folder` with `prompt`, and answer once it has finished. `setup` hears the agent being fetched. */
   run: (folder: string, prompt: string, setup?: Setup) => Promise<Done>
+  /** Stop the agent being fetched for the first run, when a person no longer wants it; the run then ends as cancelled (`failed`). */
+  cancel?: () => Promise<void> | void
 }
 
 /** The place id New keeps for this computer. A machine's is `tgt_…` and the cloud workspace's is ''. */
@@ -149,6 +151,9 @@ export function named(path: string): string {
   return path.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || path
 }
 
+/** What the host answers once the first-run setup a person cancelled has stopped. */
+export const CANCELLED = /^Setup was cancelled\.?$/i
+
 /**
  * Why a run on this computer stopped before it began, in the reader's words. The host fetches the agent itself
  * and words what went wrong in plain sentences (no connection, a download that did not check out, a folder that
@@ -157,6 +162,8 @@ export function named(path: string): string {
  */
 export function failed(e: unknown, say: Say = english): string {
   const why = (e instanceof Error ? e.message : typeof e === 'string' ? e : '').trim()
+  // A person's own choice, not a fault: the host says exactly this once the setup they cancelled has stopped.
+  if (CANCELLED.test(why)) return say('Setup was cancelled. Send again whenever you like.')
   if (/failed to invoke dev|no such file|os error 2|cannot find/i.test(why)) {
     return say('Hanzo Dev is not set up on this computer yet. Update Hanzo Desktop, then send again.')
   }
