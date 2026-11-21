@@ -66,9 +66,13 @@ export function fold(cards: readonly Card[]): (Card | Work)[] {
   return out
 }
 
-/** How a run of work went: still going while any of it is, otherwise done. */
+/**
+ * How a run of work went: still going while any of it is, cut off when a step
+ * was, otherwise done. The kept sandbox is left out: it stays "running" for as
+ * long as the sandbox is kept, which is not the work still going.
+ */
 export function ranOf(cards: readonly Card[], state: (r: Ran) => Ran = (r) => r): Ran {
-  const ran = cards.map((c) => ('ran' in c ? state(c.ran) : 'done'))
+  const ran = cards.filter((c) => !(c.kind === 'step' && c.name === KEPT)).map((c) => ('ran' in c ? state(c.ran) : 'done'))
   if (ran.includes('running')) return 'running'
   if (ran.includes('cancelled')) return 'cancelled'
   return 'done'

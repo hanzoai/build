@@ -52,7 +52,6 @@ import {
   DialogContent,
   DialogTitle,
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -729,7 +728,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     </DropdownMenuSub>
 
                     {/* The run's own menu holds the switch too: off, the run reads as its result (hanzo-inc/app issue 321). */}
-                    <DropdownMenuCheckboxItem checked={devMode} onCheckedChange={setDevMode} preventCloseOnSelect aria-label={say('Developer mode')}>
+                    {/* Drawn as this menu's other choices are (Transcript view): the words, then a check while it is on. */}
+                    <DropdownMenuItem aria-label={say('Developer mode')} aria-checked={devMode} onSelect={() => setDevMode(!devMode)}>
                       <YStack flex={1} minW={0}>
                         <SizableText size="$2" color="$ink">
                           {say('Developer mode')}
@@ -738,7 +738,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                           {say('Show the terminal, commands and each step')}
                         </SizableText>
                       </YStack>
-                    </DropdownMenuCheckboxItem>
+                      {devMode ? <Check size={14} color="$blue10" /> : null}
+                    </DropdownMenuItem>
 
                     <DropdownMenuSeparator />
 
