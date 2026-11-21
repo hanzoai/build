@@ -7,6 +7,7 @@
  *   DELETE /v1/tool/skills/{id}             {deleted}
  *   GET    /.well-known/agent-skills/index.json         the brand's catalogue, public
  *   GET    /.well-known/agent-skills/{name}/SKILL.md     one of its documents, public
+ *   POST   /v1/tool/detect                  {prompt, maxSkills, maxTools} → {skills, tools}  Kai's pick for one message
  *
  * A skill is on when its tool name, `skill_<name>`, is activated (tools.ts):
  * that is how a catalogue skill is added to an org and how an org's own skill is
@@ -134,4 +135,35 @@ export async function brand(t: Target): Promise<Catalogue> {
 /** One catalogue skill's SKILL.md. */
 export async function document(t: Target, name: string): Promise<string> {
   return (await open(t, `${seg(name)}/SKILL.md`)).text()
+}
+
+/** One thing Kai picked for a message: a skill (`skill_<name>`) or a tool, how likely it applies, and what it does. */
+export interface Detected {
+  /** The skill's own name for a skill (`code-review`), else the tool's. */
+  name: string
+  skill: boolean
+  /** Where it comes from: skill, mcp, connector, function, agent. */
+  source: string
+  description: string
+  /** 0 to 1. */
+  probability: number
+}
+
+/**
+ * Which skills and tools apply to `prompt`, as Kai decides it (cloud apps/tools
+ * detect.go; a lexical fallback answers when Kai does not). Only asks: nothing
+ * is switched on (`autoActivate` is left out), so a message carries what was
+ * picked for it and nothing more.
+ */
+export async function detect(t: Target, prompt: string, opts: { maxSkills?: number; maxTools?: number; signal?: AbortSignal } = {}): Promise<Detected[]> {
+  const raw = await call<unknown>(t, 'POST', '/v1/tool/detect', { prompt, maxSkills: opts.maxSkills ?? 3, maxTools: opts.maxTools ?? 3 }, { signal: opts.signal })
+  const r = (raw && typeof raw === 'object' ? raw : {}) as { skills?: unknown; tools?: unknown }
+  const read = (list: unknown, skill: boolean): Detected[] =>
+    (Array.isArray(list) ? list : []).flatMap((x) => {
+      const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
+      const tool = str(o.name)
+      const name = skill ? nameOf(tool) || tool : tool
+      return name ? [{ name, skill, source: str(o.source), description: str(o.description), probability: num(o.probability) }] : []
+    })
+  return [...read(r.skills, true), ...read(r.tools, false)]
 }

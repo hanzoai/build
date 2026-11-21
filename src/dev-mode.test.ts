@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DEV_MODE_EVENT, DEV_MODE_KEY, formatDeviceLabel, getDevMode, setDevMode } from './dev-mode.ts'
+import { adopt, DEV_MODE_EVENT, DEV_MODE_KEY, formatDeviceLabel, getDevMode, setDevMode } from './dev-mode.ts'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -26,6 +26,34 @@ describe('Developer mode and friendly device labels', () => {
     expect(store.get(DEV_MODE_KEY)).toBe('true')
     expect(events).toContain(DEV_MODE_EVENT)
     expect(getDevMode()).toBe(true)
+  })
+
+  it('is off for a new person, made once from what the device shows, and kept (hanzo-inc/app issue 321)', () => {
+    const device = (seed: Record<string, string>) => {
+      const store = new Map(Object.entries(seed))
+      vi.stubGlobal('window', {
+        localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) },
+        addEventListener() {},
+        removeEventListener() {},
+        dispatchEvent: () => true,
+      })
+      return store
+    }
+    // Someone new, or who has only built with Dev, reads the result.
+    let store = device({ 'hanzo.build.view.site': '"code"' })
+    expect(getDevMode()).toBe(false)
+    expect(store.get(DEV_MODE_KEY)).toBe('false')
+    // Someone who opened a terminal or linked a machine keeps the process they had.
+    store = device({ 'hanzo.tabs.fleet': JSON.stringify([{ machine: 'dgx', sandbox: false }]) })
+    expect(getDevMode()).toBe(true)
+    expect(store.get(DEV_MODE_KEY)).toBe('true')
+    // So does someone who asked Dev for more of its transcript.
+    expect(adopt({ getItem: (k) => (k === 'hanzo.build.transcript.view' ? '"verbose"' : null) })).toBe(true)
+    expect(adopt({ getItem: (k) => (k === 'hanzo.build.transcript.view' ? '"normal"' : k === 'hanzo.tabs.fleet' ? '[]' : null) })).toBe(false)
+    expect(adopt({ getItem: () => 'not json' })).toBe(false)
+    // A choice once made is the one read, whatever the device shows later.
+    store = device({ [DEV_MODE_KEY]: 'false', 'hanzo.tabs.fleet': JSON.stringify([{ machine: 'dgx' }]) })
+    expect(getDevMode()).toBe(false)
   })
 
   it('uses the key and event the Hanzo host\u2019s own settings store uses (components/settings/kit.tsx), so one switch serves both', () => {

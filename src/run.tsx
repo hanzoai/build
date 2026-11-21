@@ -52,6 +52,7 @@ import {
   DialogContent,
   DialogTitle,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -122,7 +123,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const host = useHost()
   const t = useTarget()
   const signed = Boolean(host.person)
-  const [devMode] = useDevMode()
+  const [devMode, setDevMode] = useDevMode()
   const { detail, record, events, status, refused } = read
   const [draft, setDraft] = useState('')
   const [files, setFiles] = useState<Attached[]>([])
@@ -727,6 +728,18 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
 
+                    {/* The run's own menu holds the switch too: off, the run reads as its result (hanzo-inc/app issue 321). */}
+                    <DropdownMenuCheckboxItem checked={devMode} onCheckedChange={setDevMode} preventCloseOnSelect aria-label={say('Developer mode')}>
+                      <YStack flex={1} minW={0}>
+                        <SizableText size="$2" color="$ink">
+                          {say('Developer mode')}
+                        </SizableText>
+                        <SizableText size="$1" color="$soft">
+                          {say('Show the terminal, commands and each step')}
+                        </SizableText>
+                      </YStack>
+                    </DropdownMenuCheckboxItem>
+
                     <DropdownMenuSeparator />
 
                     <DropdownMenuItem onSelect={() => void copy('id', id)}>
@@ -781,7 +794,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               )}
             </XStack>
             <SizableText size="$1" color="$soft" numberOfLines={1} maxW="100%">
-              {[state ? say(STATUS[state] ?? state) : detail.loading ? say('reading') : '', record?.repo, record?.branch, record?.published ? say('shared') : ''].filter(Boolean).join(' · ')}
+              {[state ? say(STATUS[state] ?? state) : detail.loading ? say('reading') : '', record?.repo, devMode ? record?.branch : '', record?.published ? say('shared') : ''].filter(Boolean).join(' · ')}
             </SizableText>
           </YStack>
           {pr.href ? (
@@ -940,6 +953,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
 
         <Transcript
           cards={shown}
+          devMode={devMode}
           view={transcriptView}
           queued={queued}
           onSendQueued={sendQueued}
@@ -1015,8 +1029,9 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 {note || refused}
               </SizableText>
             ) : null}
-            {plan.length ? (
-              // One line until it is opened, so the steps never crowd the transcript.
+            {plan.length && devMode ? (
+              // One line until it is opened, so the steps never crowd the transcript. Off Developer mode the
+              // transcript's own Working line says where the run is, in words, and opens onto the same steps.
               <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
                 <XStack
                   render="button"

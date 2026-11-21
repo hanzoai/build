@@ -71,6 +71,23 @@ async function remembered(t: Target): Promise<string[]> {
     .filter(Boolean)
 }
 
+/**
+ * The words skills add to a message: each one's SKILL.md (the org's own before
+ * the brand's), at most `max` of each, or its name when no document answers.
+ * Chat carries the ones Hanzo chose for a single message the same way
+ * (hanzo-inc/app issue 314).
+ */
+export async function skillsSaid(t: Target, skills: readonly string[], max = SKILL_MAX): Promise<string> {
+  if (!skills.length) return ''
+  const own = t.token() ? await authored(t).catch(() => []) : []
+  const parts: string[] = []
+  for (const n of skills) {
+    const body = own.find((s) => s.name === n)?.content || (await document(t, n).catch(() => ''))
+    parts.push(body ? `Use the skill "${n}" where it applies:\n\n${body.slice(0, max)}` : `Use the "${n}" skill where it applies.`)
+  }
+  return parts.join('\n\n')
+}
+
 /** The words `skills`, `memory` and `mode` add to a message. */
 async function said(t: Target, skills: readonly string[], memory: boolean, mode: string, design: string): Promise<string> {
   const parts: string[] = []
@@ -78,14 +95,8 @@ async function said(t: Target, skills: readonly string[], memory: boolean, mode:
     const b = await brand(t, design).catch(() => null)
     if (b?.name) parts.push(designSaid(b))
   }
-  if (skills.length) {
-    const own = t.token() ? await authored(t).catch(() => []) : []
-    for (const n of skills) {
-      const body = own.find((s) => s.name === n)?.content || (await document(t, n).catch(() => ''))
-      if (body) parts.push(`Use the skill "${n}" where it applies:\n\n${body.slice(0, SKILL_MAX)}`)
-      else parts.push(`Use the "${n}" skill where it applies.`)
-    }
-  }
+  const taught = await skillsSaid(t, skills)
+  if (taught) parts.push(taught)
   if (memory) {
     const lines = await remembered(t).catch(() => [])
     if (lines.length) parts.push(`What you remember about the person:\n${lines.map((l) => `- ${l}`).join('\n')}`)
