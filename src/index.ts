@@ -42,6 +42,7 @@ export { kind, label, said, share, spent, ways, when, type Label, type Share, ty
 export type { Limits } from './api/limits.ts'
 export type { Target } from './api/call.ts'
 export type { Browse, Browser, Host, Person, Shown } from './host.tsx'
+export type { Done, Folder, Local } from './local.ts'
 export type { Session, Status } from './api/sessions.ts'
 export { talks } from './api/talk.ts'
 export { detect, type Detected } from './api/skills.ts'

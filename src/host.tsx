@@ -12,6 +12,7 @@ import { createContext, useContext, useMemo, type ComponentType, type ReactNode 
 import type { Cast } from './api/agents.ts'
 import type { Target } from './api/call.ts'
 import type { Theme } from './api/pref.ts'
+import type { Local } from './local.ts'
 
 export interface Person {
   name: string
@@ -117,6 +118,11 @@ export interface Host {
   cast?: readonly Cast[]
   /** Every persona Customize › Agents offers to start from, read when Browse opens. Absent, none. */
   personas?: () => Promise<readonly Cast[]>
+  /**
+   * The folders of the computer the host runs on, and a run in one of them (local.ts): Hanzo Desktop has them, so New
+   * offers This computer with Auto picking the folder used last. A browser page has no folder of its own: absent.
+   */
+  local?: Local
 }
 
 const Context = createContext<Host | null>(null)
@@ -134,6 +140,11 @@ export function useHost(): Host {
 /** The host's way of showing a page, where one is mounted and has one. The side panel is drawn without a host too (hanzo.team's rooms). */
 export function useBrowse(): Browse | null {
   return useContext(Context)?.browse ?? null
+}
+
+/** The host's computer and its folders, where the host runs on one (Hanzo Desktop). */
+export function useLocal(): Local | null {
+  return useContext(Context)?.local ?? null
 }
 
 /** The host's browser, where one is mounted and has one. */
