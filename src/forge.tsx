@@ -396,8 +396,9 @@ function Projects() {
                           <YStack flex={1} minW={0}>
                             {/* `org/name` is an address: it keeps its own order in a right-to-left page. */}
                             <XStack minW={0} items="baseline" self="flex-start" {...{ 'data-i18n-ltr': '' }}>
+                              {/* The org gives way first: a long one (a wallet's is 27 characters) must not run under the Updated column. */}
                               {c.org ? (
-                                <SizableText size="$2" color="$soft" numberOfLines={1} shrink={0}>
+                                <SizableText size="$2" color="$soft" numberOfLines={1} shrink={100} minW={0}>
                                   {`${c.org}/`}
                                 </SizableText>
                               ) : null}
@@ -417,7 +418,7 @@ function Projects() {
                               {c.branch}
                             </SizableText>
                           </XStack>
-                          <SizableText size="$1" color="$soft" width={120} text="end">
+                          <SizableText size="$1" color="$soft" width={120} shrink={0} text="end">
                             {syncing.has(c.name) ? t('Syncing…') : ago(c.updated)}
                           </SizableText>
                         </XStack>
