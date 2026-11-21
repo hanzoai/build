@@ -242,7 +242,7 @@ test.describe('New’s offer to set a codebase up', () => {
     await expect(p.getByRole('button', { name: 'Set up environment' })).toHaveCount(0)
   })
 
-  test('a board’s key held as the codebase is let go once the org’s whole list does not hold it, and Send asks for a repository', async ({ page: p }, info) => {
+  test('a board’s key held as the codebase is let go once the org’s whole list does not hold it, and Send goes without one', async ({ page: p }, info) => {
     const sent = await setup(p, STRANGER)
     await p.goto('/')
     // The forge and the links both answered, without HCC: New holds no repository now.
@@ -251,8 +251,9 @@ test.describe('New’s offer to set a codebase up', () => {
     await expect(p.getByRole('button', { name: 'Set up environment' })).toHaveCount(0)
     expect(sent.some((s) => s.path === '/v1/environment/HCC')).toBe(false)
     await p.getByRole('textbox', { name: 'Describe a task or ask a question' }).press('Enter')
-    await expect(p.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
-    expect(to(sent, 'POST', '/v1/agent/coding')).toHaveLength(0)
+    // No repository is no gate (hanzo-inc/app issue 309): nothing asks for one, and nothing is sent to the stranger name.
+    await expect(p.getByText(/Choose the project this run works on/)).toHaveCount(0)
+    expect(to(sent, 'POST', '/v1/agent/coding').filter((s) => JSON.stringify(s.body ?? '').includes('HCC'))).toHaveLength(0)
     await p.screenshot({ path: info.outputPath('stranger.png') })
   })
 

@@ -127,13 +127,10 @@ test.describe('New', () => {
     // Dev has no mode picker: no Auto beside the effort.
     await expect(page.locator('[data-slot="mode"]')).toHaveCount(0)
 
-    // A run works on a project, so with none chosen it is said, the picker opens, and nothing is sent.
+    // A repository is a choice, never a gate (hanzo-inc/app issue 309): this run picks one to work on its code.
     await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Repository')
     await ask(page).fill('Add a footer')
-    await ask(page).press('Enter')
-    await expect(page.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
-    expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
-
+    await chip(page, 'Repository').click()
     await list(page, 'Repository').getByRole('option', { name: `${ORG}/universe` }).click()
     await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: universe')
     await chip(page, 'Branch').click()
@@ -158,20 +155,33 @@ test.describe('New', () => {
     expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
   })
 
-  test('with no project chosen, an ask in the sandbox opens the picker and makes no project up', async ({ page, baseURL }) => {
+  test('with no repository chosen, an ask in the sandbox is sent as it is: no picker opens and no repository is asked for', async ({ page, baseURL }) => {
     const { sent } = await desk(page)
     await page.goto('/')
     await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Repository', { timeout: 45_000 })
     await ask(page).fill('Build a todo app')
     await ask(page).press('Enter')
-    await expect(page.getByText('Choose the project this run works on: a repository of this organization, or one on its GitHub.')).toBeVisible()
-    expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
-    // The draft waits, and goes once a project is chosen.
-    await list(page, 'Repository').getByRole('option', { name: `${ORG}/universe` }).click()
+    await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
+    const body = posted(sent, '/v1/agent/turns')[0]?.body as Record<string, unknown>
+    expect(body).toMatchObject({ input: 'Build a todo app', mode: 'auto' })
+    expect(body).not.toHaveProperty('repo')
+    expect(body).not.toHaveProperty('target')
+  })
+
+  test('on a machine, an ask with no repository goes to that machine, where it works in a new folder (hanzo-inc/app issue 309)', async ({ page, baseURL }) => {
+    const { sent } = await desk(page)
+    await page.goto('/')
+    await expect(page.getByText('Build what’s next.')).toBeVisible({ timeout: 45_000 })
+    await chip(page, 'Where the run runs').click()
+    await list(page, 'Where the run runs').getByRole('option', { name: /dave-laptop/ }).click()
+    await expect(chip(page, 'Repository')).toHaveAccessibleName('Repository: Repository')
+    await ask(page).fill('Tidy the notes in this folder')
     await ask(page).press('Enter')
     await expect(page).toHaveURL(new URL(`/${NEXT}`, baseURL).href)
-    // The model is Enso, named, and the effort Medium: New fills each field it was not handed.
-    expect(posted(sent, '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Build a todo app', repo: 'universe', mode: 'build', model: 'enso-auto', effort: 'medium' })
+    const body = posted(sent, '/v1/agent/turns')[0]?.body as Record<string, unknown>
+    expect(body).toMatchObject({ input: 'Tidy the notes in this folder', target: 'tgt_1', mode: 'auto' })
+    expect(body).not.toHaveProperty('repo')
+    await expect(page.getByText(/Choose the project this run works on/)).toHaveCount(0)
   })
 
   test('a conversation in the sandbox names Enso as its model, and no machine; a refusal is said and the draft stays', async ({ page, baseURL }) => {

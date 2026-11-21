@@ -287,6 +287,14 @@ light round chips as tall as the composer's controls, on one centreline a gap ap
 (the composer stands every `ChipSelect` in its pills so, on a phone and a laptop alike),
 and Repos, Branches, Issues and Templates under it, each a press to its list. A codebase can be added to a project. Opening a codebase or an
 issue from its own screen lands here with that choice already made.
+A repository is optional everywhere: with none, a run works in a new folder (in
+the sandbox, or on a machine), and GitHub can be connected later. On a host that
+has the computer (Hanzo Desktop hands `local`, local.ts), This computer comes
+first: the run works in a folder there and needs no repository, the Folder pill
+reads Auto (the folder used most recently) until another is chosen, Choose
+folder… opens the computer's own dialog, and a computer that opened no folder
+asks for one on the first send. The agent reads, edits and runs in that folder
+only, and what it printed shows under the composer when it ends.
 
 **A run.** The transcript as it streams, drawn by what each part is: what the
 agent says as markdown, each command it runs as a card that opens onto its

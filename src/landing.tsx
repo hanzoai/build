@@ -9,8 +9,12 @@
  * Sending opens a conversation (api/talk.ts) and goes to it: the agent answers,
  * and decides for itself when the ask needs a sandbox or a coding run — on the
  * repository, branch and machine chosen here, and only planning when Plan is on.
- * A run on one of the org's machines needs a repository, so an ask with none
- * chosen there opens the picker rather than making a project up from its words. The choices a person made here are kept in this
+ * A repository is never a gate: a run with none works in a new folder, in the
+ * sandbox or on one of the org's machines (hanzo-inc/cloud issue 779), and
+ * GitHub can be connected later. On a host that has the computer (Hanzo
+ * Desktop, `host.local`), New also offers This computer: the run works in a
+ * folder there, Auto picking the folder used last (local.ts), and needs no
+ * repository at all (hanzo-inc/app issues 309 and 310). The choices a person made here are kept in this
  * browser, per org, so the next New starts where the last one did — and a kept
  * repository New can no longer offer is let go, so the next run is not sent
  * back to it. A repository can also be given by its address (Use a git URL).
@@ -21,7 +25,7 @@
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { CircleDot, Cloud, Code, FolderGit2, GitBranch, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
+import { CircleDot, Cloud, Code, FolderGit2, FolderOpen, GitBranch, Laptop, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@hanzo/ui'
 import { Composer, MEASURE, type Command, type Shelf } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
@@ -45,7 +49,8 @@ import { asHub, gone, isForge, isHub, settle, type HubRepo } from './choice.ts'
 import { useCached, useKept, usePlaces, useRead } from './data.ts'
 import { useDevMode } from './dev-mode.ts'
 import { takeHandoff } from './handoff.ts'
-import { useHost, useTarget } from './host.tsx'
+import { useHost, useLocal, useTarget } from './host.tsx'
+import { failed, HERE, recent, where, type Folder } from './local.ts'
 import { level, pacing, useMind } from './mind.ts'
 import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
@@ -72,6 +77,8 @@ interface Kept {
   repo: (RowRepo & { forge?: boolean; github?: boolean; clone?: string; given?: boolean }) | null
   branch: string
   place: string
+  /** On This computer: the folder chosen, by its path; '' is Auto, the folder used last (local.ts). */
+  folder: string
   mode: Mode
   ask: string
   /** The issue the handed-over words are, by the number the run's pull request closes; 0 for none. */
@@ -81,7 +88,19 @@ interface Kept {
 /** The org's repositories before they have been read: no answer, so nothing is judged from it. */
 const NOHOMES: Homes = { homes: [], whole: false }
 
-const FIRST: Kept = { repo: null, branch: '', place: '', mode: 'build', ask: '', issue: 0 }
+const FIRST: Kept = { repo: null, branch: '', place: '', folder: '', mode: 'build', ask: '', issue: 0 }
+
+/** This computer, as a place: always there on a host that has it. */
+const HERE_PLACE: Place = { id: HERE, label: 'This computer', kind: 'here', status: 'online', capacity: '' }
+
+/** What a run on this computer is doing, or did: its folder, its ask, and once it finished, what it printed. */
+interface Ran {
+  folder: Folder
+  ask: string
+  going: boolean
+  ok: boolean
+  output: string
+}
 
 /**
  * What was typed here and not sent, kept in this tab.
@@ -127,6 +146,36 @@ export function hold(u: Unsent): void {
   }
 }
 
+/** A run on this computer: where it works, what it was asked, and once it ends, what the agent printed. */
+function RanHere({ ran }: { ran: Ran }) {
+  const { t } = useI18n()
+  const head = ran.going
+    ? t('Working in {name}…', { name: ran.folder.name })
+    : ran.ok
+      ? t('Done in {name}', { name: ran.folder.name })
+      : t('Stopped in {name}', { name: ran.folder.name })
+  return (
+    <YStack data-slot="ran-here" role="status" aria-live="polite" gap="$1.5" mx="$3" px="$3" py="$2.5" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$background" minW={0}>
+      <XStack items="center" gap="$2" minW={0}>
+        <FolderOpen size={13} color="$soft" />
+        <SizableText size="$2" color="$ink" fontWeight="500" numberOfLines={1} flex={1} minW={0}>
+          {head}
+        </SizableText>
+      </XStack>
+      <SizableText size="$1" color="$soft" numberOfLines={1} data-i18n-ltr="">
+        {ran.folder.path}
+      </SizableText>
+      {ran.output ? (
+        <YStack maxH={320} overflowY="auto" minW={0}>
+          <SizableText size="$1" color="$ink" fontFamily="$mono" whiteSpace="pre-wrap" wordWrap="break-word" data-i18n-ltr="">
+            {ran.output}
+          </SizableText>
+        </YStack>
+      ) : null}
+    </YStack>
+  )
+}
+
 export function Landing({ onStarted }: { onStarted: (session: string) => void }) {
   const host = useHost()
   const target = useTarget()
@@ -136,11 +185,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const signed = Boolean(host.person)
   const [devMode] = useDevMode()
   const { prefs, save: savePrefs } = usePrefs()
+  const local = useLocal()
   const [stored, keep] = useKept<Partial<Kept> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
   // What was chosen here, over the person's coding defaults (Settings → Code), over
   // the first run's. Field by field: a codebase or an issue handed over from its own
   // screen keeps only the codebase and the words, and the rest still has a value.
-  const kept = settle(FIRST, prefs.code, stored)
+  // On a host that has the computer, the first run's place is This computer.
+  const kept = settle(local ? { ...FIRST, place: HERE } : FIRST, prefs.code, stored)
   const set = (patch: Partial<Kept>) => keep({ ...kept, ...patch })
 
   const [was] = useState(unsent)
@@ -216,7 +267,15 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const found = useRead(signed && codebase && settled && !stranger ? () => read(target, codebase) : null, null as Environment | null, [target, signed, codebase, settled, stranger])
   // A read kept from the codebase before is not this one's.
   const env = { ...found, value: found.value && found.value.repo === codebase && !stranger ? found.value : null }
-  const place: Place = places.value.find((p) => p.id === kept.place) ?? SANDBOX
+  // This computer, where the host has it: the run goes to a folder here and never to the platform.
+  const here = local !== null && kept.place === HERE
+  const place: Place = here ? SANDBOX : (places.value.find((p) => p.id === kept.place) ?? SANDBOX)
+  // The folders this computer opened, most recent first, and the one a run here goes to: the one chosen, else Auto's.
+  const folders = local ? recent(local.folders()) : []
+  const folderAt = where(folders, kept.folder)
+  const [ran, setRan] = useState<Ran | null>(null)
+  // Why this mode cannot run where it is sent: a plan is the sandbox's, on a machine and on this computer alike.
+  const refused = here ? (mode === 'plan' ? t('A plan runs in the cloud workspace. On this computer, switch to Build.') : '') : unhonoured(mode, place.id, t)
 
   // The kept repository is checked against what New can offer now (choice.ts
   // `gone`): on arrival, and again each time the GitHub connection changes
@@ -298,6 +357,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   // The composer sends only a draft with words in it, and not while a send is out.
   const send = async (said: string = draft) => {
+    // This computer needs no sign-in to the platform and no repository: the agent runs in the folder, here.
+    if (here && local) return void (await sendHere(said))
     if (!signed) {
       hold({ draft: said, files, sent: true })
       host.signIn?.()
@@ -305,11 +366,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     }
     const repo = isForge(kept.repo) ? kept.repo : null
     const hub = isHub(kept.repo) ? kept.repo : null
-    if (!repo && !hub && place.id) {
-      setNote(t('Choose the project this run works on: a repository of this organization, or one on its GitHub.'))
-      setPicking(true)
-      return
-    }
+    // No repository is no gate: a machine run with none works in a new folder there (cloud issue 779).
     // A plan or a setup routed to a machine is refused here, in its own words, before it leaves the page.
     const why = unhonoured(mode, place.id, t)
     if (why) {
@@ -352,7 +409,43 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       setIssue(0)
       onStarted(sent.session)
     } catch (e) {
-      setNote(plain(e, repo?.name ?? hub?.full_name ?? t('a new project'), 'run', t))
+      setNote(plain(e, repo?.name ?? hub?.full_name ?? (place.id ? activePlaceDisplay.title : t('a new project')), 'run', t))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * A run on this computer: in the folder chosen, else Auto's (the one used last), else one the person picks now, once.
+   * The agent reads, edits and runs there and nowhere else; what it printed is shown under the composer when it ends.
+   */
+  const sendHere = async (said: string) => {
+    if (!local || busy) return
+    if (refused) {
+      setNote(refused)
+      return
+    }
+    let folder = folderAt.folder
+    if (!folder) {
+      setNote(t('Choose a folder for this run'))
+      folder = await local.pick().catch(() => null)
+      if (!folder) return
+      set({ place: HERE, folder: '' })
+    }
+    local.use(folder.path)
+    const ask = said.trim()
+    const prompt = [carry.text, compose(ask, files)].filter(Boolean).join('\n\n')
+    setBusy(true)
+    setNote('')
+    setRan({ folder, ask, going: true, ok: true, output: '' })
+    try {
+      const done = await local.run(folder.path, prompt)
+      setRan({ folder, ask, going: false, ok: done.ok, output: done.output.trim() })
+      setDraft('')
+      setFiles([])
+    } catch (e) {
+      setRan(null)
+      setNote(failed(e, t))
     } finally {
       setBusy(false)
     }
@@ -439,8 +532,22 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   // Cloud is the managed workspace, set up by the chosen project's environment; the rest are the org's machines.
   const placeItems = useMemo(
-    () =>
-      (places.value.length ? places.value : [SANDBOX]).map((p) => {
+    () => [
+      // This computer first, where the host has it: a folder here is the nearest place a run can go.
+      ...(local
+        ? [
+            {
+              id: HERE,
+              label: t('This computer'),
+              hint: folderAt.folder ? folderAt.folder.name : t('A folder on this computer'),
+              detail: undefined as string | undefined,
+              icon: <Laptop size={13} color="$soft" />,
+              disabled: false,
+              place: HERE_PLACE,
+            },
+          ]
+        : []),
+      ...(places.value.length ? places.value : [SANDBOX]).map((p) => {
         const display = displayPlace(p, { devMode, say: t, names })
         return {
           id: p.id || 'sandbox',
@@ -460,17 +567,42 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           place: p,
         }
       }),
-    [places.value, devMode, t, names],
+    ],
+    [places.value, devMode, t, names, local, folderAt.folder],
   )
 
   const activePlaceDisplay = useMemo(
     () => displayPlace(place, { devMode, say: t, names }),
     [place, devMode, t, names],
   )
-  const placeTooltip = place.id
-    ? t('Runs locally in your Hanzo folder')
-    : t('Runs automatically in your Hanzo cloud workspace')
-  const placeHardwareHint = place.id && !devMode ? activePlaceDisplay.detail : undefined
+  const placeTooltip = here
+    ? t('Runs on this computer, in the folder you choose. No repository needed.')
+    : place.id
+      ? t('Runs on this machine, in a new folder unless you choose a repository')
+      : t('Runs automatically in your Hanzo cloud workspace')
+  const placeHardwareHint = place.id && !devMode && !here ? activePlaceDisplay.detail : undefined
+  // The place chosen, as the pill and the `+` menu mark it.
+  const placeId = here ? HERE : place.id
+
+  // This computer's folder: Auto (the one used last) and every folder it opened, most recent first.
+  const AUTO = '__auto__'
+  const folderItems = useMemo(
+    () => [
+      {
+        id: AUTO,
+        label: t('Auto'),
+        hint: folders[0] ? t('Last used: {name}', { name: folders[0].name }) : t('The folder you used last'),
+        icon: <FolderOpen size={13} color="$soft" />,
+      },
+      ...folders.map((f) => ({ id: f.path, label: f.name, hint: f.path, icon: <FolderOpen size={13} color="$soft" /> })),
+    ],
+    [folders, t],
+  )
+  const chooseFolder = async () => {
+    if (!local) return
+    const f = await local.pick().catch(() => null)
+    if (f) set({ place: HERE, folder: f.path })
+  }
 
   const branch = kept.branch || kept.repo?.default_branch || 'main'
   const forge = isForge(kept.repo)
@@ -486,9 +618,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
             <XStack items="center" minW={0} maxW="100%">
               <ChipSelect
                 name={t('Where the run runs')}
-                icon={place.id ? <Monitor size={13} color="$soft" /> : <Cloud size={13} color="$soft" />}
-                label={activePlaceDisplay.title}
-                chosen={placeItems.find((i) => i.place.id === place.id)}
+                icon={here ? <Laptop size={13} color="$soft" /> : place.id ? <Monitor size={13} color="$soft" /> : <Cloud size={13} color="$soft" />}
+                label={here ? t('This computer') : activePlaceDisplay.title}
+                chosen={placeItems.find((i) => i.place.id === placeId)}
                 items={placeItems}
                 onChange={(i) => set({ place: i.place.id })}
                 placeholder={devMode ? t('Search machines…') : t('Search devices…')}
@@ -518,6 +650,26 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+      {here ? (
+        <ChipSelect
+          name={t('Folder')}
+          icon={<FolderOpen size={13} color="$soft" />}
+          label={
+            folderAt.folder
+              ? folderAt.auto
+                ? t('Auto · {name}', { name: folderAt.folder.name })
+                : folderAt.folder.name
+              : t('Choose folder…')
+          }
+          chosen={folderItems.find((i) => i.id === (folderAt.auto ? AUTO : folderAt.folder?.path))}
+          items={folderItems}
+          onChange={(i) => set({ folder: i.id === AUTO ? '' : i.id })}
+          placeholder={t('Search folders…')}
+          placement="top-start"
+          footer={<FooterLink label={t('Choose folder…')} onPress={() => void chooseFolder()} />}
+        />
+      ) : null}
+      {here ? null : (
       <RepoSelect
         open={picking}
         onOpenChange={setPicking}
@@ -566,7 +718,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         placement="top-start"
         disabled={!signed}
       />
-      {forge ? (
+      )}
+      {forge && !here ? (
         <BranchSelect open={branching} onOpenChange={setBranching} value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} placement="top-start" />
       ) : null}
     </>
@@ -621,8 +774,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       id: i.place.id || 'sandbox',
       label: i.label,
       note: i.hint,
-      icon: i.place.id ? <Monitor size={16} /> : <Cloud size={16} />,
-      on: i.place.id === place.id,
+      icon: i.place.id === HERE ? <Laptop size={16} /> : i.place.id ? <Monitor size={16} /> : <Cloud size={16} />,
+      on: i.place.id === placeId,
     })),
     pick: (id: string) => set({ place: id === 'sandbox' ? '' : id }),
     loading: places.loading,
@@ -681,7 +834,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           </YStack>
           <YStack width="100%" maxW={MEASURE} gap="$2" pb="$3">
             <YStack gap="$2">
-              {env.value && (env.value.state === 'proposed' || unset(env.value)) && !place.id ? (
+              {env.value && (env.value.state === 'proposed' || unset(env.value)) && !place.id && !here ? (
                 <XStack
                   items="center"
                   justify="space-between"
@@ -708,11 +861,12 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                   )}
                 </XStack>
               ) : null}
-              {note || unhonoured(mode, place.id, t) || mind.note ? (
+              {note || refused || mind.note ? (
                 <SizableText size="$1" color="$soft" role="status" px="$3">
-                  {note || unhonoured(mode, place.id, t) || mind.note}
+                  {note || refused || mind.note}
                 </SizableText>
               ) : null}
+              {ran ? <RanHere ran={ran} /> : null}
               <Composer
                 column
                 value={draft}

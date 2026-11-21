@@ -12,6 +12,8 @@
  *
  *   ?label=Dev    the runs section's label, instead of the default
  *   ?at=<path>    the address to start at
+ *   ?local=<n>    the host has the computer (Hanzo Desktop's `local`), with n folders opened already; its folder dialog
+ *                 answers /Users/dave/picked, and every run it is asked for is written out under the sidebar (Runs on this computer)
  */
 import '@hanzo/font/css'
 import '@hanzo/ui/theme.css'
@@ -22,10 +24,32 @@ import { Sidebar, SidebarItem } from '@hanzo/ui/chat'
 import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import { administers, Builder, DevSection, Grip, type Host } from '../index.ts'
+import { administers, Builder, DevSection, Grip, type Folder, type Host, type Local } from '../index.ts'
 
 const ORG = 'acme'
 const bearer = () => window.localStorage.getItem('hanzo_iam_access_token')
+
+/** A computer with `n` folders opened (the last one used most recently), as Hanzo Desktop's `local` answers. */
+function computer(n: number, ran: (line: string) => void): Local {
+  let folders: Folder[] = Array.from({ length: n }, (_, i) => ({ path: `/Users/dave/f${i + 1}`, name: `f${i + 1}`, used: i + 1 }))
+  const use = (path: string) => {
+    const top = Math.max(0, ...folders.map((f) => f.used ?? 0)) + 1
+    const known = folders.some((f) => f.path === path)
+    folders = known ? folders.map((f) => (f.path === path ? { ...f, used: top } : f)) : [...folders, { path, name: path.split('/').pop() ?? path, used: top }]
+  }
+  return {
+    folders: () => folders,
+    pick: async () => {
+      use('/Users/dave/picked')
+      return folders.find((f) => f.path === '/Users/dave/picked') ?? null
+    },
+    use,
+    run: async (folder, prompt) => {
+      ran(`${folder} <- ${prompt}`)
+      return { ok: true, output: `Edited README.md in ${folder}` }
+    },
+  }
+}
 
 function Page() {
   const q = new URLSearchParams(window.location.search)
@@ -34,6 +58,8 @@ function Page() {
   const [picks, setPicks] = useState(0)
   const [width, setWidth] = useState(264)
   const [shut, setShut] = useState(false)
+  const [ran, setRan] = useState<string[]>([])
+  const [local] = useState(() => (q.has('local') ? computer(Number(q.get('local')) || 0, (line) => setRan((r) => [...r, line])) : undefined))
   const token = bearer()
   const host: Host = {
     name: 'Hanzo',
@@ -49,6 +75,7 @@ function Page() {
     },
     links: { github: '/dev/-/sync', customize: '/dev/-/customize', settings: '/settings', home: '/' },
     open: () => {},
+    ...(local ? { local } : {}),
   }
   const label = q.get('label')
   if (shut)
@@ -75,6 +102,9 @@ function Page() {
         </SizableText>
         <SizableText size="$1" color="$soft" aria-label="Picks">
           {String(picks)}
+        </SizableText>
+        <SizableText size="$1" color="$soft" aria-label="Runs on this computer">
+          {ran.join(' | ')}
         </SizableText>
       </Sidebar>
       <Builder host={host} rail={false} />
