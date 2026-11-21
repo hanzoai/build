@@ -284,7 +284,7 @@ function answer(w: World, s: Sent): Reply | undefined {
     w.social[m[1]] = { id: m[1], available: true, connected: false }
     return { json: { disconnected: true } }
   }
-  if ((m = at(/^\/v1\/projects\/([^/]+)$/)) && s.method === 'PATCH') {
+  if ((m = at(/^\/v1\/project\/([^/]+)$/)) && s.method === 'PATCH') {
     const p = w.projects.find((x) => x.slug === m![1])!
     Object.assign(p, b)
     return { json: p }

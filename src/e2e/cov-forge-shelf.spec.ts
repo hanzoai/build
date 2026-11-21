@@ -47,7 +47,7 @@ async function shelf(page: Page, seed: Partial<World> = {}) {
     if (path === '/v1/project') return { json: world.projects }
     if (path === '/v1/templates') return { json: { data: world.starters } }
     if (path === '/v1/project/fork') return { status: 201, json: world.forks.shift() ?? { slug: `${b.slug}-2`, name: 'Copy' } }
-    const slug = path.match(/^\/v1\/projects\/([^/]+)$/)?.[1]
+    const slug = path.match(/^\/v1\/project\/([^/]+)$/)?.[1]
     const i = world.projects.findIndex((p) => p.slug === slug)
     if (slug && method === 'PATCH') {
       world.projects[i] = { ...world.projects[i], ...b }

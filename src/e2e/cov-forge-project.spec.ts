@@ -191,7 +191,7 @@ async function studio(page: Page, seed: Partial<World> = {}, who?: Who) {
     }
     if (path === '/v1/platform/apps') return { status: 202, json: world.declared }
     if (path === '/v1/platform/builds') return { json: { builds: world.builds } }
-    const deployed = path.match(/^\/v1\/projects\/([^/]+)\/deployments$/)
+    const deployed = path.match(/^\/v1\/project\/([^/]+)\/deployments$/)
     if (deployed) return { json: world.deployments[deployed[1]!] ?? [] }
     const coding = path.match(/^\/v1\/agent\/coding\/(sess_[0-9a-f]{32})\/(changes|merge)$/)
     if (coding?.[2] === 'changes') return { json: world.changes[coding[1]!] ?? { pull: null } }
