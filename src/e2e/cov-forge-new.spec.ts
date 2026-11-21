@@ -10,6 +10,7 @@ import type { Page } from '@playwright/test'
 import { DAVE, enter, held, MEMBER, serve, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
 import { mounted, went } from './mount.ts'
+import { granted } from './stubs.ts'
 import { ORG, SESSION } from './signed.ts'
 
 const NEXT = `sess_${'c'.repeat(32)}`
@@ -19,6 +20,8 @@ interface World extends Holds {
   machines: Record<string, unknown>[]
   models: string[]
   repos: Record<string, unknown>[]
+  /** What GitHub lists for the org (GET /v1/provider/github/repos). */
+  github: Record<string, unknown>[]
   envs: Record<string, Record<string, unknown>>
   /** What the platform answers each declare with, in order; the last one stays. */
   declared: Record<string, unknown>[]
@@ -40,6 +43,7 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
     ],
     models: ['enso-auto', 'zen5.8', 'zen5.8-coder'],
     repos: [UNIVERSE, SITE],
+    github: [],
     envs: {},
     declared: [],
     builds: [],
@@ -55,6 +59,7 @@ async function desk(page: Page, seed: Partial<World> = {}, who: Who = DAVE, kept
     // hanzoai/ai model_routes.go: `{object, data}`, a row's family and class the gateway's own; no default is marked.
     if (path === '/v1/models') return { json: { object: 'list', data: world.models.map((id) => ({ id, object: 'model', owned_by: 'hanzo', supports_reasoning: true, ...(id.startsWith('enso') ? { name: 'Enso', family: 'enso', class: 'ours' } : {}) })) } }
     if (path === '/v1/git/repos') return { json: { data: world.repos } }
+    if (path === '/v1/provider/github/repos') return { json: { repos: world.github, next: '', total: world.github.length, unread: [], connected: true } }
     const repo = path.match(/^\/v1\/git\/repos\/([^/]+)$/)?.[1]
     if (repo) return { json: world.repos.find((r) => r.name === repo) ?? {} }
     const env = path.match(/^\/v1\/environment\/([^/]+)$/)?.[1]
@@ -428,6 +433,16 @@ test.describe('Add to project', () => {
     await expect(dialog.getByRole('link', { name: /Open the review/ })).toHaveCount(0)
     const origin = new URL(page.url()).origin
     expect(posted(sent, '/v1/platform/apps')[0]?.body).toEqual({ repo: `${origin}/v1/git/${ORG}/gone.git`, ref: 'main', name: 'gone', partOf: 'gone', mode: 'branch' })
+  })
+
+  test('a GitHub row is built from GitHub’s own address, even when the forge holds a codebase of its name', async ({ page }) => {
+    const { sent } = await desk(page, { declared: [declared(null, '')], github: [granted('guided-owner', 'site')] }, DAVE)
+    await page.goto('/')
+    const dialog = await add(page, 'guided-owner\\s*/site')
+    await expect(dialog.getByText('Build guided-owner/site at main', { exact: false })).toBeVisible()
+    await dialog.getByRole('button', { name: 'Add to project' }).click()
+    await expect.poll(() => posted(sent, '/v1/platform/apps').length).toBe(1)
+    expect(posted(sent, '/v1/platform/apps')[0]?.body).toEqual({ repo: 'https://github.com/guided-owner/site', ref: 'main', name: 'site', partOf: 'site', mode: 'branch' })
   })
 
   test('a member’s addition opens a review and ships nothing', async ({ page }) => {
