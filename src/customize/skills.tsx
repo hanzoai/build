@@ -21,6 +21,7 @@ import { active, authored, brand, document, nameOf, remove, tool, write, type Ca
 import { toggle, type Tool } from '../api/tools.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { useLoad } from './load.ts'
+import { Roles } from './roles.tsx'
 import { say } from './say.ts'
 import { Add, Confirm, day, Empty, Failed, Field, FilterPills, Grid, Mark, matches, MenuTrigger, Part, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
 
@@ -172,6 +173,7 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
     return (
       <YStack gap="$3">
         <StatusBanner notice={notice} />
+        {signed && !q.trim() ? <Roles /> : null}
         <Part title={t('From Hanzo')} detail={t('Add one and every run in your organization can use it.')}>
           {shelf.error && !shelf.value ? (
             <Failed error={shelf.error} onRetry={shelf.reload} />

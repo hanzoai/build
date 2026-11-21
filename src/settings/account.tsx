@@ -10,7 +10,6 @@
  * an organization's id are drawn as given.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
-import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
 import { Check, Copy, LogOut } from '@hanzogui/lucide-icons-2'
 import { Button, Input, Textarea } from '@hanzo/ui'
@@ -23,21 +22,8 @@ import { PHOTO, photo, rename } from '../api/profile.ts'
 import { copy } from '../clipboard.ts'
 import { useHost, useTarget } from '../host.tsx'
 import { usePrefs } from '../prefs.tsx'
+import { WORK } from '../roles.ts'
 import { Card, Field, Group, Heading, Note, Row, Soft } from './ui.tsx'
-
-/** What a person may say they work on, each label English and marked (`phrase`), drawn through `t`. */
-export const WORK = [
-  { id: 'engineering', label: phrase('Software engineering') },
-  { id: 'data', label: phrase('Data science') },
-  { id: 'design', label: phrase('Design') },
-  { id: 'product', label: phrase('Product management') },
-  { id: 'research', label: phrase('Research') },
-  { id: 'writing', label: phrase('Writing') },
-  { id: 'education', label: phrase('Education') },
-  { id: 'operations', label: phrase('Operations') },
-  { id: 'marketing', label: phrase('Marketing and sales') },
-  { id: 'other', label: phrase('Something else') },
-]
 
 /** Long enough for real guidance, short enough to sit in the settings document beside everything else. */
 const INSTRUCTIONS = 3000
