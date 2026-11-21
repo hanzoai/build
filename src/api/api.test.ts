@@ -308,6 +308,14 @@ describe('coding', () => {
     await expect(coding.start(T, { prompt: '  ' })).rejects.toMatchObject({ status: 400 })
     expect(seen).toHaveLength(0)
   })
+
+  it('steers a working sandbox run through its own steer, and refuses no words before sending', async () => {
+    const seen = answer(202, { ok: true })
+    await coding.steer(T, 'sess_1', '  use the other endpoint ')
+    expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/coding/sess_1/steer', body: { text: 'use the other endpoint' } })
+    await expect(coding.steer(T, 'sess_1', ' ')).rejects.toMatchObject({ status: 400 })
+    expect(seen).toHaveLength(1)
+  })
 })
 
 describe('sessions', () => {

@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { answer, cards, decode, failure, merge, outcome, said, settled, shell, steps, vendor, who, type Card } from './turn.ts'
+import { answer, cards, decode, failure, followed, merge, outcome, said, settled, shell, steps, vendor, who, type Card } from './turn.ts'
 
 const ev = (seq: number, kind: string, payload: unknown) => ({ id: `e${seq}`, seq, kind, payload })
 const status = (payload: Record<string, unknown>, mode = '') => said({ kind: 'status', payload }, mode)
@@ -210,6 +210,13 @@ describe('answer and settled', () => {
     expect(settled([ev(1, 'status', { status: 'error' })])).toEqual({ settled: true, pushed: false })
     expect(settled([ev(1, 'status', { status: 'stopped', changed: true })])).toEqual({ settled: true, pushed: true })
     expect(settled([ev(1, 'status', { status: 'running' })])).toEqual({ settled: false, pushed: false })
+  })
+
+  it('names the follow-up that carried the run on, and nothing before it starts', () => {
+    expect(followed([ev(1, 'status', { status: 'stopped', changed: true })])).toBe('')
+    expect(followed([ev(2, 'status', { status: 'followed', next: 'sess_2' }), ev(1, 'status', { status: 'stopped' })])).toBe('sess_2')
+    expect(followed([ev(1, 'status', { status: 'followed', error: 'did not start' })])).toBe('')
+    expect(followed([ev(1, 'log', { status: 'followed', next: 'sess_2' })])).toBe('')
   })
 })
 

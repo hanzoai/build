@@ -583,3 +583,14 @@ export function settled(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): Sett
   }
   return out
 }
+
+/** The session of the run that carried this one on (its `followed` status), or ''. */
+export function followed(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): string {
+  let next = ''
+  for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
+    if (e.kind !== 'status') continue
+    const b = decode(e.payload)
+    if (b && typeof b !== 'string' && str(b.status) === 'followed') next = str(b.next)
+  }
+  return next
+}
