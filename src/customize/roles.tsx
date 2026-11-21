@@ -23,8 +23,8 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { active, brand, tool } from '../api/skills.ts'
 import { toggle, type Tool } from '../api/tools.ts'
-import { useHost, useTarget } from '../host.tsx'
-import { usePrefs } from '../prefs.tsx'
+import { useHost, useHosted, useTarget } from '../host.tsx'
+import { usePrefs, type PrefState } from '../prefs.tsx'
 import { recommend, WORK } from '../roles.ts'
 import { useLoad } from './load.ts'
 import { say } from './say.ts'
@@ -35,11 +35,17 @@ interface Notice {
   error?: boolean
 }
 
+/** Drawn only where the builder's host and settings are mounted, so a chat drawn without them draws nothing. */
 export function Roles({ first = false }: { first?: boolean }) {
+  const hosted = useHosted()
+  const state = usePrefs(false)
+  return hosted && state ? <Suggest first={first} state={state} /> : null
+}
+
+function Suggest({ first, state }: { first: boolean; state: PrefState }) {
   const { t } = useI18n()
   const host = useHost()
   const target = useTarget()
-  const state = usePrefs(false)
   const signed = Boolean(host.person)
   const may = signed && host.admin
   const kept = state?.prefs.work ?? ''
@@ -64,7 +70,7 @@ export function Roles({ first = false }: { first?: boolean }) {
   const taken = fresh.filter((e) => !left.has(e.name))
 
   // The first run's card: only a signed-in admin who has said nothing about their work and not put this off.
-  if (!signed || !state) return null
+  if (!signed) return null
   if (first && !said && (!may || kept || state.prefs.roles || shelf.error)) return null
 
   const choose = (id: string) => {

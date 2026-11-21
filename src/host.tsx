@@ -137,6 +137,11 @@ export function useHost(): Host {
   return h
 }
 
+/** The host, or null where none is mounted: a surface that may be drawn without one (the first run's card in Chat). */
+export function useHosted(): Host | null {
+  return useContext(Context)
+}
+
 /** The host's way of showing a page, where one is mounted and has one. The side panel is drawn without a host too (hanzo.team's rooms). */
 export function useBrowse(): Browse | null {
   return useContext(Context)?.browse ?? null
