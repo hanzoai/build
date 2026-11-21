@@ -291,10 +291,17 @@ A repository is optional everywhere: with none, a run works in a new folder (in
 the sandbox, or on a machine), and GitHub can be connected later. On a host that
 has the computer (Hanzo Desktop hands `local`, local.ts), This computer comes
 first: the run works in a folder there and needs no repository, the Folder pill
-reads Auto (the folder used most recently) until another is chosen, Choose
-folder… opens the computer's own dialog, and a computer that opened no folder
-asks for one on the first send. The agent reads, edits and runs in that folder
-only, and what it printed shows under the composer when it ends.
+reads Auto until another is chosen — the folder the ask is about (`route` in
+local.ts: the folder whose name the words say, then the folders it sits in; the
+pill follows the words as they are typed), else the folder used most recently,
+from the folders Hanzo opened and the project folders the host found (`Local.folders`,
+`Local.changed` when they arrive late). Choose folder… opens the computer's own
+dialog, and a computer that opened no folder asks for one on the first send.
+The agent reads, edits and runs in that folder only. What it said shows under the
+composer in words (`plainAnswer`: the folder's path is its name, `~` is "your home
+folder"), what it did only in Developer mode (`Done.process`), and the first run
+says "Setting up Hanzo Dev on this computer…" while the host fetches the agent
+(`run`'s `setup` callback).
 
 **A run.** The transcript as it streams, drawn by what each part is: what the
 agent says as markdown, each command it runs as a card that opens onto its
