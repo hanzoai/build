@@ -25,7 +25,7 @@
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { phrase } from '@hanzo/i18n'
 import { useI18n } from '@hanzo/i18n/react'
-import { CircleDot, Cloud, Code, FolderGit2, FolderOpen, GitBranch, Laptop, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
+import { CircleDot, Cloud, Code, FolderGit2, FolderOpen, GitBranch, Globe, Laptop, LayoutTemplate, Link2, Monitor, Play } from '@hanzogui/lucide-icons-2'
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@hanzo/ui'
 import { Composer, MEASURE, type Command, type Shelf } from '@hanzo/ui/chat'
 import { BranchSelect, ChipSelect, FooterLink, RepoSelect, type Repo as RowRepo } from '@hanzo/ui/product'
@@ -49,9 +49,11 @@ import { asHub, gone, isForge, isHub, settle, type HubRepo } from './choice.ts'
 import { useCached, useKept, usePlaces, useRead } from './data.ts'
 import { useDevMode } from './dev-mode.ts'
 import { takeHandoff } from './handoff.ts'
-import { useHost, useLocal, useTarget } from './host.tsx'
+import { useHost, useLocal, useSite, useTarget } from './host.tsx'
 import { failed, HERE, recent, where, type Folder } from './local.ts'
 import { plainAnswer } from './plain.ts'
+import { useRedesign } from './redesign.tsx'
+import { urlOf } from './site.ts'
 import { level, pacing, useMind } from './mind.ts'
 import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
@@ -212,6 +214,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const [devMode] = useDevMode()
   const { prefs, save: savePrefs } = usePrefs()
   const local = useLocal()
+  const site = useSite()
   const [stored, keep] = useKept<Partial<Kept> | null>(`hanzo.build.new.${host.org ?? 'none'}`, null)
   // What was chosen here, over the person's coding defaults (Settings → Code), over
   // the first run's. Field by field: a codebase or an issue handed over from its own
@@ -306,6 +309,21 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   // The folders found on the computer arrive after the first read.
   const [, folded] = useState(0)
   useEffect(() => local?.changed?.(() => folded((n) => n + 1)), [local])
+  // An address pasted here is offered as a redesign of that site (redesign.tsx): the folder the person chose is built in, Auto makes a new one.
+  const redesign = useRedesign({
+    local,
+    site,
+    here,
+    draft,
+    chosen: folderAt.auto ? null : folderAt.folder,
+    carried: carry.text,
+    devMode,
+    started: () => {
+      setDraft('')
+      setFiles([])
+      setNote('')
+    },
+  })
   // Why this mode cannot run where it is sent: a plan is the sandbox's, on a machine and on this computer alike.
   const refused = here ? (mode === 'plan' ? t('A plan runs in the cloud workspace. On this computer, switch to Build.') : '') : unhonoured(mode, place.id, t)
 
@@ -389,6 +407,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
 
   // The composer sends only a draft with words in it, and not while a send is out.
   const send = async (said: string = draft) => {
+    // A site's address, alone or asked to be redesigned, starts a redesign (redesign.tsx); any other ask is a run.
+    const asked = redesign.can ? urlOf(said) : null
+    if (asked) return void (await redesign.start(asked))
     // This computer needs no sign-in to the platform and no repository: the agent runs in the folder, here.
     if (here && local) return void (await sendHere(said))
     if (!signed) {
@@ -453,7 +474,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
    * composer when it ends, and what it did only in Developer mode.
    */
   const sendHere = async (said: string) => {
-    if (!local || busy) return
+    if (!local || busy || redesign.busy) return
     if (refused) {
       setNote(refused)
       return
@@ -770,6 +791,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     { id: 'projects', label: t('Open projects'), icon: <Code size={14} color="$soft" />, run: screen('projects') },
     { id: 'sync', label: t('Connect GitHub…'), icon: <GitBranch size={14} color="$soft" />, run: screen('sync') },
     { id: 'address', label: t('Use a git URL'), icon: <Link2 size={14} color="$soft" />, run: () => setGiving(true) },
+    ...(redesign.can ? [{ id: 'redesign', label: t('Redesign a site…'), icon: <Globe size={14} color="$soft" />, run: redesign.ask }] : []),
   ]
 
   // The `+` menu's Connectors shelf gives power users 1-click access to attach a GitHub project even when the composer bar is kept clean.
@@ -903,13 +925,14 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                   {note || refused || mind.note}
                 </SizableText>
               ) : null}
+              {redesign.view}
               {ran ? <RanHere ran={ran} setup={fetched} devMode={devMode} /> : null}
               <Composer
                 column
                 value={draft}
                 onChange={setDraft}
                 onSend={() => void send()}
-                busy={busy}
+                busy={busy || redesign.busy}
                 placeholder={t('Ask, build, or run anything…')}
                 label={t('Describe a task or ask a question')}
                 plus={{

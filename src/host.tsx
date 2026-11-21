@@ -13,6 +13,7 @@ import type { Cast } from './api/agents.ts'
 import type { Target } from './api/call.ts'
 import type { Theme } from './api/pref.ts'
 import type { Local } from './local.ts'
+import type { Site } from './site.ts'
 
 export interface Person {
   name: string
@@ -123,6 +124,11 @@ export interface Host {
    * offers This computer with Auto picking the folder used last. A browser page has no folder of its own: absent.
    */
   local?: Local
+  /**
+   * Opening a site, saving a copy of it for the agent, and serving its redesign live in the person's browser (site.ts):
+   * Hanzo Desktop can, so New on This computer offers to redesign a site from its address. A browser page cannot: absent.
+   */
+  site?: Site
 }
 
 const Context = createContext<Host | null>(null)
@@ -150,6 +156,11 @@ export function useBrowse(): Browse | null {
 /** The host's computer and its folders, where the host runs on one (Hanzo Desktop). */
 export function useLocal(): Local | null {
   return useContext(Context)?.local ?? null
+}
+
+/** The host's way of redesigning a site, where the host runs on a computer that can (Hanzo Desktop). */
+export function useSite(): Site | null {
+  return useContext(Context)?.site ?? null
 }
 
 /** The host's browser, where one is mounted and has one. */

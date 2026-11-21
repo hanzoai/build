@@ -17,6 +17,8 @@
  *   ?folders=a,b  instead of f1..fn: the computer's folders by name, the last one used most recently
  *   ?found=a,b    folders the computer finds a moment after the first read (it says so through `changed`), never opened in Hanzo
  *   ?setup=1      the first run fetches the agent: it says 40% and waits for "Finish setup" before it says 100% and runs
+ *   ?site=<mode>  the host can redesign a site (Hanzo Desktop's `site`; needs ?local): `ok`, or `fail` where the site will
+ *                 not open. Every step it is asked for is written out under the sidebar (Redesign steps)
  */
 import '@hanzo/font/css'
 import '@hanzo/ui/theme.css'
@@ -27,7 +29,7 @@ import { Sidebar, SidebarItem } from '@hanzo/ui/chat'
 import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import { administers, Builder, DevSection, Grip, type Folder, type Host, type Local } from '../index.ts'
+import { administers, Builder, DevSection, Grip, type Folder, type Host, type Local, type Site } from '../index.ts'
 
 const ORG = 'acme'
 const bearer = () => window.localStorage.getItem('hanzo_iam_access_token')
@@ -68,8 +70,33 @@ function computer(n: number, ran: (line: string) => void, names: string[], found
         })
         fetching?.(100)
       }
-      return { ok: true, output: `Edited README.md in ${folder}`, process: `exec bash -lc 'ls ~' in ${folder}\n succeeded in 12ms` }
+      return {
+        ok: true,
+        output: prompt.startsWith('Redesign the website') ? 'The page is cluttered. I rebuilt it around one clear call to action.' : `Edited README.md in ${folder}`,
+        process: `exec bash -lc 'ls ~' in ${folder}\n succeeded in 12ms`,
+      }
     },
+  }
+}
+
+/** A host that can redesign a site, as Hanzo Desktop's `site` answers: `fail` is a site that will not open. */
+function website(mode: string, said: (line: string) => void): Site {
+  return {
+    folder: async (name) => {
+      said(`folder ${name}`)
+      return { path: `/Users/dave/Documents/Hanzo/${name}`, name }
+    },
+    capture: async (url, folder) => {
+      said(`capture ${url} -> ${folder}`)
+      if (mode === 'fail') throw new Error('The site took too long to answer.')
+      return { title: 'Acme Plumbing', url, files: ['page.html', 'text.md', 'style-1.css'], screenshot: false }
+    },
+    preview: async (folder) => {
+      said(`preview ${folder}`)
+      return { url: 'http://127.0.0.1:9933/' }
+    },
+    stop: async (folder) => said(`stop ${folder}`),
+    show: async (url) => said(`show ${url}`),
   }
 }
 
@@ -87,6 +114,8 @@ function Page() {
       ? computer(Number(q.get('local')) || 0, (line) => setRan((r) => [...r, line]), (q.get('folders') ?? '').split(',').filter(Boolean), (q.get('found') ?? '').split(',').filter(Boolean), setup)
       : undefined,
   )
+  const [steps, setSteps] = useState<string[]>([])
+  const [site] = useState(() => (q.has('site') ? website(q.get('site') ?? 'ok', (line) => setSteps((s) => [...s, line])) : undefined))
   const token = bearer()
   const host: Host = {
     name: 'Hanzo',
@@ -103,6 +132,7 @@ function Page() {
     links: { github: '/dev/-/sync', customize: '/dev/-/customize', settings: '/settings', home: '/' },
     open: () => {},
     ...(local ? { local } : {}),
+    ...(site ? { site } : {}),
   }
   const label = q.get('label')
   if (shut)
@@ -134,6 +164,9 @@ function Page() {
           {ran.join(' | ')}
         </SizableText>
         {setup ? <SidebarItem onPress={() => setup.finish()}>Finish setup</SidebarItem> : null}
+        <SizableText size="$1" color="$soft" aria-label="Redesign steps">
+          {steps.join(' | ')}
+        </SizableText>
       </Sidebar>
       <Builder host={host} rail={false} />
     </XStack>
