@@ -40,6 +40,8 @@ export interface Entry {
   description: string
   /** The product it belongs to. */
   product: string
+  /** The kinds of work (`roles.ts` WORK) the catalogue recommends it for. */
+  works: string[]
 }
 
 export interface Catalogue {
@@ -82,7 +84,7 @@ export function catalogue(raw: unknown): Catalogue {
     skills: rows(o.skills)
       .map((r) => {
         const e = obj(r)
-        return { name: str(e.name), description: str(e.description), product: str(e.service) }
+        return { name: str(e.name), description: str(e.description), product: str(e.service), works: rows(e.works).map(str).filter(Boolean) }
       })
       .filter((e) => e.name),
     products: rows(o.products)
