@@ -19,7 +19,7 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Check } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
-import { useEffect, useMemo, useState } from 'react'
+import { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { active, brand, tool } from '../api/skills.ts'
 import { toggle, type Tool } from '../api/tools.ts'
@@ -35,11 +35,26 @@ interface Notice {
   error?: boolean
 }
 
+/** A card that suggests and never gets in the way: one that cannot be drawn leaves the page as it was. */
+class Quiet extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  render() {
+    return this.state.failed ? null : this.props.children
+  }
+}
+
 /** Drawn only where the builder's host and settings are mounted, so a chat drawn without them draws nothing. */
 export function Roles({ first = false }: { first?: boolean }) {
   const hosted = useHosted()
   const state = usePrefs(false)
-  return hosted && state ? <Suggest first={first} state={state} /> : null
+  return hosted && state ? (
+    <Quiet>
+      <Suggest first={first} state={state} />
+    </Quiet>
+  ) : null
 }
 
 function Suggest({ first, state }: { first: boolean; state: PrefState }) {
