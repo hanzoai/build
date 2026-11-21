@@ -256,6 +256,11 @@ export async function stop(t: Target, id: string, why = 'Stopped from the builde
   await call<unknown>(t, 'POST', `/v1/agent/sessions/${seg(id)}/stop`, { message: why })
 }
 
+/** A run, deleted for good: its record and every link it was shared by. */
+export async function remove(t: Target, id: string): Promise<void> {
+  await call<unknown>(t, 'DELETE', `/v1/agent/sessions/${seg(id)}`)
+}
+
 export async function pause(t: Target, id: string): Promise<void> {
   await call<unknown>(t, 'POST', `/v1/agent/sessions/${seg(id)}/pause`, {})
 }

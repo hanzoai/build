@@ -70,6 +70,51 @@ test('a verdict that does not land is taken back and says why', async ({ page: p
   await expect(reply.getByRole('button', { name: 'Good result' })).toHaveAttribute('aria-pressed', 'false')
 })
 
+test('the run’s menu archives it at once, and deletes it only after a question in the middle of the page', async ({ page: p }, info) => {
+  const { sent } = await rig(p, { events: told() })
+  await p.goto(`/${SESSION}`)
+  const title = p.getByRole('button', { name: 'Manage this run' })
+  await expect(title.getByRole('heading', { name: 'universe: Add the widget' })).toBeVisible({ timeout: 45_000 })
+  const marks = () => p.evaluate(() => JSON.parse(localStorage.getItem('hanzo.dev.runs.meta') ?? '{}'))
+  const gone = () => to(sent, 'DELETE', `/v1/agent/sessions/${SESSION}`).length
+
+  // Delete asks first, names the run, and sits in the middle of the page; Cancel leaves everything as it was.
+  await title.click()
+  await p.getByRole('menuitem', { name: 'Delete' }).click()
+  const ask = p.locator('[data-slot="dialog-content"]')
+  await expect(ask.getByText('Delete this run?')).toBeVisible()
+  await expect(ask.getByText(/“universe: Add the widget” is deleted for good|“Add the widget” is deleted for good/)).toBeVisible()
+  const box = (await ask.boundingBox())!
+  const view = p.viewportSize()!
+  expect(Math.abs(box.x + box.width / 2 - view.width / 2), 'centred across').toBeLessThan(8)
+  expect(Math.abs(box.y + box.height / 2 - view.height / 2), 'centred down').toBeLessThan(80)
+  await p.screenshot({ path: info.outputPath('delete.png') })
+  await ask.getByRole('button', { name: 'Cancel' }).click()
+  await expect(ask).toHaveCount(0)
+  expect(gone()).toBe(0)
+  expect(await marks()).toEqual({})
+
+  // Confirmed, it is deleted on the platform, marked deleted for every list, and the page leaves it.
+  await title.click()
+  await p.getByRole('menuitem', { name: 'Delete' }).click()
+  await ask.getByRole('button', { name: 'Delete' }).click()
+  await expect.poll(gone).toBe(1)
+  await expect.poll(marks).toEqual({ [SESSION]: { deleted: true } })
+  await expect(p).not.toHaveURL(new RegExp(SESSION))
+})
+
+test('Archive marks the run archived for every list and leaves it, deleting nothing', async ({ page: p }) => {
+  const { sent } = await rig(p, { events: told() })
+  await p.goto(`/${SESSION}`)
+  const title = p.getByRole('button', { name: 'Manage this run' })
+  await expect(title.getByRole('heading', { name: 'universe: Add the widget' })).toBeVisible({ timeout: 45_000 })
+  await title.click()
+  await p.getByRole('menuitem', { name: 'Archive' }).click()
+  await expect(p).not.toHaveURL(new RegExp(SESSION))
+  expect(await p.evaluate(() => JSON.parse(localStorage.getItem('hanzo.dev.runs.meta') ?? '{}'))).toEqual({ [SESSION]: { archived: true } })
+  expect(to(sent, 'DELETE', `/v1/agent/sessions/${SESSION}`)).toHaveLength(0)
+})
+
 test('the title is the run’s menu, and Share opens its story and copies its link', async ({ page: p }, info) => {
   await browser(p, { clipboard: 'keeps' })
   const { sent } = await rig(p, { events: told(), record: { ...finished(), project: 'widgets' } })
