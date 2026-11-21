@@ -265,6 +265,15 @@ describe('cards', () => {
     expect(cards([ev(1, 'tool-call', { step: 'exit', message: 'exit 0' })])).toEqual([])
   })
 
+  it('says a turn the platform refused: its record carries the reason and no status', () => {
+    const refused = ev(2, 'log', { runId: 'run_1', error: 'metering: insufficient balance', model: '', status: '', durationMs: 0 })
+    expect(bare(cards([ev(1, 'message', { role: 'user', text: 'Make a page' }), refused]))).toEqual([
+      { kind: 'said', who: 'person', text: 'Make a page' },
+      { kind: 'note', text: 'Your balance is out of credit. Add credit, then try again.' },
+      { kind: 'step', name: 'Error', detail: '', output: 'metering: insufficient balance', ran: 'error' },
+    ])
+  })
+
   it('never draws a log line: raw output is the Terminal’s', () => {
     expect(cards([ev(1, 'log', 'codex\nhi\n'), ev(2, 'log', { text: 'there\n' }), ev(3, 'log', {})])).toEqual([])
   })
