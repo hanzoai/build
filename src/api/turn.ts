@@ -584,8 +584,9 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
         break
       }
       case 'log': {
-        // A conversation's turn that failed says why on its record of the run.
-        if (b && str(b.runId) && str(b.status) === 'error') failed(str(b.error))
+        // A conversation's turn that failed says why on its record of the run. A turn the platform refuses
+        // before it starts (no balance) carries the reason and no status, and is a failure all the same.
+        if (b && str(b.runId) && (str(b.status) === 'error' || str(b.error))) failed(str(b.error))
         break
       }
     }
