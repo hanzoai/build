@@ -1,8 +1,9 @@
 /**
  * This computer (hanzo-inc/app issues 309 and 310): on a host that has the computer, New offers it first, with Auto
- * picking the folder used last; a run there needs no repository and no GitHub, and goes to the host's own runner,
- * never to the platform. Driven through the host page (/src/e2e/host.html), whose `?local=<n>` hands the builder a
- * computer with n folders.
+ * picking the folder the ask is about, else the one used last; a run there needs no repository and no GitHub, and
+ * goes to the host's own runner, never to the platform. What the agent said is drawn in words, and what it did only in
+ * Developer mode. Driven through the host page (/src/e2e/host.html), whose `?local=<n>` hands the builder a computer
+ * with n folders.
  */
 import type { Page } from '@playwright/test'
 
@@ -37,7 +38,7 @@ test.describe('This computer', () => {
     await ask(page).press('Enter')
     await expect(runs(page)).toHaveText('/Users/dave/f2 <- Fix the typo in the README')
     await expect(page.locator('[data-slot="ran-here"]')).toContainText('Done in f2')
-    await expect(page.locator('[data-slot="ran-here"]')).toContainText('Edited README.md in /Users/dave/f2')
+    await expect(page.locator('[data-slot="ran-here"]')).toContainText('Edited README.md in f2')
     await expect(ask(page)).toHaveValue('')
     // Nothing went to the platform: the run is the computer's.
     expect(platform(sent)).toHaveLength(0)
@@ -85,5 +86,66 @@ test.describe('This computer', () => {
     await page.goto(HOST)
     await chip(page, 'Where the run runs').click({ timeout: 45_000 })
     await expect(list(page, 'Where the run runs').getByRole('option', { name: /This computer/ })).toHaveCount(0)
+  })
+
+  test('Auto follows the ask: the pill names the folder the words are about, live, and Send goes there', async ({ page }) => {
+    const sent = await quiet(page)
+    await page.goto(`${HOST}?local=0&folders=shop,docs,blog`)
+    // Nothing typed: the folder used last.
+    await expect(chip(page, 'Folder')).toHaveAccessibleName('Folder: Auto · blog', { timeout: 45_000 })
+    await ask(page).fill('Fix the checkout button in shop')
+    await expect(chip(page, 'Folder')).toHaveAccessibleName('Folder: Auto · shop')
+    await ask(page).fill('Fix the typo in the docs')
+    await expect(chip(page, 'Folder')).toHaveAccessibleName('Folder: Auto · docs')
+    await ask(page).press('Enter')
+    await expect(runs(page)).toHaveText('/Users/dave/docs <- Fix the typo in the docs')
+    // A folder the person chose is not moved by the words.
+    await chip(page, 'Folder').click()
+    await list(page, 'Folder').getByRole('option', { name: /^shop/ }).click()
+    await ask(page).fill('Write a post on my blog')
+    await expect(chip(page, 'Folder')).toHaveAccessibleName('Folder: shop')
+    expect(platform(sent)).toHaveLength(0)
+  })
+
+  test('the folders the computer finds later are offered, and Auto can pick one the person never opened', async ({ page }) => {
+    await quiet(page)
+    await page.goto(`${HOST}?local=0&folders=blog&found=portfolio`)
+    await expect(chip(page, 'Folder')).toHaveAccessibleName('Folder: Auto · blog', { timeout: 45_000 })
+    await ask(page).fill('Redo my portfolio homepage')
+    await expect(chip(page, 'Folder')).toHaveAccessibleName('Folder: Auto · portfolio')
+    await ask(page).press('Enter')
+    await expect(runs(page)).toHaveText('/Users/dave/portfolio <- Redo my portfolio homepage')
+  })
+
+  test('the answer is in words, and the process only in Developer mode', async ({ page }) => {
+    await quiet(page)
+    await page.goto(`${HOST}?local=1`)
+    await ask(page).fill('Add a checkout page')
+    await ask(page).press('Enter')
+    const here = page.locator('[data-slot="ran-here"]')
+    await expect(here).toContainText('Done in f1', { timeout: 45_000 })
+    await expect(here.locator('[data-slot="ran-answer"]')).toHaveText('Edited README.md in f1')
+    await expect(here).not.toContainText('bash -lc')
+    await expect(here).not.toContainText('~')
+    await expect(here.locator('[data-slot="ran-process"]')).toHaveCount(0)
+    // Developer mode shows what the agent did, as it ran it.
+    await page.evaluate(() => {
+      window.localStorage.setItem('hanzo.dev_mode', 'true')
+      window.dispatchEvent(new CustomEvent('hanzo:dev-mode', { detail: { enabled: true } }))
+    })
+    await expect(here.locator('[data-slot="ran-process"]')).toContainText("exec bash -lc 'ls ~' in /Users/dave/f1")
+  })
+
+  test('the first run says it is setting Hanzo Dev up, then runs', async ({ page }) => {
+    await quiet(page)
+    await page.goto(`${HOST}?local=1&setup=1`)
+    await ask(page).fill('Add a checkout page')
+    await ask(page).press('Enter')
+    const here = page.locator('[data-slot="ran-here"]')
+    await expect(here.locator('[data-slot="ran-setup"]')).toHaveText('Setting up Hanzo Dev on this computer… 40%', { timeout: 45_000 })
+    await expect(here).toContainText('Working in f1…')
+    await page.getByRole('button', { name: 'Finish setup' }).click()
+    await expect(here).toContainText('Done in f1')
+    await expect(here.locator('[data-slot="ran-setup"]')).toHaveCount(0)
   })
 })
