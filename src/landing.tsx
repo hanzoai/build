@@ -67,7 +67,7 @@ import { book, hand, Suggestions, taken, useSuggestions } from './suggestions.ts
 import type { Act } from './suggest.ts'
 import { want } from './library.tsx'
 import { carrying, compose, pick, read as readFiles, type Attached } from './tools.tsx'
-import { asked as critiqued, attach as asFile, critique, local as onThisComputer, named as pagesIn, read as readPage, shown as shownPage } from './page.ts'
+import { about, asked as critiqued, attach as asFile, critique, local as onThisComputer, named as pagesIn, read as readPage, shown as shownPage } from './page.ts'
 import { useEar, useSpoken } from './voice.ts'
 
 /** One vocabulary for the mode, on New and in a workspace: English, marked (`phrase`), drawn through `t`. */
@@ -462,7 +462,8 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     setNote('')
     try {
       // A page the ask names is read first, and rides it: a run never starts on a page that could not be read.
-      const pages = await pagesFor(said)
+      // Only an ask about its pages reads them (page.ts `about`); any other link is words for the agent.
+      const pages = about(said) ? await pagesFor(said) : { files: [], missed: '' }
       if (!pages) return
       // What the plugins that are on add: words for the run, or an answer of their own.
       const prepped = carry.preparing ? await carry.prep({ text: said.trim(), files: [], thread: '' }, new AbortController().signal) : {}
@@ -526,7 +527,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     // A public page is read for the run while someone is signed in; an address on this computer (a localhost
     // server) is the agent's own to open, and a signed-out run reads nothing from the platform.
     setBusy(true)
-    const pages = (signed ? await pagesFor(ask, (u) => !onThisComputer(hostOf(u)), false) : null) ?? { files: [], missed: '' }
+    const pages = (signed && about(ask) ? await pagesFor(ask, (u) => !onThisComputer(hostOf(u)), false) : null) ?? { files: [], missed: '' }
     const prompt = [carry.text, compose(ask, [...files, ...pages.files])].filter(Boolean).join('\n\n')
     setBusy(true)
     setNote(pages.missed ? t('{why} The run goes on without that page.', { why: pages.missed }) : '')

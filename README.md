@@ -313,9 +313,11 @@ a normal run.
 Everywhere else (a browser page, the cloud workspace, a machine), a web page's
 address in the ask (page.ts, hanzo-inc/app issue 312) offers
 **Critique and redesign** (critique it, build a redesign, keep its dev server on
-localhost running for the Preview), and on send the page is read by the platform's
-guarded reader (`POST /v1/crawl`) and rides the ask as one more attached file, said
-to be data. A page that cannot be read (private or local, a sign-in, 404, a file,
+localhost running for the Preview). An ask about its page (that ask, the address
+alone, or words like redesign, critique, "based on", "like <address>"; `about`) has
+the page read on send by the platform's guarded reader (`POST /v1/crawl`), and it
+rides the ask as one more attached file, said to be data; a link mentioned in passing
+stays words for the agent. A page that cannot be read (private or local, a sign-in, 404, a file,
 too slow, no text) is one sentence under the composer and no run starts. On This
 computer a localhost address is left to the agent, a page that cannot be read is
 said while the run goes on without it, and where the host redesigns a site itself

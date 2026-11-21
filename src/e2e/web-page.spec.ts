@@ -74,6 +74,16 @@ test('a page that cannot be read is said, and no run starts', async ({ page }, i
   await expect(ask(page)).toHaveValue('Redesign http://192.168.1.20/')
 })
 
+test('a link an ask only mentions is not read, and the run starts as it is', async ({ page }) => {
+  const sent = await platform(page)
+  await page.goto('/')
+  await ask(page).fill('Link the footer to https://acme.test/team', { timeout: 45_000 })
+  await ask(page).press('Enter')
+  await expect(page).toHaveURL(new RegExp(`/${SESSION}$`))
+  expect(crawls(sent)).toEqual([])
+  expect((turns(sent)[0]!.body as { input: string }).input).toBe('Link the footer to https://acme.test/team')
+})
+
 test('on This computer a public page is read for the run, and a localhost address is the agent’s own', async ({ page }) => {
   // Nothing kept: New starts on This computer, as a host that has it opens.
   const sent = await platform(page, {})
@@ -91,9 +101,9 @@ test('on This computer a page that cannot be read does not stop the run: it goes
   const sent = await platform(page, {})
   await page.goto('/src/e2e/host.html?local=1')
   await expect(page.getByRole('button', { name: /^Where the run runs: / })).toHaveAccessibleName('Where the run runs: This computer', { timeout: 45_000 })
-  await ask(page).fill('What does https://acme.test/team say about hiring?')
+  await ask(page).fill('Review https://acme.test/team and list what to fix')
   await ask(page).press('Enter')
-  await expect(page.getByLabel('Runs on this computer')).toHaveText('/Users/dave/f1 <- What does https://acme.test/team say about hiring?')
+  await expect(page.getByLabel('Runs on this computer')).toHaveText('/Users/dave/f1 <- Review https://acme.test/team and list what to fix')
   await expect(page.getByRole('status').first()).toContainText('acme.test needs a sign-in or blocks readers (HTTP 403), so Hanzo can’t read it. Use a public page. The run goes on without that page.')
   expect(crawls(sent)).toEqual(['https://acme.test/team'])
 })

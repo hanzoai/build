@@ -208,3 +208,23 @@ export function critique(url: string): string {
 
 /** Whether a draft already is the critique for its page. */
 export const asked = (draft: string): boolean => /^critique and redesign /i.test(draft.trim())
+
+/**
+ * What an ask wants of a page it names, in its other words: to remake it, judge it, or build from it
+ * (`redesign acme.com`, `what do you think of …`, `a landing page like acme.com`). A link mentioned in passing
+ * (`call the API at …`, `link the footer to …`) asks nothing of the page.
+ */
+const INTENT =
+  /\b(?:re-?design|re-?build|re-?make|re-?vamp|re-?style|re-?work|critique|review|audit|improve|moderni[sz]e|refresh|clone|inspired by|based on|what do you think)\b|\b(?:from|like|of|about)\s+(?:the\s+|this\s+|that\s+)?(?:(?:web\s*)?page\s+|site\s+|website\s+)?LINK\b/i
+
+/**
+ * Whether an ask is about the pages it names, so they are read before the run: the Critique and redesign ask, an
+ * address alone, or words that ask something of the page (`INTENT`). Any other link stays words for the agent: a
+ * page is never read, metered and attached because an ask happened to mention it, and a site that turns readers
+ * away never stops a run that did not need it.
+ */
+export function about(ask: string): boolean {
+  if (!named(ask).length) return false
+  const t = ask.trim()
+  return asked(t) || !/\s/.test(t) || INTENT.test(t.replace(LINK, ' LINK '))
+}
