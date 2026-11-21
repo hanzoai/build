@@ -1,25 +1,14 @@
 /**
- * Skills for a person's work: pick what you do, see the skills that suit it,
- * add them all in one click or leave some out first.
- *
- * It stands in two places. In Customize › Skills it is always there, for anyone
- * who wants it. As the first run's card (`first`) it asks once, only a person
- * who has not said what they work on and has not put it off, and goes away when
- * they add the skills or say not now: the work is kept on the account
- * (`Prefs.work`, the one Settings › Account holds) and so is the answer
- * (`Prefs.roles`), so it follows them to every device and never returns.
- *
- * Adding a skill switches it on for the org (`toggle`), which is an org admin's
- * to do; a member reads what is recommended and is told who adds it.
- *
- * Its words are the reader's language (@hanzo/i18n `t`); a skill's name and
- * description are the catalogue's, drawn as given.
+ * Skills for a person's work: pick what you do, see the skills that suit it, add them all in one
+ * click or leave some out first. In Customize > Skills it is always there; as the first run's card
+ * (`first`) it asks once, and the answer (`Prefs.work`, `Prefs.roles`) follows the account. Adding a
+ * skill switches it on for the org, which is an org admin's to do; a member reads what is recommended.
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { Check } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
-import { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { active, brand, tool } from '../api/skills.ts'
 import { toggle, type Tool } from '../api/tools.ts'
@@ -35,26 +24,11 @@ interface Notice {
   error?: boolean
 }
 
-/** A card that suggests and never gets in the way: one that cannot be drawn leaves the page as it was. */
-class Quiet extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false }
-  static getDerivedStateFromError() {
-    return { failed: true }
-  }
-  render() {
-    return this.state.failed ? null : this.props.children
-  }
-}
-
 /** Drawn only where the builder's host and settings are mounted, so a chat drawn without them draws nothing. */
 export function Roles({ first = false }: { first?: boolean }) {
   const hosted = useHosted()
   const state = usePrefs(false)
-  return hosted && state ? (
-    <Quiet>
-      <Suggest first={first} state={state} />
-    </Quiet>
-  ) : null
+  return hosted && state ? <Suggest first={first} state={state} /> : null
 }
 
 function Suggest({ first, state }: { first: boolean; state: PrefState }) {
