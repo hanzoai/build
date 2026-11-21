@@ -100,11 +100,11 @@ describe('skills', () => {
 
   it('reads the brand catalogue and a SKILL.md without a bearer', async () => {
     let seen = answer(200, {
-      skills: [{ name: 'git_repos', description: 'List repositories', service: 'git' }, { description: 'nameless' }],
+      skills: [{ name: 'git_repos', description: 'List repositories', service: 'git', works: ['engineering'] }, { description: 'nameless' }],
       products: [{ name: 'git', path: '_git/index.json', skill_count: 4 }],
     })
     expect(await skills.brand(T)).toEqual({
-      skills: [{ name: 'git_repos', description: 'List repositories', product: 'git' }],
+      skills: [{ name: 'git_repos', description: 'List repositories', product: 'git', works: ['engineering'] }],
       products: [{ name: 'git', count: 4 }],
     })
     expect(seen[0].url).toBe('https://api.hanzo.ai/.well-known/agent-skills/index.json')

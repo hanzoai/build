@@ -1,45 +1,34 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Catalogue } from './api/skills.ts'
-import { MOST, RECOMMENDED, recommend, WORK } from './roles.ts'
+import { catalogue, type Catalogue } from './api/skills.ts'
+import { MOST, recommend, WORK } from './roles.ts'
 
-const every = (names: readonly string[]): Catalogue => ({
-  skills: names.map((name) => ({ name, description: `What ${name} does`, product: name.split('_')[0]! })),
+const shelf = (rows: [name: string, works: string[]][]): Catalogue => ({
+  skills: rows.map(([name, works]) => ({ name, description: `What ${name} does`, product: name.split('_')[0]!, works })),
   products: [],
 })
 
 describe('the skills a work recommends', () => {
-  it('names a list for every work the account offers, and none for "something else"', () => {
-    for (const w of WORK) expect(w.id in RECOMMENDED, w.id).toBe(w.id !== 'other')
-    expect(Object.keys(RECOMMENDED).every((id) => WORK.some((w) => w.id === id))).toBe(true)
+  it('reads the works a catalogue entry names, and none when it names none', () => {
+    const read = catalogue({ skills: [{ name: 'a_b', service: 'a', works: ['data', 'research'] }, { name: 'c_d', service: 'c' }] })
+    expect(read.skills.map((e) => e.works)).toEqual([['data', 'research'], []])
   })
 
-  it('keeps each list within what one click can sensibly add, and free of repeats', () => {
-    for (const [id, names] of Object.entries(RECOMMENDED)) {
-      expect(names.length, id).toBeLessThanOrEqual(MOST)
-      expect(new Set(names).size, id).toBe(names.length)
-    }
+  it('offers the entries that name the work, in catalogue order', () => {
+    const all = shelf([['a_x', ['data']], ['b_y', ['design']], ['c_z', ['data', 'design']]])
+    expect(recommend('data', all).map((e) => e.name)).toEqual(['a_x', 'c_z'])
+    expect(recommend('design', all)[0]).toMatchObject({ name: 'b_y', description: 'What b_y does', product: 'b' })
   })
 
-  it('offers the catalogue entries of the work, in the order the list gives them', () => {
-    const all = every(Object.values(RECOMMENDED).flat())
-    expect(recommend('marketing', all).map((e) => e.name)).toEqual([...RECOMMENDED.marketing!])
-    expect(recommend('marketing', all)[0]).toMatchObject({ description: 'What marketing_summary does', product: 'marketing' })
+  it('keeps one click within what can sensibly be added', () => {
+    const many = shelf(Array.from({ length: MOST + 5 }, (_, i): [string, string[]] => [`s_${i}`, ['data']]))
+    expect(recommend('data', many)).toHaveLength(MOST)
   })
 
-  it('leaves out a skill the catalogue no longer serves, rather than offering what cannot be added', () => {
-    const all = every(RECOMMENDED.education!.filter((n) => n !== 'knowledge_graph'))
-    const names = recommend('education', all).map((e) => e.name)
-    expect(names).not.toContain('knowledge_graph')
-    expect(names).toEqual(RECOMMENDED.education!.filter((n) => n !== 'knowledge_graph'))
-  })
-
-  it('offers nothing for no work, an unknown one, "something else", or before the catalogue is read', () => {
-    const all = every(Object.values(RECOMMENDED).flat())
-    expect(recommend(undefined, all)).toEqual([])
-    expect(recommend('', all)).toEqual([])
-    expect(recommend('astronaut', all)).toEqual([])
-    expect(recommend('other', all)).toEqual([])
-    expect(recommend('marketing', null)).toEqual([])
+  it('offers nothing for no work, one no entry names, "something else", or before the catalogue is read', () => {
+    const all = shelf([['a_x', ['data']]])
+    expect(WORK.some((w) => w.id === 'other')).toBe(true)
+    for (const work of [undefined, '', 'astronaut', 'other']) expect(recommend(work, all)).toEqual([])
+    expect(recommend('data', null)).toEqual([])
   })
 })
