@@ -23,6 +23,7 @@ import { useHost, useTarget } from './host.tsx'
 import { path } from './route.ts'
 import { AddCard } from './settings/card.tsx'
 import { day } from './settings/ui.tsx'
+import { Confirm } from './ask.tsx'
 
 type Term = 'month' | 'year'
 
@@ -354,38 +355,26 @@ export function Plans() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={leaving} onOpenChange={(o) => !working && setLeaving(o)}>
-        <DialogContent maxW={420} showCloseButton={false} gap="$3">
-          <DialogTitle>{t('Switch to the free plan?')}</DialogTitle>
-          {on ? (
-            <YStack gap="$3">
-              <SizableText size="$2" color="$soft">
-                {day(on.ends)
-                  ? t('{plan} stays on until {date}, and nothing is charged after that.', { plan: on.name, date: day(on.ends) })
-                  : t('{plan} stays on until the end of this period, and nothing is charged after that.', { plan: on.name })}
-              </SizableText>
-              <XStack gap="$2" justify="flex-end">
-                <Button size="sm" variant="ghost" disabled={working} onPress={() => setLeaving(false)}>
-                  {t('Keep {plan}', { plan: on.name })}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={working}
-                  onPress={() =>
-                    void act(async () => {
-                      await cancel(target, on.id)
-                      return t('{plan} ends on {date}', { plan: on.name, date: day(on.ends) })
-                    })
-                  }
-                >
-                  {working ? t('Switching…') : t('Switch')}
-                </Button>
-              </XStack>
-            </YStack>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <Confirm
+        open={leaving && Boolean(on)}
+        onOpenChange={(o) => !working && setLeaving(o)}
+        title={t('Switch to the free plan?')}
+        says={
+          !on
+            ? ''
+            : day(on.ends)
+              ? t('{plan} stays on until {date}, and nothing is charged after that.', { plan: on.name, date: day(on.ends) })
+              : t('{plan} stays on until the end of this period, and nothing is charged after that.', { plan: on.name })
+        }
+        act={t('Switch')}
+        no={on ? t('Keep {plan}', { plan: on.name }) : undefined}
+        run={() =>
+          act(async () => {
+            await cancel(target, on!.id)
+            return t('{plan} ends on {date}', { plan: on!.name, date: day(on!.ends) })
+          })
+        }
+      />
 
       <AddCard
         open={adding}

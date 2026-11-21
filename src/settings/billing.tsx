@@ -44,6 +44,7 @@ import { path } from '../route.ts'
 import { AddCard } from './card.tsx'
 import { Credits } from './credits.tsx'
 import { Card, day, Field, Group, Heading, Note, Row, Soft } from './ui.tsx'
+import { Confirm } from '../ask.tsx'
 
 export function Billing() {
   const { t } = useI18n()
@@ -378,7 +379,7 @@ export function Billing() {
           working={working}
           onOpenChange={setEnding}
           onConfirm={() =>
-            void act(() => cancel(target, plan.id), t('Your plan ends on {date}', { date: day(plan.ends) }), () => {
+            act(() => cancel(target, plan.id), t('Your plan ends on {date}', { date: day(plan.ends) }), () => {
               setEnding(false)
               subs.reload()
             })
@@ -559,30 +560,23 @@ function Ending({
   open: boolean
   working: boolean
   onOpenChange: (o: boolean) => void
-  onConfirm: () => void
+  onConfirm: () => Promise<void>
 }) {
   const { t } = useI18n()
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent maxW={420} showCloseButton={false}>
-        <DialogTitle>{t('Cancel your plan?')}</DialogTitle>
-        <YStack gap="$3">
-          <SizableText size="$2" color="$soft">
-            {day(plan.ends)
-              ? t('{plan} stays on until {date}, and nothing is charged after that. You can keep it any time before then.', { plan: plan.name, date: day(plan.ends) })
-              : t('{plan} stays on until the end of this period, and nothing is charged after that. You can keep it any time before then.', { plan: plan.name })}
-          </SizableText>
-          <XStack gap="$2" justify="flex-end">
-            <Button size="sm" variant="ghost" onPress={() => onOpenChange(false)}>
-              {t('Keep plan')}
-            </Button>
-            <Button size="sm" variant="destructive" disabled={working} onPress={onConfirm}>
-              {t('Cancel plan')}
-            </Button>
-          </XStack>
-        </YStack>
-      </DialogContent>
-    </Dialog>
+    <Confirm
+      open={open}
+      onOpenChange={(o) => !working && onOpenChange(o)}
+      title={t('Cancel your plan?')}
+      says={
+        day(plan.ends)
+          ? t('{plan} stays on until {date}, and nothing is charged after that. You can keep it any time before then.', { plan: plan.name, date: day(plan.ends) })
+          : t('{plan} stays on until the end of this period, and nothing is charged after that. You can keep it any time before then.', { plan: plan.name })
+      }
+      act={t('Cancel plan')}
+      no={t('Keep plan')}
+      run={onConfirm}
+    />
   )
 }
 

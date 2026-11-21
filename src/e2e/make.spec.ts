@@ -8,6 +8,7 @@
 import type { Page } from '@playwright/test'
 
 import { cramped, expect, test } from './fixture.ts'
+import { accept } from './spend.ts'
 import { gallery, library } from './stubs.ts'
 
 const picker = (p: Page) => p.getByRole('dialog', { name: 'Make something new' })
@@ -70,6 +71,8 @@ test('goes into the grid from the search, moves across and down it, picks with E
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('Enter')
+  // A site template's copy is built and published at once: asked first, over the picker.
+  await accept(page, /Start from .+\?/, 'Start')
   await expect(page).toHaveURL(/\/warp-tunnel$/)
   expect(sent.filter((s) => s.path === '/v1/project/fork').map((s) => [s.method, s.body])).toEqual([['POST', { slug: 'warp-tunnel' }]])
 })

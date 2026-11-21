@@ -9,6 +9,7 @@
 import type { Page } from '@playwright/test'
 
 import { cramped, expect, test } from './fixture.ts'
+import { accept } from './spend.ts'
 import { scheduled } from './stubs.ts'
 
 const flow = (n: number) => `flow_${String(n).padStart(32, '0')}`
@@ -56,6 +57,8 @@ test('each task says when it runs next and where it came from; its switch pauses
   await page.getByRole('switch', { name: 'Monday summary on' }).click()
   await expect(page.getByRole('switch', { name: 'Monday summary on' })).not.toBeChecked()
   await page.getByRole('switch', { name: 'Weekly digest on' }).click()
+  // Switching one on lets it spend by itself: asked first (spend.spec.ts holds the no).
+  await accept(page, 'Turn Weekly digest on?', 'Turn on')
   await expect(page.getByRole('switch', { name: 'Weekly digest on' })).toBeChecked()
   expect(sent.filter((s) => s.method === 'PATCH').map((s) => [s.path, s.body])).toEqual([
     [`/v1/auto/automations/${flow(1)}`, { enabled: false }],
@@ -68,6 +71,7 @@ test('Run now starts one from the menu, and Edit opens its editor', async ({ pag
   await page.goto('/-/automations')
   await page.getByRole('button', { name: 'Actions for Monday summary' }).click({ timeout: 45_000 })
   await page.getByRole('menuitem', { name: 'Run now' }).click()
+  await accept(page, 'Run Monday summary now?', 'Run now')
   await expect.poll(() => sent.some((s) => s.method === 'POST' && s.path === `/v1/auto/automations/${flow(1)}/run`)).toBe(true)
   await page.getByRole('button', { name: 'Actions for Monday summary' }).click()
   await page.getByRole('menuitem', { name: 'Edit' }).click()
@@ -99,6 +103,17 @@ test('a new task is said in plain words, read back, and made from Dev with what 
   await page.getByLabel('When it runs').fill('every 5 minutes')
   await expect(page.getByRole('dialog', { name: 'New task' }).getByRole('status')).toContainText('Every 5 minutes')
   await page.getByRole('button', { name: 'Create' }).click()
+  // Made on, it runs and spends by itself: asked first. Escape shuts the question alone, the sheet keeps what was
+  // typed, the focus is back on Create, and nothing was made.
+  await expect(page.getByRole('alertdialog', { name: 'Turn Build check on?' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+  await expect(page.getByRole('dialog', { name: 'New task' })).toBeVisible()
+  await expect(page.getByLabel('Task name')).toHaveValue('Build check')
+  await expect(page.getByRole('button', { name: 'Create' })).toBeFocused()
+  expect(sent.filter((s) => s.method === 'POST' && s.path === '/v1/auto/automations')).toEqual([])
+  await page.getByRole('button', { name: 'Create' }).click()
+  await accept(page, 'Turn Build check on?', 'Turn on')
   await expect(page.getByText('Scheduled: Build check.')).toBeVisible()
   const made = sent.find((s) => s.method === 'POST' && s.path === '/v1/auto/automations')!
   expect(made.body).toMatchObject({

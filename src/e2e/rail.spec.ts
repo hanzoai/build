@@ -6,6 +6,7 @@
 import type { Page } from '@playwright/test'
 
 import { cramped, expect, test } from './fixture.ts'
+import { accept } from './spend.ts'
 import { mounted } from './mount.ts'
 import { rail as platform } from './stubs.ts'
 
@@ -142,6 +143,7 @@ test.describe('Sites, at the foot of the Library', () => {
     const sent = await platform(page)
     await page.goto('/-/artifacts')
     await page.getByRole('button', { name: 'Start from Circle' }).click()
+    await accept(page, 'Start from Circle?', 'Start')
     await expect(page).toHaveURL(/\/circle-2$/)
     expect(sent).toContainEqual({ method: 'POST', path: '/v1/project/fork', query: '', body: { slug: 'circle' } })
   })
@@ -180,7 +182,7 @@ test.describe('Sites, at the foot of the Library', () => {
     await page.waitForTimeout(300)
     await page.getByRole('button', { name: 'Actions for Docs site' }).click()
     await pick(page, 'Delete')
-    const confirm = page.getByRole('dialog')
+    const confirm = page.getByRole('alertdialog')
     await expect(confirm.getByText('Delete Docs site?')).toBeVisible()
     await confirm.getByRole('button', { name: 'Delete' }).click()
     await expect(page.getByText('Docs site is deleted')).toBeVisible()
@@ -210,7 +212,7 @@ test.describe('Code settings', () => {
     await expect(page.getByText('TOKEN', { exact: true })).toBeVisible()
     await page.screenshot({ path: info.outputPath('environment-open.png') })
     await page.getByRole('button', { name: 'Forget' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Forget' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Forget' }).click()
     await expect(page.getByText('universe’s environment is forgotten')).toBeVisible()
     expect(sent).toContainEqual({ method: 'DELETE', path: '/v1/environment/universe', query: '', body: null })
   })
@@ -246,7 +248,7 @@ test.describe('Code settings', () => {
 
     await page.getByRole('button', { name: 'Actions for workshop' }).click()
     await pick(page, 'Claim key')
-    await page.getByRole('dialog').getByRole('button', { name: 'Mint key' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Mint key' }).click()
     const once = page.getByRole('dialog')
     await expect(once.getByLabel('Claim key', { exact: true })).toHaveText('tk_live_once')
     await expect(once.getByText('Copy it now. It is not shown again.')).toBeVisible()
@@ -258,7 +260,7 @@ test.describe('Code settings', () => {
 
     await page.getByRole('button', { name: 'Actions for laptop' }).click()
     await pick(page, 'Remove')
-    await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click()
     await expect(page.getByText('laptop is removed')).toBeVisible()
     expect(sent).toContainEqual({ method: 'DELETE', path: '/v1/agent/targets/tgt_2', query: '', body: null })
   })
@@ -285,7 +287,7 @@ test.describe('Code settings', () => {
     expect(sent.filter((s) => s.method === 'POST' && s.path === '/v1/account/keys')).toHaveLength(1)
 
     await page.getByRole('button', { name: 'Revoke site' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Revoke' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke' }).click()
     await expect(page.getByText('site revoked')).toBeVisible()
     expect(sent).toContainEqual({ method: 'DELETE', path: '/v1/account/keys/acme-publishable-1', query: '', body: null })
   })

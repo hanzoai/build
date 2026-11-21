@@ -17,7 +17,7 @@ import { useI18n } from '@hanzo/i18n/react'
 import { Button } from '@hanzo/ui'
 import { useEffect, useRef, useState } from 'react'
 
-import { door, type Door as Which, type State as Held } from './api/sandbox.ts'
+import { door, stay, type Door as Which, type State as Held } from './api/sandbox.ts'
 import { useTarget } from './host.tsx'
 
 /** What each page signs its messages to the window that frames it with. */
@@ -67,7 +67,8 @@ export function Door({ which, sandbox, held, session }: { which: Which; sandbox:
     setSrc('')
     setState('opening')
     setWhy('')
-    door(target, sandbox, which, session).then(
+    // Opened by the page, so it never wakes the sandbox: the bar's Wake does, on a press.
+    door(target, sandbox, which, stay, session).then(
       (u) => {
         if (!gone) setSrc(u)
       },

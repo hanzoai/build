@@ -12,6 +12,7 @@ import type { Page } from '@playwright/test'
 
 import { enter, held, via, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
+import { accept, decline } from './spend.ts'
 import { mounted, went } from './mount.ts'
 import { ORG } from './signed.ts'
 
@@ -905,6 +906,11 @@ test.describe('publishing and merging', () => {
 
     world.down['POST /v1/platform/apps'] = 'Builds are resting'
     await page.getByRole('button', { name: 'Publish again' }).click()
+    // Built again in a cloud sandbox: asked first, and Cancel builds nothing.
+    await decline(page, /^Publish .+ again\?$/)
+    expect(posted(sent, '/v1/platform/apps')).toEqual([])
+    await page.getByRole('button', { name: 'Publish again' }).click()
+    await accept(page, /^Publish .+ again\?$/, 'Publish again')
     await expect(page.getByText('Builds are resting')).toBeVisible()
 
     delete world.down['POST /v1/platform/apps']
@@ -912,6 +918,7 @@ test.describe('publishing and merging', () => {
     world.deployments.synapse = [{ id: 'dep_2', version: 2, status: 'building', source: 'build', createdAt: now, updatedAt: now }, ...world.deployments.synapse!]
     world.projects = [...PROJECTS(), { ...COPY, updatedAt: now }]
     await page.getByRole('button', { name: 'Publish again' }).click()
+    await accept(page, /^Publish .+ again\?$/, 'Publish again')
     await expect(page.getByText('Publishing your copy…')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Publish again' })).toHaveCount(0)
     await expect(page.getByText('Builds are resting')).toHaveCount(0)

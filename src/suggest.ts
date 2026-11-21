@@ -27,7 +27,13 @@
  */
 import { phrase } from '@hanzo/i18n'
 
-import type { Automation, Schedule } from './api/auto.ts'
+import type { Say } from '@hanzo/i18n/react'
+
+import { create, type Automation, type Schedule, type Source } from './api/auto.ts'
+import type { Target } from './api/call.ts'
+import type { Spend } from './host.tsx'
+import { spend, switchOn } from './question.ts'
+import { english } from './say.ts'
 import type { Conversation } from './api/conversations.ts'
 import type { Item } from './api/library.ts'
 import type { Session } from './api/sessions.ts'
@@ -547,4 +553,33 @@ export function skip(k: Kept | null | undefined, inputs: Input[]): string[] {
   for (const i of inputs) if (i.to && gone.has(idOf(`${i.to}${i.item ?? ''}`, ''))) out.add(i.key)
   for (const r of k.rows) if (gone.has(r.id)) out.add(r.title)
   return [...out]
+}
+
+/**
+ * Make a `schedule` row's task: on, asking before it acts, and notifying its person. It runs, and spends, by itself
+ * from then, so the person is asked first through the host's confirm (host.tsx `Host.confirm`, the same function);
+ * on anything but a yes nothing is made and the answer is null.
+ */
+export async function book(
+  t: Target,
+  act: Extract<Act, { kind: 'schedule' }>,
+  source: Source,
+  confirm: (spend: Spend) => Promise<boolean>,
+  say: Say = english,
+): Promise<Automation | null> {
+  const name = act.name || act.prompt.slice(0, 80)
+  const asked = switchOn(name, say)
+  const yes = await confirm(spend(asked)).catch(() => false)
+  if (yes !== true) return null
+  return create(t, {
+    name,
+    instructions: act.prompt,
+    model: null,
+    schedule: { ...act.schedule, tz: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    permissions: 'ask',
+    notify: true,
+    postTo: [],
+    enabled: true,
+    source,
+  })
 }

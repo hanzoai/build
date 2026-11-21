@@ -21,6 +21,7 @@ import type { Blob, Entry } from './api/git.ts'
 import { preview, read as look, type Node } from './api/sandbox.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { useWake } from './spend.tsx'
 import { away, Out } from './out.tsx'
 
 type Source = 'live' | 'branch'
@@ -283,6 +284,7 @@ export function Artifacts({
   const host = useHost()
   const target = useTarget()
   const { t } = useI18n()
+  const { wake, dialog } = useWake()
   const left = useRead(host.person ? () => artifacts(target, session) : null, { saved: '', artifacts: [] }, [target, session, host.person])
   const [note, setNote] = useState('')
 
@@ -300,7 +302,7 @@ export function Artifacts({
     }
   }
   // A preview is opened with a fresh ticket, in a tab of its own.
-  const open = (a: Artifact) => away(preview(target, sandbox, a.port)).catch((e: Error) => setNote(e.message))
+  const open = (a: Artifact) => away(preview(target, sandbox, a.port, wake)).catch((e: Error) => setNote(e.message))
 
   const items: { key: string; icon: ReactNode; title: string; note: string; href?: string; onPress?: () => void; action?: ReactNode }[] = []
   for (const a of left.value.artifacts) {
@@ -326,6 +328,7 @@ export function Artifacts({
   if (!items.length) return <Soft>{left.error?.message || (left.loading ? t('Reading what this run left…') : t('This run has produced no artifacts yet.'))}</Soft>
   return (
     <YStack gap="$2">
+      {dialog}
       {note ? (
         <SizableText size="$1" color="$soft" role="status">
           {note}

@@ -358,12 +358,12 @@ test('skills: a delete the platform refuses stays open and says why, and Cancel 
   await yours(page).click()
   await page.getByRole('list', { name: 'Your skills' }).getByRole('button', { name: 'triage', exact: true }).click()
   await page.getByRole('dialog', { name: 'triage' }).getByRole('button', { name: 'Delete' }).click()
-  const confirm = page.getByRole('dialog', { name: 'Delete triage?' })
+  const confirm = page.getByRole('alertdialog', { name: 'Delete triage?' })
   await confirm.getByRole('button', { name: 'Delete' }).click()
   await expect(confirm.getByText('triage is named by 2 agents')).toBeVisible()
   expect(sentTo(sent, 'DELETE', '/v1/tool/skills/triage')).toHaveLength(1)
   await confirm.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.getByRole('dialog', { name: 'Delete triage?' })).toHaveCount(0)
+  await expect(page.getByRole('alertdialog', { name: 'Delete triage?' })).toHaveCount(0)
   await expect(page.getByRole('dialog', { name: 'triage' })).toBeVisible()
 })
 
@@ -523,7 +523,7 @@ test('connectors: a removal the platform refuses says why, and the list stays as
   const mine = page.getByRole('list', { name: 'Your connectors' })
   await mine.getByRole('button', { name: 'Docs' }).click()
   await page.getByRole('dialog', { name: 'Docs' }).getByRole('button', { name: 'Remove connector' }).click()
-  const confirm = page.getByRole('dialog', { name: 'Delete Docs?' })
+  const confirm = page.getByRole('alertdialog', { name: 'Delete Docs?' })
   await confirm.getByRole('button', { name: 'Delete' }).click()
   await expect(confirm.getByText('Docs is named by 2 agents')).toBeVisible()
 
@@ -1072,7 +1072,7 @@ test('agents: one opened while read, one that cannot be read, one changed and re
   // It names no model: the deployment's default runs it.
   await expect(lookout.getByRole('button', { name: 'Model: The deployment’s default' })).toBeVisible()
   await lookout.getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('dialog', { name: 'Delete lookout?' }).getByRole('button', { name: 'Delete' }).click()
+  await page.getByRole('alertdialog', { name: 'Delete lookout?' }).getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByText('lookout is deleted')).toBeVisible()
   expect(sentTo(sent, 'DELETE', '/v1/agent/lookout')).toHaveLength(1)
   await expect(mine.getByRole('button', { name: 'lookout' })).toHaveCount(0)

@@ -12,7 +12,7 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Plus, X } from '@hanzogui/lucide-icons-2'
-import { useI18n } from '@hanzo/i18n/react'
+import { useI18n, type Say } from '@hanzo/i18n/react'
 import { Button, Dialog, DialogContent, DialogTitle, Input, Textarea } from '@hanzo/ui'
 import { useEffect, useState } from 'react'
 
@@ -21,7 +21,17 @@ import { plain, read, refuse, removeSecret, save, setSecret, SETUP, type Environ
 import type { Home, Homes } from './api/work.ts'
 import { useRead, type Read } from './data.ts'
 import { matches } from './merge.ts'
-import { useHost, useTarget } from './host.tsx'
+import { useHost, useTarget, type Ask } from './host.tsx'
+import { useSpend } from './spend.tsx'
+
+/** The question before a setup run starts, from the Environment tab and from New's dialog alike: it runs in a cloud sandbox. */
+const setting = (repo: string, t: Say): Ask => ({
+  kind: 'run',
+  title: t('Set up {repo} with an agent?', { repo }),
+  what: t('This starts a run that explores the codebase, installs and checks it, and proposes its environment.'),
+  yes: t('Start setup'),
+  uses: 'computer',
+})
 
 const mono = { fontFamily: 'var(--f-mono, ui-monospace, monospace)' }
 
@@ -37,6 +47,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
+  const spend = useSpend()
   const [note, setNote] = useState('')
   const [working, setWorking] = useState(false)
 
@@ -82,6 +93,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
   }
 
   const setup = async () => {
+    if (!(await spend.ask(setting(repo, t)))) return
     setWorking(true)
     setNote('')
     try {
@@ -110,6 +122,7 @@ export function Environment({ repo, busy }: { repo: string; busy: boolean }) {
 
   return (
     <YStack gap="$4">
+      {spend.dialog}
       <XStack items="center" gap="$2">
         <SizableText flex={1} size="$4" color="$ink" numberOfLines={1}>
           {repo}
@@ -280,6 +293,7 @@ export function SetupDialog({
   const [working, setWorking] = useState<'' | 'save' | 'start'>('')
   const [note, setNote] = useState('')
   const [last, setLast] = useState<'save' | 'start' | ''>('')
+  const spend = useSpend()
   useEffect(() => {
     if (!open) return
     setChosen(repo)
@@ -307,6 +321,7 @@ export function SetupDialog({
         await save(target, repo, { install: '', start: '' })
         onSaved(repo)
       } else {
+        if (!(await spend.ask(setting(repo, t)))) return
         await onStart(repo)
         onOpenChange(false)
       }
@@ -320,6 +335,7 @@ export function SetupDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxW={480} showCloseButton={false}>
+        {spend.dialog}
         <XStack items="center" justify="space-between" gap="$2">
           <DialogTitle>{t('Set up an environment')}</DialogTitle>
           <XStack render="button" aria-label={t('Close')} p="$1" onPress={() => onOpenChange(false)}>

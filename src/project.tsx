@@ -101,6 +101,8 @@ import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Merge } from './git.tsx'
 import { Gutter } from './gutter.tsx'
 import { useHost, useTarget } from './host.tsx'
+import { republish } from './question.ts'
+import { useSpend } from './spend.tsx'
 import { MODES } from './gear.ts'
 import { level, pacing, useMind } from './mind.ts'
 import { Out } from './out.tsx'
@@ -211,6 +213,7 @@ export function Project({ at }: { at: Where }) {
   const host = useHost()
   const target = useTarget()
   const { t } = useI18n()
+  const spend = useSpend()
   const signed = Boolean(host.person)
   const all = useProjects(target, signed)
   // The repository the address names, and the forge's record of it.
@@ -248,6 +251,8 @@ export function Project({ at }: { at: Where }) {
   const home = named ? (forge.value?.branch ?? 'main') : project?.branch || 'main'
   const retry = async () => {
     if (!clone || redo.busy) return
+    // Built again in a cloud sandbox: asked first.
+    if (!(await spend.ask(republish(title, t)))) return
     setRedo({ busy: true, error: '' })
     try {
       await declare(target, { repo: clone, ref: home, name: slug, project: slug, mode: 'branch' })
@@ -716,6 +721,7 @@ export function Project({ at }: { at: Where }) {
                       ? why
                       : t('Publish this project and its page appears here.')}
               </SizableText>
+              {spend.dialog}
               {(stalled || failed) && clone ? (
                 <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={redo.busy} onPress={() => void retry()}>
                   {redo.busy ? t('Publishing…') : t('Publish again')}

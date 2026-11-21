@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test'
 
 import { desk, open as pick } from './desk.ts'
 import { expect, test } from './fixture.ts'
+import { accept } from './spend.ts'
 import { finished, hold, NEXT, ORG, rig, SESSION, to } from './cov-run.ts'
 import { setup, STRANGER } from './stubs.ts'
 
@@ -45,6 +46,7 @@ test('a codebase with no environment is set up by an agent, which opens', async 
   await expect(desk(p).getByText('No secrets yet')).toBeVisible()
   await p.screenshot({ path: info.outputPath('none.png') })
   await desk(p).getByRole('button', { name: 'Set up with an agent' }).click()
+  await accept(p, /Set up .+ with an agent\?/, 'Start setup')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   const body = to(sent, 'POST', '/v1/agent/coding')[0]?.body as { mode: string; repo: string; prompt: string }
   expect([body.mode, body.repo, body.prompt.split('\n')[0]]).toEqual(['setup', 'universe', 'Set up the environment'])
@@ -53,6 +55,7 @@ test('a codebase with no environment is set up by an agent, which opens', async 
 test('a setup run the platform will not start says why', async ({ page: p }) => {
   await open(p, { repo: 'universe', state: 'none' }, ({ path }) => (path === '/v1/agent/coding' ? refusal('No sandbox is free', 503) : undefined))
   await desk(p).getByRole('button', { name: 'Set up with an agent' }).click()
+  await accept(p, /Set up .+ with an agent\?/, 'Start setup')
   await expect(note(p, 'The code workspace is not answering right now. Try again shortly.')).toBeVisible()
   await expect(desk(p).getByRole('button', { name: 'Set up with an agent' })).toBeEnabled()
 })
@@ -220,6 +223,7 @@ test.describe('New’s offer to set a codebase up', () => {
     await dialog.getByRole('button', { name: 'Skip & save' }).click()
     await expect(dialog.getByRole('status')).toHaveText('Only an organization admin saves an environment. Start the agent instead; an admin reviews what it proposes.')
     await dialog.getByRole('button', { name: 'Start agent' }).click()
+    await accept(p, /Set up .+ with an agent\?/, 'Start setup')
     await expect(dialog.getByRole('status')).toHaveText('This account cannot start a run on universe. Ask an organization admin for access.')
     await expect(dialog.getByRole('button', { name: 'Start agent' })).toBeEnabled()
     // What failed is tried again from where it is said.
@@ -270,6 +274,7 @@ test.describe('New’s offer to set a codebase up', () => {
     await dialog.getByRole('button', { name: `Choose ${ORG}/site` }).click()
     await expect(dialog.getByLabel('Chosen repository')).toHaveText(`${ORG}/site`)
     await dialog.getByRole('button', { name: 'Start agent' }).click()
+    await accept(p, /Set up .+ with an agent\?/, 'Start setup')
     await expect(p).toHaveURL(new RegExp(`/${SESSION}$`))
     expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ mode: 'setup', repo: 'site', model: 'enso-auto', effort: 'medium' })
   })
@@ -285,10 +290,12 @@ test.describe('New’s offer to set a codebase up', () => {
     await p.getByRole('button', { name: 'Set up environment' }).click()
     const dialog = p.getByRole('dialog')
     await dialog.getByRole('button', { name: 'Start agent' }).click()
+    await accept(p, /Set up .+ with an agent\?/, 'Start setup')
     await expect(dialog.getByRole('status')).toHaveText('universe is not a repository this organization has on the forge. Choose one of its repositories.')
     await expect(dialog.getByText(/coding:/)).toHaveCount(0)
     refuse = false
     await dialog.getByRole('button', { name: 'Try again' }).click()
+    await accept(p, /Set up .+ with an agent\?/, 'Start setup')
     await expect(p).toHaveURL(new RegExp(`/${SESSION}$`))
     expect(to(sent, 'POST', '/v1/agent/coding')).toHaveLength(1)
   })
@@ -301,6 +308,7 @@ test.describe('New’s offer to set a codebase up', () => {
     const dialog = p.getByRole('dialog')
     await expect(dialog.getByRole('button', { name: 'Skip & save' })).toHaveCount(0)
     await dialog.getByRole('button', { name: 'Start agent' }).click()
+    await accept(p, /Set up .+ with an agent\?/, 'Start setup')
     await expect(p).toHaveURL(new RegExp(`/${SESSION}$`))
     await expect(p.getByRole('dialog')).toHaveCount(0)
     expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ mode: 'setup', repo: 'universe' })

@@ -62,6 +62,7 @@ import { here, useBack } from './back.ts'
 import { Out } from './out.tsx'
 import { ask, assemble, attach, closes, facets, handle, home, keyOf, matches, pickProjects, place, type Issue, type Project } from './merge.ts'
 import { removal, stopped, type Removal, type Step } from './removal.ts'
+import { Confirm } from './ask.tsx'
 
 function Note({ children }: { children: string }) {
   return (
@@ -479,24 +480,16 @@ function Projects() {
           </>
         )}
       </YStack>
-      <Dialog open={confirming !== null} onOpenChange={(o) => !o && !removing && setConfirming(null)}>
-        <DialogContent maxW={440} showCloseButton={false} gap="$3">
-          <DialogTitle>{confirming ? t('Remove {repo}?', { repo: confirming.repo }) : t('Remove project?')}</DialogTitle>
-          {confirming ? (
-            <SizableText size="$2" color="$soft">
-              {confirming.says}
-            </SizableText>
-          ) : null}
-          <XStack gap="$2" justify="flex-end">
-            <Button size="sm" variant="ghost" disabled={removing} onPress={() => setConfirming(null)}>
-              {t('Cancel')}
-            </Button>
-            <Button size="sm" variant="destructive" disabled={removing || !confirming} onPress={() => confirming && void remove(confirming)}>
-              {removing ? t('Removing…') : t('Remove')}
-            </Button>
-          </XStack>
-        </DialogContent>
-      </Dialog>
+      <Confirm
+        open={confirming !== null}
+        onOpenChange={(o) => !o && !removing && setConfirming(null)}
+        title={confirming ? t('Remove {repo}?', { repo: confirming.repo }) : t('Remove project?')}
+        says={confirming?.says ?? ''}
+        act={t('Remove')}
+        run={async () => {
+          if (confirming) await remove(confirming)
+        }}
+      />
     </YStack>
   )
 }

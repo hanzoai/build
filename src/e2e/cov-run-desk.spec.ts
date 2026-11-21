@@ -12,6 +12,7 @@ import type { Page } from '@playwright/test'
 
 import { desk, open } from './desk.ts'
 import { expect, test } from './fixture.ts'
+import { accept, decline } from './spend.ts'
 import { BOX, ev, finished, hold, rig, SESSION, tells, to } from './cov-run.ts'
 import type { Sent } from './signed.ts'
 
@@ -36,7 +37,12 @@ test('the desktop waits for a sandbox, opens only while it runs, and says an end
   expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(0)
   expect(to(sent, 'POST', SCREEN)).toHaveLength(0)
   // Resumed from the bar, it opens.
+  // Waking gives it a cloud computer again: asked first, and a no wakes nothing.
   await desk(p).getByLabel('Sandbox').getByRole('button', { name: 'Resume' }).click()
+  await decline(p, 'Wake the cloud workspace?')
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(0)
+  await desk(p).getByLabel('Sandbox').getByRole('button', { name: 'Resume' }).click()
+  await accept(p, 'Wake the cloud workspace?', 'Wake')
   await expect(screen(p).getByText(/the screen \?ticket=t\d+/)).toBeVisible()
   expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(1)
   world.held = { status: 'gone' }
@@ -45,7 +51,7 @@ test('the desktop waits for a sandbox, opens only while it runs, and says an end
   await expect(desk(p).getByText('Ended', { exact: true })).toBeVisible()
 })
 
-test('a door asked of a sandbox that stopped as it was asked resumes it once', async ({ page: p }) => {
+test('a door asked of a sandbox that stopped as it was asked does not wake it', async ({ page: p }) => {
   const { sent } = await rig(p, { record: live() })
   let parked = true
   await p.route(
@@ -58,8 +64,11 @@ test('a door asked of a sandbox that stopped as it was asked resumes it once', a
   )
   await p.goto(`/${SESSION}`)
   await open(p, 'Desktop')
-  await expect(screen(p).getByText(/the screen \?ticket=t\d+/)).toBeVisible()
-  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(1)
+  // Opened by the page, the door never wakes it, and asks nothing: only the bar's Wake, pressed, does.
+  await expect.poll(() => to(sent, 'POST', SCREEN).length).toBeGreaterThan(0)
+  await p.waitForTimeout(500)
+  await expect(p.getByRole('alertdialog')).toHaveCount(0)
+  expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`)).toHaveLength(0)
 })
 
 test('the sandbox bar suspends a kept sandbox and resumes it, and never one a run is working in', async ({ page: p }, info) => {
@@ -74,6 +83,7 @@ test('the sandbox bar suspends a kept sandbox and resumes it, and never one a ru
   await expect(bar.getByText(/Sandbox suspended · its files are kept until/)).toBeVisible()
   await p.screenshot({ path: info.outputPath('suspended.png') })
   await bar.getByRole('button', { name: 'Resume' }).click()
+  await accept(p, 'Wake the cloud workspace?', 'Wake')
   await expect(bar.getByText('Sandbox running')).toBeVisible()
   expect(to(sent, 'POST', `/v1/sandbox/${BOX}/pause`).length).toBe(1)
   expect(to(sent, 'POST', `/v1/sandbox/${BOX}/resume`).length).toBe(1)

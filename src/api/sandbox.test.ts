@@ -9,6 +9,8 @@ import type { Target } from './call.ts'
 import { artifact, artifacts } from './coding.ts'
 import * as sandbox from './sandbox.ts'
 
+/** The person agreed to wake it. */
+const yes = async () => true
 const T: Target = { api: 'https://api.hanzo.ai', token: () => 'tok', org: 'hanzo' }
 
 type Reply = { status: number; body?: unknown }
@@ -54,7 +56,7 @@ describe('a sandbox', () => {
       { status: 200, body: { status: 'running' } },
       { status: 200, body: { url: '/v1/sandbox/m_1/screen?ticket=s' } },
     )
-    expect(await sandbox.door(T, 'm_1', 'screen')).toBe('https://api.hanzo.ai/v1/sandbox/m_1/screen?ticket=s')
+    expect(await sandbox.door(T, 'm_1', 'screen', yes)).toBe('https://api.hanzo.ai/v1/sandbox/m_1/screen?ticket=s')
     expect(seen.map((s) => s.url)).toEqual([
       'https://api.hanzo.ai/v1/sandbox/m_1/screen/ticket',
       'https://api.hanzo.ai/v1/sandbox/m_1/resume',
@@ -62,24 +64,43 @@ describe('a sandbox', () => {
     ])
   })
 
+  it('wakes a parked sandbox for nothing without the person’s yes: its door, its preview, its dev server', async () => {
+    const no = vi.fn(async () => false)
+    for (const ask of [() => sandbox.door(T, 'm_1', 'screen', no), () => sandbox.preview(T, 'm_1', 3000, no), () => sandbox.serve(T, 'm_1', no)]) {
+      const seen = replies({ status: 409, body: { detail: 'the sandbox is parked' } })
+      await expect(ask()).rejects.toMatchObject({ status: 409, message: 'The cloud workspace is suspended. Wake it to go on.' })
+      expect(seen.filter((x) => x.url.endsWith('/resume'))).toEqual([])
+    }
+    expect(no).toHaveBeenCalledTimes(3)
+    // What the page passes where nobody pressed anything never wakes one.
+    const seen = replies({ status: 409, body: { detail: 'the sandbox is parked' } })
+    await expect(sandbox.door(T, 'm_1', 'screen', sandbox.stay)).rejects.toMatchObject({ status: 409 })
+    expect(seen.filter((x) => x.url.endsWith('/resume'))).toEqual([])
+    // A sandbox that is up is never asked about.
+    const asked = vi.fn(yes)
+    replies({ status: 200, body: { url: '/v1/sandbox/m_1/screen?ticket=s' } })
+    await sandbox.door(T, 'm_1', 'screen', asked)
+    expect(asked).not.toHaveBeenCalled()
+  })
+
   it('lists what listens, and opens a port at its own origin', async () => {
     replies({ status: 200, body: { ports: [{ port: 3000, host: 'sandbox-ab-preview-3000.hanzo.app' }, { port: 0 }, 'junk', { port: 70000 }] } })
     expect(await sandbox.ports(T, 'm_1')).toEqual([{ port: 3000, host: 'sandbox-ab-preview-3000.hanzo.app' }])
     const seen = replies({ status: 201, body: { url: 'https://sandbox-ab-preview-3000.hanzo.app/_hanzo/enter?ticket=t', port: 3000, expiresIn: 30 } })
-    expect(await sandbox.preview(T, 'm_1', 3000)).toBe('https://sandbox-ab-preview-3000.hanzo.app/_hanzo/enter?ticket=t')
+    expect(await sandbox.preview(T, 'm_1', 3000, yes)).toBe('https://sandbox-ab-preview-3000.hanzo.app/_hanzo/enter?ticket=t')
     expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/sandbox/m_1/preview', body: { port: 3000 } })
   })
 
   it('refuses a preview address that is not https', async () => {
     replies({ status: 201, body: { url: 'javascript:alert(1)' } })
-    await expect(sandbox.preview(T, 'm_1', 3000)).rejects.toMatchObject({ status: 502 })
+    await expect(sandbox.preview(T, 'm_1', 3000, yes)).rejects.toMatchObject({ status: 502 })
   })
 })
 
 describe('a server started from the Preview', () => {
   it('runs the start script detached, handing it the environment’s start command, and answers what it started', async () => {
     const seen = replies({ status: 200, body: { exitCode: 0, stdout: 'EVN_FILE_NAME=dev yarn dev', stderr: '' } })
-    expect(await sandbox.serve(T, 'm_1', '  EVN_FILE_NAME=dev yarn dev ')).toBe('EVN_FILE_NAME=dev yarn dev')
+    expect(await sandbox.serve(T, 'm_1', yes, '  EVN_FILE_NAME=dev yarn dev ')).toBe('EVN_FILE_NAME=dev yarn dev')
     expect(seen[0]).toEqual({
       method: 'POST',
       url: 'https://api.hanzo.ai/v1/sandbox/m_1/exec',
@@ -100,7 +121,7 @@ describe('a server started from the Preview', () => {
       { status: 200, body: { status: 'running' } },
       { status: 200, body: { exitCode: 0, stdout: 'pnpm run dev' } },
     )
-    expect(await sandbox.serve(T, 'm_1')).toBe('pnpm run dev')
+    expect(await sandbox.serve(T, 'm_1', yes)).toBe('pnpm run dev')
     expect(seen.map((s) => s.url)).toEqual([
       'https://api.hanzo.ai/v1/sandbox/m_1/exec',
       'https://api.hanzo.ai/v1/sandbox/m_1/resume',
@@ -110,11 +131,11 @@ describe('a server started from the Preview', () => {
 
   it('says why there was nothing to start, and what failed when it could not', async () => {
     replies({ status: 200, body: { exitCode: 3, stdout: 'no-script\n' } })
-    await expect(sandbox.serve(T, 'm_1')).rejects.toMatchObject({ status: 422, message: expect.stringContaining('no dev or start script') })
+    await expect(sandbox.serve(T, 'm_1', yes)).rejects.toMatchObject({ status: 422, message: expect.stringContaining('no dev or start script') })
     replies({ status: 200, body: { exitCode: 3, stdout: 'no-package' } })
-    await expect(sandbox.serve(T, 'm_1')).rejects.toMatchObject({ status: 422, message: expect.stringContaining('no package.json') })
+    await expect(sandbox.serve(T, 'm_1', yes)).rejects.toMatchObject({ status: 422, message: expect.stringContaining('no package.json') })
     replies({ status: 200, body: { exitCode: 2, stdout: '', stderr: 'sh: 1: cannot create /tmp/hanzo-preview/log\nmkdir: permission denied\n' } })
-    await expect(sandbox.serve(T, 'm_1')).rejects.toMatchObject({ status: 502, message: 'mkdir: permission denied' })
+    await expect(sandbox.serve(T, 'm_1', yes)).rejects.toMatchObject({ status: 502, message: 'mkdir: permission denied' })
   })
 
   it('reads whether it still runs, and what it last wrote', async () => {

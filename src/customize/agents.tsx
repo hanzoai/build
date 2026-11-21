@@ -27,10 +27,11 @@ import { ModelPicker } from '@hanzo/ui/models'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { RING } from '../pane.ts'
-import { agents, ALL, CAST_CAP, CAST_TASK, create, draft, EMPTY, one, PERIODS, person, profile, remove, SCHEDULES, TRIGGERS, update, use, type Agent, type Cast, type Draft, type Period, type Run, type Trigger } from '../api/agents.ts'
+import { agents, ALL, CAST_CAP, CAST_TASK, create, draft, EMPTY, micros, one, PERIODS, person, profile, remove, SCHEDULES, TRIGGERS, update, use, type Agent, type Cast, type Draft, type Period, type Run, type Trigger } from '../api/agents.ts'
 import { models, type Model } from '../api/models.ts'
 import { tools, type Tool } from '../api/tools.ts'
-import { useHost, useTarget } from '../host.tsx'
+import { useHost, useTarget, type Ask } from '../host.tsx'
+import { useSpend } from '../spend.tsx'
 import { useFunds } from '../mind.ts'
 import { path } from '../route.ts'
 import { Drafted } from './drafted.tsx'
@@ -38,7 +39,8 @@ import { Inventory, Traits } from './inventory.tsx'
 import { useLoad } from './load.ts'
 import { keep, kept, nature, score, type Answers, type Form } from './ocean.ts'
 import { say } from './say.ts'
-import { Add, Choice, Confirm, Empty, Failed, Field, FilterPills, Grid, Line, Mark, matches, Part, Sheet, Soft, useCount, Visitor, type Pane } from './ui.tsx'
+import { Add, Choice, Empty, Failed, Field, FilterPills, Grid, Line, Mark, matches, Part, Sheet, Soft, useCount, Visitor, type Pane } from './ui.tsx'
+import { Confirm } from '../ask.tsx'
 
 /** How many cards Browse draws at a time. */
 const PAGE = 24
@@ -135,6 +137,22 @@ const BUDGET: Record<Period | '', string> = {
   month: phrase('{spent} of {cap} spent this month; at most {task} a run.'),
   '': phrase('{spent} of {cap} spent this period; at most {task} a run.'),
 }
+/** What a 24/7 bot may spend, said before it is made: whole sentences by its period. */
+const AROUND: Record<Period, string> = {
+  day: phrase('{name} runs by itself around the clock, on its schedule and when its triggers fire, and may spend up to {cap} a day until you pause or delete it.'),
+  week: phrase('{name} runs by itself around the clock, on its schedule and when its triggers fire, and may spend up to {cap} a week until you pause or delete it.'),
+  month: phrase('{name} runs by itself around the clock, on its schedule and when its triggers fire, and may spend up to {cap} a month until you pause or delete it.'),
+}
+
+/** The question before a 24/7 bot is made, whichever way it is made: Add, Elect or the editor. */
+const bot = (name: string, cap: string, period: Period, t: Say): Ask => ({
+  kind: 'bot',
+  title: t('Start {name} running 24/7?', { name }),
+  what: t(AROUND[period], { name, cap: money(micros(cap)) }),
+  yes: t('Start bot'),
+  uses: 'credits',
+})
+
 const SO_FAR: Record<Period | '', string> = {
   day: phrase('Spent {spent} this day.'),
   week: phrase('Spent {spent} this week.'),
@@ -264,6 +282,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
   const signed = Boolean(host.person)
   const browsing = view === 'discover'
   const botsMode = mode === 'bots'
+  const spend = useSpend()
   const mine = useLoad(signed ? () => agents(target) : null, [] as Agent[], [target, signed])
   const figures = useLoad(browsing && !botsMode && host.personas ? host.personas : null, [] as readonly Cast[], [view, botsMode])
   const yoursList = useMemo(
@@ -290,6 +309,8 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
 
   const opened = (a: Agent) => host.go(path({ kind: 'agent', name: a.name }))
   const take = async (c: Cast) => {
+    // Add in Bots makes one that runs around the clock on the default budget: asked first.
+    if (botsMode && !(await spend.ask(bot(c.title, CAST_CAP, 'month', t)))) return
     setUsing(c)
     setNote('')
     try {
@@ -411,6 +432,7 @@ export function Agents({ view, q, adding, onAdding, onView, onCount, mode = 'age
 
   const modals = (
     <>
+      {spend.dialog}
       {scratch ? (
         <Editor
           defaultBot={botsMode}
@@ -728,6 +750,7 @@ function Elect({
   const [period, setPeriod] = useState<Period>('month')
   const [working, setWorking] = useState(false)
   const [note, setNote] = useState('')
+  const spend = useSpend()
 
   const selectPreset = (c: Cast) => {
     setPicked(c)
@@ -740,6 +763,7 @@ function Elect({
   }
 
   const save = async () => {
+    if (autonomous && !(await spend.ask(bot(picked.title, cap, period, t)))) return
     setWorking(true)
     setNote('')
     try {
@@ -760,6 +784,7 @@ function Elect({
 
   return (
     <Sheet title={t('Elect 24/7 autonomous preset')} open onOpenChange={(o) => !o && onClose()} width={680}>
+      {spend.dialog}
       <XStack items="center" gap="$3" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor">
         <Mark name={picked.title} size={44} logo={picked.avatar} />
         <YStack flex={1} minW={0}>
@@ -1143,6 +1168,7 @@ function Editor({
   const [note, setNote] = useState('')
   const [asking, setAsking] = useState(false)
   const [find, setFind] = useState('')
+  const spend = useSpend()
 
   useEffect(() => {
     if (full.value) {
@@ -1162,10 +1188,13 @@ function Editor({
   }, [on.value, d.tools, t])
   const shownTools = choices.filter((x) => matches(find, x.name, x.source, x.description))
   const save = async () => {
+    const was = full.value
+    // Made, or turned, 24/7: it starts spending by itself, so it is asked first.
+    const around = d.executionMode === 'long-running' && was?.executionMode !== 'long-running'
+    if (around && !(await spend.ask(bot(d.name.trim() || t('This bot'), d.cap, d.period, t)))) return
     setWorking(true)
     setNote('')
     try {
-      const was = full.value
       const saved = agent && was ? await update(target, was, d) : await create(target, d)
       onSaved(saved)
     } catch (e) {
@@ -1179,6 +1208,7 @@ function Editor({
 
   return (
     <Sheet title={agent ? agent.name : t(defaultBot ? 'New bot' : 'New agent')} open onOpenChange={(o) => !o && onClose()} width={680}>
+      {spend.dialog}
       {agent && full.error && !full.value ? (
         <Failed error={full.error} onRetry={full.reload} />
       ) : !ready ? (
@@ -1373,11 +1403,12 @@ function Editor({
           </XStack>
           {agent && onDeleted ? (
             <Confirm
-              what={agent.name}
+              title={t('Delete {name}?', { name: agent.name })}
+              act={t('Delete')}
               says={t('The agent and every run recorded against it are removed.')}
               open={asking}
               onOpenChange={setAsking}
-              onYes={async () => {
+              run={async () => {
                 await remove(target, agent.id || agent.name)
                 onDeleted()
               }}

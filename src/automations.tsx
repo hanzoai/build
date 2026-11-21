@@ -33,12 +33,15 @@ import { Out } from './out.tsx'
 import { useSocial } from './settings/integrations.tsx'
 import { Refusal, told } from './api/call.ts'
 import { ENSO, limits as readLimits, models } from './api/models.ts'
-import { Choice, Confirm, Field, Sheet } from './customize/ui.tsx'
+import { Choice, Field, Sheet } from './customize/ui.tsx'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { runNow, switchOn } from './question.ts'
+import { useSpend } from './spend.tsx'
 import { SOURCE } from './api/library.ts'
 import { Outputs } from './library.tsx'
 import { path } from './route.ts'
+import { Confirm } from './ask.tsx'
 
 export const zone = (): string => {
   try {
@@ -221,6 +224,7 @@ export function Editor({ id }: { id: string }) {
   const { t } = useI18n()
   const target = useTarget()
   const desktop = Boolean(useMedia().sm)
+  const spend = useSpend()
   const signed = Boolean(host.person)
   const fresh = id === 'new'
   // `tick` reads the automation again; `beat` reads its runs again.
@@ -338,8 +342,14 @@ export function Editor({ id }: { id: string }) {
     return true
   }
 
-  const keep = () =>
-    act('save', async () => {
+  const keep = async () => {
+    // A save after which it runs, and spends, by itself where it did not before (a new one, a draft finished On, one
+    // switched on in the form) is asked first. A draft never ran, whatever its switch said.
+    // A task that runs already is switched on and off by its switch alone, which asks for itself.
+    const ran = !fresh && Boolean(a) && !a!.draft && base.enabled
+    const turning = tidy(d).enabled && (fresh || !switchesAlone) && !ran
+    if (turning && !(await spend.ask(switchOn(d.name.trim(), t)))) return
+    await act('save', async () => {
       if (fresh) {
         const made = await create(target, tidy(d))
         // Only while still here: a person who left during the create stays where they went.
@@ -357,9 +367,11 @@ export function Editor({ id }: { id: string }) {
       setNoteError(false)
       setNote(t('Saved.'))
     })
+  }
 
-  const flip = (on: boolean) => {
+  const flip = async (on: boolean) => {
     if (!switchesAlone) return set({ enabled: on })
+    if (on && !(await spend.ask(switchOn(a!.name, t)))) return
     void act('switch', async () => {
       await save(target, id, { enabled: on })
       setTick((n) => n + 1)
@@ -367,8 +379,9 @@ export function Editor({ id }: { id: string }) {
     })
   }
 
-  const go = () =>
-    act('run', async () => {
+  const go = async () => {
+    if (!(await spend.ask(runNow(a!.name, t)))) return
+    await act('run', async () => {
       const run = await start(target, id)
       setBeat((n) => n + 1)
       if (run.status === 'skipped') {
@@ -378,6 +391,7 @@ export function Editor({ id }: { id: string }) {
         toast.success(t('Run started'))
       }
     })
+  }
 
   const leave = (how?: { replace?: boolean }) => host.go(path({ kind: 'screen', screen: 'automations' }), how)
   // A held post is answered once; its buttons go when it is.
@@ -432,6 +446,7 @@ export function Editor({ id }: { id: string }) {
 
   return (
     <YStack flex={1} minH={0}>
+      {spend.dialog}
       <YStack shrink={0} px="$6" pt="$4" pb="$3" $max-md={{ px: '$4' }} borderBottomWidth={1} borderColor="$borderColor">
         <XStack width="100%" maxW={760} mx="auto" items="center" justify="space-between" gap="$3" flexWrap="wrap" rowGap="$2">
           <XStack items="center" gap="$2">
@@ -453,7 +468,7 @@ export function Editor({ id }: { id: string }) {
               <Switch
                 checked={on}
                 disabled={busy === 'switch' || !can}
-                onCheckedChange={flip}
+                onCheckedChange={(next: boolean) => void flip(next)}
                 aria-label={switchesAlone ? t('{name} on', { name: a!.name }) : t('On when saved')}
                 aria-describedby={sayId}
               />
@@ -860,11 +875,12 @@ export function Editor({ id }: { id: string }) {
         </YStack>
         {a ? (
           <Confirm
-            what={a.name}
+            title={t('Delete {name}?', { name: a.name })}
+            act={t('Delete')}
             says={t('It stops running, and its schedule and its runs go with it. A run going now is stopped.')}
             open={asking}
             onOpenChange={setAsking}
-            onYes={async () => {
+            run={async () => {
               const name = a.name
               await remove(target, a.id)
               toast.success(t('{name} deleted', { name }))

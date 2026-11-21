@@ -7,6 +7,7 @@
 import type { Page } from '@playwright/test'
 
 import type { Theme } from '../api/pref.ts'
+import type { Cast } from '../api/agents.ts'
 import type { Person } from '../host.tsx'
 
 /** What the host offers. Anything left out, it does not. */
@@ -24,6 +25,13 @@ export interface Mount {
   theme?: Theme
   /** The host signs people in: its sign-in is written into `went` as 'sign in'. */
   signIn?: boolean
+  /** The default agents Customize offers to start from (`Host.cast`). */
+  cast?: Cast[]
+  /**
+   * The host asks before a spend (`Host.confirm`), writing each question into `asked`: it answers yes, no, throws,
+   * or holds the answer until the spec calls `window.answer`. Left out, the builder asks in its own dialog.
+   */
+  confirm?: 'yes' | 'no' | 'throw' | 'hold'
 }
 
 /** Opens `path` in a builder mounted by the host `m` describes. */

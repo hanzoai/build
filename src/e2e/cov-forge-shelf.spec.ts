@@ -9,6 +9,7 @@ import type { Page } from '@playwright/test'
 
 import { enter, held, serve, via, type Holds, type Reply, type Sent } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
+import { accept, decline } from './spend.ts'
 import { mounted, went } from './mount.ts'
 import { ORG } from './signed.ts'
 import { PNG } from './stubs.ts'
@@ -93,6 +94,11 @@ test.describe('Sites', () => {
     })
     await page.goto('/-/artifacts')
     await page.getByRole('button', { name: 'Start from Synapse' }).click()
+    // The copy is built and published at once: asked first, and Cancel copies nothing.
+    await decline(page, 'Start from Synapse?')
+    expect(sentTo(sent, 'POST', '/v1/project/fork')).toEqual([])
+    await page.getByRole('button', { name: 'Start from Synapse' }).click()
+    await accept(page, 'Start from Synapse?', 'Start')
     await expect(page.getByRole('button', { name: 'Start from Synapse' })).toContainText('Copying…')
     // One copy at a time: a second press while it is out does nothing.
     await page.getByRole('button', { name: 'Start from Folio' }).click()
@@ -104,8 +110,10 @@ test.describe('Sites', () => {
     await expect(page).toHaveURL(new URL('/-/artifacts', baseURL).href)
 
     await page.getByRole('button', { name: 'Start from Circle' }).click()
+    await accept(page, 'Start from Circle?', 'Start')
     await expect(page.getByRole('status')).toHaveText('Private projects need a paid plan')
     await page.getByRole('button', { name: 'Start from Metrics' }).click()
+    await accept(page, 'Start from Metrics?', 'Start')
     await expect(page).toHaveURL(new URL('/metrics', baseURL).href)
   })
 
@@ -159,10 +167,10 @@ test.describe('Sites', () => {
     const { sent } = await shelf(page, { holds: { 'DELETE /v1/project/blog': [{ status: 409, detail: 'Blog is still deploying' }, { wait: 2500 }] } })
     await page.goto('/-/artifacts')
     await act(page, 'Blog', 'Delete')
-    const dialog = page.getByRole('dialog')
+    const dialog = page.getByRole('alertdialog')
     await expect(dialog.getByText('Delete Blog?')).toBeVisible()
     await dialog.getByRole('button', { name: 'Cancel' }).click()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
     expect(sentTo(sent, 'DELETE', '/v1/project/blog')).toHaveLength(0)
 
     await act(page, 'Blog', 'Delete')
@@ -172,7 +180,7 @@ test.describe('Sites', () => {
     await expect(dialog.getByRole('button', { name: 'Delete' })).toBeDisabled()
     await page.keyboard.press('Escape')
     await expect(dialog.last()).toBeVisible()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
     await expect(page.getByText('Blog is deleted')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Open Blog' })).toHaveCount(0)
     expect(sentTo(sent, 'DELETE', '/v1/project/blog')).toHaveLength(2)
@@ -219,8 +227,10 @@ test.describe('Templates', () => {
     await expect(page.getByRole('button', { name: 'Start from Circle' })).toContainText(/^CIRCLE\s*Circle\s*A community$/i)
     await page.screenshot({ path: info.outputPath('templates.png'), fullPage: true })
     await page.getByRole('button', { name: 'Start from Mint' }).click()
+    await accept(page, 'Start from Mint?', 'Start')
     await expect(page.getByRole('status')).toHaveText('Private projects need a paid plan')
     await page.getByRole('button', { name: 'Start from Circle' }).click()
+    await accept(page, 'Start from Circle?', 'Start')
     await expect(page.getByRole('button', { name: 'Start from Circle' })).toContainText('Copying…')
     await expect(page).toHaveURL(new URL('/circle-2', baseURL).href)
     expect(sentTo(sent, 'POST', '/v1/project/fork').map((s) => s.body)).toEqual([{ slug: 'mint' }, { slug: 'circle' }])
@@ -242,6 +252,7 @@ test.describe('Templates', () => {
     // The platform holds the copy once it answers the fork.
     world.projects = [...world.projects, copy]
     await page.getByRole('button', { name: 'Start from Synapse' }).click()
+    await accept(page, 'Start from Synapse?', 'Start')
     await expect(page).toHaveURL(new URL('/synapse-2', baseURL).href)
     await expect(page.getByText('Publishing your copy…')).toBeVisible()
     await expect(page.locator('iframe')).toHaveCount(0)

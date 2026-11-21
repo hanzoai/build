@@ -22,9 +22,20 @@
  */
 export { Builder } from './builder.tsx'
 export { Library, Outputs, Preview, Thumb, want } from './library.tsx'
-export { SOURCE, type Item, type Kind as ItemKind, type Source } from './api/library.ts'
+/** The Library's one reader, for a host that lists what a person made itself: `items(target, filter)` answers one page. */
+export { items, SOURCE, type Filter as ItemFilter, type Item, type Kind as ItemKind, type Page as ItemPage, type Scope as ItemScope, type Source } from './api/library.ts'
 export { Scheduled, schedule } from './scheduled.tsx'
 export { Editor } from './automations.tsx'
+/**
+ * The screens a host draws in its own pane, each under `HostProvider` alone, so
+ * they sit inside the host's one look (theme and text size) and never under the
+ * builder's own `Look`: Library, Scheduled tasks and one task's `Editor` above,
+ * `Customize` (one tab), an agent's `Profile`, and the `Forge`'s screens
+ * (Projects, Issues, Sync, Connectors).
+ */
+export { Customize } from './customize/index.tsx'
+export { Profile } from './customize/agents.tsx'
+export { Forge } from './forge.tsx'
 export { library, nav, NEW, own, sections, tabs, useScheduled, type Group } from './nav.tsx'
 export { MARKS, type Icon, type Mark } from './marks.tsx'
 export { useFunds, type Funds } from './mind.ts'
@@ -41,7 +52,7 @@ export { useStanding, rows, left, type Standing, type Row } from './standing.ts'
 export { kind, label, said, share, spent, ways, when, type Label, type Share, type State } from './plan.ts'
 export type { Limits } from './api/limits.ts'
 export type { Target } from './api/call.ts'
-export type { Browse, Browser, Host, Person, Shown } from './host.tsx'
+export type { Browse, Browser, Host, Person, Shown, Ask, Spend, SpendKind } from './host.tsx'
 export type { Done, Folder, Local } from './local.ts'
 export type { Live, Saved, Site } from './site.ts'
 export type { Session, Status } from './api/sessions.ts'
@@ -86,8 +97,13 @@ export { address, destination, located, name, PAGE, SEARCH, useDeck, useKey, use
 
 /**
  * Up to three suggestions under the composer (above it on a phone), each from
- * the person's own activity: `useSuggestions` reads and makes them, `Suggestions`
- * draws them. The row is `Hint` here: `Suggestion` is the side panel's.
+ * the person's own activity: `useSuggestions` reads and makes them (a model call
+ * when they are due; never signed out, never while the account's `suggestions`
+ * preference is off), `setSuggestions` is the one way to switch them, and
+ * `Suggestions` draws them with the sentence that says so and its Turn off. A
+ * `schedule` row's task is made by `book`, which asks through the host's confirm.
+ * The row is `Hint` here: `Suggestion` is the side panel's.
  */
-export { book, hand, Suggestions, taken, useSuggestions, type Suggested, type SuggestionsProps } from './suggestions.tsx'
+export { hand, setSuggestions, Suggestions, taken, useSuggestions, type Suggested, type SuggestionsProps, type Switch as SuggestionsSwitch } from './suggestions.tsx'
+export { book } from './suggest.ts'
 export type { Act, Suggestion as Hint } from './suggest.ts'

@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { RING } from './pane.ts'
 import { read as readChanges, type Changes } from './api/changes.ts'
 import { read as readEnvironment } from './api/environment.ts'
-import { park, ports as listening, preview, sandbox as look, serve, served, wake, type Box, type Port } from './api/sandbox.ts'
+import { park, ports as listening, preview, sandbox as look, serve, served, stay, wake, type Box, type Port } from './api/sandbox.ts'
 import type { Event } from './api/sessions.ts'
 import { cards, failure, shell, steps, type ShellLine } from './api/turn.ts'
 import { useKept, useRead } from './data.ts'
@@ -31,6 +31,7 @@ import { Environment } from './environment.tsx'
 import { Artifacts, Files } from './files.tsx'
 import { Git } from './git.tsx'
 import { useHost, useTarget } from './host.tsx'
+import { useWake } from './spend.tsx'
 import { away, Out } from './out.tsx'
 import { Panel, type Kind } from './panel.tsx'
 import type { Deck, Tabs } from './tabs.ts'
@@ -368,7 +369,12 @@ const until = (ms: number): string => new Date(ms).toLocaleString(undefined, { w
  */
 function Held({ box, live, devMode }: { box: Watch; live: boolean; devMode: boolean }) {
   const { t } = useI18n()
+  const { wake: agree, dialog } = useWake()
   const b = box.value
+  // Waking gives the run its cloud computer back, billed again from then: asked first (spend.tsx `useWake`).
+  const wake = async () => {
+    if (await agree()) box.act('wake')
+  }
   const state = b?.state ?? 'pending'
   const says = devMode
     ? state === 'running'
@@ -397,6 +403,7 @@ function Held({ box, live, devMode }: { box: Watch; live: boolean; devMode: bool
               : t('Cloud workspace unavailable')
   return (
     <XStack px="$3" py="$1.5" gap="$2" rowGap="$1.5" items="center" flexWrap="wrap" borderBottomWidth={1} borderColor="$borderColor" aria-label={devMode ? t('Sandbox') : t('Workspace status')}>
+      {dialog}
       <YStack width={7} height={7} rounded={99} bg={state === 'running' ? 'var(--state-online)' : state === 'parked' ? '$soft' : '$borderColor'} shrink={0} />
       <SizableText flex={1} minW={120} size="$1" color="$soft" numberOfLines={1}>
         {box.note || says}
@@ -406,7 +413,7 @@ function Held({ box, live, devMode }: { box: Watch; live: boolean; devMode: bool
           {t('Suspend')}
         </Button>
       ) : state === 'parked' ? (
-        <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={box.busy} onPress={() => box.act('wake')}>
+        <Button size="sm" variant="outline" borderColor="var(--border-strong)" disabled={box.busy} onPress={() => void wake()}>
           {box.busy ? t('Resuming…') : devMode ? t('Resume') : t('Wake')}
         </Button>
       ) : null}
@@ -461,6 +468,8 @@ function Browser({
   const [serving, setServing] = useState<Serving | null>(null)
   const reopened = useRef<number[]>([])
   const frame = useRef<HTMLIFrameElement>(null)
+  // A suspended sandbox is woken only by a press (Open in a new tab, Start dev server) and only on a yes.
+  const { wake, dialog } = useWake()
   const running = Boolean(sandbox) && held === 'running'
   // A server the run started ended with the run, so once it has, the person can
   // start one again here, in the sandbox kept for its previews — a suspended one
@@ -498,7 +507,8 @@ function Browser({
     setWhy('')
     if (!port || !sandbox) return
     let gone = false
-    preview(t, sandbox, port).then(
+    // Opened by the page (and again after the sandbox stopped), so it never wakes it; only a press does.
+    preview(t, sandbox, port, stay).then(
       (u) => !gone && setSrc(u),
       (e: Error) => !gone && setWhy(e.message),
     )
@@ -529,7 +539,7 @@ function Browser({
     return () => window.removeEventListener('message', hear)
   }, [src, port, say])
 
-  const tab = () => away(preview(t, sandbox, port)).catch((e: Error) => setWhy(e.message))
+  const tab = () => away(preview(t, sandbox, port, wake)).catch((e: Error) => setWhy(e.message))
 
   /**
    * Start the app's server: the codebase's start command when its environment
@@ -540,7 +550,7 @@ function Browser({
     setServing({ command: '', up: true, log: '', why: '' })
     try {
       const named = repo ? await readEnvironment(t, repo).then((e) => e.start, () => '') : ''
-      setServing({ command: await serve(t, sandbox, named), up: true, log: '', why: '' })
+      setServing({ command: await serve(t, sandbox, wake, named), up: true, log: '', why: '' })
     } catch (e) {
       setServing({ command: '', up: false, log: '', why: (e as Error).message })
     }
@@ -574,12 +584,18 @@ function Browser({
     }
   }, [t, sandbox, coming, say])
 
-  const nothing = <Site site={site} live={live} held={held} serving={serving} onStart={startable ? () => void start() : undefined} onEnvironment={repo ? onEnvironment : undefined} />
+  const nothing = (
+    <>
+      {dialog}
+      <Site site={site} live={live} held={held} serving={serving} onStart={startable ? () => void start() : undefined} onEnvironment={repo ? onEnvironment : undefined} />
+    </>
+  )
   if (!running) return nothing
   if (!port) return nothing
   const host = open.find((p) => p.port === port)?.host ?? ''
   return (
     <YStack flex={1} minH={0}>
+      {dialog}
       <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
         <XStack render="button" aria-label={say('Reload the page')} onPress={() => setAttempt((a) => a + 1)} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
           <RefreshCcw size={14} />

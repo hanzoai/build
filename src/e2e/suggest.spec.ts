@@ -38,14 +38,23 @@ interface Seen {
   model: Record<string, unknown>[]
   patches: Record<string, unknown>[]
   reads: string[]
+  /** Lets the held read (`hold`) answer. */
+  release: () => void
 }
 
-/** The platform: the person's activity, `kept` as the account's suggest key, and `answer` as the model's rows. */
-async function platform(p: Page, kept: unknown, answer: object[] = ROWS): Promise<Seen> {
-  const seen: Seen = { model: [], patches: [], reads: [] }
-  let doc: Record<string, unknown> = kept ? { suggest: kept } : {}
+/**
+ * The platform: the person's activity, `kept` as the account's suggest key, and `answer` as the model's rows. The
+ * person turned suggestions on, unless `on` is false (the preference left unset). `hold` keeps one read's answer
+ * back until `release`.
+ */
+async function platform(p: Page, kept: unknown, answer: object[] = ROWS, o: { on?: boolean; hold?: string } = {}): Promise<Seen> {
+  let release = () => {}
+  const gate = o.hold ? new Promise<void>((r) => (release = r)) : null
+  const seen: Seen = { model: [], patches: [], reads: [], release: () => release() }
+  let doc: Record<string, unknown> = { ...(o.on === false ? {} : { suggestions: 'on' }), ...(kept ? { suggest: kept } : {}) }
   await p.route('**/v1/**', async (r) => {
     const req: Request = r.request()
+    if (gate && new URL(req.url()).pathname === o.hold) await gate
     const path = new URL(req.url()).pathname
     const json = (body: unknown) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })
     if (path === '/v1/pref' && req.method() === 'PATCH') {
@@ -210,4 +219,61 @@ test('on a phone, above the composer, a finger’s pitch, the × in sight; and i
   const width = await page.evaluate(() => document.documentElement.scrollWidth)
   expect(width).toBeLessThanOrEqual(390)
   await shot(page, 'suggest-phone-light.png')
+})
+
+test('they say a model makes them, and send exactly what the README lists', async ({ page }) => {
+  const seen = await platform(page, null)
+  await open(page, { theme: 'dark' })
+  await expect(list(page).getByRole('listitem')).toHaveCount(3)
+  await expect(page.getByText('Hanzo’s model reads your recent activity to suggest these.')).toBeVisible()
+  expect(seen.model).toHaveLength(1)
+  const sent = JSON.parse((seen.model[0]!.messages as { content: string }[])[1]!.content) as Record<string, unknown>
+  expect(Object.keys(sent).sort()).toEqual(['activity', 'person', 'skip', 'today'])
+  for (const a of sent.activity as Record<string, unknown>[]) for (const k of Object.keys(a)) expect(['key', 'kind', 'title', 'state', 'text', 'updated']).toContain(k)
+  for (const k of Object.keys(sent.person as object)) expect(['name', 'work', 'role', 'use', 'instructions']).toContain(k)
+})
+
+test('unset is off: nothing is read or sent, one line offers to turn them on, and on they are made', async ({ page }) => {
+  const seen = await platform(page, null, ROWS, { on: false })
+  await open(page, { theme: 'dark' })
+  await expect(page.getByText('Hanzo’s model can suggest what to do next from your recent activity.')).toBeVisible()
+  await expect(list(page)).toHaveCount(0)
+  expect(seen.reads).toEqual([])
+  expect(seen.model).toEqual([])
+  await page.getByRole('button', { name: 'Turn on suggestions' }).click()
+  await expect(list(page).getByRole('listitem')).toHaveCount(3)
+  expect(seen.patches[0]).toEqual({ suggestions: 'on' })
+  expect(seen.model).toHaveLength(1)
+})
+
+test('turned off mid-run, nothing more is sent and nothing is saved back', async ({ page }) => {
+  // Rows kept long ago are drawn while new ones are made; the board's answer is held so the run is mid-way.
+  const old = { at: '2026-01-01T00:00:00Z', sig: 'x', rows: [{ id: 'r9', icon: 'agent', title: 'An old row', summary: '', act: { kind: 'task', prompt: 'Do the old thing.' } }], dismissed: [] }
+  const seen = await platform(page, old, ROWS, { hold: '/v1/task/board' })
+  await open(page, { theme: 'dark' })
+  await expect(row(page, 'An old row')).toBeVisible()
+  await page.getByRole('button', { name: 'Turn off suggestions' }).click()
+  await expect.poll(() => seen.patches.length).toBe(1)
+  seen.release()
+  await page.waitForTimeout(1500)
+  expect(seen.model).toEqual([])
+  expect(seen.patches).toEqual([{ suggestions: 'off', suggest: null }])
+  await expect(page.getByRole('button', { name: 'Turn on suggestions' })).toBeVisible()
+})
+
+test('Turn off is the account’s: kept as `suggestions: off`, and from then nothing is read but the switch and nothing is sent', async ({ page }) => {
+  const seen = await platform(page, null)
+  await open(page, { theme: 'dark' })
+  await expect(list(page).getByRole('listitem')).toHaveCount(3)
+  await page.getByRole('button', { name: 'Turn off suggestions' }).click()
+  await expect(list(page)).toHaveCount(0)
+  // The switch, and the rows made from their activity forgotten.
+  await expect.poll(() => seen.patches.at(-1)).toEqual({ suggestions: 'off', suggest: null })
+  const reads = seen.reads.length
+  await page.reload()
+  await page.waitForTimeout(1500)
+  await expect(list(page)).toHaveCount(0)
+  expect(seen.model).toHaveLength(1)
+  // No source of their activity is read (the switch itself is /v1/pref, which `reads` leaves out).
+  expect(seen.reads.slice(reads)).toEqual([])
 })

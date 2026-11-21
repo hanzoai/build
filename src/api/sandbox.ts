@@ -78,12 +78,27 @@ async function up(t: Target, id: string): Promise<void> {
   if (b.state !== 'running') throw new Refusal(503, b.error || phrase('The sandbox did not start again. Try again.'))
 }
 
-/** Asks what needs a running sandbox; a parked one is resumed first. */
-async function running<T>(t: Target, id: string, ask: () => Promise<T>): Promise<T> {
+/**
+ * Whether the person agrees to wake a suspended sandbox, which bills its cloud
+ * computer again: the UI's spend question (spend.tsx `useWake`). Nothing here
+ * wakes one without it.
+ */
+export type Wake = () => Promise<boolean>
+
+/**
+ * What the page passes where nobody pressed anything (a door or a preview opening as the page loads, or reopening
+ * after the sandbox stopped): it never wakes one, so a remembered yes cannot wake a workspace by a page being open.
+ * The suspended state says so, beside its Wake.
+ */
+export const stay: Wake = async () => false
+
+/** Asks what needs a running sandbox; a parked one is resumed first, only on the person's yes. */
+async function running<T>(t: Target, id: string, ask: () => Promise<T>, agree: Wake): Promise<T> {
   try {
     return await ask()
   } catch (e) {
     if (!(e instanceof Refusal) || e.status !== 409) throw e
+    if (!(await agree())) throw new Refusal(409, phrase('The cloud workspace is suspended. Wake it to go on.'))
     await up(t, id)
     return ask()
   }
@@ -93,8 +108,8 @@ async function running<T>(t: Target, id: string, ask: () => Promise<T>): Promise
 export const NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 
 /** Where to frame one door, with a fresh ticket in its address. */
-export async function door(t: Target, id: string, which: Door, session = ''): Promise<string> {
-  const r = await running(t, id, () => call<{ url?: unknown }>(t, 'POST', `/v1/sandbox/${seg(id)}/${which}/ticket`))
+export async function door(t: Target, id: string, which: Door, agree: Wake, session = ''): Promise<string> {
+  const r = await running(t, id, () => call<{ url?: unknown }>(t, 'POST', `/v1/sandbox/${seg(id)}/${which}/ticket`), agree)
   const path = typeof r?.url === 'string' ? r.url : ''
   if (!path.startsWith('/v1/')) throw new Refusal(502, phrase('The sandbox answered with no address to open'))
   const arg = which === 'terminal' && NAME.test(session) ? `&arg=${session}` : ''
@@ -123,11 +138,15 @@ export async function ports(t: Target, id: string): Promise<Port[]> {
  * An address that opens one port in a browser: its own origin, with a single-use
  * ticket that sets the preview's cookie and lands on its root.
  */
-export async function preview(t: Target, id: string, port: number): Promise<string> {
-  const r = await running(t, id, () =>
-    call<{ url?: unknown }>(t, 'POST', `/v1/sandbox/${seg(id)}/preview`, {
-      port,
-    }),
+export async function preview(t: Target, id: string, port: number, agree: Wake): Promise<string> {
+  const r = await running(
+    t,
+    id,
+    () =>
+      call<{ url?: unknown }>(t, 'POST', `/v1/sandbox/${seg(id)}/preview`, {
+        port,
+      }),
+    agree,
   )
   let url: URL
   try {
@@ -207,10 +226,10 @@ async function exec(t: Target, id: string, argv: string[], timeoutSec: number): 
 /**
  * Start the app's server in the sandbox, detached, and answer the command it runs:
  * `start` when the codebase's environment names one, else its package's dev script.
- * A parked sandbox is resumed first.
+ * A parked sandbox is resumed first, on the person's yes.
  */
-export async function serve(t: Target, id: string, start = ''): Promise<string> {
-  const r = await running(t, id, () => exec(t, id, ['sh', '-c', SERVE, 'sh', start.trim()], 30))
+export async function serve(t: Target, id: string, agree: Wake, start = ''): Promise<string> {
+  const r = await running(t, id, () => exec(t, id, ['sh', '-c', SERVE, 'sh', start.trim()], 30), agree)
   const said = r.out.trim()
   if (r.code === 0 && said) return said
   const why = UNSTARTED[said]
