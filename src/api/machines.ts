@@ -6,19 +6,26 @@
  *   PATCH  /v1/agent/targets/{id}       rename it, drain it, bring it back
  *   DELETE /v1/agent/targets/{id}       deregister it
  *   POST   /v1/agent/targets/{id}/key   mint or rotate its claim key, answered once
+ *   POST   /v1/agent/targets/{id}/folders {folder}    let the web start runs in a folder there
+ *   DELETE /v1/agent/targets/{id}/folders?folder=…   stop letting it
  *
  * A machine belongs to the member who registered it. Only that member or an org
  * admin changes, removes or keys it, and the platform answers anyone else the
  * same 404 an unknown id gets — the record names no owner — so a 404 here is
  * said as that rule. `hanzo link`, run on the machine, registers it under its
  * hostname and keeps it online while it runs.
+ *
+ * A run started from the web works in a folder of a machine only inside one its
+ * owner granted (`folders`, hanzo-inc/app#310). Only the owner grants, from Hanzo
+ * Desktop or `hanzo link grant <folder>`, and only the owner revokes; the platform
+ * answers anyone else 403, an org admin included.
  */
 import { phrase } from '@hanzo/i18n'
 import type { Say } from '@hanzo/i18n/react'
 
 import { formatDeviceLabel } from '../dev-mode.ts'
 import { deviceKey, type Names } from '../names.ts'
-import { call, Refusal, seg, type Target } from './call.ts'
+import { call, query, Refusal, seg, type Target } from './call.ts'
 
 export const KINDS = ['laptop', 'gpu', 'cloud', 'cluster', 'machine'] as const
 export type Kind = (typeof KINDS)[number]
@@ -88,6 +95,8 @@ export interface Machine {
   updatedAt?: string
   spec?: MachineSpec
   metrics?: MachineMetrics
+  /** The folders its owner lets runs started from the web work in, absolute paths; a run may work in one or under one. */
+  folders: string[]
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -210,6 +219,7 @@ export function machine(raw: unknown): Machine {
     sessions: num(o.sessions),
     running: num(o.running),
     seen: str(o.metricsAt),
+    folders: Array.isArray(o.folders) ? o.folders.filter((f): f is string => typeof f === 'string' && f !== '') : [],
   }
 
   Object.defineProperties(m, {
@@ -294,4 +304,14 @@ export async function key(t: Target, id: string): Promise<string> {
   const k = str(r?.claimKey)
   if (!k) throw new Error(phrase('The platform answered no key'))
   return k
+}
+
+/** Let runs started from the web work in `folder` on the machine, and in every folder under it. The owner's alone. */
+export async function grant(t: Target, id: string, folder: string): Promise<void> {
+  await call<unknown>(t, 'POST', `/v1/agent/targets/${seg(id)}/folders`, { folder })
+}
+
+/** Stop letting runs started from the web work in `folder` on the machine. The owner's alone. */
+export async function revoke(t: Target, id: string, folder: string): Promise<void> {
+  await call<unknown>(t, 'DELETE', `/v1/agent/targets/${seg(id)}/folders${query({ folder })}`)
 }

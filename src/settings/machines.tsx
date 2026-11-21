@@ -3,7 +3,9 @@
  * Hanzo sandbox. `hanzo link` run on a machine registers it under its hostname
  * and keeps it online while it runs; one can also be registered here by hand.
  * The member who linked a machine, or an org admin, renames it, drains it,
- * mints its claim key or removes it.
+ * mints its claim key or removes it. Under each, the folders its owner lets the
+ * web use, and on Hanzo Desktop a way to share one of this computer's
+ * (shared.tsx).
  *
  * Its words are the reader's language (@hanzo/i18n `t`); a machine's name,
  * hostname, id and hardware, and the commands to type, are drawn as given.
@@ -50,8 +52,9 @@ import {
 import { Confirm, Rename } from '../ask.tsx'
 import { useRead } from '../data.ts'
 import { useDevMode } from '../dev-mode.ts'
-import { useHost, useTarget } from '../host.tsx'
+import { useHost, useLocal, useTarget } from '../host.tsx'
 import { rename, useDeviceNames } from '../names.ts'
+import { Shared } from './shared.tsx'
 import { Card, Field, Group, Heading, Note, Once, Row, Soft } from './ui.tsx'
 
 /** What `hanzo link` needs, in the order it is typed on the machine. */
@@ -163,6 +166,20 @@ export function Machines() {
   const [collapsedDevIds, setCollapsedDevIds] = useState<Record<string, boolean>>({})
   const [showAdvancedLink, setShowAdvancedLink] = useState(false)
   const [note, setNote] = useState('')
+  // This computer's hostname, on a host that has the computer: its machine is the one registered under it.
+  const local = useLocal()
+  const [hostname, setHostname] = useState('')
+  useEffect(() => {
+    let live = true
+    void local?.host?.().then(
+      (h) => live && setHostname(h),
+      // A computer that cannot say its name is not found among the machines, and shares nothing from here.
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [local])
 
   // Read again on the agent's beat; "Reading machines…" stays for the first read only.
   const again = list.reload
@@ -418,6 +435,8 @@ export function Machines() {
                       </XStack>
                     }
                   />
+
+                  <Shared m={m} here={hostname !== '' && m.host === hostname} onChanged={list.reload} />
 
                   {/* Advanced details: hardware specs, live telemetry, keys & CLI flags (collapsed unless opened or Developer mode is ON) */}
                   {showDetails ? (

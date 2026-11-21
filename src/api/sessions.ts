@@ -33,6 +33,10 @@ export interface Session {
   repo: string
   project: string
   target: string
+  /** The hostname of the machine it runs on, as that machine reported it, or ''. */
+  host: string
+  /** The folder it is working in now, as its machine reports it (a linked shell moves), or ''. */
+  cwd: string
   /** What sort of run: 'coding' for a coding run. */
   kind: string
   /** The branch the run started from, or ''. */
@@ -93,6 +97,8 @@ export function session(raw: unknown): Session {
     repo: str(s.repo),
     project: str(s.project),
     target: str(s.target),
+    host: str(s.host),
+    cwd: str(s.cwd),
     kind: str(s.kind),
     base: str(s.base),
     branch: str(s.branch),

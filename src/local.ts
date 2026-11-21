@@ -58,6 +58,8 @@ export interface Local {
   run: (folder: string, prompt: string, setup?: Setup) => Promise<Done>
   /** Stop the agent being fetched for the first run, when a person no longer wants it; the run then ends as cancelled (`failed`). */
   cancel?: () => Promise<void> | void
+  /** This computer's hostname, the name `hanzo link` registers it under: how its own machine is found among the org's (settings/shared.tsx). */
+  host?: () => Promise<string>
 }
 
 /** The place id New keeps for this computer. A machine's is `tgt_…` and the cloud workspace's is ''. */

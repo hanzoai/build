@@ -215,7 +215,10 @@ run's menu offers Schedule this, which opens New task with the run's ask.
 **Settings, Code.** Environments: every codebase that has one, opened in the
 same editor a run shows, forgotten by an org admin. Machines: `hanzo login` and
 `hanzo link` to link one, registering one by hand, and each machine's rename,
-drain, claim key (shown once) and removal. API keys: your secret and publishable
+drain, claim key (shown once) and removal, and under each the folders its owner
+lets the web use, with Stop sharing (settings/shared.tsx); on Hanzo Desktop the
+machine that is this computer (`Local.host`, its hostname) shares one through the
+computer's own dialog. API keys: your secret and publishable
 key, a new one shown once, rotated or revoked.
 
 **Customize.** What the agent brings to a run, a tab each — Skills, Connectors,
@@ -310,6 +313,12 @@ folder's `redesign/` live and shows it in Chrome; the agent, which has no networ
 reads the copy, answers with a critique and builds the new site there as static
 files, and the preview follows each file it saves. An ask that only holds a link is
 a normal run.
+On a machine whose owner shares folders with the web (shared.ts, hanzo-inc/app
+issue 310), a Folder pill lists those and no others; Auto is the folder the
+machine's linked shell is open in (its running session's `cwd`) when that is
+inside one, else no folder (a new one there, as before). A run in a folder is a
+coding run with `dir` and `targetId` and no repository; a `folder_not_granted`
+refusal says how to share the folder and offers the ones shared now.
 Everywhere else (a browser page, the cloud workspace, a machine), a web page's
 address in the ask (page.ts, hanzo-inc/app issue 312) offers
 **Critique and redesign** (critique it, build a redesign, keep its dev server on
@@ -372,6 +381,7 @@ picker and open-in-tab; Share and Publish; the console dock under it.
 | `PATCH /v1/agent/sessions/{id}` `{title}` · `{published}` | rename a run, share its story at `GET /v1/agent/builds/{org}/{project}` |
 | `GET /v1/agent/sessions?kind=coding&status=&after=` | Find, by status, paged |
 | `GET`/`POST /v1/agent/targets` · `PATCH`/`DELETE …/{id}` · `POST …/{id}/key` | the org's machines, and a machine's claim key |
+| `POST /v1/agent/targets/{id}/folders` `{folder}` · `DELETE …/folders?folder=` | share a machine's folder with the web, stop sharing it (its owner's alone) |
 | `GET`/`POST /v1/account/keys` · `DELETE …/{id}` | your API keys, as many as you need; one revoked at a time |
 | `GET`/`POST /v1/auto/automations` · `GET`/`PATCH`/`DELETE …/{id}` · `POST …/{id}/run` · `GET …/{id}/runs` | Scheduled tasks, and one task's editor |
 | `GET /v1/auto/jobs` · `…/{id}` · `GET /v1/auto/events` (SSE over fetch) · `POST /v1/auto/cron` | Activity, live, and a schedule from plain words |

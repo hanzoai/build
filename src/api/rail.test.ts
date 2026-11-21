@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Refusal, type Target } from './call.ts'
 import { keys, limits, mint, revoke } from './keys.ts'
-import { add, change as changeMachine, key, machine, machines, remove as removeMachine } from './machines.ts'
+import { add, change as changeMachine, grant, key, machine, machines, remove as removeMachine, revoke as unshare } from './machines.ts'
 import { places, SANDBOX } from './places.ts'
 import { change, project, remove } from './projects.ts'
 
@@ -103,6 +103,7 @@ describe('machines', () => {
     running: 1,
     metricsAt: '2026-09-27T00:00:00Z',
     spec: { os: 'linux' },
+    folders: ['/home/me/site', '', 7],
   }
 
   it('lists the org’s machines, dropping a row with no id', async () => {
@@ -110,7 +111,7 @@ describe('machines', () => {
     const list = await machines(T)
     expect(seen[0]).toMatchObject({ method: 'GET', url: 'https://api.hanzo.ai/v1/agent/targets' })
     expect(list).toEqual([
-      { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 4, running: 1, seen: '2026-09-27T00:00:00Z' },
+      { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', sessions: 4, running: 1, seen: '2026-09-27T00:00:00Z', folders: ['/home/me/site'] },
     ])
   })
 
@@ -119,9 +120,22 @@ describe('machines', () => {
     expect(machine({ id: 'tgt_3' }).label).toBe('tgt_3')
   })
 
-  it('keeps the places New offers the same rows', async () => {
-    answer(200, { targets: [row] })
-    expect(await places(T)).toEqual([SANDBOX, { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark' }])
+  it('keeps the places New offers the same rows, with the folders a machine shares', async () => {
+    answer(200, { targets: [row, { ...row, id: 'tgt_2', folders: [] }] })
+    expect(await places(T)).toEqual([
+      SANDBOX,
+      { id: 'tgt_1', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark', folders: ['/home/me/site'] },
+      { id: 'tgt_2', label: 'workshop', kind: 'gpu', status: 'online', capacity: '1× GB10', host: 'spark' },
+    ])
+  })
+
+  it('grants and revokes a folder, the folder escaped in the revoke\'s address', async () => {
+    let seen = answer(201, { folder: '/home/me/my site', grantedBy: 'u', grantedAt: '2026-11-21T00:00:00Z' })
+    await grant(T, 'tgt_1', '/home/me/my site')
+    expect(seen[0]).toEqual({ method: 'POST', url: 'https://api.hanzo.ai/v1/agent/targets/tgt_1/folders', body: { folder: '/home/me/my site' } })
+    seen = answer(200, { revoked: true, folder: '/home/me/my site' })
+    await unshare(T, 'tgt_1', '/home/me/my site')
+    expect(seen[0]).toMatchObject({ method: 'DELETE', url: 'https://api.hanzo.ai/v1/agent/targets/tgt_1/folders?folder=%2Fhome%2Fme%2Fmy+site' })
   })
 
   it('registers one by hand, sending a hostname only when there is one', async () => {

@@ -83,6 +83,13 @@ describe('call', () => {
     await expect(call(T, 'POST', '/v1/agent?x=1', {})).rejects.toMatchObject({ status: 409, message: text })
   })
 
+  it('keeps the code a problem names, so a screen can tell one refusal from another', async () => {
+    answer(403, { type: 'about:blank', title: 'Forbidden', status: 403, detail: 'not shared', code: 'folder_not_granted' }, 'application/problem+json')
+    await expect(call(T, 'POST', '/v1/agent/coding', {})).rejects.toMatchObject({ status: 403, message: 'not shared', code: 'folder_not_granted' })
+    answer(409, { title: 'Conflict' }, 'application/problem+json')
+    await expect(call(T, 'POST', '/v1/agent/coding', {})).rejects.toMatchObject({ code: '' })
+  })
+
   it('reads a refusal whose body is not JSON as saying nothing', async () => {
     expect(await reason(new Response('<html>Bad gateway</html>', { status: 502 }))).toBe('')
   })
