@@ -15,6 +15,10 @@
  *   GET    /v1/billing/invoices/{id}/pdf         the invoice as a PDF
  *   GET    /v1/billing/balance                   prepaid balance, whole cents
  *   GET    /v1/billing/credit-balance            granted credit, per currency
+ *   GET    /v1/billing/credits                   {grants}: every grant, spent and lapsed included
+ *   GET    /v1/billing/tier                      the rung served and its tier class
+ *   GET    /v1/billing/recharge                  the auto-reload rule
+ *   PUT    /v1/billing/recharge                  arm it (a card on file) or disarm it
  *   POST   /v1/billing/topup                     charge a saved card into the balance
  *   GET    /v1/billing/usage/rollup              the plan's month: included spend and request windows
  *   GET    /v1/usage/summary?range=month         this month's spend, by category
@@ -390,6 +394,78 @@ export async function credit(t: Target): Promise<number> {
     .map(obj)
     .filter((b) => (str(b.currency) || 'usd').toLowerCase() === 'usd')
     .reduce((sum, b) => sum + num(b.available), 0)
+}
+
+/** One grant of credit, spent, lapsed and voided included: the ledger, not the spendable figure. */
+export interface Grant {
+  id: string
+  name: string
+  amount: number
+  remaining: number
+  currency: string
+  /** RFC 3339, or '' for one that does not lapse. */
+  expires: string
+  active: boolean
+}
+
+export async function grants(t: Target): Promise<Grant[]> {
+  const raw = obj(await call<unknown>(t, 'GET', '/v1/billing/credits'))
+  return arr(raw.grants)
+    .map(obj)
+    .map((g) => ({
+      id: str(g.id),
+      name: str(g.name),
+      amount: num(g.amountCents),
+      remaining: num(g.remainingCents),
+      currency: str(g.currency) || 'usd',
+      expires: str(g.expiresAt),
+      active: g.active === true && g.voided !== true,
+    }))
+    .filter((g) => g.id)
+}
+
+/** The rung an organization is served as (`max-20x`, '' with none) and the tier class it is served under (`pro`). */
+export interface Tier {
+  plan: string
+  tier: string
+}
+
+export async function tier(t: Target): Promise<Tier> {
+  const r = obj(await call<unknown>(t, 'GET', '/v1/billing/tier'))
+  return { plan: str(r.plan), tier: str(obj(r.tier).name) }
+}
+
+/** Auto-reload: top the balance up by `amount` whenever it falls below `threshold`, charging the card on file. */
+export interface Recharge {
+  enabled: boolean
+  threshold: number
+  amount: number
+  currency: string
+  /** RFC 3339 of the last reload, or ''. */
+  last: string
+}
+
+function recharged(raw: unknown): Recharge {
+  const r = obj(raw)
+  return {
+    enabled: r.enabled === true,
+    threshold: num(r.thresholdCents),
+    amount: num(r.amountCents),
+    currency: str(r.currency) || 'usd',
+    last: str(r.lastRechargedAt),
+  }
+}
+
+/** The rule as stored; one never set reads as off. */
+export async function recharge(t: Target): Promise<Recharge> {
+  return recharged(await call<unknown>(t, 'GET', '/v1/billing/recharge'))
+}
+
+/** Arm or disarm the rule. Turning it on needs a card on file, and the platform says so when there is none. */
+export async function arm(t: Target, rule: { enabled: boolean; threshold: number; amount: number }): Promise<Recharge> {
+  return recharged(
+    await call<unknown>(t, 'PUT', '/v1/billing/recharge', { enabled: rule.enabled, thresholdCents: rule.threshold, amountCents: rule.amount, currency: 'usd' }),
+  )
 }
 
 /** Charge a saved card and add the amount to the balance; answers the balance after. */
