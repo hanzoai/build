@@ -14,6 +14,9 @@
  *   ?at=<path>    the address to start at
  *   ?local=<n>    the host has the computer (Hanzo Desktop's `local`), with n folders opened already; its folder dialog
  *                 answers /Users/dave/picked, and every run it is asked for is written out under the sidebar (Runs on this computer)
+ *   ?folders=a,b  instead of f1..fn: the computer's folders by name, the last one used most recently
+ *   ?found=a,b    folders the computer finds a moment after the first read (it says so through `changed`), never opened in Hanzo
+ *   ?setup=1      the first run fetches the agent: it says 40% and waits for "Finish setup" before it says 100% and runs
  */
 import '@hanzo/font/css'
 import '@hanzo/ui/theme.css'
@@ -30,8 +33,16 @@ const ORG = 'acme'
 const bearer = () => window.localStorage.getItem('hanzo_iam_access_token')
 
 /** A computer with `n` folders opened (the last one used most recently), as Hanzo Desktop's `local` answers. */
-function computer(n: number, ran: (line: string) => void): Local {
-  let folders: Folder[] = Array.from({ length: n }, (_, i) => ({ path: `/Users/dave/f${i + 1}`, name: `f${i + 1}`, used: i + 1 }))
+function computer(n: number, ran: (line: string) => void, names: string[], found: string[], setup: { finish: () => void } | null): Local {
+  const listeners = new Set<() => void>()
+  let folders: Folder[] = (names.length ? names : Array.from({ length: n }, (_, i) => `f${i + 1}`)).map((name, i) => ({ path: `/Users/dave/${name}`, name, used: i + 1 }))
+  if (found.length) {
+    // Found on the computer, never opened in Hanzo: listed after a moment, in the order the host found them.
+    setTimeout(() => {
+      folders = [...folders, ...found.map((name) => ({ path: `/Users/dave/${name}`, name }))]
+      for (const l of listeners) l()
+    }, 300)
+  }
   const use = (path: string) => {
     const top = Math.max(0, ...folders.map((f) => f.used ?? 0)) + 1
     const known = folders.some((f) => f.path === path)
@@ -39,14 +50,25 @@ function computer(n: number, ran: (line: string) => void): Local {
   }
   return {
     folders: () => folders,
+    changed: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
     pick: async () => {
       use('/Users/dave/picked')
       return folders.find((f) => f.path === '/Users/dave/picked') ?? null
     },
     use,
-    run: async (folder, prompt) => {
+    run: async (folder, prompt, fetching) => {
       ran(`${folder} <- ${prompt}`)
-      return { ok: true, output: `Edited README.md in ${folder}` }
+      if (setup) {
+        fetching?.(40)
+        await new Promise<void>((resolve) => {
+          setup.finish = resolve
+        })
+        fetching?.(100)
+      }
+      return { ok: true, output: `Edited README.md in ${folder}`, process: `exec bash -lc 'ls ~' in ${folder}\n succeeded in 12ms` }
     },
   }
 }
@@ -59,7 +81,12 @@ function Page() {
   const [width, setWidth] = useState(264)
   const [shut, setShut] = useState(false)
   const [ran, setRan] = useState<string[]>([])
-  const [local] = useState(() => (q.has('local') ? computer(Number(q.get('local')) || 0, (line) => setRan((r) => [...r, line])) : undefined))
+  const [setup] = useState(() => (q.get('setup') === '1' ? { finish: () => {} } : null))
+  const [local] = useState(() =>
+    q.has('local')
+      ? computer(Number(q.get('local')) || 0, (line) => setRan((r) => [...r, line]), (q.get('folders') ?? '').split(',').filter(Boolean), (q.get('found') ?? '').split(',').filter(Boolean), setup)
+      : undefined,
+  )
   const token = bearer()
   const host: Host = {
     name: 'Hanzo',
@@ -106,6 +133,7 @@ function Page() {
         <SizableText size="$1" color="$soft" aria-label="Runs on this computer">
           {ran.join(' | ')}
         </SizableText>
+        {setup ? <SidebarItem onPress={() => setup.finish()}>Finish setup</SidebarItem> : null}
       </Sidebar>
       <Builder host={host} rail={false} />
     </XStack>

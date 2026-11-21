@@ -89,16 +89,42 @@ const WORK = /(^|[\s'"`(=:,])\/work(\/[^\s'"`),;]*)?(?=$|[\s'"`),;:.])/g
  * project" and `/work/src/app.ts` is "src/app.ts". Anything else is left as written.
  */
 export function plainPath(text: string, say: Say = english): string {
-  const rest = (tail: string | undefined) => (tail ?? '').replace(/^\/+/, '').replace(/\/+$/, '')
+  // The path inside a tail, and the sentence's own punctuation after it, which stays where it was written.
+  const split = (tail: string | undefined): [string, string] => {
+    const written = (tail ?? '').replace(/^\/+/, '')
+    const stop = /[.!?:]*$/.exec(written)?.[0] ?? ''
+    return [written.slice(0, written.length - stop.length).replace(/\/+$/, ''), stop]
+  }
   return text
     .replace(HOME, (_, lead: string, tail?: string) => {
-      const inside = rest(tail)
-      return lead + (inside ? say('{path} in your home folder', { path: inside }) : say('your home folder'))
+      const [inside, stop] = split(tail)
+      return lead + (inside ? say('{path} in your home folder', { path: inside }) : say('your home folder')) + stop
     })
     .replace(WORK, (_, lead: string, tail?: string) => {
-      const inside = rest(tail)
-      return lead + (inside || say('your project'))
+      const [inside, stop] = split(tail)
+      return lead + (inside || say('your project')) + stop
     })
+}
+
+/** A text as a pattern that matches it literally. */
+const literal = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * What an agent said after working in a folder, said in words. Paths inside the folder are named by it
+ * ("checkout.html in shop"), the folder's own path by its name, and the home folder and the sandbox's `/work`
+ * as `plainPath` says them. Anything else is left as it was written.
+ */
+export function plainAnswer(text: string, folder: { path: string; name: string }, say: Say = english): string {
+  const root = folder.path.replace(/[/\\]+$/, '')
+  if (!root) return plainPath(text, say)
+  const own = new RegExp(`(^|[\\s'"\`(=:,])${root.split(/[/\\]+/).map(literal).join('[/\\\\]+')}([/\\\\][^\\s'"\`),;]*)?(?=$|[\\s'"\`),;:.!?])`, 'g')
+  const inside = text.replace(own, (_, lead: string, tail?: string) => {
+    const written = (tail ?? '').replace(/^[/\\]+/, '')
+    const stop = /[.!?:]*$/.exec(written)?.[0] ?? ''
+    const rest = written.slice(0, written.length - stop.length).replace(/[/\\]+$/, '')
+    return lead + (rest ? say('{path} in {folder}', { path: rest, folder: folder.name }) : folder.name) + stop
+  })
+  return plainPath(inside, say)
 }
 
 /** A file's name as a person reads it: the last part of its path, said in words. */

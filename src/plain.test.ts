@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { cards, type Card } from './api/turn.ts'
-import { doing, fold, isProcess, plainPath, ranOf, worked } from './plain.ts'
+import { doing, fold, isProcess, plainAnswer, plainPath, ranOf, worked } from './plain.ts'
 
 const said = (key: string, text: string, who: 'person' | 'agent' = 'agent'): Card => ({ kind: 'said', key, who, text })
 const shell = (key: string, command: string, ran: 'running' | 'done' = 'done'): Card => ({ kind: 'shell', key, command, output: '', ran })
@@ -87,5 +87,37 @@ describe('result first: the process folds into one plain line (hanzo-inc/app iss
       { kind: 'note', key: expect.any(String), text: 'Sent to a machine', step: true },
       { kind: 'note', key: expect.any(String), text: 'Done — nothing to change' },
     ])
+  })
+})
+
+describe('what an agent said in a folder, in words', () => {
+  const folder = { path: '/Users/alex/work/shop', name: 'shop' }
+
+  it('names a file by its folder and the folder by its name', () => {
+    expect(plainAnswer('I added /Users/alex/work/shop/checkout.html and linked it.', folder)).toBe('I added checkout.html in shop and linked it.')
+    expect(plainAnswer('Everything is in /Users/alex/work/shop.', folder)).toBe('Everything is in shop.')
+    expect(plainAnswer('Changed /Users/alex/work/shop/src/app.ts.', folder)).toBe('Changed src/app.ts in shop.')
+    expect(plainAnswer('(see /Users/alex/work/shop/README.md)', folder)).toBe('(see README.md in shop)')
+  })
+
+  it('says the home folder in words and leaves a longer name alone', () => {
+    expect(plainAnswer('Saved the key to ~/.config/hanzo.', folder)).toBe('Saved the key to .config/hanzo in your home folder.')
+    expect(plainAnswer('Listed ~ for you', folder)).toBe('Listed your home folder for you')
+    expect(plainAnswer('Also touched /Users/alex/work/shop2/x.ts', folder)).toBe('Also touched work/shop2/x.ts in your home folder')
+  })
+
+  it('reads a Windows folder, either slash', () => {
+    const win = { path: 'C:\\Users\\alex\\shop', name: 'shop' }
+    expect(plainAnswer('Wrote C:\\Users\\alex\\shop\\index.html', win)).toBe('Wrote index.html in shop')
+    expect(plainAnswer('Wrote C:/Users/alex/shop/index.html', win)).toBe('Wrote index.html in shop')
+  })
+
+  it('draws through the reader\'s language', () => {
+    const french = ((s: string, v?: Record<string, string>) => `fr:${s}${v?.path ? `:${v.path}:${v.folder}` : ''}`) as never
+    expect(plainAnswer('Made /Users/alex/work/shop/a.ts', folder, french)).toBe('Made fr:{path} in {folder}:a.ts:shop')
+  })
+
+  it('leaves a text with no path as it was', () => {
+    expect(plainAnswer('I made the page faster.', folder)).toBe('I made the page faster.')
   })
 })

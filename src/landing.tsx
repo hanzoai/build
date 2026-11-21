@@ -51,6 +51,7 @@ import { useDevMode } from './dev-mode.ts'
 import { takeHandoff } from './handoff.ts'
 import { useHost, useLocal, useTarget } from './host.tsx'
 import { failed, HERE, recent, where, type Folder } from './local.ts'
+import { plainAnswer } from './plain.ts'
 import { level, pacing, useMind } from './mind.ts'
 import { usePrefs } from './prefs.tsx'
 import { Publish, type Source } from './publish.tsx'
@@ -93,13 +94,16 @@ const FIRST: Kept = { repo: null, branch: '', place: '', folder: '', mode: 'buil
 /** This computer, as a place: always there on a host that has it. */
 const HERE_PLACE: Place = { id: HERE, label: 'This computer', kind: 'here', status: 'online', capacity: '' }
 
-/** What a run on this computer is doing, or did: its folder, its ask, and once it finished, what it printed. */
+/** What a run on this computer is doing, or did: its folder, its ask, and once it finished, what the agent said and did. */
 interface Ran {
   folder: Folder
   ask: string
   going: boolean
   ok: boolean
+  /** What the agent said at the end. */
   output: string
+  /** What it did on the way: shown in Developer mode only. */
+  process: string
 }
 
 /**
@@ -146,14 +150,20 @@ export function hold(u: Unsent): void {
   }
 }
 
-/** A run on this computer: where it works, what it was asked, and once it ends, what the agent printed. */
-function RanHere({ ran }: { ran: Ran }) {
+/**
+ * A run on this computer: where it works, and once it ends, what the agent said, in words (`plainAnswer`). What it did
+ * on the way (its commands and what they printed) is drawn only in Developer mode; the first run waits while the host
+ * fetches the agent, and says so.
+ */
+function RanHere({ ran, setup, devMode }: { ran: Ran; setup: number | null; devMode: boolean }) {
   const { t } = useI18n()
+  const fetching = ran.going && setup !== null && setup < 100
   const head = ran.going
     ? t('Working in {name}…', { name: ran.folder.name })
     : ran.ok
       ? t('Done in {name}', { name: ran.folder.name })
       : t('Stopped in {name}', { name: ran.folder.name })
+  const said = ran.output ? plainAnswer(ran.output, ran.folder, t) : ''
   return (
     <YStack data-slot="ran-here" role="status" aria-live="polite" gap="$1.5" mx="$3" px="$3" py="$2.5" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$background" minW={0}>
       <XStack items="center" gap="$2" minW={0}>
@@ -162,13 +172,29 @@ function RanHere({ ran }: { ran: Ran }) {
           {head}
         </SizableText>
       </XStack>
-      <SizableText size="$1" color="$soft" numberOfLines={1} data-i18n-ltr="">
-        {ran.folder.path}
-      </SizableText>
-      {ran.output ? (
+      {fetching ? (
+        <SizableText data-slot="ran-setup" size="$1" color="$soft">
+          {t('Setting up Hanzo Dev on this computer… {percent}%', { percent: setup })}
+        </SizableText>
+      ) : null}
+      {said ? (
         <YStack maxH={320} overflowY="auto" minW={0}>
-          <SizableText size="$1" color="$ink" fontFamily="$mono" whiteSpace="pre-wrap" wordWrap="break-word" data-i18n-ltr="">
-            {ran.output}
+          <SizableText data-slot="ran-answer" size="$2" color="$ink" whiteSpace="pre-wrap" wordWrap="break-word">
+            {said}
+          </SizableText>
+        </YStack>
+      ) : !ran.going && !ran.ok ? (
+        <SizableText data-slot="ran-answer" size="$2" color="$ink">
+          {t('Hanzo Dev stopped before it finished. Try again.')}
+        </SizableText>
+      ) : null}
+      {devMode && ran.process ? (
+        <YStack data-slot="ran-process" gap="$1" minW={0}>
+          <SizableText size="$1" color="$soft" fontWeight="500">
+            {t('What Hanzo ran')}
+          </SizableText>
+          <SizableText size="$1" color="$soft" fontFamily="$mono" whiteSpace="pre-wrap" wordWrap="break-word" maxH={240} overflowY="auto" data-i18n-ltr="">
+            {ran.process}
           </SizableText>
         </YStack>
       ) : null}
@@ -272,8 +298,14 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const place: Place = here ? SANDBOX : (places.value.find((p) => p.id === kept.place) ?? SANDBOX)
   // The folders this computer opened, most recent first, and the one a run here goes to: the one chosen, else Auto's.
   const folders = local ? recent(local.folders()) : []
-  const folderAt = where(folders, kept.folder)
+  // The folder Auto picks is the one the words typed so far are about (local.ts `route`), so the pill says where Send goes.
+  const folderAt = where(folders, kept.folder, draft)
   const [ran, setRan] = useState<Ran | null>(null)
+  // How far the agent's first-run setup has got, while the host fetches it.
+  const [fetched, setFetched] = useState<number | null>(null)
+  // The folders found on the computer arrive after the first read.
+  const [, folded] = useState(0)
+  useEffect(() => local?.changed?.(() => folded((n) => n + 1)), [local])
   // Why this mode cannot run where it is sent: a plan is the sandbox's, on a machine and on this computer alike.
   const refused = here ? (mode === 'plan' ? t('A plan runs in the cloud workspace. On this computer, switch to Build.') : '') : unhonoured(mode, place.id, t)
 
@@ -416,8 +448,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   }
 
   /**
-   * A run on this computer: in the folder chosen, else Auto's (the one used last), else one the person picks now, once.
-   * The agent reads, edits and runs there and nowhere else; what it printed is shown under the composer when it ends.
+   * A run on this computer: in the folder chosen, else Auto's (the one the ask is about, else the one used last), else one
+   * the person picks now, once. The agent reads, edits and runs there and nowhere else; what it said is shown under the
+   * composer when it ends, and what it did only in Developer mode.
    */
   const sendHere = async (said: string) => {
     if (!local || busy) return
@@ -425,7 +458,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       setNote(refused)
       return
     }
-    let folder = folderAt.folder
+    let folder = where(folders, kept.folder, said).folder
     if (!folder) {
       setNote(t('Choose a folder for this run'))
       folder = await local.pick().catch(() => null)
@@ -437,16 +470,18 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     const prompt = [carry.text, compose(ask, files)].filter(Boolean).join('\n\n')
     setBusy(true)
     setNote('')
-    setRan({ folder, ask, going: true, ok: true, output: '' })
+    setRan({ folder, ask, going: true, ok: true, output: '', process: '' })
+    setFetched(null)
     try {
-      const done = await local.run(folder.path, prompt)
-      setRan({ folder, ask, going: false, ok: done.ok, output: done.output.trim() })
+      const done = await local.run(folder.path, prompt, setFetched)
+      setRan({ folder, ask, going: false, ok: done.ok, output: done.output.trim(), process: (done.process ?? '').trim() })
       setDraft('')
       setFiles([])
     } catch (e) {
       setRan(null)
       setNote(failed(e, t))
     } finally {
+      setFetched(null)
       setBusy(false)
     }
   }
@@ -591,7 +626,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       {
         id: AUTO,
         label: t('Auto'),
-        hint: folders[0] ? t('Last used: {name}', { name: folders[0].name }) : t('The folder you used last'),
+        hint: t('The folder your ask is about, else the one you used last'),
         icon: <FolderOpen size={13} color="$soft" />,
       },
       ...folders.map((f) => ({ id: f.path, label: f.name, hint: f.path, icon: <FolderOpen size={13} color="$soft" /> })),
@@ -868,7 +903,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                   {note || refused || mind.note}
                 </SizableText>
               ) : null}
-              {ran ? <RanHere ran={ran} /> : null}
+              {ran ? <RanHere ran={ran} setup={fetched} devMode={devMode} /> : null}
               <Composer
                 column
                 value={draft}
