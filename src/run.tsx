@@ -69,14 +69,16 @@ import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useVoice } from '@hanzo/voice'
 import { useEffect, useMemo, useState } from 'react'
 
+import { Confirm } from './ask.tsx'
 import { copy as toClipboard } from './clipboard.ts'
 import { approve, followUp, headline, retry, start, steer, type Ask, type Earlier } from './api/coding.ts'
 import { limits as readLimits } from './api/models.ts'
-import { list, message, pause, publish, rename, resume, stop, story, took } from './api/sessions.ts'
+import { list, message, pause, publish, remove, rename, resume, stop, story, took } from './api/sessions.ts'
 import { answer, cards, followed, outcome, pull, settled, steps } from './api/turn.ts'
 import { answer as reply, say as talk, talks } from './api/talk.ts'
 import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun, type RunState } from './data.ts'
+import { mark } from './runmeta.ts'
 import { Desk, SEED } from './desk.tsx'
 import { useDevMode } from './dev-mode.ts'
 import { KeepAwake, useKeepAwake } from './awake.tsx'
@@ -141,6 +143,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   // The working sandbox run words were said to here: its follow-up opens once it starts.
   const [steered, setSteered] = useState('')
   const [naming, setNaming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [name, setName] = useState('')
   const [copied, setCopied] = useState('')
   const [unfolded, setUnfolded] = useState(false)
@@ -765,6 +768,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     <DropdownMenuItem
                       aria-label={say('Archive')}
                       onSelect={() => {
+                        // Kept out of every list of runs (the sidebar's too, `runmeta.ts`) and still readable under Archived.
+                        mark(id, { archived: true })
                         if (running) void stop(t, id, 'Archived').catch(() => undefined)
                         host.go('')
                       }}
@@ -778,10 +783,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     <DropdownMenuItem
                       aria-label={say('Delete')}
                       variant="destructive"
-                      onSelect={() => {
-                        if (running) void stop(t, id, 'Deleted').catch(() => undefined)
-                        host.go('')
-                      }}
+                      onSelect={() => setDeleting(true)}
                     >
                       <SizableText size="$2" color="$red10" flex={1}>
                         {say('Delete')}
@@ -1156,6 +1158,21 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           <SideProvider value={split.side}>{desk_(false)}</SideProvider>
         </YStack>
       ) : null}
+      <Confirm
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={say('Delete this run?')}
+        says={say('“{title}” is deleted for good, with every link it was shared by. To keep it out of the list instead, archive it.', {
+          title: headline(record?.title ?? '', record?.repo ?? '') || say('this run'),
+        })}
+        act={say('Delete')}
+        run={async () => {
+          if (running) await stop(t, id, 'Deleted').catch(() => undefined)
+          await remove(t, id)
+          mark(id, { deleted: true })
+          host.go('')
+        }}
+      />
       <Dialog open={naming} onOpenChange={setNaming}>
         <DialogContent maxW={480}>
           <DialogTitle>{say('Rename this run')}</DialogTitle>
