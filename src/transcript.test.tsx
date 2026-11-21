@@ -15,11 +15,10 @@ const { box, step, none } = vi.hoisted(() => {
 })
 vi.mock('@hanzo/gui', () => ({ SizableText: box, XStack: box, YStack: box }))
 vi.mock('@hanzo/ui', () => ({ Button: box }))
-vi.mock('@hanzo/ui/agents', () => ({ Feedback: none }))
 vi.mock('@hanzo/ui/chat', () => ({ Code: box, GAP: '$4', MEASURE: 720, Message: box, Step: step, Thread: box }))
 vi.mock('@hanzogui/lucide-icons-2', () => ({ GitBranch: none }))
 vi.mock('./prose.tsx', () => ({ Prose: ({ text }: { text: string }) => text as unknown as ReactNode }))
-vi.mock('./reply.tsx', () => ({ artifacts: () => [], lead: () => null, Reply: none }))
+vi.mock('./reply.tsx', () => ({ artifacts: () => [], lead: () => null, Reply: ({ onRate }: { onRate?: unknown }) => (onRate ? 'rate-wired' : 'rate-missing') }))
 
 const { Transcript } = await import('./transcript.tsx')
 import type { Card } from './api/turn.ts'
@@ -35,6 +34,11 @@ const run: Card[] = [
 const draw = (devMode: boolean) => renderToStaticMarkup(h(Transcript, { cards: run, live: false, empty: null, onVerdict: async () => {}, devMode }))
 
 describe('a run as it reads (hanzo-inc/app issues 317 and 321)', () => {
+  it('rates an answer through the reply row alone, so its verdict is recorded and there is no second thumb pair', () => {
+    expect(draw(false).match(/rate-wired/g)).toHaveLength(1)
+    expect(draw(false)).not.toContain('rate-missing')
+  })
+
   it('off Developer mode, shows the result and folds the process into one plain line', () => {
     const html = draw(false)
     expect(html).toContain('Make me a landing page')

@@ -20,7 +20,7 @@ import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n } from '@hanzo/i18n/react'
 import { GitBranch } from '@hanzogui/lucide-icons-2'
 import { Button } from '@hanzo/ui'
-import { Feedback, type Verdict } from '@hanzo/ui/agents'
+import type { Verdict } from '@hanzo/ui/agents'
 import { Code, GAP, MEASURE, Message, Step, Thread } from '@hanzo/ui/chat'
 import { useState, type ReactNode } from 'react'
 
@@ -148,9 +148,7 @@ export function Transcript({
             <YStack gap="$1">
               <Prose text={c.text} />
               {c.key === last ? null : (
-                <Reply text={c.text} listen={listen} onOpen={first && onOpen ? () => onOpen(first) : undefined}>
-                  <Judge onVerdict={onVerdict} />
-                </Reply>
+                <Reply text={c.text} listen={listen} onRate={onVerdict} onOpen={first && onOpen ? () => onOpen(first) : undefined} />
               )}
             </YStack>
           </Message>
@@ -318,13 +316,12 @@ export function Transcript({
             </SizableText>
             <Prose text={c.text} />
             <XStack items="center" gap="$2" flexWrap="wrap">
-              <Reply text={c.text} listen={listen} />
+              <Reply text={c.text} listen={listen} onRate={onVerdict} />
               {onApprove ? (
                 <Button size="sm" disabled={approving} onPress={() => onApprove(c.text)}>
                   {approving ? t('Starting the build…') : t('Approve and build')}
                 </Button>
               ) : null}
-              <Judge onVerdict={onVerdict} />
             </XStack>
           </YStack>
         )
@@ -377,29 +374,5 @@ export function Transcript({
       ))}
       {end}
     </Thread>
-  )
-}
-
-/** Say whether what the agent said was good. A verdict that did not land is taken back and says why. */
-function Judge({ onVerdict }: { onVerdict: (v: Verdict) => Promise<void> }) {
-  const [verdict, setVerdict] = useState<Verdict>(null)
-  const [note, setNote] = useState('')
-  const judge = (next: Verdict) => {
-    setVerdict(next)
-    setNote('')
-    onVerdict(next).catch((e: Error) => {
-      setVerdict(null)
-      setNote(e.message)
-    })
-  }
-  return (
-    <XStack items="center" gap="$2" flexWrap="wrap">
-      <Feedback text="" verdict={verdict} onVerdict={judge} />
-      {note ? (
-        <SizableText size="$1" color="$soft" role="status">
-          {note}
-        </SizableText>
-      ) : null}
-    </XStack>
   )
 }

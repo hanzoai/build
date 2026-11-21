@@ -67,9 +67,7 @@ import { useCarry } from './carry.tsx'
 import { DEV_MODES } from './gear.ts'
 import { Panel, PanelToggle } from './panel.tsx'
 import { PAGE, useDeck, useKey } from './tabs.ts'
-import { book, hand, Suggestions, taken, useSuggestions } from './suggestions.tsx'
-import type { Act } from './suggest.ts'
-import { want } from './library.tsx'
+import { taken } from './suggestions.tsx'
 import { carrying, compose, pick, read as readFiles, type Attached } from './tools.tsx'
 import { about, asked as critiqued, attach as asFile, critique, local as onThisComputer, named as pagesIn, read as readPage, shown as shownPage } from './page.ts'
 import { useEar, useSpoken } from './voice.ts'
@@ -299,7 +297,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     go: (href) => (href.startsWith('http') ? host.open(href) : host.go(href)),
   }, DEV_MODES)
   const mode: Mode = carry.mode.value === 'plan' ? 'plan' : 'build'
-  const hints = useSuggestions(target)
   // The chosen codebase's environment, so New can say when it has none yet.
   const codebase = isForge(kept.repo) ? kept.repo.name : ''
   // The org's repositories on the forge: what a run and an environment can name.
@@ -609,33 +606,6 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     // Started once, on the sign-in that it waited for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signed])
-
-  /** What pressing a suggestion does: open what it names, chat its prompt, start its run, or make its scheduled task. */
-  const act = (a: Act) => {
-    switch (a.kind) {
-      case 'open':
-        if (a.item) want(a.item)
-        if (/^https:\/\//.test(a.to)) window.open(a.to, '_blank', 'noopener,noreferrer')
-        else if (a.to.startsWith('/')) host.open(a.to)
-        else host.go(a.to)
-        return
-      case 'send':
-        hand('send', a.prompt)
-        host.open('/chat')
-        return
-      case 'task':
-        setDraft(a.prompt)
-        void send(a.prompt)
-        return
-      case 'schedule':
-        setNote('')
-        void book(target, a, 'dev').then(
-          (made) => host.go(path({ kind: 'automation', id: made.id })),
-          (e: unknown) => setNote(e instanceof Error && e.message ? e.message : t('The scheduled task could not be made.')),
-        )
-        return
-    }
-  }
 
   /** Start the agent that finds a codebase's environment, and open it: its run is the progress. A refusal is the dialog's to say. */
   const setup = async (repo: string) => {
