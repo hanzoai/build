@@ -26,6 +26,8 @@ import { useState, type ReactNode } from 'react'
 
 import { counted, edited, explored } from './api/cli.ts'
 import type { Card, Ran } from './api/turn.ts'
+import { useDevMode } from './dev-mode.ts'
+import { doing, fold, plainPath, ranOf, worked, type Work } from './plain.ts'
 import { Prose } from './prose.tsx'
 import { artifacts, lead, Reply, type Artifact, type Listen } from './reply.tsx'
 
@@ -86,6 +88,7 @@ export function Transcript({
   onSendQueued,
   onRun,
   onAnswer,
+  devMode,
 }: {
   cards: Card[]
   /** The run is still working: a card still running shows it; otherwise it was cut off. */
@@ -115,212 +118,242 @@ export function Transcript({
   onRun?: (session: string) => void
   /** Answer a question the run asked with one of its options. Absent, a question has no buttons. */
   onAnswer?: (question: string, label: string) => void
+  /**
+   * Draw every command, read, edit and step as its own card. Off, each run of
+   * them folds into one plain line that opens onto them (plain.ts), so the
+   * transcript reads as its result. Absent, the reader's Developer mode decides.
+   */
+  devMode?: boolean
 }) {
   const { t } = useI18n()
+  const [developer, setDeveloper] = useDevMode()
+  const dev = devMode ?? developer
+  // A path a person reads off Developer mode is said in words (`~` is "your home folder").
+  const path = (p: string) => (dev ? p : plainPath(p, t))
   // A card the run never finished is cut off once the run has ended, not still going.
   const state = (ran: Ran): Ran => (ran === 'running' && !live ? 'cancelled' : ran)
   // The answer still arriving: the last thing the agent said while the run works.
   const last = live ? [...cards].reverse().find((c) => c.kind === 'said' && c.who === 'agent')?.key : undefined
   const expandThink = view === 'thinking' || view === 'verbose'
   const expandVerbose = view === 'verbose'
+  const draw = (c: Card): ReactNode => {
+    switch (c.kind) {
+      case 'said': {
+        if (c.who === 'person')
+          return <UserSaid key={c.key} text={c.text} />
+        const made = artifacts(c.text)
+        const first = lead(made)
+        return (
+          <Message key={c.key} role="assistant" busy={c.key === last}>
+            <YStack gap="$1">
+              <Prose text={c.text} />
+              {c.key === last ? null : (
+                <Reply text={c.text} listen={listen} onOpen={first && onOpen ? () => onOpen(first) : undefined}>
+                  <Judge onVerdict={onVerdict} />
+                </Reply>
+              )}
+            </YStack>
+          </Message>
+        )
+      }
+      case 'think':
+        return (
+          <Step key={`${c.key}:${view}`} name={t('Thought')} detail={firstLine(c.text)} status="done" defaultOpen={expandThink} aria-label={t('Thought')}>
+            <Prose text={c.text} />
+          </Step>
+        )
+      case 'todo':
+        return (
+          <YStack key={c.key} gap="$1" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Plan checklist')}>
+            {c.items.map((x, i) => (
+              <XStack key={i} gap="$2" items="flex-start">
+                <SizableText size="$2" color={x.done ? '$ink' : '$soft'}>
+                  {x.done ? '✓' : '○'}
+                </SizableText>
+                <SizableText flex={1} size="$2" color={x.done ? '$soft' : '$ink'}>
+                  {x.text}
+                </SizableText>
+              </XStack>
+            ))}
+          </YStack>
+        )
+      case 'shell':
+        // The CLI's words: Ran (Running while it works), the command as the shell got it, its output under it.
+        return (
+          <Step
+            key={`${c.key}:${view}`}
+            name={state(c.ran) === 'running' ? t('Running') : t('Ran')}
+            detail={c.command}
+            status={state(c.ran)}
+            defaultOpen={expandVerbose}
+            aria-label={t('Command {command}', { command: c.command })}
+          >
+            <Code language="shell" value={c.output || t('(no output)')}>
+              {c.output ? tail(c.output.replace(/\n+$/, '')) : t('(no output)')}
+            </Code>
+          </Step>
+        )
+      case 'explore':
+        // The CLI's Explored block: one line an action, consecutive reads on one line (cli.ts explored).
+        return (
+          <YStack key={c.key} gap="$1" aria-label={state(c.ran) === 'running' ? t('Exploring') : t('Explored')}>
+            <SizableText size="$2" color="$ink" fontWeight="600">
+              {state(c.ran) === 'running' ? t('Exploring') : t('Explored')}
+            </SizableText>
+            {explored(c.calls).map((l, i) => (
+              <XStack key={i} gap="$2" pl="$3">
+                <SizableText size="$2" color="$soft" shrink={0}>
+                  {t(l.title)}
+                </SizableText>
+                <SizableText size="$2" color="$ink" style={{ ...mono, overflowWrap: 'anywhere' }}>
+                  {path(l.text)}
+                </SizableText>
+              </XStack>
+            ))}
+          </YStack>
+        )
+      case 'edit':
+        // The CLI's patch header: Added / Deleted / Edited a file, or Edited N files, with the lines added and removed.
+        return (
+          <Step
+            key={`${c.key}:${view}`}
+            name={!c.files.length ? t('Edited files') : c.files.length > 1 ? `Edited ${c.files.length} files` : edited(c.files).split(' ')[0]!}
+            detail={!c.files.length ? '' : c.files.length > 1 ? edited(c.files).split(' ').slice(3).join(' ') : edited(c.files).split(' ').slice(1).join(' ')}
+            status={state(c.ran)}
+            defaultOpen={expandVerbose}
+            aria-label={c.files.length ? edited(c.files) : t('Edited files')}
+          >
+            <YStack gap="$2" items="flex-start">
+              <SizableText size="$1" color="$soft" style={{ whiteSpace: 'pre-wrap' }}>
+                {c.files.length ? c.files.map((f) => `${path(f.path)} ${counted(f)}`.trimEnd()).join('\n') : t('The agent named no files.')}
+              </SizableText>
+              {onDiff ? (
+                <Button size="sm" variant="outline" onPress={onDiff}>
+                  {t('Open the diff')}
+                </Button>
+              ) : null}
+            </YStack>
+          </Step>
+        )
+      case 'step':
+        return (
+          // The run's own error opens by default: it is the reason, and the line above it only says what to do.
+          // A step's name is ours (Error, Search) or a tool's; ours is said in the reader's language.
+          <Step key={`${c.key}:${view}`} name={t(c.name)} detail={c.detail} status={state(c.ran)} defaultOpen={c.name === 'Error' || expandVerbose} aria-label={`${t(c.name)} ${c.detail}`.trim()}>
+            {c.name === 'Error' ? (
+              // The reason is read whole, wrapped, never scrolled sideways.
+              <SizableText size="$2" color="$ink" style={{ ...mono, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                {c.output}
+              </SizableText>
+            ) : c.output.trim() ? (
+              <Code language="output" value={c.output}>
+                {tail(c.output.replace(/\n+$/, ''))}
+              </Code>
+            ) : undefined}
+          </Step>
+        )
+      case 'note': {
+        const noteText = t(c.text)
+        if (/^Pushed\s+/i.test(c.text) || /^Pushed\s+/i.test(noteText)) {
+          return (
+            <XStack key={c.key} role="note" self="flex-start">
+              <XStack
+                items="center"
+                gap="$1.5"
+                px="$2.5"
+                py="$1"
+                $platform-web={{ display: 'inline-flex' }}
+              >
+                <GitBranch size={12} color="$soft" shrink={0} aria-hidden />
+                <SizableText size="$1" color="$soft">
+                  {noteText}
+                </SizableText>
+              </XStack>
+            </XStack>
+          )
+        }
+        return (
+          <SizableText key={c.key} size="$1" color="$soft" role="note">
+            {noteText}
+          </SizableText>
+        )
+      }
+      case 'run':
+        return (
+          <XStack key={c.key} items="center" gap="$2" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Coding run')}>
+            <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1}>
+              {t('Coding run')}
+            </SizableText>
+            {onRun ? (
+              <Button size="sm" variant="outline" onPress={() => onRun(c.session)}>
+                {t('Open the run')}
+              </Button>
+            ) : null}
+          </XStack>
+        )
+      case 'ask':
+        return (
+          <YStack key={c.key} gap="$2" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Question')}>
+            <Prose text={c.text} />
+            {c.answer ? (
+              <SizableText size="$2" color="$soft">
+                {`✓ ${c.answer}`}
+              </SizableText>
+            ) : (
+              <XStack gap="$2" flexWrap="wrap">
+                {c.options.map((label) => (
+                  <Button key={label} size="sm" variant="outline" disabled={!onAnswer} onPress={() => onAnswer?.(c.question, label)}>
+                    {label}
+                  </Button>
+                ))}
+              </XStack>
+            )}
+          </YStack>
+        )
+      case 'plan':
+        return (
+          <YStack key={c.key} gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" aria-label={t('Plan')}>
+            <SizableText size="$2" color="$soft">
+              {t('Plan')}
+            </SizableText>
+            <Prose text={c.text} />
+            <XStack items="center" gap="$2" flexWrap="wrap">
+              <Reply text={c.text} listen={listen} />
+              {onApprove ? (
+                <Button size="sm" disabled={approving} onPress={() => onApprove(c.text)}>
+                  {approving ? t('Starting the build…') : t('Approve and build')}
+                </Button>
+              ) : null}
+              <Judge onVerdict={onVerdict} />
+            </XStack>
+          </YStack>
+        )
+    }
+  }
+  // The work between two things a person reads, as one line that opens onto it.
+  const work = (w: Work): ReactNode => {
+    const ran = ranOf(w.cards, state)
+    const now = [...w.cards].reverse().find((c) => 'ran' in c && state(c.ran) === 'running')
+    const name = ran === 'running' ? t('Working') : t('Worked')
+    const line = ran === 'running' ? doing(now ?? w.cards[w.cards.length - 1]!, t) : worked(w.cards, t)
+    return (
+      <Step key={`${w.key}:${view}`} name={name} detail={line} status={ran} defaultOpen={expandVerbose} aria-label={`${name} ${line}`.trim()}>
+        <YStack gap="$2">
+          {w.cards.map(draw)}
+          <XStack render="button" self="flex-start" aria-label={t('Turn on Developer mode')} onPress={() => setDeveloper(true)} px="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+            <SizableText size="$1" color="$soft">
+              {t('Always show each step: turn on Developer mode')}
+            </SizableText>
+          </XStack>
+        </YStack>
+      </Step>
+    )
+  }
   return (
     <Thread gap={GAP} column={{ maxW: MEASURE }} aria-label={t('Transcript')}>
       {header}
       {cards.length === 0 && queued.length === 0 ? <YStack py="$2">{empty}</YStack> : null}
-      {cards.map((c) => {
-        switch (c.kind) {
-          case 'said': {
-            if (c.who === 'person')
-              return <UserSaid key={c.key} text={c.text} />
-            const made = artifacts(c.text)
-            const first = lead(made)
-            return (
-              <Message key={c.key} role="assistant" busy={c.key === last}>
-                <YStack gap="$1">
-                  <Prose text={c.text} />
-                  {c.key === last ? null : (
-                    <Reply text={c.text} listen={listen} onOpen={first && onOpen ? () => onOpen(first) : undefined}>
-                      <Judge onVerdict={onVerdict} />
-                    </Reply>
-                  )}
-                </YStack>
-              </Message>
-            )
-          }
-          case 'think':
-            return (
-              <Step key={`${c.key}:${view}`} name={t('Thought')} detail={firstLine(c.text)} status="done" defaultOpen={expandThink} aria-label={t('Thought')}>
-                <Prose text={c.text} />
-              </Step>
-            )
-          case 'todo':
-            return (
-              <YStack key={c.key} gap="$1" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Plan checklist')}>
-                {c.items.map((x, i) => (
-                  <XStack key={i} gap="$2" items="flex-start">
-                    <SizableText size="$2" color={x.done ? '$ink' : '$soft'}>
-                      {x.done ? '✓' : '○'}
-                    </SizableText>
-                    <SizableText flex={1} size="$2" color={x.done ? '$soft' : '$ink'}>
-                      {x.text}
-                    </SizableText>
-                  </XStack>
-                ))}
-              </YStack>
-            )
-          case 'shell':
-            // The CLI's words: Ran (Running while it works), the command as the shell got it, its output under it.
-            return (
-              <Step
-                key={`${c.key}:${view}`}
-                name={state(c.ran) === 'running' ? t('Running') : t('Ran')}
-                detail={c.command}
-                status={state(c.ran)}
-                defaultOpen={expandVerbose}
-                aria-label={t('Command {command}', { command: c.command })}
-              >
-                <Code language="shell" value={c.output || t('(no output)')}>
-                  {c.output ? tail(c.output.replace(/\n+$/, '')) : t('(no output)')}
-                </Code>
-              </Step>
-            )
-          case 'explore':
-            // The CLI's Explored block: one line an action, consecutive reads on one line (cli.ts explored).
-            return (
-              <YStack key={c.key} gap="$1" aria-label={state(c.ran) === 'running' ? t('Exploring') : t('Explored')}>
-                <SizableText size="$2" color="$ink" fontWeight="600">
-                  {state(c.ran) === 'running' ? t('Exploring') : t('Explored')}
-                </SizableText>
-                {explored(c.calls).map((l, i) => (
-                  <XStack key={i} gap="$2" pl="$3">
-                    <SizableText size="$2" color="$soft" shrink={0}>
-                      {t(l.title)}
-                    </SizableText>
-                    <SizableText size="$2" color="$ink" style={{ ...mono, overflowWrap: 'anywhere' }}>
-                      {l.text}
-                    </SizableText>
-                  </XStack>
-                ))}
-              </YStack>
-            )
-          case 'edit':
-            // The CLI's patch header: Added / Deleted / Edited a file, or Edited N files, with the lines added and removed.
-            return (
-              <Step
-                key={`${c.key}:${view}`}
-                name={!c.files.length ? t('Edited files') : c.files.length > 1 ? `Edited ${c.files.length} files` : edited(c.files).split(' ')[0]!}
-                detail={!c.files.length ? '' : c.files.length > 1 ? edited(c.files).split(' ').slice(3).join(' ') : edited(c.files).split(' ').slice(1).join(' ')}
-                status={state(c.ran)}
-                defaultOpen={expandVerbose}
-                aria-label={c.files.length ? edited(c.files) : t('Edited files')}
-              >
-                <YStack gap="$2" items="flex-start">
-                  <SizableText size="$1" color="$soft" style={{ whiteSpace: 'pre-wrap' }}>
-                    {c.files.length ? c.files.map((f) => `${f.path} ${counted(f)}`.trimEnd()).join('\n') : t('The agent named no files.')}
-                  </SizableText>
-                  {onDiff ? (
-                    <Button size="sm" variant="outline" onPress={onDiff}>
-                      {t('Open the diff')}
-                    </Button>
-                  ) : null}
-                </YStack>
-              </Step>
-            )
-          case 'step':
-            return (
-              // The run's own error opens by default: it is the reason, and the line above it only says what to do.
-              // A step's name is ours (Error, Search) or a tool's; ours is said in the reader's language.
-              <Step key={`${c.key}:${view}`} name={t(c.name)} detail={c.detail} status={state(c.ran)} defaultOpen={c.name === 'Error' || expandVerbose} aria-label={`${t(c.name)} ${c.detail}`.trim()}>
-                {c.name === 'Error' ? (
-                  // The reason is read whole, wrapped, never scrolled sideways.
-                  <SizableText size="$2" color="$ink" style={{ ...mono, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                    {c.output}
-                  </SizableText>
-                ) : c.output.trim() ? (
-                  <Code language="output" value={c.output}>
-                    {tail(c.output.replace(/\n+$/, ''))}
-                  </Code>
-                ) : undefined}
-              </Step>
-            )
-          case 'note': {
-            const noteText = t(c.text)
-            if (/^Pushed\s+/i.test(c.text) || /^Pushed\s+/i.test(noteText)) {
-              return (
-                <XStack key={c.key} role="note" self="flex-start">
-                  <XStack
-                    items="center"
-                    gap="$1.5"
-                    px="$2.5"
-                    py="$1"
-                    $platform-web={{ display: 'inline-flex' }}
-                  >
-                    <GitBranch size={12} color="$soft" shrink={0} aria-hidden />
-                    <SizableText size="$1" color="$soft">
-                      {noteText}
-                    </SizableText>
-                  </XStack>
-                </XStack>
-              )
-            }
-            return (
-              <SizableText key={c.key} size="$1" color="$soft" role="note">
-                {noteText}
-              </SizableText>
-            )
-          }
-          case 'run':
-            return (
-              <XStack key={c.key} items="center" gap="$2" px="$3" py="$2" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Coding run')}>
-                <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1}>
-                  {t('Coding run')}
-                </SizableText>
-                {onRun ? (
-                  <Button size="sm" variant="outline" onPress={() => onRun(c.session)}>
-                    {t('Open the run')}
-                  </Button>
-                ) : null}
-              </XStack>
-            )
-          case 'ask':
-            return (
-              <YStack key={c.key} gap="$2" p="$3" rounded="$3" borderWidth={1} borderColor="$borderColor" aria-label={t('Question')}>
-                <Prose text={c.text} />
-                {c.answer ? (
-                  <SizableText size="$2" color="$soft">
-                    {`✓ ${c.answer}`}
-                  </SizableText>
-                ) : (
-                  <XStack gap="$2" flexWrap="wrap">
-                    {c.options.map((label) => (
-                      <Button key={label} size="sm" variant="outline" disabled={!onAnswer} onPress={() => onAnswer?.(c.question, label)}>
-                        {label}
-                      </Button>
-                    ))}
-                  </XStack>
-                )}
-              </YStack>
-            )
-          case 'plan':
-            return (
-              <YStack key={c.key} gap="$3" p="$4" rounded="$4" borderWidth={1} borderColor="$borderColor" bg="$panel" aria-label={t('Plan')}>
-                <SizableText size="$2" color="$soft">
-                  {t('Plan')}
-                </SizableText>
-                <Prose text={c.text} />
-                <XStack items="center" gap="$2" flexWrap="wrap">
-                  <Reply text={c.text} listen={listen} />
-                  {onApprove ? (
-                    <Button size="sm" disabled={approving} onPress={() => onApprove(c.text)}>
-                      {approving ? t('Starting the build…') : t('Approve and build')}
-                    </Button>
-                  ) : null}
-                  <Judge onVerdict={onVerdict} />
-                </XStack>
-              </YStack>
-            )
-        }
-      })}
+      {dev ? cards.map(draw) : fold(cards).map((x) => (x.kind === 'work' ? work(x) : draw(x)))}
       {queued.map((q) => (
         <UserSaid
           key={q.id}

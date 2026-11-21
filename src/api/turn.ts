@@ -342,7 +342,8 @@ export type Card =
   | { kind: 'edit'; key: string; files: Changed[]; ran: Ran }
   | { kind: 'step'; key: string; name: string; detail: string; output: string; ran: Ran }
   | { kind: 'todo'; key: string; items: { text: string; done: boolean }[] }
-  | { kind: 'note'; key: string; text: string }
+  /** `step`: a line about the run getting going (started, sent to a machine), the process rather than its end. */
+  | { kind: 'note'; key: string; text: string; step?: true }
   | { kind: 'plan'; key: string; text: string }
   | { kind: 'run'; key: string; session: string }
   | { kind: 'ask'; key: string; question: string; text: string; options: string[]; answer: string }
@@ -553,7 +554,8 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
           break
         }
         const line = status(b, mode, t)
-        if (line) out.push({ kind: 'note', key: mint(), text: line })
+        const going = str(b.status) === 'started' || str(b.status) === 'routed'
+        if (line) out.push(going ? { kind: 'note', key: mint(), text: line, step: true } : { kind: 'note', key: mint(), text: line })
         break
       }
       case 'control': {
