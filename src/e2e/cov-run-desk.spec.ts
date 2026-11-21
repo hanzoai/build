@@ -101,7 +101,7 @@ test('the Browser frames what the sandbox serves, opens it again when its sandbo
   await expect(p.frameLocator(`iframe[title="What the run serves on port 5173"]`).getByText(/preview-5173/)).toBeVisible()
   await p.screenshot({ path: info.outputPath('browser.png') })
   const opened = p.waitForEvent('popup')
-  await desk(p).getByRole('button', { name: 'Open in a new tab' }).click()
+  await desk(p).getByRole('button', { name: 'Open in browser' }).click()
   await expect.poll(async () => (await opened).url()).toMatch(/^https:\/\/sandbox-.+-preview-5173\.hanzo\.app\//)
 })
 
