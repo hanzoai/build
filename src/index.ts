@@ -46,6 +46,8 @@ export type { Done, Folder, Local } from './local.ts'
 export type { Session, Status } from './api/sessions.ts'
 export { talks } from './api/talk.ts'
 export { detect, type Detected } from './api/skills.ts'
+export { Roles } from './customize/roles.tsx'
+export { recommend, WORK } from './roles.ts'
 export type { Read } from './data.ts'
 export { href, parse, path, PLACES, route, SESSION, SLUG, type Route, type Screen } from './route.ts'
 

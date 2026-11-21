@@ -44,6 +44,8 @@ export interface Prefs {
   callName?: string
   /** What best describes their work. */
   work?: string
+  /** Whether the recommended skills for their work were taken up or put off (customize/roles.tsx); unset until asked. */
+  roles?: 'done' | 'skipped'
   /** What every coding run is told about how they like to work. */
   instructions?: string
   code?: Code
@@ -61,6 +63,7 @@ const THEMES: readonly Theme[] = ['system', 'light', 'dark']
 const TEXTS: readonly Text[] = ['small', 'medium', 'large']
 const MOTIONS: readonly Motion[] = ['system', 'reduced']
 const MODES = ['build', 'plan'] as const
+const ROLES = ['done', 'skipped'] as const
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const text = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v : undefined)
@@ -113,6 +116,7 @@ export function prefs(raw: unknown): Prefs {
     language: text(p.language),
     callName: text(p.callName),
     work: text(p.work),
+    roles: one(p.roles, ROLES),
     instructions: text(p.instructions),
     code: code(p.code),
     side: side(p.side),
