@@ -705,9 +705,11 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         action={{
           label: t('Add to project'),
           onPress: (r) => {
-            const row = known.current.get(r.name)
+            // A GitHub row is built from GitHub's own address: cloud git's first segment is a Hanzo org, and a GitHub owner is not one.
+            const github = (r as { github?: boolean }).github === true
+            const row = github ? undefined : known.current.get(r.name)
             setAdding({
-              repo: row?.clone || `${target.api}/v1/git/${r.owner}/${r.name}.git`,
+              repo: github ? `https://github.com/${r.owner}/${r.name}` : row?.clone || `${target.api}/v1/git/${r.owner}/${r.name}.git`,
               title: row?.full_name || `${r.owner}/${r.name}`,
               ref: r.default_branch || 'main',
               name: r.name,
