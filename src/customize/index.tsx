@@ -1,8 +1,9 @@
 /**
  * Customize: what the agent brings to a run — the skills it knows, the
  * connectors it calls, the plugins it runs, and agents of the org's own. Each
- * tab is its own address; in each, Yours is what the org has and Discover is
- * what it can add, with one search box and one Add over both.
+ * tab is its own address. In each, Browse comes first and is where the page
+ * opens: what there is to add, then what Hanzo builds in. Yours is what the org
+ * already has, counted on its button. One search and one Add serve both.
  *
  * Skills and connectors ride into every run in the org, so adding, switching
  * and removing them is an org admin's and a member reads them; plugins and
@@ -11,7 +12,7 @@
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { BookOpen, Bot, Plug, Plus, Puzzle } from '@hanzogui/lucide-icons-2'
 import { Button, Input } from '@hanzo/ui'
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 
 import { useHost } from '../host.tsx'
 import { path, TABS, type Tab } from '../route.ts'
@@ -22,34 +23,33 @@ import { Skills } from './skills.tsx'
 import { Choice, type Pane, type View } from './ui.tsx'
 
 /** What every run in the org loads: an org admin's to add to, a member's to read. */
-const ORG_KIT: Tab[] = ['skills', 'connectors']
+export const ORG_KIT: Tab[] = ['skills', 'connectors']
 
-const LABEL: Record<Tab, { title: string; add: string; find: string; icon: ReactNode }> = {
-  skills: { title: 'Skills', add: 'New skill', find: 'Search skills', icon: <BookOpen size={15} /> },
-  connectors: { title: 'Connectors', add: 'Add connector', find: 'Search connectors', icon: <Plug size={15} /> },
-  plugins: { title: 'Plugins', add: 'Build plugin', find: 'Search plugins', icon: <Puzzle size={15} /> },
-  agents: { title: 'Agents', add: 'New agent', find: 'Search agents', icon: <Bot size={15} /> },
+const LABEL: Record<Tab, { title: string; says: string; add: string; find: string; icon: ReactNode }> = {
+  skills: { title: 'Skills', says: 'Know-how an agent reads before it works.', add: 'New skill', find: 'Search skills', icon: <BookOpen size={15} /> },
+  connectors: { title: 'Connectors', says: 'Apps and tools an agent can call.', add: 'Add by URL', find: 'Search connectors', icon: <Plug size={15} /> },
+  plugins: { title: 'Plugins', says: 'Connectors you build in TypeScript.', add: 'Build plugin', find: 'Search plugins', icon: <Puzzle size={15} /> },
+  agents: { title: 'Agents', says: 'Agents with their own model, instructions and budget.', add: 'New agent', find: 'Search agents', icon: <Bot size={15} /> },
 }
-
-const VIEWS = [
-  { id: 'yours', label: 'Yours' },
-  { id: 'discover', label: 'Discover' },
-] as const
 
 export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
   const host = useHost()
-  // Until a person picks, a visitor sees what there is to add and a member what is theirs:
-  // sign-in lands after the first draw, so the default follows it rather than being fixed then.
-  const [picked, setView] = useState<View | null>(first ?? null)
-  const view: View = picked ?? (host.person ? 'yours' : 'discover')
+  // Browse first, always: a first visit has nothing of its own to show, and what there is to add is the page.
+  const [view, setView] = useState<View>(first ?? 'discover')
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
+  const [count, setCount] = useState(0)
+  const onCount = useCallback((n: number) => setCount(n), [])
   const pick = (next: Tab) => {
     setQ('')
     setAdding(false)
+    setView('discover')
+    setCount(0)
     host.go(path({ kind: 'customize', tab: next }))
   }
-  const pane: Pane = { view, q, adding, onAdding: setAdding, onView: setView }
+  const pane: Pane = { view, q, adding, onAdding: setAdding, onView: setView, onCount }
+  const kit = ORG_KIT.includes(tab)
+  const may = Boolean(host.person) && (host.admin || !kit)
 
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" $max-md={{ px: '$4', py: '$4' }}>
@@ -59,7 +59,7 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
             Customize
           </SizableText>
           <SizableText size="$2" color="$soft">
-            What the agent brings to a run: the skills it knows, the connectors it calls, the plugins it runs, and agents of your own.
+            What your agent can use in every run.
           </SizableText>
         </YStack>
 
@@ -92,16 +92,33 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
           })}
         </XStack>
 
+        <SizableText size="$2" color="$soft">
+          {LABEL[tab].says}
+        </SizableText>
+
         <XStack items="center" gap="$2">
-          <Choice label="Show" value={view} options={VIEWS} onChange={setView} />
+          <Choice
+            label="Show"
+            value={view}
+            options={[
+              { id: 'discover', label: 'Browse' },
+              { id: 'yours', label: 'Yours', count },
+            ]}
+            onChange={setView}
+          />
           <XStack flex={1} />
-          {host.person && (host.admin || !ORG_KIT.includes(tab)) ? (
+          {may ? (
             <Button size="sm" onPress={() => setAdding(true)}>
               <Plus size={14} /> {LABEL[tab].add}
             </Button>
           ) : null}
         </XStack>
         <Input value={q} onChangeText={setQ} placeholder={`${LABEL[tab].find}…`} aria-label={LABEL[tab].find} />
+        {host.person && kit && !host.admin ? (
+          <SizableText size="$1" color="$soft">
+            Only an org admin can add or change {LABEL[tab].title.toLowerCase()}. You can see what is on.
+          </SizableText>
+        ) : null}
 
         {tab === 'skills' ? (
           <Skills {...pane} />
@@ -116,4 +133,3 @@ export function Customize({ tab, view: first }: { tab: Tab; view?: View }) {
     </YStack>
   )
 }
-

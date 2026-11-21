@@ -9,7 +9,7 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { Boxes, ExternalLink, Globe, Lock, MoreHorizontal } from '@hanzogui/lucide-icons-2'
-import { DropdownMenu } from '@hanzo/ui'
+import { Button, DropdownMenu } from '@hanzo/ui'
 import { useState } from 'react'
 
 import { change, fork, remove, templates, type Project, type Template } from './api/projects.ts'
@@ -172,9 +172,14 @@ export function Artifacts() {
             Reading your projects…
           </SizableText>
         ) : list.value.length === 0 ? (
-          <SizableText size="$2" color="$soft">
-            Nothing built yet. Describe something on the New page and it lands here.
-          </SizableText>
+          <YStack gap="$3" items="flex-start">
+            <SizableText size="$2" color="$soft">
+              Nothing built yet. Describe something on the New page and it lands here.
+            </SizableText>
+            <Button size="sm" onPress={() => host.go('')}>
+              New run
+            </Button>
+          </YStack>
         ) : (
           <YStack gap="$5">
             {months(list.value).map((g) => (
@@ -307,6 +312,14 @@ export function Templates() {
         {list.error ? (
           <SizableText size="$2" color="$soft">
             {list.error.message}
+          </SizableText>
+        ) : list.loading && !list.value.length ? (
+          <SizableText size="$2" color="$soft">
+            Reading templates…
+          </SizableText>
+        ) : !list.value.length ? (
+          <SizableText size="$2" color="$soft">
+            No templates here right now. The whole catalog has more.
           </SizableText>
         ) : (
           <XStack flexWrap="wrap" gap="$3">

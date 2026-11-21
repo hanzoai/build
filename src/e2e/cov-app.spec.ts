@@ -370,12 +370,14 @@ test.describe('a host that draws its own rail', () => {
     await runs(page)
     await page.goto(`${HOST}?label=Dev`)
     const surface = await page.evaluate((at) => import(at).then((m: object) => Object.keys(m).sort()), '/src/index.ts')
-    expect(surface).toEqual(['Builder', 'DOTS', 'DevSection', 'Grip', 'HostProvider', 'SESSION', 'SLUG', 'Slack', 'Who', 'administers', 'nav', 'path', 'route', 'useSessions', 'useWho'])
+    expect(surface).toEqual(['Builder', 'DOTS', 'DevSection', 'Grip', 'HostProvider', 'NEW', 'SESSION', 'SLUG', 'Slack', 'Who', 'administers', 'nav', 'path', 'route', 'useSessions', 'useWho'])
 
     const r = rail(page)
     await expect(r.getByText('Dev', { exact: true })).toBeVisible()
     const rows = await r.locator('[data-slot="sidebar-item"]').allInnerTexts()
-    expect(rows).toEqual(['New run', 'Automations', 'Codebase', 'Projects', 'Issues', 'Customize', 'Artifacts', 'Templates', 'The host’s own row', 'universe: Add the widget', 'Untitled run'])
+    // Every place in view, grouped as every rail groups them (nav.tsx), then the host's rows and the runs.
+    expect(rows).toEqual(['New run', 'Projects', 'Issues', 'Codebase', 'Artifacts', 'Templates', 'Automations', 'Machines', 'Environments', 'Customize', 'Docs', 'The host’s own row', 'universe: Add the widget', 'Untitled run'])
+    for (const label of ['Work', 'Make', 'Run', 'Setup']) await expect(r.getByText(label, { exact: true })).toBeVisible()
     await expect(row(page, 'universe: Add the widget').locator('[data-status]')).toHaveAttribute('data-status', 'running')
     // A status the rail has no dot for is idle.
     await expect(row(page, 'Untitled run').locator('[data-status]')).toHaveAttribute('data-status', 'idle')
@@ -430,6 +432,8 @@ test.describe('a host that draws its own rail', () => {
       ['Projects', '-/projects'],
       ['Artifacts', '-/artifacts'],
       ['Templates', '-/templates'],
+      ['Machines', '-/settings/machines'],
+      ['Environments', '-/settings/environments'],
     ] as const
     for (const [name, path] of at) {
       await row(page, name).click()
@@ -437,9 +441,9 @@ test.describe('a host that draws its own rail', () => {
       await expect(row(page, name)).toHaveAttribute('aria-current', 'page')
     }
     await row(page, 'Customize').click()
-    await expect(moves(page)).toHaveText(/-\/customize\/connectors$/)
+    await expect(moves(page)).toHaveText(/-\/customize$/)
     await expect(row(page, 'Customize')).toHaveAttribute('aria-current', 'page')
-    await expect(page.getByText('What the agent brings to a run').first()).toBeVisible()
+    await expect(page.getByText('What your agent can use in every run.').first()).toBeVisible()
 
     await page.evaluate(() => localStorage.setItem('hanzo.build.board.acme', '"web"'))
     await row(page, 'Issues').click()
@@ -455,7 +459,7 @@ test.describe('a host that draws its own rail', () => {
     await row(page, 'New run').click()
     await expect(moves(page)).toHaveText(/\(new\)$/)
     // The host is told of every pick, so a drawer can close.
-    await expect(page.getByLabel('Picks')).toHaveText('9')
+    await expect(page.getByLabel('Picks')).toHaveText('11')
   })
 
   test('with no label of its own it lists Runs, and tells a host that asked for nothing only through go', async ({ page }) => {

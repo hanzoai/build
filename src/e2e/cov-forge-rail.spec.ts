@@ -90,7 +90,6 @@ test.describe('the rail', () => {
     await expect(page.getByText('Try Hanzo in Slack')).toHaveCount(0)
     expect(await page.evaluate(() => localStorage.getItem('hanzo.build.slack'))).toBe('true')
 
-    await rail(page).getByText('More', { exact: true }).click()
     const [docs] = await Promise.all([page.waitForEvent('popup'), rail(page).getByText('Docs', { exact: true }).click()])
     expect(new URL(docs.url()).hostname).toBe('docs.hanzo.ai')
     await docs.close()

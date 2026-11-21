@@ -191,7 +191,11 @@ test.describe('Artifacts', () => {
     await page.goto('/-/artifacts')
     await expect(page.getByText('Reading your projects…')).toBeVisible()
     await expect(page.getByText('Nothing built yet. Describe something on the New page and it lands here.')).toBeVisible()
+    // The next step is one press away.
     world.slow = {}
+    await page.getByRole('button', { name: 'New run', exact: true }).click()
+    await expect(page).toHaveURL(/\/$/)
+    await via(page, 'Artifacts')
     world.down['GET /v1/projects'] = 'Projects are resting'
     await via(page, 'Projects')
     await via(page, 'Artifacts')
@@ -267,6 +271,14 @@ test.describe('Templates', () => {
       }
     })
   }
+
+  test('says it is reading, and says so when the catalogue lists none', async ({ page }) => {
+    await shelf(page, { starters: [], slow: { 'GET /v1/templates': 2000 } })
+    await page.goto('/-/templates')
+    await expect(page.getByText('Reading templates…')).toBeVisible()
+    await expect(page.getByText('No templates here right now. The whole catalog has more.')).toBeVisible()
+    await expect(page.getByRole('link', { name: /The whole catalog/ })).toBeVisible()
+  })
 
   test('a refused catalogue says why', async ({ page }) => {
     await shelf(page, { down: { 'GET /v1/templates': 'The catalogue is resting' } })

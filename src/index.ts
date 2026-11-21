@@ -10,7 +10,8 @@
  * `HostProvider`. `Grip` sizes that rail: the edge the builder sizes its own
  * chat with.
  */
-export { Builder, nav } from './builder.tsx'
+export { Builder } from './builder.tsx'
+export { nav, NEW, type Group } from './nav.tsx'
 export { DevSection, DOTS, useSessions } from './section.tsx'
 export { HostProvider } from './host.tsx'
 export { Slack, useWho, Who } from './foot.tsx'

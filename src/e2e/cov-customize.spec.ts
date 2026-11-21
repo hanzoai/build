@@ -1,7 +1,10 @@
 /**
  * Customize past the happy path: what a visitor and a member see, every
- * loading, empty, refused and no-match state of the four tabs, the rows the
- * platform answers thinly, and every write that fails and says why.
+ * loading, empty, refused, slow and no-match state of the four tabs, the rows
+ * the platform answers thinly, and every write that fails and says why. A
+ * refusal is said in plain words with a way to ask again — never the
+ * platform's own text, which these stubs make distinctive so its absence can
+ * be checked — except where it names what was wrong with what was sent.
  *
  * The shared stubs (stubs.ts) answer the platform; `over` answers some calls
  * differently ahead of them — a refusal, a held answer, other rows — and passes
@@ -55,14 +58,18 @@ async function member(page: Page) {
 }
 
 const sentTo = (sent: Sent[], method: string, path: string) => sent.filter((s) => s.method === method && s.path === path)
+const browse = (page: Page) => page.getByRole('button', { name: 'Browse', exact: true })
+const yours = (page: Page) => page.getByRole('button', { name: /^Yours/ })
+/** What a 5xx is said as, wherever it lands. */
+const DOWN = 'Hanzo could not answer just now. Try again.'
 
 test('a visitor reads the catalogue, the fleet’s servers and the presets, and is asked to sign in for the rest', async ({ page }, info) => {
   await visitor(page)
   await mounted(page, { path: '-/customize', org: null, admin: false, person: null, signIn: true })
 
-  // Discover is what a visitor lands on; nothing there is theirs to add.
-  await expect(page.getByRole('button', { name: 'Discover', pressed: true })).toBeVisible()
-  await expect(page.getByText('3 skills across 2 products')).toBeVisible()
+  // Browse is what everyone lands on; nothing there is a visitor's to add.
+  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText('3 skills', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'New skill' })).toHaveCount(0)
   await page.getByRole('button', { name: 'git_repos', exact: true }).click()
@@ -72,29 +79,29 @@ test('a visitor reads the catalogue, the fleet’s servers and the presets, and 
   await reader.getByRole('button', { name: 'Close' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Yours', exact: true }).click()
+  await yours(page).click()
   await expect(page.getByText('Sign in to see your skills.')).toBeVisible()
 
   await page.getByRole('tab', { name: 'Connectors' }).click()
-  await expect(page.getByText('Sign in to see your connectors.')).toBeVisible()
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
-  await expect(page.getByText('Sign in to browse the shelf.')).toBeVisible()
+  await expect(page.getByText('Sign in to browse connectors.')).toBeVisible()
+  await page.getByRole('button', { name: 'Show built-in servers' }).click()
   await expect(page.getByText('2 servers · 3 operations')).toBeVisible()
   await page.screenshot({ path: info.outputPath('visitor-connectors.png'), fullPage: true })
+  await yours(page).click()
+  await expect(page.getByText('Sign in to see your connectors.')).toBeVisible()
 
   await page.getByRole('tab', { name: 'Plugins' }).click()
-  await expect(page.getByText('Sign in to see what this deployment mounts.')).toBeVisible()
-  await page.getByRole('button', { name: 'Yours', exact: true }).click()
+  await expect(page.getByText('Sign in to browse plugins.')).toBeVisible()
+  await yours(page).click()
   await expect(page.getByText('Sign in to see your plugins.')).toBeVisible()
 
   await page.getByRole('tab', { name: 'Agents' }).click()
-  await expect(page.getByText('Sign in to see your agents.')).toBeVisible()
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
   await expect(page.getByText('Product & Fashion Create', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^(Add|Use) / })).toHaveCount(0)
+  await yours(page).click()
+  await expect(page.getByText('Sign in to see your agents.')).toBeVisible()
 
   // Sign in is the host's to do.
-  await page.getByRole('button', { name: 'Yours', exact: true }).click()
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect.poll(() => went(page)).toContain('sign in')
 })
@@ -130,6 +137,7 @@ test('skills: the org’s own as the platform answers them, a catalogue skill th
     return undefined
   })
   await page.goto('/-/customize')
+  await yours(page).click()
 
   const mine = page.getByRole('list', { name: 'Your skills' })
   const card = (text: string) => mine.getByRole('listitem').filter({ hasText: text })
@@ -145,13 +153,14 @@ test('skills: the org’s own as the platform answers them, a catalogue skill th
   await page.screenshot({ path: info.outputPath('skills-thin.png') })
 
   await page.getByLabel('Search skills').fill('zzz')
-  await expect(page.getByText('None of yours matches.')).toBeVisible()
+  await expect(page.getByText('No skill of yours matches “zzz”.')).toBeVisible()
   await expect(added).toHaveCount(0)
   await page.getByLabel('Search skills').fill('')
 
   await added.getByRole('button', { name: 'kms_secrets', exact: true }).click()
   const reader = page.getByRole('dialog', { name: 'kms_secrets' })
-  await expect(reader.getByText('no such skill')).toBeVisible()
+  await expect(reader.getByText('Not found. It may have been removed.')).toBeVisible()
+  await expect(reader.getByText('no such skill')).toHaveCount(0)
   await expect(reader.getByText('On for your organization.')).toBeVisible()
   await reader.getByRole('button', { name: 'Remove' }).click()
   await expect(reader.getByRole('button', { name: 'Add to your skills' })).toBeVisible()
@@ -165,7 +174,7 @@ test('skills: the org’s own as the platform answers them, a catalogue skill th
   const editor = page.getByRole('dialog', { name: 'deploy' })
   await expect(editor.getByText('Read from acme/universe. The next push of that repository replaces what is saved here.')).toBeVisible()
   await expect(editor.getByLabel('Name')).toBeDisabled()
-  await expect(editor.getByText('A skill’s name is its id; save under another name to make a new one.')).toBeVisible()
+  await expect(editor.getByText('A skill keeps its name. Save under another name to make a new one.')).toBeVisible()
   await editor.getByLabel('Description').fill('Ship to production')
   const puts = sentTo(sent, 'PUT', '/v1/tool/activation').length
   await editor.getByRole('button', { name: 'Save' }).click()
@@ -191,16 +200,18 @@ test('skills: while they are read the page says so, and then what is on arrives'
     return undefined
   })
   await page.goto('/-/customize')
-  await expect(page.getByText('Reading your skills…')).toBeVisible()
+  await yours(page).click()
+  await expect(page.getByText('Loading your skills…')).toBeVisible()
   // The org's own are read, and there are none; what is on is still being read.
   const read = page.waitForResponse('**/v1/tool/skills/authored')
   own.release()
   await read
-  await expect(page.getByText('Reading your skills…')).toBeVisible()
+  await expect(page.getByText('Loading your skills…')).toBeVisible()
   lit.release()
-  // None written here, two added from the catalogue.
-  await expect(page.getByText('None yet.')).toBeVisible()
+  // None written here, so no heading for them; two added from Hanzo.
+  await expect(page.getByRole('heading', { name: 'Made by your team' })).toHaveCount(0)
   await expect(page.getByRole('list', { name: 'Added skills' }).getByRole('listitem')).toHaveCount(2)
+  await expect(yours(page)).toHaveAccessibleName('Yours, 2')
 })
 
 test('skills: a refused read of the org’s own is said', async ({ page }) => {
@@ -212,7 +223,9 @@ test('skills: a refused read of the org’s own is said', async ({ page }) => {
     return undefined
   })
   await page.goto('/-/customize')
-  await expect(page.getByText('the skill store is down')).toBeVisible()
+  await yours(page).click()
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('the skill store is down')).toHaveCount(0)
 })
 
 test('skills: a refused read of what is on is said when the org has none of its own', async ({ page }) => {
@@ -224,7 +237,9 @@ test('skills: a refused read of what is on is said when the org has none of its 
     return undefined
   })
   await page.goto('/-/customize')
-  await expect(page.getByText('the tool plane is down')).toBeVisible()
+  await yours(page).click()
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('the tool plane is down')).toHaveCount(0)
 })
 
 test('skills: a switch the platform refuses says why, and a list that cannot be read again stays as it was', async ({ page }) => {
@@ -237,18 +252,20 @@ test('skills: a switch the platform refuses says why, and a list that cannot be 
     return undefined
   })
   await page.goto('/-/customize')
+  await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your skills' })
   await mine.getByRole('switch', { name: 'triage on' }).click()
   // Switched off; the read after it is refused, so what was read stays on screen.
   await expect(page.getByText('triage is off')).toBeVisible()
   await expect(mine.getByText('triage', { exact: true })).toBeVisible()
   await mine.getByRole('switch', { name: 'triage on' }).click()
-  await expect(page.getByText('switching is paused')).toBeVisible()
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('switching is paused')).toHaveCount(0)
   expect(sentTo(sent, 'PUT', '/v1/tool/activation')).toHaveLength(2)
 
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
+  await browse(page).click()
   await page.getByRole('button', { name: 'Add git_repos' }).click()
-  await expect(page.getByText('switching is paused')).toBeVisible()
+  await expect(page.getByText(DOWN)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add git_repos' })).toBeVisible()
 })
 
@@ -262,36 +279,36 @@ test('skills: a catalogue read a page at a time, searched, refused once and kept
   await customize(page)
   await page.route('**/.well-known/agent-skills/index.json', (r) => r.fulfill(now))
   await page.goto('/-/customize')
-  await expect(page.getByRole('button', { name: 'Yours', pressed: true })).toBeVisible()
+  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
   const again = async () => {
-    await page.getByRole('button', { name: 'Yours', exact: true }).click()
-    await page.getByRole('button', { name: 'Discover', exact: true }).click()
+    await yours(page).click()
+    await browse(page).click()
   }
 
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
-  await expect(page.getByText('the catalogue is rebuilding')).toBeVisible()
-
+  // Refused: said plainly, with the one control that asks again.
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('the catalogue is rebuilding')).toHaveCount(0)
   now = { json: many }
-  await again()
+  await page.getByRole('button', { name: 'Try again' }).click()
   const shelf = page.getByRole('list', { name: 'Skills to add' })
-  await expect(page.getByText('70 skills across 1 products')).toBeVisible()
+  await expect(page.getByText('70 skills', { exact: true })).toBeVisible()
   await expect(shelf.getByRole('listitem')).toHaveCount(60)
   await page.getByRole('button', { name: 'Show more' }).click()
   await expect(shelf.getByRole('listitem')).toHaveCount(70)
   await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0)
   await page.screenshot({ path: info.outputPath('skills-many.png') })
   await page.getByLabel('Search skills').fill('no such operation')
-  await expect(page.getByText('No skill matches.')).toBeVisible()
+  await expect(page.getByText('No skill matches “no such operation”.')).toBeVisible()
   await page.getByLabel('Search skills').fill('')
 
   // Refused, saying nothing of its own: what was read stays.
   now = { status: 503, json: {} }
   await again()
-  await expect(page.getByText('70 skills across 1 products')).toBeVisible()
+  await expect(page.getByText('70 skills', { exact: true })).toBeVisible()
 
   now = { json: { skills: [], products: [] } }
   await again()
-  await expect(page.getByText('The catalogue lists no skills.')).toBeVisible()
+  await expect(page.getByText('There are no skills to add yet.')).toBeVisible()
 })
 
 test('skills: an org with none is pointed at the catalogue, and a new skill the platform refuses says why', async ({ page }) => {
@@ -304,8 +321,14 @@ test('skills: an org with none is pointed at the catalogue, and a new skill the 
     return undefined
   })
   await page.goto('/-/customize')
-  await expect(page.getByText('No skills yet. Write one, or add one from the catalogue.')).toBeVisible()
+  await yours(page).click()
+  await expect(page.getByText('No skills yet', { exact: true })).toBeVisible()
+  await expect(page.getByText('Add one from Hanzo, or write your own.')).toBeVisible()
 
+  // The empty state's own next step opens the same dialog as the bar's.
+  await page.getByRole('button', { name: 'Write a skill' }).click()
+  await expect(page.getByRole('dialog', { name: 'New skill' })).toBeVisible()
+  await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'New skill' }).click()
   let dialog = page.getByRole('dialog', { name: 'New skill' })
   await dialog.getByLabel('Name').fill('deploy')
@@ -322,9 +345,9 @@ test('skills: an org with none is pointed at the catalogue, and a new skill the 
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Discover skills' }).click()
-  await expect(page.getByRole('button', { name: 'Discover', pressed: true })).toBeVisible()
-  await expect(page.getByText('3 skills across 2 products')).toBeVisible()
+  await page.getByRole('button', { name: 'Browse skills' }).click()
+  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText('3 skills', { exact: true })).toBeVisible()
 })
 
 test('skills: a delete the platform refuses stays open and says why, and Cancel keeps the skill', async ({ page }) => {
@@ -332,6 +355,7 @@ test('skills: a delete the platform refuses stays open and says why, and Cancel 
   await customize(page)
   const sent = await over(page, ({ method, path }) => (method === 'DELETE' && path === '/v1/tool/skills/triage' ? refused(409, 'triage is named by 2 agents') : undefined))
   await page.goto('/-/customize')
+  await yours(page).click()
   await page.getByRole('list', { name: 'Your skills' }).getByRole('button', { name: 'triage', exact: true }).click()
   await page.getByRole('dialog', { name: 'triage' }).getByRole('button', { name: 'Delete' }).click()
   const confirm = page.getByRole('dialog', { name: 'Delete triage?' })
@@ -360,6 +384,8 @@ test('skills: a member reads what is on and off, opens a skill to read it, and a
       : undefined,
   )
   await page.goto('/-/customize')
+  await expect(page.getByText('Only an org admin can add or change skills. You can see what is on.')).toBeVisible()
+  await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your skills' })
   await expect(mine.getByRole('listitem').filter({ hasText: 'triage' }).getByText('On', { exact: true })).toBeVisible()
   await expect(mine.getByRole('listitem').filter({ hasText: 'deploy' }).getByText('Off', { exact: true })).toBeVisible()
@@ -368,14 +394,14 @@ test('skills: a member reads what is on and off, opens a skill to read it, and a
 
   await mine.getByRole('button', { name: 'triage', exact: true }).click()
   const editor = page.getByRole('dialog', { name: 'triage' })
-  await expect(editor.getByText('An org admin writes and deletes the organization’s skills.')).toBeVisible()
+  await expect(editor.getByText('Only an org admin can write or delete skills.')).toBeVisible()
   await expect(editor.getByRole('button', { name: 'Save' })).toHaveCount(0)
   await expect(editor.getByRole('button', { name: 'Delete' })).toHaveCount(0)
   await editor.getByRole('button', { name: 'Close', exact: true }).last().click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
-  await expect(page.getByText('3 skills across 2 products')).toBeVisible()
+  await browse(page).click()
+  await expect(page.getByText('3 skills', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0)
   await page.getByRole('button', { name: 'git_repos', exact: true }).click()
   const reader = page.getByRole('dialog', { name: 'git_repos' })
@@ -393,17 +419,18 @@ test('connectors: the org’s servers as the platform answers them, and one serv
     { id: 'old', org: 'acme', url: 'https://old.example.com/mcp' },
   ])
   await page.goto('/-/customize/connectors')
+  await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your connectors' })
   const card = (text: string) => mine.getByRole('listitem').filter({ hasText: text })
   await expect(card('Docs').getByText('docs.example.com/mcp', { exact: true })).toBeVisible()
-  await expect(card('Docs').getByText('Added by URL · not in runs until an admin adds it again')).toBeVisible()
-  await expect(card('GitHub').getByText(/^From the shelf · secret sealed in KMS · .+$/)).toBeVisible()
+  await expect(card('Docs').getByText('0 of 2 tools on · Added by URL · Not in runs until an admin adds it again')).toBeVisible()
+  await expect(card('GitHub').getByText('0 of 2 tools on · From Browse · Secret in KMS')).toBeVisible()
   // A server answered without a name is drawn by its address, its mark a question.
-  await expect(card('old.example.com/mcp')).toHaveText(/^\?\s*old\.example\.com\/mcp\s*Added by URL$/)
+  await expect(card('old.example.com/mcp')).toHaveText(/^\?\s*old\.example\.com\/mcp\s*0 of 2 tools on · Added by URL$/)
   await page.screenshot({ path: info.outputPath('connectors-thin.png') })
 
   await page.getByLabel('Search connectors').fill('zzz')
-  await expect(page.getByText('No connector matches.')).toBeVisible()
+  await expect(page.getByText('No connector of yours matches “zzz”.')).toBeVisible()
   await page.getByLabel('Search connectors').fill('')
 
   await card('GitHub').getByRole('button', { name: 'GitHub' }).click()
@@ -429,6 +456,12 @@ test('connectors: the org’s servers as the platform answers them, and one serv
   expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: [], deactivate: ['docs_create_payment_link', 'docs_list_customers'] })
   await detail.getByRole('button', { name: 'Close' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  // Its card reads the tools again: off, every one.
+  await expect(card('Docs').getByRole('switch', { name: 'Docs on' })).not.toBeChecked()
+  await card('Docs').getByRole('switch', { name: 'Docs on' }).click()
+  await expect(page.getByText('Docs is on')).toBeVisible()
+  expect(sentTo(sent, 'PUT', '/v1/tool/activation').at(-1)?.body).toEqual({ activate: ['docs_create_payment_link', 'docs_list_customers'], deactivate: [] })
+  await expect(card('Docs').getByText('2 of 2 tools on · Added by URL · Not in runs until an admin adds it again')).toBeVisible()
 })
 
 test('connectors: a server’s tools while they are asked for, when the ask is refused, when it lists none, and a switch refused', async ({ page }) => {
@@ -447,20 +480,22 @@ test('connectors: a server’s tools while they are asked for, when the ask is r
     return undefined
   })
   await page.goto('/-/customize/connectors')
+  await yours(page).click()
   const open = async () => {
     await page.getByRole('list', { name: 'Your connectors' }).getByRole('button', { name: 'Docs' }).click()
     return page.getByRole('dialog', { name: 'Docs' })
   }
 
   let detail = await open()
-  await expect(detail.getByText('Asking the server for its tools…')).toBeVisible()
+  await expect(detail.getByText('Loading its tools…')).toBeVisible()
   asking.release()
-  await expect(detail.getByText('docs did not answer tools/list')).toBeVisible()
+  await expect(detail.getByText(DOWN)).toBeVisible()
+  await expect(detail.getByText('docs did not answer tools/list')).toHaveCount(0)
   await detail.getByRole('button', { name: 'Close' }).click()
 
   now = 'none'
   detail = await open()
-  await expect(detail.getByText('The server listed no tools. One that does not answer is left out until it does.')).toBeVisible()
+  await expect(detail.getByText('No tools listed yet. A server that does not answer shows its tools once it does.')).toBeVisible()
   await expect(detail.getByRole('button', { name: /^Turn all/ })).toHaveCount(0)
   await detail.getByRole('button', { name: 'Close' }).click()
 
@@ -469,7 +504,7 @@ test('connectors: a server’s tools while they are asked for, when the ask is r
   // A tool with no description is its name alone.
   await expect(detail.getByText('search', { exact: true })).toBeVisible()
   await detail.getByRole('switch', { name: 'search on' }).click()
-  await expect(detail.getByText('switching is paused')).toBeVisible()
+  await expect(detail.getByText(DOWN)).toBeVisible()
   await expect(detail.getByRole('switch', { name: 'search on' })).toBeChecked()
 })
 
@@ -484,6 +519,7 @@ test('connectors: a removal the platform refuses says why, and the list stays as
     return undefined
   })
   await page.goto('/-/customize/connectors')
+  await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your connectors' })
   await mine.getByRole('button', { name: 'Docs' }).click()
   await page.getByRole('dialog', { name: 'Docs' }).getByRole('button', { name: 'Remove connector' }).click()
@@ -509,18 +545,21 @@ test('connectors: a server that lists no tools, one whose tools cannot be read, 
     return undefined
   })
   await page.goto('/-/customize/connectors')
-  await expect(page.getByText('No connectors yet. Add an MCP server by its URL, or pick one off the shelf.')).toBeVisible()
+  await yours(page).click()
+  await expect(page.getByText('No connectors yet', { exact: true })).toBeVisible()
+  await expect(page.getByText('Connect an app from Browse, or add any MCP server by its URL.')).toBeVisible()
   const add = async (name: string, url: string) => {
-    await page.getByRole('button', { name: 'Add connector' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Add connector' })
+    await page.getByRole('button', { name: 'Add by URL' }).first().click()
+    const dialog = page.getByRole('dialog', { name: 'Add by URL' })
     await dialog.getByLabel('Name').fill(name)
     await dialog.getByLabel('URL').fill(url)
     await dialog.getByRole('button', { name: 'Add', exact: true }).click()
     return dialog
   }
 
-  await page.getByRole('button', { name: 'Add connector' }).click()
-  await page.getByRole('dialog', { name: 'Add connector' }).getByRole('button', { name: 'Cancel' }).click()
+  // The empty state's Add by URL is the bar's, and Cancel lets it go.
+  await page.getByRole('button', { name: 'Add by URL' }).last().click()
+  await page.getByRole('dialog', { name: 'Add by URL' }).getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   await add('Docs', 'https://docs.example.com/mcp')
@@ -529,7 +568,7 @@ test('connectors: a server that lists no tools, one whose tools cannot be read, 
 
   tools = 'refused'
   await add('Wiki', 'https://wiki.example.com/mcp')
-  await expect(page.getByText('Wiki is added, but its tools could not be switched on: the tool plane is down')).toBeVisible()
+  await expect(page.getByText(`Wiki is added, but its tools could not be switched on. ${DOWN}`)).toBeVisible()
   await expect(page.getByRole('list', { name: 'Your connectors' }).getByRole('listitem')).toHaveCount(2)
 
   const dialog = await add('Lab', 'https://10.0.0.1/mcp')
@@ -552,13 +591,15 @@ test('connectors: yours while they are read and when the read is refused, then a
     return undefined
   })
   await page.goto('/-/customize/connectors')
-  await expect(page.getByText('Reading your connectors…')).toBeVisible()
+  await yours(page).click()
+  await expect(page.getByText('Loading your connectors…')).toBeVisible()
   reading.release()
-  await expect(page.getByText('the tool plane is down')).toBeVisible()
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('the tool plane is down')).toHaveCount(0)
 
   first = false
-  await page.getByRole('button', { name: 'Add connector' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Add connector' })
+  await page.getByRole('button', { name: 'Add by URL' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add by URL' })
   await dialog.getByLabel('Name').fill('Docs')
   await dialog.getByLabel('URL').fill('https://docs.example.com/mcp')
   await dialog.getByRole('button', { name: 'Add', exact: true }).click()
@@ -602,7 +643,6 @@ test('connectors: the shelf a page at a time with its featured card, searched, a
     return undefined
   })
   await page.goto('/-/customize/connectors')
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
 
   await expect(page.getByText('Featured', { exact: true })).toBeVisible()
   await expect(page.locator('img[src="https://logos.example/stripe.png"]')).toBeVisible()
@@ -610,28 +650,32 @@ test('connectors: the shelf a page at a time with its featured card, searched, a
   const list = page.getByRole('list', { name: 'Servers on the shelf' })
   await expect(list.getByRole('listitem').filter({ hasText: 'Broken' })).toHaveText(/^B\s*Broken/)
   await expect(page.locator('img[src="https://logos.example/broken.png"]')).toHaveCount(0)
-  await expect(page.getByText('48 of 60 servers')).toBeVisible()
+  await expect(page.getByText('48 of 60 connectors')).toBeVisible()
   await page.screenshot({ path: info.outputPath('connectors-shelf.png') })
 
   await page.getByRole('button', { name: 'Show more' }).click()
-  await expect(page.getByText('the shelf is reindexing')).toBeVisible()
+  await expect(page.getByText(DOWN)).toBeVisible()
   await page.getByRole('button', { name: 'Show more' }).click()
-  await expect(page.getByText('60 servers', { exact: true })).toBeVisible()
+  await expect(page.getByText('60 connectors', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0)
   expect(sent.filter((s) => s.path === '/v1/tool/catalog').at(-1)?.query).toBe('?limit=48&offset=48')
 
   // A search has no featured card: every match is a card like the rest.
   await page.getByLabel('Search connectors').fill('server 5')
-  await expect(page.getByText('11 servers', { exact: true })).toBeVisible()
+  await expect(page.getByText('11 connectors', { exact: true })).toBeVisible()
   await expect(page.getByText('Featured', { exact: true })).toHaveCount(0)
+  // The fleet's servers are listed only when asked for.
+  expect(sentTo(sent, 'POST', '/v1/mcp')).toHaveLength(0)
+  await page.getByRole('button', { name: 'Show built-in servers' }).click()
   await page.getByLabel('Search connectors').fill('zzz')
-  await expect(page.getByText('Nothing on the shelf matches.')).toBeVisible()
-  await expect(page.getByText('No built-in server matches.')).toBeVisible()
+  await expect(page.getByText('No connector matches “zzz”.')).toBeVisible()
+  await expect(page.getByText('No built-in server matches “zzz”.')).toBeVisible()
   await page.getByLabel('Search connectors').fill('')
 
   await expect(page.getByText('2 servers · 2 operations')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Show built-in servers' })).toHaveCount(0)
   await page.getByRole('button', { name: 'ping', exact: true }).click()
-  await expect(page.getByText('This server named no operations.')).toBeVisible()
+  await expect(page.getByText('This server lists no operations.')).toBeVisible()
   const git = page.getByRole('button', { name: 'git', exact: true })
   await git.click()
   await expect(git).toHaveAttribute('aria-expanded', 'true')
@@ -660,19 +704,20 @@ test('connectors: the shelf and the fleet’s servers while they are read, when 
     return undefined
   })
   await page.goto('/-/customize/connectors')
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
-  await expect(page.getByText('Reading the shelf…')).toBeVisible()
-  await expect(page.getByText('Reading the servers…')).toBeVisible()
+  await expect(page.getByText('Loading connectors…')).toBeVisible()
+  await page.getByRole('button', { name: 'Show built-in servers' }).click()
+  await expect(page.getByText('Loading built-in servers…')).toBeVisible()
   shelf.release()
   natives.release()
-  await expect(page.getByText('the shelf is reindexing')).toBeVisible()
-  await expect(page.getByText('the MCP server is restarting')).toBeVisible()
+  await expect(page.getByText(DOWN)).toHaveCount(2)
+  await expect(page.getByText('the shelf is reindexing')).toHaveCount(0)
+  await expect(page.getByText('the MCP server is restarting')).toHaveCount(0)
 
   empty = true
   await page.getByLabel('Search connectors').fill('stripe')
-  await expect(page.getByText('Nothing on the shelf matches.')).toBeVisible()
+  await expect(page.getByText('No connector matches “stripe”.')).toBeVisible()
   await page.getByLabel('Search connectors').fill('')
-  await expect(page.getByText('The shelf is empty.')).toBeVisible()
+  await expect(page.getByText('There are no connectors to add yet.')).toBeVisible()
 })
 
 test('connectors: a listing read in full, one that cannot be read, one already added, and one added from its card', async ({ page }) => {
@@ -701,7 +746,6 @@ test('connectors: a listing read in full, one that cannot be read, one already a
     return undefined
   })
   await page.goto('/-/customize/connectors')
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
   await expect(page.getByLabel('Stripe is added')).toBeVisible()
 
   await page.getByRole('button', { name: 'Stripe', exact: true }).click()
@@ -716,7 +760,7 @@ test('connectors: a listing read in full, one that cannot be read, one already a
   about = page.getByRole('dialog', { name: 'Local files' })
   await expect(about.getByText('io.local · v1.2.0')).toBeVisible()
   await expect(about.getByText('npm · @local/files-mcp · 1.2.0 · npx')).toBeVisible()
-  await expect(about.getByText('It ships only as a package, so it needs somewhere to run before it can be added here.')).toBeVisible()
+  await expect(about.getByText('It ships only as a package, so it needs a place to run before it can be added here.')).toBeVisible()
   await expect(about.getByRole('link', { name: 'local.example' })).toHaveAttribute('href', 'https://local.example')
   await expect(about.getByRole('link', { name: 'github.com/local/files' })).toHaveAttribute('href', 'https://github.com/local/files')
   await expect(about.getByRole('button', { name: 'Add to your connectors' })).toHaveCount(0)
@@ -724,7 +768,7 @@ test('connectors: a listing read in full, one that cannot be read, one already a
 
   await page.getByRole('button', { name: 'Wiki', exact: true }).click()
   about = page.getByRole('dialog', { name: 'Wiki' })
-  await expect(about.getByText('no such listing')).toBeVisible()
+  await expect(about.getByText('Showing what Browse listed. Not found. It may have been removed.')).toBeVisible()
   await expect(about.getByRole('button', { name: 'Add to your connectors' })).toBeEnabled()
   await page.keyboard.press('Escape')
 
@@ -743,13 +787,16 @@ test('connectors: a member with none is told an org admin adds them, and reads t
   await member(page)
   await over(page, ({ path }) => (path === '/v1/mcp' ? { json: { jsonrpc: '2.0', id: 1, result: { tools: [] } } } : undefined))
   await page.goto('/-/customize/connectors')
-  await expect(page.getByText('No connectors yet. An org admin adds them.')).toBeVisible()
-  await page.getByRole('button', { name: 'Discover connectors' }).click()
-  await expect(page.getByRole('button', { name: 'Discover', pressed: true })).toBeVisible()
+  await expect(page.getByText('Only an org admin can add or change connectors. You can see what is on.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add by URL' })).toHaveCount(0)
+  await yours(page).click()
+  await expect(page.getByText('An org admin adds connectors. Browse what there is.')).toBeVisible()
+  await page.getByRole('button', { name: 'Browse connectors' }).click()
+  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByText('Featured', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0)
-  await expect(page.getByText('Package', { exact: true })).toHaveCount(0)
-  await expect(page.getByText('The MCP server listed no native servers.')).toBeVisible()
+  await page.getByRole('button', { name: 'Show built-in servers' }).click()
+  await expect(page.getByText('No built-in servers are listed.')).toBeVisible()
   await page.getByRole('button', { name: 'Stripe', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Stripe' }).getByText('https://mcp.stripe.com · streamable-http')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add to your connectors' })).toHaveCount(0)
@@ -772,11 +819,17 @@ test('connectors: a member opens a server and reads its tools’ switches withou
       : undefined,
   )
   await page.goto('/-/customize/connectors')
-  await page.getByRole('list', { name: 'Your connectors' }).getByRole('button', { name: 'Stripe' }).click()
+  await yours(page).click()
+  // Its card says on, and has no switch.
+  const card = page.getByRole('list', { name: 'Your connectors' }).getByRole('listitem').filter({ hasText: 'Stripe' })
+  await expect(card.getByText('1 of 2 tools on · From Browse · Secret in KMS')).toBeVisible()
+  await expect(card.getByRole('switch')).toHaveCount(0)
+  await expect(card.getByText('On', { exact: true })).toBeVisible()
+  await card.getByRole('button', { name: 'Stripe' }).click()
   const detail = page.getByRole('dialog', { name: 'Stripe' })
   await expect(detail.getByText('On', { exact: true })).toHaveCount(1)
   await expect(detail.getByText('Off', { exact: true })).toHaveCount(1)
-  await expect(detail.getByText('An org admin adds, switches and removes the organization’s connectors.')).toBeVisible()
+  await expect(detail.getByText('Only an org admin can switch or remove connectors.')).toBeVisible()
   await expect(detail.getByRole('switch')).toHaveCount(0)
   await expect(detail.getByRole('button', { name: /^Turn all/ })).toHaveCount(0)
   await expect(detail.getByRole('button', { name: 'Remove connector' })).toHaveCount(0)
@@ -815,30 +868,33 @@ test('plugins: yours and what is mounted, each while read, refused, empty, as an
     return undefined
   })
   await page.goto('/-/customize/plugins')
-  const yours = () => page.getByRole('button', { name: 'Yours', exact: true }).click()
-  const discover = () => page.getByRole('button', { name: 'Discover', exact: true }).click()
+  const mineView = () => yours(page).click()
+  const discover = () => browse(page).click()
 
-  await expect(page.getByText('Reading your plugins…')).toBeVisible()
-  first.yours.release()
-  await expect(page.getByText('the runtime is restarting')).toBeVisible()
-  await discover()
-  await expect(page.getByText('Reading what is mounted…')).toBeVisible()
+  await expect(page.getByText('Loading built-in plugins…')).toBeVisible()
   first.mounted.release()
-  await expect(page.getByText('the deployment did not say')).toBeVisible()
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('the deployment did not say')).toHaveCount(0)
+  await mineView()
+  await expect(page.getByText('Loading your plugins…')).toBeVisible()
+  first.yours.release()
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('the runtime is restarting')).toHaveCount(0)
 
   mode.yours = 'none'
   mode.mounted = 'none'
-  await yours()
-  await expect(page.getByText('No plugins yet. Write a connector in TypeScript, or describe an API and have one written.')).toBeVisible()
+  await page.getByRole('button', { name: 'Try again' }).click()
+  await expect(page.getByText('No plugins yet', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Build a plugin' }).click()
   await page.getByRole('dialog', { name: 'Build a plugin' }).getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await discover()
-  await expect(page.getByText('This deployment reports nothing mounted.')).toBeVisible()
+  await expect(page.getByText('Nothing built in is listed.')).toBeVisible()
 
   mode.yours = 'rows'
   mode.mounted = 'rows'
-  await yours()
+  await page.reload()
+  await mineView()
   const mine = page.getByRole('list', { name: 'Your plugins' })
   const acme = mine.getByRole('listitem').filter({ hasText: 'acme' })
   await expect(acme.getByText('Reads the acme connector’s credential when it runs.')).toBeVisible()
@@ -846,7 +902,7 @@ test('plugins: yours and what is mounted, each while read, refused, empty, as an
   await expect(mine.getByRole('listitem').filter({ hasText: 'tiny' })).toHaveText(/^T\s*tiny\s*Needs no credential\.$/)
   await page.screenshot({ path: info.outputPath('plugins-yours.png') })
   await page.getByLabel('Search plugins').fill('zzz')
-  await expect(page.getByText('No plugin matches.')).toBeVisible()
+  await expect(page.getByText('No plugin of yours matches “zzz”.')).toBeVisible()
   await page.getByLabel('Search plugins').fill('')
 
   await mine.getByRole('button', { name: 'acme', exact: true }).click()
@@ -862,11 +918,12 @@ test('plugins: yours and what is mounted, each while read, refused, empty, as an
 
   await discover()
   const mounted = page.getByRole('list', { name: 'Mounted subsystems' })
-  // A subsystem that names no prefix is its name alone.
-  await expect(mounted.getByRole('listitem').filter({ hasText: 'git' })).toHaveText(/^git$/)
+  // A subsystem that names no prefix is its name and whether it is on.
+  await expect(mounted.getByRole('listitem').filter({ hasText: 'git' })).toHaveText(/^git\s*On$/)
   await expect(mounted.getByText('/v1/tool')).toBeVisible()
+  await expect(page.getByText('2 built in', { exact: true })).toBeVisible()
   await page.getByLabel('Search plugins').fill('zzz')
-  await expect(page.getByText('Nothing mounted matches.')).toBeVisible()
+  await expect(page.getByText('Nothing built in matches “zzz”.')).toBeVisible()
 })
 
 test('plugins: a build from TypeScript says its size and opens its source, and a build let go sends nothing', async ({ page }) => {
@@ -912,9 +969,11 @@ test('agents: yours while read, refused, none, then as the platform answers them
     return refused(503, 'the agent store is down')
   })
   await page.goto('/-/customize/agents')
-  await expect(page.getByText('Reading your agents…')).toBeVisible()
+  await yours(page).click()
+  await expect(page.getByText('Loading your agents…')).toBeVisible()
   first.release()
-  await expect(page.getByText('the agent store is down')).toBeVisible()
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('the agent store is down')).toHaveCount(0)
 
   const create = async (name: string) => {
     const dialog = page.getByRole('dialog', { name: 'New agent' })
@@ -927,7 +986,8 @@ test('agents: yours while read, refused, none, then as the platform answers them
   mode = 'none'
   await page.getByRole('button', { name: 'New agent' }).click()
   await create('scout')
-  await expect(page.getByText('No agents yet. Give one a model, instructions and the tools it may call.')).toBeVisible()
+  await expect(page.getByText('No agents yet', { exact: true })).toBeVisible()
+  await expect(page.getByText('Start from a preset, or give a new one a model, instructions and tools.')).toBeVisible()
 
   mode = 'rows'
   await page.getByRole('button', { name: 'New agent' }).last().click()
@@ -942,7 +1002,7 @@ test('agents: yours while read, refused, none, then as the platform answers them
   await expect(mine.getByRole('listitem').filter({ hasText: 'spender' }).getByText('zen4 · 2 runs · 2 tools · $0.0123 of $5 this week')).toBeVisible()
   await page.screenshot({ path: info.outputPath('agents-thin.png') })
   await page.getByLabel('Search agents').fill('zzz')
-  await expect(page.getByText('No agent matches.')).toBeVisible()
+  await expect(page.getByText('No agent of yours matches “zzz”.')).toBeVisible()
 })
 
 test('agents: one opened while read, one that cannot be read, one changed and refused, and one with no id deleted by its name', async ({ page }) => {
@@ -970,10 +1030,11 @@ test('agents: one opened while read, one that cannot be read, one changed and re
     return undefined
   })
   await page.goto('/-/customize/agents')
+  await yours(page).click()
   const mine = page.getByRole('list', { name: 'Your agents' })
 
   await mine.getByRole('button', { name: 'broken' }).click()
-  await expect(page.getByRole('dialog', { name: 'broken' }).getByText('the agent store is down')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'broken' }).getByText(DOWN)).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
@@ -1005,7 +1066,7 @@ test('agents: one opened while read, one that cannot be read, one changed and re
 
   await mine.getByRole('button', { name: 'lookout' }).click()
   const lookout = page.getByRole('dialog', { name: 'lookout' })
-  await expect(lookout.getByText('Reading the agent…')).toBeVisible()
+  await expect(lookout.getByText('Loading the agent…')).toBeVisible()
   reading.release()
   await expect(lookout.getByLabel('Instructions')).toHaveValue('Watch the queue.')
   // It names no model: the deployment's default runs it.
@@ -1029,19 +1090,20 @@ test('agents: the tools that are on while read, refused, and none, and a model c
     return refused(503, 'the tool plane is down')
   })
   await page.goto('/-/customize/agents')
+  await yours(page).click()
   await expect(page.getByRole('list', { name: 'Your agents' })).toBeVisible()
 
   await page.getByRole('button', { name: 'New agent' }).click()
   let dialog = page.getByRole('dialog', { name: 'New agent' })
-  await expect(dialog.getByText('Reading the tools that are on…')).toBeVisible()
+  await expect(dialog.getByText('Loading the tools that are on…')).toBeVisible()
   first.release()
-  await expect(dialog.getByText('the tool plane is down')).toBeVisible()
+  await expect(dialog.getByText(DOWN)).toBeVisible()
   await dialog.getByRole('button', { name: 'Cancel' }).click()
 
   mode = 'none'
   await page.getByRole('button', { name: 'New agent' }).click()
   dialog = page.getByRole('dialog', { name: 'New agent' })
-  await expect(dialog.getByText('No tool is on for your organization. Switch skills and connectors on first.')).toBeVisible()
+  await expect(dialog.getByText('No tool is on for your organization yet. Add skills or connectors first.')).toBeVisible()
   await dialog.getByRole('button', { name: 'Model: The deployment’s default' }).click()
   await page.getByRole('option', { name: /^zen5\.8,/ }).click()
   await expect(dialog.getByRole('button', { name: 'Model: zen5.8' })).toBeVisible()
@@ -1080,31 +1142,89 @@ test('agents: presets while read, refused, none, one with no title, one already 
   })
   await page.goto('/-/customize/agents')
   const again = async () => {
-    await page.getByRole('button', { name: 'Yours', exact: true }).click()
-    await page.getByRole('button', { name: 'Discover', exact: true }).click()
+    await yours(page).click()
+    await browse(page).click()
   }
-  await expect(page.getByRole('button', { name: 'Yours', pressed: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Discover', exact: true }).click()
-  await expect(page.getByText('Reading the presets…')).toBeVisible()
+  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText('Loading presets…')).toBeVisible()
   first.release()
-  await expect(page.getByText('the presets are unavailable')).toBeVisible()
+  await expect(page.getByText(DOWN)).toBeVisible()
+  await expect(page.getByText('the presets are unavailable')).toHaveCount(0)
 
   mode = 'none'
   await again()
-  await expect(page.getByText('The platform offers no presets.')).toBeVisible()
+  await expect(page.getByText('There are no presets yet. Start from a blank agent with New agent.')).toBeVisible()
 
   mode = 'rows'
   await again()
   const presets = page.getByRole('list', { name: 'Presets' })
   // A preset named by its id alone, and one the org already has an agent of.
-  await expect(presets.getByRole('listitem').filter({ hasText: 'scout' })).toHaveText(/^scout\s*Preset scout$/)
+  await expect(presets.getByRole('listitem').filter({ hasText: 'scout' })).toHaveText(/^scout\s*Preset scout\s*Use$/)
   await expect(page.getByLabel('Helper is added')).toBeVisible()
-  await page.getByRole('button', { name: 'Add scout' }).click()
+  await page.getByRole('button', { name: 'Use scout' }).click()
   const dialog = page.getByRole('dialog', { name: 'New agent' })
   await expect(dialog.getByLabel('Name')).toHaveValue('scout')
   await expect(dialog.getByLabel('Description')).toHaveValue('')
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await page.getByLabel('Search agents').fill('zzz')
-  await expect(page.getByText('No preset matches.')).toBeVisible()
+  await expect(page.getByText('No preset matches “zzz”.')).toBeVisible()
+})
+
+// Slow, and empty.
+
+test('a read that hangs gives up after fifteen seconds, says so plainly, and asks again', async ({ page }) => {
+  let hang = true
+  await catalogue(page)
+  await customize(page)
+  await over(page, async ({ path }) => {
+    if (path !== '/v1/agent/chat/presets' || !hang) return undefined
+    await new Promise(() => {})
+    return undefined
+  })
+  await page.clock.install()
+  await page.goto('/-/customize/agents')
+  await expect(page.getByText('Loading presets…')).toBeVisible()
+  await page.clock.runFor(14_000)
+  await expect(page.getByText('Loading presets…')).toBeVisible()
+  await page.clock.runFor(2_000)
+  await expect(page.getByText('Hanzo is taking too long to answer. Try again.')).toBeVisible()
+  hang = false
+  await page.getByRole('button', { name: 'Try again' }).click()
+  await expect(page.getByText('Product & Fashion Create', { exact: true })).toBeVisible()
+})
+
+test('an org with nothing of its own is shown what to add first, and each empty Yours names the next step', async ({ page }, info) => {
+  await catalogue(page)
+  await customize(page)
+  await over(page, ({ method, path, query }) => {
+    if (path === '/v1/tool/skills/authored') return { json: { skills: [] } }
+    if (path === '/v1/tool/skills' && method === 'GET') return { json: { tools: [] } }
+    if (path === '/v1/tool/plugins/authored') return { json: { plugins: [] } }
+    if (path === '/v1/agent' && method === 'GET') return { json: { agents: [] } }
+    if (path === '/v1/tool' && query.includes('activated=true')) return { json: { tools: [] } }
+    return undefined
+  })
+  await page.goto('/-/customize')
+  // Browse first, with nothing counted on Yours.
+  await expect(browse(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(yours(page)).toHaveAccessibleName('Yours')
+  await expect(page.getByRole('list', { name: 'Skills to add' })).toBeVisible()
+
+  const steps: [string, string, string[]][] = [
+    ['Skills', 'No skills yet', ['Browse skills', 'Write a skill']],
+    ['Connectors', 'No connectors yet', ['Browse connectors', 'Add by URL']],
+    ['Plugins', 'No plugins yet', ['Build a plugin']],
+    ['Agents', 'No agents yet', ['Browse presets', 'New agent']],
+  ]
+  for (const [tab, title, buttons] of steps) {
+    await page.getByRole('tab', { name: tab }).click()
+    await expect(browse(page), tab).toHaveAttribute('aria-pressed', 'true')
+    await yours(page).click()
+    await expect(page.getByText(title, { exact: true })).toBeVisible()
+    for (const b of buttons) await expect(page.getByRole('button', { name: b }).last(), `${tab}: ${b}`).toBeVisible()
+    await page.screenshot({ path: info.outputPath(`empty-${tab.toLowerCase()}.png`) })
+  }
+  await page.getByRole('button', { name: 'Browse presets' }).click()
+  await expect(page.getByRole('heading', { name: 'Start from a preset' })).toBeVisible()
 })
