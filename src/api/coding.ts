@@ -11,7 +11,8 @@
  *
  * Where it runs is one field. No `targetId` is the platform's sandbox; a target
  * id routes it to one of the org's machines, and `routed` says whether it got
- * there.
+ * there. `dir` with a target id and no repository is a folder there its owner
+ * granted (shared.ts); the platform refuses any other 403 `folder_not_granted`.
  *
  * `mode` is what the run may do: `build` edits, commits and pushes its branch;
  * `plan` reads the repository with a credential that can only read and answers
@@ -60,6 +61,8 @@ export interface Ask {
   base?: string
   /** One of the org's machines. Omitted is the sandbox. */
   targetId?: string
+  /** A folder on that machine its owner lets the web use, an absolute path; the run works there instead of in a repository. */
+  dir?: string
   /** The project slug the run works on. */
   project?: string
   /** An earlier run's session to continue from, on the branch it pushed. */
@@ -105,6 +108,7 @@ export function body(ask: Ask): Record<string, string | number | boolean> {
     'repo',
     'base',
     'targetId',
+    'dir',
     'project',
     'after',
     'mode',

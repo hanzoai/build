@@ -14,7 +14,9 @@
  * GitHub can be connected later. On a host that has the computer (Hanzo
  * Desktop, `host.local`), New also offers This computer: the run works in a
  * folder there, Auto picking the folder used last (local.ts), and needs no
- * repository at all (hanzo-inc/app issues 309 and 310). The choices a person made here are kept in this
+ * repository at all (hanzo-inc/app issues 309 and 310). On a machine whose owner lets the web use some of its
+ * folders, the run can work in one of those instead of a repository (shared.ts): Auto is the folder the machine's
+ * linked shell is open in, when it is one of them. The choices a person made here are kept in this
  * browser, per org, so the next New starts where the last one did — and a kept
  * repository New can no longer offer is let go, so the next run is not sent
  * back to it. A repository can also be given by its address (Use a git URL).
@@ -33,8 +35,9 @@ import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useTalk, useVoice } from '@hanzo/voice'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { told } from './api/call.ts'
+import { Refusal, told } from './api/call.ts'
 import { start, unhonoured, type Mode } from './api/coding.ts'
+import { list as running, type Session } from './api/sessions.ts'
 import { say } from './api/talk.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
 import { heard, repos as githubRepos } from './api/github.ts'
@@ -51,7 +54,8 @@ import { useCached, useKept, usePlaces, useRead } from './data.ts'
 import { useDevMode } from './dev-mode.ts'
 import { takeHandoff } from './handoff.ts'
 import { useHost, useLocal, useSite, useTarget } from './host.tsx'
-import { failed, HERE, recent, where, type Folder } from './local.ts'
+import { failed, HERE, named, recent, where, type Folder } from './local.ts'
+import { aim, NOT_GRANTED, shell } from './shared.ts'
 import { plainAnswer } from './plain.ts'
 import { useRedesign } from './redesign.tsx'
 import { urlOf } from './site.ts'
@@ -82,7 +86,7 @@ interface Kept {
   repo: (RowRepo & { forge?: boolean; github?: boolean; clone?: string; given?: boolean }) | null
   branch: string
   place: string
-  /** On This computer: the folder chosen, by its path; '' is Auto, the folder used last (local.ts). */
+  /** The folder chosen, by its path: on This computer one of its own (local.ts), on a machine one its owner granted (shared.ts); '' is Auto. */
   folder: string
   mode: Mode
   ask: string
@@ -94,6 +98,9 @@ interface Kept {
 const NOHOMES: Homes = { homes: [], whole: false }
 
 const FIRST: Kept = { repo: null, branch: '', place: '', folder: '', mode: 'build', ask: '', issue: 0 }
+
+/** No folders: a place that shares none. */
+const NONE: readonly string[] = []
 
 /** This computer, as a place: always there on a host that has it. */
 const HERE_PLACE: Place = { id: HERE, label: 'This computer', kind: 'here', status: 'online', capacity: '' }
@@ -312,6 +319,12 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   const folders = local ? recent(local.folders()) : []
   // The folder Auto picks is the one the words typed so far are about (local.ts `route`), so the pill says where Send goes.
   const folderAt = where(folders, kept.folder, draft)
+  // On a machine: the folders its owner lets the web use, the one its linked shell is open in, and the one a run goes to.
+  const granted = here ? NONE : (place.folders ?? NONE)
+  const shells = useRead(granted.length ? () => running(target, { status: 'running', limit: 100 }) : null, [] as Session[], [target, place.id, granted.length > 0])
+  const aimed = aim(granted, kept.folder, shell(shells.value, place))
+  // The machine a run was refused on for a folder it does not share: there, the folders it does are offered.
+  const [offered, setOffered] = useState('')
   const [ran, setRan] = useState<Ran | null>(null)
   // How far the agent's first-run setup has got, while the host fetches it.
   const [fetched, setFetched] = useState<number | null>(null)
@@ -467,6 +480,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     }
     setBusy(true)
     setNote('')
+    setOffered('')
     try {
       // A page the ask names is read first, and rides it: a run never starts on a page that could not be read.
       // Only an ask about its pages reads them (page.ts `about`); any other link is words for the agent.
@@ -486,26 +500,46 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       // Skills, memories and plugin system prompts travel out-of-band as
       // developerInstructions so the user prompt stays clean and cacheable.
       const developerInstructions = [carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n')
-      const sent = await say(target, {
-        input: compose(said.trim(), [...files, ...pages.files]),
-        ...(developerInstructions ? { developerInstructions } : {}),
-        // The name alone. The org rides the request, and a slash is not a repo name.
-        // An empty base or place is not sent: the default branch, and the sandbox.
-        repo: repo?.name ?? hub?.full_name,
-        base: repo ? kept.branch : hub ? kept.branch || hub.default_branch : undefined,
-        target: place.id,
-        // The mode the composer shows: Auto starts a build, Manual asks first, Plan only plans.
-        mode: carry.mode.value === 'manual' ? 'manual' : mode === 'plan' ? 'plan' : 'auto',
-        model: mind.model,
-        effort: level(mind.effort),
-        issue,
-      })
+      const input = compose(said.trim(), [...files, ...pages.files])
+      // A folder on the machine is a coding run there, in that folder: a conversation names no folder.
+      const sent = aimed.dir
+        ? await start(target, {
+            prompt: input,
+            targetId: place.id,
+            dir: aimed.dir,
+            mode,
+            model: mind.model,
+            effort: level(mind.effort),
+            ...(developerInstructions ? { developerInstructions } : {}),
+          })
+        : await say(target, {
+            input,
+            ...(developerInstructions ? { developerInstructions } : {}),
+            // The name alone. The org rides the request, and a slash is not a repo name.
+            // An empty base or place is not sent: the default branch, and the sandbox.
+            repo: repo?.name ?? hub?.full_name,
+            base: repo ? kept.branch : hub ? kept.branch || hub.default_branch : undefined,
+            target: place.id,
+            // The mode the composer shows: Auto starts a build, Manual asks first, Plan only plans.
+            mode: carry.mode.value === 'manual' ? 'manual' : mode === 'plan' ? 'plan' : 'auto',
+            model: mind.model,
+            effort: level(mind.effort),
+            issue,
+          })
       setDraft('')
       setFiles([])
       setIssue(0)
       onStarted(sent.session)
     } catch (e) {
-      setNote(plain(e, repo?.name ?? hub?.full_name ?? (place.id ? activePlaceDisplay.title : t('a new project')), 'run', t))
+      // The owner stopped sharing the folder, or never did: say how to share it, and offer the ones shared now.
+      if (e instanceof Refusal && e.code === NOT_GRANTED) {
+        setNote(t('That folder is not shared with the web. Share it from Hanzo Desktop or `hanzo link grant {folder}`', { folder: aimed.dir }))
+        setOffered(place.id)
+        places.reload()
+        shells.reload()
+        return
+      }
+      setNote(plain(e, aimed.dir ? named(aimed.dir) : (repo?.name ?? hub?.full_name ?? (place.id ? activePlaceDisplay.title : t('a new project'))), 'run', t))
     } finally {
       setBusy(false)
     }
@@ -680,27 +714,28 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
   )
   const placeTooltip = here
     ? t('Runs on this computer, in the folder you choose. No repository needed.')
-    : place.id
+    : aimed.dir
+      ? t('Runs on this machine, in a folder its owner shares with the web. No repository needed.')
+      : place.id
       ? t('Runs on this machine, in a new folder unless you choose a repository')
       : t('Runs automatically in your Hanzo cloud workspace')
   const placeHardwareHint = place.id && !devMode && !here ? activePlaceDisplay.detail : undefined
   // The place chosen, as the pill and the `+` menu mark it.
   const placeId = here ? HERE : place.id
 
-  // This computer's folder: Auto (the one used last) and every folder it opened, most recent first.
+  // The Folder pill's choices: Auto, then on This computer every folder it opened, most recent first, and on a
+  // machine the folders its owner shares with the web, and no others.
   const AUTO = '__auto__'
-  const folderItems = useMemo(
-    () => [
-      {
-        id: AUTO,
-        label: t('Auto'),
-        hint: t('The folder your ask is about, else the one you used last'),
-        icon: <FolderOpen size={13} color="$soft" />,
-      },
-      ...folders.map((f) => ({ id: f.path, label: f.name, hint: f.path, icon: <FolderOpen size={13} color="$soft" /> })),
-    ],
-    [folders, t],
-  )
+  const folderItems = useMemo(() => {
+    const item = (id: string, label: string, hint: string) => ({ id, label, hint, icon: <FolderOpen size={13} color="$soft" /> })
+    return here
+      ? [item(AUTO, t('Auto'), t('The folder your ask is about, else the one you used last')), ...folders.map((f) => item(f.path, f.name, f.path))]
+      : [item(AUTO, t('Auto'), t('The folder your shell there is open in, when it is shared; else a new folder')), ...granted.map((f) => item(f, named(f), f))]
+  }, [here, folders, granted, t])
+  // The folder the run goes to, as the pill says it: Auto's or the one chosen.
+  const aimedAt = here
+    ? { name: folderAt.folder?.name ?? '', id: folderAt.auto ? AUTO : folderAt.folder?.path, auto: folderAt.auto }
+    : { name: aimed.dir ? named(aimed.dir) : '', id: aimed.auto ? AUTO : aimed.dir, auto: aimed.auto }
   const chooseFolder = async () => {
     if (!local) return
     const f = await local.pick().catch(() => null)
@@ -753,26 +788,26 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      {here ? (
+      {here || granted.length ? (
         <ChipSelect
           name={t('Folder')}
           icon={<FolderOpen size={13} color="$soft" />}
-          label={
-            folderAt.folder
-              ? folderAt.auto
-                ? t('Auto · {name}', { name: folderAt.folder.name })
-                : folderAt.folder.name
-              : t('Choose folder…')
-          }
-          chosen={folderItems.find((i) => i.id === (folderAt.auto ? AUTO : folderAt.folder?.path))}
+          label={aimedAt.name ? (aimedAt.auto ? t('Auto · {name}', { name: aimedAt.name }) : aimedAt.name) : here ? t('Choose folder…') : t('Auto')}
+          chosen={folderItems.find((i) => i.id === aimedAt.id)}
           items={folderItems}
           onChange={(i) => set({ folder: i.id === AUTO ? '' : i.id })}
           placeholder={t('Search folders…')}
           placement="top-start"
-          footer={<FooterLink label={t('Choose folder…')} onPress={() => void chooseFolder()} />}
+          footer={
+            here ? (
+              <FooterLink label={t('Choose folder…')} onPress={() => void chooseFolder()} />
+            ) : (
+              <FooterLink label={t('Manage shared folders…')} onPress={() => host.go(path({ kind: 'settings', section: 'machines' }))} />
+            )
+          }
         />
       ) : null}
-      {here ? null : (
+      {here || aimed.dir ? null : (
       <RepoSelect
         open={picking}
         onOpenChange={setPicking}
@@ -824,7 +859,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
         disabled={!signed}
       />
       )}
-      {forge && !here ? (
+      {forge && !here && !aimed.dir ? (
         <BranchSelect open={branching} onOpenChange={setBranching} value={branch} onChange={(b) => set({ branch: b })} load={loadBranches} placement="top-start" />
       ) : null}
     </>
@@ -971,6 +1006,31 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
                 <SizableText size="$1" color="$soft" role="status" px="$3">
                   {note || refused || mind.note}
                 </SizableText>
+              ) : null}
+              {offered === place.id && granted.length ? (
+                <XStack px="$3" gap="$2" flexWrap="wrap" data-slot="shared-folders">
+                  {granted.map((f) => (
+                    <Button
+                      key={f}
+                      size="sm"
+                      variant="outline"
+                      borderColor="var(--border-strong)"
+                      aria-label={t('Use {folder}', { folder: f })}
+                      onPress={() => {
+                        set({ folder: f })
+                        setOffered('')
+                        setNote('')
+                      }}
+                    >
+                      <XStack items="center" gap="$1.5">
+                        <FolderOpen size={14} />
+                        <SizableText size="$2" color="$ink">
+                          {named(f)}
+                        </SizableText>
+                      </XStack>
+                    </Button>
+                  ))}
+                </XStack>
               ) : null}
               {redesign.view}
               {ran ? <RanHere ran={ran} setup={fetched} devMode={devMode} onCancel={local?.cancel ? () => void local.cancel?.() : undefined} /> : null}

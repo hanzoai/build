@@ -29,6 +29,8 @@ export interface Place {
   capacity: string
   /** The hostname its runs report, or '' (the cloud workspace, or a machine addressed by id only). */
   host?: string
+  /** A machine's folders its owner lets a run from the web work in (machines.ts); none elsewhere. */
+  folders?: string[]
 }
 
 /** The cloud workspace, named in English and marked (`phrase`): a screen draws its label through `t`. */
@@ -36,7 +38,7 @@ export const SANDBOX: Place = { id: '', label: phrase('Hanzo sandbox'), kind: 's
 
 export async function places(t: Target): Promise<Place[]> {
   const list = await machines(t)
-  return [SANDBOX, ...list.map((m) => ({ id: m.id, label: m.label, kind: m.kind, status: state(m), capacity: m.capacity, ...(m.host ? { host: m.host } : {}) }))]
+  return [SANDBOX, ...list.map((m) => ({ id: m.id, label: m.label, kind: m.kind, status: state(m), capacity: m.capacity, ...(m.host ? { host: m.host } : {}), ...(m.folders.length ? { folders: m.folders } : {}) }))]
 }
 
 /** A place as a person reads it: the name they gave the machine (`names`, from `useDeviceNames`), else its own as a person says it. */

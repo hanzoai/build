@@ -27,11 +27,12 @@ export interface Target {
   org: string | null
 }
 
-/** A refusal: the status, and the platform's own sentence for it. */
+/** A refusal: the status, the platform's own sentence for it, and the code it names the refusal by ('' for none). */
 export class Refusal extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code = '',
   ) {
     super(message)
     this.name = 'Refusal'
@@ -83,21 +84,27 @@ export function headers(t: Target, extra?: HeadersInit): Headers {
   return h
 }
 
-/** The sentence a refusal carries, whichever envelope it arrived in. */
-export async function reason(res: Response): Promise<string> {
+/** The sentence a refusal carries, whichever envelope it arrived in, and the problem's `code` when it names one. */
+async function problem(res: Response): Promise<{ why: string; code: string }> {
   try {
     const body = (await res.json()) as {
       detail?: string
       title?: string
+      code?: unknown
       error?: { message?: string } | string
       msg?: string
       message?: string
     }
     const err = typeof body.error === 'string' ? body.error : body.error?.message
-    return body.detail || err || body.msg || body.message || body.title || ''
+    return { why: body.detail || err || body.msg || body.message || body.title || '', code: typeof body.code === 'string' ? body.code : '' }
   } catch {
-    return ''
+    return { why: '', code: '' }
   }
+}
+
+/** The sentence a refusal carries, whichever envelope it arrived in. */
+export async function reason(res: Response): Promise<string> {
+  return (await problem(res)).why
 }
 
 /** A path segment, escaped. Ids and names from a row never compose a path raw. */
@@ -125,8 +132,8 @@ export async function call<T>(
     signal: init?.signal,
   })
   if (!res.ok) {
-    const why = await reason(res)
-    throw new Refusal(res.status, why || `${method} ${path.split('?')[0]} answered ${res.status}`)
+    const { why, code } = await problem(res)
+    throw new Refusal(res.status, why || `${method} ${path.split('?')[0]} answered ${res.status}`, code)
   }
   if (res.status === 204) return undefined as T
   const text = await res.text()

@@ -68,6 +68,8 @@ const run = (o: Partial<Session>): Session => ({
   repo: 'acme/app',
   project: '',
   target: '',
+  host: '',
+  cwd: '',
   kind: 'coding',
   base: 'main',
   branch: 'agent/x',
