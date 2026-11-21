@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Sentence, type Target } from './api/call.ts'
-import { address, asked, attach, critique, local, named, read, readAll, refusal, shown } from './page.ts'
+import { about, address, asked, attach, critique, local, named, read, readAll, refusal, shown } from './page.ts'
 
 const target: Target = { api: 'https://api.test', token: () => 'tok', org: 'acme' }
 
@@ -119,5 +119,24 @@ describe('a page on the ask, and the ask New offers for it', () => {
     expect(asked('https://acme.com/pricing')).toBe(false)
     // The ask names its page, so the page is read and attached when it is sent.
     expect(named(ask)).toEqual(['https://acme.com/pricing'])
+  })
+})
+
+describe('which asks are about the pages they name', () => {
+  it('the critique ask, an address alone, or words that ask something of the page', () => {
+    for (const a of [
+      critique('https://acme.com/pricing'),
+      'https://acme.com/pricing',
+      'Redesign https://acme.com',
+      'Rebuild www.acme.com in Astro',
+      'What do you think of https://acme.com?',
+      'Build a landing page like https://acme.com',
+      'a pricing page based on https://acme.com/pricing',
+    ])
+      expect(about(a)).toBe(true)
+  })
+  it('a link mentioned in passing is not read', () => {
+    for (const a of ['Call the API at https://api.acme.com/v1 from the cart', 'Fix the footer link to https://acme.com/terms', 'Implement https://github.com/acme/shop/issues/12', 'Fix the cart'])
+      expect(about(a)).toBe(false)
   })
 })
