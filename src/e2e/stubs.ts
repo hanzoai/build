@@ -1110,6 +1110,9 @@ export async function scheduled(page: Page, seed: { tasks?: Record<string, unkno
       return { json: tasks[i] }
     }
     if (id && id[2] && method === 'POST') return { status: 201, json: { run: { id: 'run_4', status: 'running' } } }
+    // One task, opened in its editor, and its runs (none yet).
+    if (id && !id[2] && method === 'GET') return { json: tasks.find((x) => x.id === id[1]) }
+    if (/^\/v1\/auto\/automations\/flow_[0-9]{32}\/runs$/.test(path)) return { json: { data: [] } }
     if (id && method === 'DELETE') {
       tasks.splice(tasks.findIndex((x) => x.id === id[1]), 1)
       return { json: {} }

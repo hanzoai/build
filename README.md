@@ -76,6 +76,103 @@ at its name (`/projects`, `/issues`, `/customize/connectors`, `/settings/usage`)
 per address ahead of time. `@hanzo/build/route` is that module alone, with no
 React, for server code and for pages that must not carry the builder.
 
+### Asking before a spend
+
+Nothing in the builder spends on one press. Each of these asks first and spends
+only on a yes: a scheduled task's Run now (its list and its editor); a task made
+or switched on (the switch, New task's Create, an editor save that turns it On);
+Add, Elect with 24/7 on, or an editor save that makes a bot 24/7; Try again,
+Approve and build, Fork, and Resume on a sandbox run; a codebase's setup run;
+starting from a site template, and Publish again; and waking a suspended cloud
+workspace, whether from its Wake button or because its desktop, shell, preview
+or dev server needs it running (`api/sandbox.ts` takes a `Wake` and never
+resumes one without it). Words a person typed and sent are their own ask.
+
+A host that has its own spend question passes it, and is then the only asker:
+
+```ts
+type SpendKind = 'run' | 'task-run' | 'task' | 'bot' | 'machine' | 'publish'
+interface Spend {
+  kind: SpendKind
+  title: string                 // the question: "Run Monday summary now?"
+  what: string                  // what will start, one sentence
+  yes: string                   // the yes button's words: "Run now"
+  uses: 'computer' | 'credits'  // a cloud computer, or the plan or credits only
+  again: string | null          // the key a "Don't ask again" may be kept under, or null
+}
+Host.confirm?: (spend: Spend) => Promise<boolean>
+```
+
+Every string arrives in the person's language. **The remembering rule:** a host
+may keep a "Don't ask again" only under `again`, and only for that key. It is
+`<kind>.<uses>` (`task-run.credits`, `run.computer`, `run.credits`), so one yes
+never covers a bigger spend of another kind or one that starts a computer when
+the yes was for one that did not. A 24/7 bot's `again` is always `null`: each
+has its own budget and period, so every one is asked.
+
+**What counts as a yes** (`question.ts`): exactly `true`, while the screen that
+asked is still there, answering the latest question that screen asked. A
+`false`, a throw, a yes after the person moved on, or one a newer press
+superseded spends nothing, and a question the host never answers blocks
+nothing: the next press asks again. `book`, which makes a suggestion's task,
+takes the same `confirm` and makes nothing without a yes.
+
+Without `confirm` (this repository's own page) the builder asks in its one
+confirm (`ask.tsx` `Confirm`, also every delete's): an AlertDialog, Cancel
+focused, a click outside refused, Escape shutting the question alone and never
+the sheet it was asked from, focus back on the control that asked.
+`src/question.test.ts` and `src/e2e/spend.spec.ts` hold all of it.
+
+### Suggestions, and the Library's reader
+
+Suggestions are on or off for the account: the key `suggestions` in
+`/v1/pref`, `'on'` or `'off'`, and **unset is off**: only a person who turned
+them on has anything read or sent. It follows them across devices and never
+reaches the next person on a shared browser. `useSuggestions(target)` reads it
+itself, so every caller obeys it with no check of its own, and answers `state`
+(`none` signed out or until read, `on`, `off`) and `turn(on)`.
+`setSuggestions(target, on)` is the one way to change it. Turning off calls off
+a run in flight before it sends anything more, waits out a save already sent,
+and deletes the rows kept from their activity (`suggest`). Off, or signed out,
+the only read is `GET /v1/pref` for the switch and nothing is sent; off,
+`Suggestions` (`state`, `onTurn`, both required) draws one line offering to turn
+them on, and on, the rows with the sentence that says a model made them and its
+Turn off.
+
+On, and when the kept rows are due, it reads the person's conversations
+(`/v1/agents/chat/conversations`), the org's board (`/v1/task/board`), Dev runs
+(`/v1/agent/sessions`, only their own are used), automations, their Library
+files and their signup answers (`/v1/iam/preferences`), and sends Hanzo's model
+(`zen5-flash`, `POST /v1/chat/completions` at api.hanzo.ai) exactly this:
+today's date; about the person, their name (`callName`), what describes their
+work, the role and use chosen at signup, and their custom instructions; and for
+each of the newest 8 conversations, 6 issues, 4 pull requests, 6 runs, 4
+automations and 4 files, its id or address, kind, title
+(140 characters), state, one line of detail (240 characters) and the date it
+changed. That detail line is a board issue's or pull request's repository and
+the first line of its body, a run's repository and branch, an automation's last
+summary or the first line of its instructions, a file's source. Last, the titles
+and addresses of rows the person dismissed, so they are not suggested again.
+`src/e2e/suggest.spec.ts` holds the switch, the guest and that list.
+
+`items(target, filter)` (from `api/library.ts`, with `ItemFilter`, `ItemPage`,
+`ItemScope`, `Item`, `ItemKind`) is the Library's one reader, `GET /v1/library`,
+for a host that lists what a person made without the `Library` screen.
+
+### Drawing one screen
+
+A host that has its own look (its theme and text size) draws the builder's
+screens directly in its pane, under `HostProvider` alone, instead of through
+`Builder`, which mounts the builder's own `Look` and would set them a second
+time: `Library`, `Scheduled`, one task's `Editor`, `Customize` (one tab),
+an agent's `Profile`, and `Forge` (Projects, Issues, Sync, Connectors).
+
+```tsx
+<HostProvider host={host}>
+  <Customize tab="agents" />
+</HostProvider>
+```
+
 ### In a host that has its own rail
 
 The Hanzo app already has a left column, so it mounts `<Builder host={host}
@@ -463,7 +560,9 @@ src/
   publish.tsx   Add to project / Publish
   find.tsx      finding a run, by status, paged
   foot.tsx      the rail's foot: the Slack card and the account menu
-  ask.tsx       confirming an act, or naming something, in a dialog
+  ask.tsx       the one confirm, and naming something, in a dialog
+  question.ts   what counts as a spend's yes, its key, and the words of each question
+  spend.tsx     asking before a press spends: the host's confirm, else the one confirm
   settings/     Settings, one file per section
   data.ts       reads as hooks
   host.tsx      what a host provides

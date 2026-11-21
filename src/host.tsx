@@ -60,6 +60,35 @@ export interface Browser {
   settings?: () => void
 }
 
+/**
+ * What kind of spend a press is: `task-run` one run of a scheduled task now,
+ * `task` a task switched on (or made on) to run by itself, `bot` a 24/7 bot
+ * made, `run` a coding run started, `machine` a suspended cloud computer woken,
+ * `publish` a site built and published (a template copied, a project published again).
+ */
+export type SpendKind = 'run' | 'task-run' | 'task' | 'bot' | 'machine' | 'publish'
+
+/** What a press must say before it spends, already in the person's language. */
+export interface Ask {
+  kind: SpendKind
+  /** The question: "Run Monday summary now?" */
+  title: string
+  /** What will start, one sentence. */
+  what: string
+  /** The yes button's words: the act itself ("Run now"). */
+  yes: string
+  /** `computer`: it starts a cloud computer. `credits`: it counts against the plan or credits and starts no computer. */
+  uses: 'computer' | 'credits'
+}
+
+/**
+ * A question as the host is asked it. `again` is the key a host may remember a "Don't ask again" under, or null to
+ * ask every time. It is `<kind>.<uses>` (`task-run.credits`, `run.computer`), so one yes covers only the same kind of
+ * spend on the same kind of thing. A host keeps nothing it is not given a key for. A 24/7 bot's is null by its TYPE:
+ * each has its own budget and period, so no yes is ever remembered for one.
+ */
+export type Spend = (Ask & { kind: Exclude<SpendKind, 'bot'>; again: string | null }) | (Ask & { kind: 'bot'; again: null })
+
 export interface Host {
   /** The product's name, drawn at the top left: `Hanzo Build` on hanzo.build, `Hanzo` on hanzo.ai. */
   name: string
@@ -129,6 +158,13 @@ export interface Host {
    * Hanzo Desktop can, so New on This computer offers to redesign a site from its address. A browser page cannot: absent.
    */
   site?: Site
+  /**
+   * Asks the person before a press spends (spend.tsx), and answers whether they said yes. A host that gives it is the
+   * only asker: the builder draws no question of its own and spends only on `true`. Absent (this package's own page),
+   * the builder asks in its own dialog. A no, a throw, an answer after the asking screen has gone, or one a newer
+   * question on that screen superseded spends nothing; one left unanswered blocks nothing.
+   */
+  confirm?: (spend: Spend) => Promise<boolean>
 }
 
 const Context = createContext<Host | null>(null)

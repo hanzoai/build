@@ -8,6 +8,7 @@
 import type { Page } from '@playwright/test'
 
 import { expect, test } from './fixture.ts'
+import { accept, decline } from './spend.ts'
 import { browser, ev, finished, hold, NEXT, ORG, rig, SESSION, to } from './cov-run.ts'
 import { desk, open } from './desk.ts'
 import { mounted, went } from './mount.ts'
@@ -148,6 +149,7 @@ test('a paused sandbox run that cannot be carried on says why and stays', async 
   await p.goto(`/${SESSION}`)
   await expect(p.getByText('Paused — its work so far is on its branch.')).toBeVisible({ timeout: 45_000 })
   await p.getByRole('button', { name: 'Resume' }).click()
+  await accept(p, 'Resume this run?', 'Resume')
   await expect(status(p).getByText('Your plan has no runs left this month')).toBeVisible()
   await expect(p).toHaveURL(new RegExp(`/${SESSION}$`))
 })
@@ -209,6 +211,11 @@ test('a failed run opens its error, ends on Chat’s failure, and Try again star
   const failure = t.getByRole('alert')
   await expect(failure).toBeVisible()
   await failure.getByRole('button', { name: 'Try again' }).click()
+  // A new run, billed: asked first, and Cancel starts none.
+  await decline(p, 'Try this run again?')
+  expect(to(sent, 'POST', '/v1/agent/coding')).toHaveLength(0)
+  await failure.getByRole('button', { name: 'Try again' }).click()
+  await accept(p, 'Try this run again?', 'Try again')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   expect(to(sent, 'POST', '/v1/agent/coding')[0]?.body).toMatchObject({ prompt: 'Add the widget', repo: 'hanzoai/universe', after: SESSION, mode: 'plan' })
 })
@@ -241,6 +248,7 @@ test('a run the feed says paused before its record is read cannot be carried on 
   await p.goto(`/${SESSION}`)
   await expect(p.getByText('Paused.', { exact: true })).toBeVisible({ timeout: 45_000 })
   await p.getByRole('button', { name: 'Resume' }).click()
+  await accept(p, 'Resume this run?', 'Resume')
   await expect(status(p).getByText('This run is still being read')).toBeVisible()
   await p.getByRole('button', { name: 'Good result' }).click()
   await expect.poll(() => to(sent, 'POST', '/v1/event').map((s) => (s.body as { properties: unknown }).properties)).toEqual([{ verdict: 'up', project: '' }])
@@ -376,6 +384,11 @@ test.describe('a plan run', () => {
     const go = await hold(p, '/v1/agent/coding', 'POST')
     await p.goto(`/${SESSION}`)
     await p.getByRole('button', { name: 'Approve and build' }).click()
+    // Building is a new run: asked first, and Cancel builds nothing.
+    await decline(p, 'Build this plan?')
+    expect(to(sent, 'POST', '/v1/agent/coding')).toHaveLength(0)
+    await p.getByRole('button', { name: 'Approve and build' }).click()
+    await accept(p, 'Build this plan?', 'Approve and build')
     await expect(p.getByRole('button', { name: 'Starting the build…' })).toBeDisabled()
     go()
     await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
@@ -389,6 +402,7 @@ test.describe('a plan run', () => {
     )
     await p.goto(`/${SESSION}`)
     await p.getByRole('button', { name: 'Approve and build' }).click()
+    await accept(p, 'Build this plan?', 'Approve and build')
     await expect.poll(() => to(sent, 'POST', '/v1/agent/turns').length).toBe(1)
     expect(to(sent, 'POST', '/v1/agent/turns')[0]?.body).toMatchObject({ session: CONVERSATION, mode: 'auto', input: `Carry out this plan:\n\n${PLAN}` })
     expect(to(sent, 'POST', '/v1/agent/coding')).toHaveLength(0)
@@ -398,6 +412,7 @@ test.describe('a plan run', () => {
     await rig(p, planned(), ({ path }) => (path === '/v1/agent/coding' ? refusal('Out of credits', 402) : undefined))
     await p.goto(`/${SESSION}`)
     await p.getByRole('button', { name: 'Approve and build' }).click()
+    await accept(p, 'Build this plan?', 'Approve and build')
     await expect(status(p).getByText('Out of credits')).toBeVisible()
   })
 

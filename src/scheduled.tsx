@@ -29,14 +29,17 @@ import { RING, RING_INSET } from './pane.ts'
 import { automations, create, cron, events, jobs, remove, save, start, words, type Automation, type Draft, type Job, type Parsed, type Schedule } from './api/auto.ts'
 import { Refusal, told } from './api/call.ts'
 import { ENSO, limits as readLimits, models } from './api/models.ts'
-import { Confirm, Field, Line, Sheet } from './customize/ui.tsx'
+import { Field, Line, Sheet } from './customize/ui.tsx'
 import { local, PLAN, shaped, tidy, unplanned, unready, When, zone } from './automations.tsx'
+import { runNow, switchOn } from './question.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { useSpend } from './spend.tsx'
 import { about, dollars, DOTS, lasted, merged, SAID, titled } from './activity.ts'
 import { SOURCE } from './api/library.ts'
 import { Outputs } from './library.tsx'
 import { path } from './route.ts'
+import { Confirm } from './ask.tsx'
 
 /** Where a move into Scheduled leaves the prompt a new task should start from. */
 const ASK = 'hanzo.build.scheduled.ask'
@@ -104,6 +107,7 @@ export function Scheduled() {
   const { t } = useI18n()
   const host = useHost()
   const target = useTarget()
+  const spend = useSpend()
   const signed = Boolean(host.person)
   const [tick, setTick] = useState(0)
   const tasks = useRead(signed ? () => automations(target) : null, [] as Automation[], [target, signed, tick])
@@ -150,14 +154,17 @@ export function Scheduled() {
       setProblemError(true)
     }
   }
-  const flip = (a: Automation, on: boolean) =>
-    act(a.name, async () => {
+  const flip = async (a: Automation, on: boolean) => {
+    if (on && !(await spend.ask(switchOn(a.name, t)))) return
+    await act(a.name, async () => {
       const next = await save(target, a.id, { enabled: on })
       setTasks((was) => was.map((x) => (x.id === next.id ? next : x)))
       toast.success(on ? t('{name} turned on', { name: a.name }) : t('{name} paused', { name: a.name }))
     })
-  const run = (a: Automation) =>
-    act(a.name, async () => {
+  }
+  const run = async (a: Automation) => {
+    if (!(await spend.ask(runNow(a.name, t)))) return
+    await act(a.name, async () => {
       const r = await start(target, a.id)
       if (r.status === 'skipped') {
         setProblem(t('{name}: not started, the previous run is still going.', { name: a.name }))
@@ -167,6 +174,7 @@ export function Scheduled() {
       }
       setTick((n) => n + 1)
     })
+  }
   const edit = (id: string) => host.go(path({ kind: 'automation', id }))
 
   const activityCap = 10
@@ -328,13 +336,15 @@ export function Scheduled() {
         }}
       />
       <Detail j={looking} onClose={() => setLooking(null)} now={now} />
+      {spend.dialog}
       {deleting ? (
         <Confirm
-          what={deleting.name}
+          title={t('Delete {name}?', { name: deleting.name })}
+          act={t('Delete')}
           says={t('It stops running, and its schedule and its runs go with it. A run going now is stopped.')}
           open
           onOpenChange={(o) => !o && setDeleting(null)}
-          onYes={async () => {
+          run={async () => {
             const dead = deleting
             await remove(target, dead.id)
             setTasks((was) => was.filter((x) => x.id !== dead.id))
@@ -522,6 +532,7 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
   const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const spend = useSpend()
   const catalog = useRead(signed && open ? () => models(target) : null, [], [target, signed, open])
   const { limits } = useLimits(signed && open ? (signal) => readLimits(target, signal) : null, target)
 
@@ -575,6 +586,8 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
     if (!asks.trim()) return setNote(t('Say what it should do.'))
     if (!when) return setNote(said.trim() ? t('Say when in other words, or choose instead.') : t('Say when it runs.'))
     if (wrong) return setNote(wrong)
+    // It is made on, to run and spend by itself: asked first, as switching one on is.
+    if (!(await spend.ask(switchOn(name.trim(), t)))) return
     setBusy(true)
     setNote('')
     try {
@@ -592,6 +605,7 @@ function Make({ prompt, onClose, onMade }: { prompt: string | null; onClose: () 
 
   return (
     <Sheet title={t('New task')} open={open} onOpenChange={(o) => !o && !busy && onClose()} width={560}>
+      {spend.dialog}
       <YStack gap="$4">
         <Field label={t('Name')}>
           <Input value={name} onChangeText={setName} placeholder={t('Monday summary')} aria-label={t('Task name')} />

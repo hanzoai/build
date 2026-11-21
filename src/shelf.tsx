@@ -19,6 +19,8 @@ import { address, change, fork, remove, templates, type Project, type Template }
 import { Address, Confirm, Rename } from './ask.tsx'
 import { useProjects, useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { copying } from './question.ts'
+import { useSpend } from './spend.tsx'
 import { Out } from './out.tsx'
 
 const SHOTS = ['/templates', 'https://gallery.hanzo.ai/screenshots', 'https://hanzo.ai/templates'] as const
@@ -63,11 +65,15 @@ function Card({ onPress, label, disabled = false, children }: { onPress: () => v
 function useFork() {
   const t = useTarget()
   const host = useHost()
+  const { t: say } = useI18n()
+  const spend = useSpend()
   const [busy, setBusy] = useState('')
   const [failed, setFailed] = useState('')
-  const take = async (slug: string) => {
+  const take = async (slug: string, name: string) => {
     if (busy) return
     if (!host.person) return host.signIn?.()
+    // The copy is built and published at once: asked first.
+    if (!(await spend.ask(copying(name, say)))) return
     setBusy(slug)
     setFailed('')
     try {
@@ -79,7 +85,7 @@ function useFork() {
       setBusy('')
     }
   }
-  return { busy, failed, take }
+  return { busy, failed, take, dialog: spend.dialog }
 }
 
 /** When a project was last edited, or made if it never was; Unix seconds. */
@@ -120,7 +126,7 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
   const host = useHost()
   const list = useProjects(t, Boolean(host.person))
   const starters = useRead(() => templates(t), [] as Template[], [t.api])
-  const { busy, failed, take } = useFork()
+  const { busy, failed, take, dialog } = useFork()
   const [renaming, setRenaming] = useState<Project | null>(null)
   const [relinking, setRelinking] = useState<Project | null>(null)
   const [deleting, setDeleting] = useState<Project | null>(null)
@@ -152,6 +158,7 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
   const said = failed || note
   return (
     <YStack width="100%" role="region" aria-label={say('Sites')}>
+      {dialog}
       <YStack width="100%">
         <YStack gap="$1" pb="$4">
           <SizableText render="h2" size="$5" color="$ink">
@@ -178,7 +185,7 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
               width="100%"
             >
               {starters.value.slice(0, 4).map((x) => (
-                <Card key={x.slug} label={say('Start from {template}', { template: x.title })} disabled={Boolean(busy) && busy !== x.slug} onPress={() => void take(x.slug)}>
+                <Card key={x.slug} label={say('Start from {template}', { template: x.title })} disabled={Boolean(busy) && busy !== x.slug} onPress={() => void take(x.slug, x.title)}>
                   <Shot slug={x.slug} />
                   <YStack px="$3" py="$2.5">
                     <SizableText size="$2" color="$ink" numberOfLines={1}>
@@ -389,7 +396,7 @@ export function Templates() {
   const t = useTarget()
   const desktop = Boolean(useMedia().sm)
   const list = useRead(() => templates(t), [] as Template[], [t.api])
-  const { busy, failed, take } = useFork()
+  const { busy, failed, take, dialog } = useFork()
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('')
   const [moreCats, setMoreCats] = useState(false)
@@ -435,6 +442,7 @@ export function Templates() {
 
   return (
     <YStack flex={1} minH={0} overflow="scroll" px="$6" py="$6" items="center">
+      {dialog}
       <YStack width="100%" maxW={1080}>
         <Head title={say('Templates')} says={`${say('Start from a working app.')} ${say('Picking one copies its repository into a project of yours.')}`} />
         {failed ? (
@@ -583,7 +591,7 @@ export function Templates() {
         ) : (
           <YStack display="grid" gridTemplateColumns="repeat(auto-fill, minmax(min(100%, 260px), 1fr))" gap="$3" width="100%">
             {filtered.map((x) => (
-              <Card key={x.slug} label={say('Start from {template}', { template: x.title })} disabled={Boolean(busy) && busy !== x.slug} onPress={() => void take(x.slug)}>
+              <Card key={x.slug} label={say('Start from {template}', { template: x.title })} disabled={Boolean(busy) && busy !== x.slug} onPress={() => void take(x.slug, x.title)}>
                 <Shot slug={x.slug} />
                 <YStack p="$3" gap="$1">
                   <SizableText size="$3" color="$ink" numberOfLines={1}>

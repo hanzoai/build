@@ -82,7 +82,8 @@ import { mark } from './runmeta.ts'
 import { Desk, SEED } from './desk.tsx'
 import { useDevMode } from './dev-mode.ts'
 import { KeepAwake, useKeepAwake } from './awake.tsx'
-import { useHost, useTarget } from './host.tsx'
+import { useHost, useTarget, type Ask as Question } from './host.tsx'
+import { useSpend } from './spend.tsx'
 import { level, pacing, useMind } from './mind.ts'
 import { Out } from './out.tsx'
 import { Gutter } from './gutter.tsx'
@@ -123,6 +124,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const { t: say } = useI18n()
   const host = useHost()
   const t = useTarget()
+  const spend = useSpend()
   const signed = Boolean(host.person)
   const [devMode, setDevMode] = useDevMode()
   const { detail, record, events, status, refused } = read
@@ -314,6 +316,23 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   }
 
   /**
+   * A press that starts a new run with no words typed (Try again, Approve and build, Resume on a sandbox run, Fork) asks
+   * first, before anything says it is starting; words the person typed and sent are their own ask. A no starts
+   * nothing and says nothing.
+   */
+  const ahead = async (said: string, how: 'approve' | 'retry' | 'resume' | 'fork') => {
+    if (busy) return
+    const asked: Record<typeof how, Omit<Question, 'kind' | 'uses'>> = {
+      retry: { title: say('Try this run again?'), what: say('This starts a new run of the same ask.'), yes: say('Try again') },
+      approve: { title: say('Build this plan?'), what: say('This starts a run that carries out the plan.'), yes: say('Approve and build') },
+      resume: { title: say('Resume this run?'), what: say('This starts a follow-up run that carries on from its branch.'), yes: say('Resume') },
+      fork: { title: say('Fork this run?'), what: say('This starts a new run from this one’s work, with the same ask.'), yes: say('Fork') },
+    }
+    if (!(await spend.ask({ kind: 'run', uses: held ? 'computer' : 'credits', ...asked[how] }))) return
+    await act(() => carry(said, how === 'resume' || how === 'fork' ? 'follow' : how))
+  }
+
+  /**
    * Words for the run while it works. A machine drains them between steps; a
    * sandbox run reads nothing after it starts, so the platform stops it with its
    * work kept and a follow-up takes the words on (api/coding.ts `steer`).
@@ -366,7 +385,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
         })
         return
       case 'resume':
-        if (held) void act(() => carry(''))
+        if (held) void ahead('', 'resume')
         else
           void act(async () => {
             await resume(t, id)
@@ -585,6 +604,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     <XStack data-slot="run-split" display="grid" gridTemplateColumns="minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
       <YStack data-slot="run" ref={split.main} {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
         <XStack px="$4" pt="$3" pb="$2" gap="$1.5" items="center" minH={44}>
+          {spend.dialog}
           <YStack flex={1} minW={0} items="flex-start">
             <XStack items="center" gap="$1" maxW="100%" minW={0}>
               {signed && record ? (
@@ -663,7 +683,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     <DropdownMenuItem
                       aria-label={say('Fork')}
                       onSelect={() => {
-                        void act(() => carry(again || headline(record.title, record.repo), 'follow'))
+                        void ahead(again || headline(record.title, record.repo), 'fork')
                       }}
                     >
                       <SizableText size="$2" color="$ink" flex={1}>
@@ -968,7 +988,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           listen={signed ? listen : undefined}
           end={
             failed ? (
-              <Failure onRetry={busy ? undefined : () => void act(() => carry(again, 'retry'))}>
+              <Failure onRetry={busy ? undefined : () => void ahead(again, 'retry')}>
                 {end.problem
                   ? say('This run stopped before it finished.')
                   : // Only a run that pushed has work on its branch (turn.ts settled): one that failed before it
@@ -988,7 +1008,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               </SizableText>
             ) : null
           }
-          onApprove={planned && earlier ? (p) => void act(() => carry(p, 'approve')) : undefined}
+          onApprove={planned && earlier ? (p) => void ahead(p, 'approve') : undefined}
           // What dev asks its person while it works (its ask tool), answered here.
           onAnswer={signed ? (q, label) => void act(async () => (await reply(t, id, q, label, true), '')) : undefined}
           approving={busy}

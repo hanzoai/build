@@ -23,7 +23,8 @@ import { useHost, useTarget } from '../host.tsx'
 import { useLoad } from './load.ts'
 import { Roles } from './roles.tsx'
 import { say } from './say.ts'
-import { Add, Confirm, day, Empty, Failed, Field, FilterPills, Grid, Mark, matches, MenuTrigger, Part, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
+import { Add, day, Empty, Failed, Field, FilterPills, Grid, Mark, matches, MenuTrigger, Part, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
+import { Confirm } from '../ask.tsx'
 
 const PAGE = 60
 const ANY = ''
@@ -152,11 +153,12 @@ export function Skills({ view, q, adding, onAdding, onView, onCount }: Pane) {
     ) : null
   const confirmDelete = deleting ? (
     <Confirm
-      what={deleting.name}
+      title={t('Delete {name}?', { name: deleting.name })}
+      act={t('Delete')}
       says={t('The skill leaves your organization and every agent that names it.')}
       open
       onOpenChange={(o) => !o && setDeleting(null)}
-      onYes={async () => {
+      run={async () => {
         const gone = deleting
         await remove(target, gone.id)
         setDeleting(null)
@@ -520,11 +522,12 @@ function Editor({
       </XStack>
       {skill ? (
         <Confirm
-          what={skill.name}
+          title={t('Delete {name}?', { name: skill.name })}
+          act={t('Delete')}
           says={t('The skill leaves your organization and every agent that names it.')}
           open={asking}
           onOpenChange={setAsking}
-          onYes={async () => {
+          run={async () => {
             await remove(target, skill.id)
             onDeleted(skill.name)
           }}

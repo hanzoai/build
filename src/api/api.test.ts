@@ -17,6 +17,8 @@ import * as sandbox from './sandbox.ts'
 import { name, project, projects, safe } from './projects.ts'
 import * as sessions from './sessions.ts'
 
+/** The person agreed to wake it. */
+const yes = async () => true
 const T: Target = { api: 'https://api.hanzo.ai', token: () => 'tok', org: 'hanzo' }
 
 interface Seen {
@@ -717,12 +719,12 @@ describe('ours', () => {
 describe('a run\'s sandbox', () => {
   it('frames a door at the address its ticket names, a shell reattaching by name', async () => {
     const seen = answer(201, { ticket: 'k', expiresIn: 30, url: '/v1/sandbox/m_1/terminal?ticket=k' })
-    expect(await sandbox.door(T, 'm_1', 'terminal', 'run-abc')).toBe('https://api.hanzo.ai/v1/sandbox/m_1/terminal?ticket=k&arg=run-abc')
+    expect(await sandbox.door(T, 'm_1', 'terminal', yes, 'run-abc')).toBe('https://api.hanzo.ai/v1/sandbox/m_1/terminal?ticket=k&arg=run-abc')
     expect(seen[0]).toMatchObject({ method: 'POST', url: 'https://api.hanzo.ai/v1/sandbox/m_1/terminal/ticket' })
     answer(201, { url: '/v1/sandbox/m_1/screen?ticket=s' })
-    expect(await sandbox.door(T, 'm_1', 'screen', 'run-abc')).toBe('https://api.hanzo.ai/v1/sandbox/m_1/screen?ticket=s')
+    expect(await sandbox.door(T, 'm_1', 'screen', yes, 'run-abc')).toBe('https://api.hanzo.ai/v1/sandbox/m_1/screen?ticket=s')
     answer(201, { url: 'https://elsewhere.example/x' })
-    await expect(sandbox.door(T, 'm_1', 'screen')).rejects.toBeInstanceOf(Refusal)
+    await expect(sandbox.door(T, 'm_1', 'screen', yes)).rejects.toBeInstanceOf(Refusal)
   })
 
   it('reads a directory as names and a file as text', async () => {

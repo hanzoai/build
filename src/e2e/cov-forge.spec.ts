@@ -13,6 +13,7 @@ import type { Page } from '@playwright/test'
 import { DAVE, enter, held, MEMBER, refused, via, type Holds, type Reply, type Sent, type Who } from './cov-forge.ts'
 import { expect, test } from './fixture.ts'
 import { mounted, went } from './mount.ts'
+import { accept } from './spend.ts'
 import { ORG, SESSION } from './signed.ts'
 import { granted, linked } from './stubs.ts'
 
@@ -236,6 +237,7 @@ test.describe('Automations', () => {
     await page.screenshot({ path: info.outputPath('automations.png') })
 
     await page.getByRole('switch', { name: 'Weekly digest on' }).click()
+    await accept(page, 'Turn Weekly digest on?', 'Turn on')
     await expect(page.getByRole('switch', { name: 'Weekly digest on' })).toBeChecked()
     await page.getByRole('switch', { name: 'Morning briefing on' }).click()
     await expect(page.getByRole('switch', { name: 'Morning briefing on' })).not.toBeChecked()
@@ -249,6 +251,7 @@ test.describe('Automations', () => {
     await forge(page, { autos: AUTOS(), holds: { [`PATCH /v1/auto/automations/${ID(2)}`]: [{ status: 403, detail: 'only the person this automation runs as, or an admin of the organization, may do that' }] } })
     await page.goto('/-/automations')
     await page.getByRole('switch', { name: 'Weekly digest on' }).click()
+    await accept(page, 'Turn Weekly digest on?', 'Turn on')
     await expect(page.getByText('Weekly digest: only the person this automation runs as')).toBeVisible()
     await expect(page.getByRole('switch', { name: 'Weekly digest on' })).not.toBeChecked()
   })
@@ -275,9 +278,11 @@ test.describe('Automations', () => {
     await page.getByRole('group', { name: 'Permissions' }).getByRole('button', { name: 'Act on its own' }).click()
     await page.getByRole('switch', { name: 'Email me when a run ends' }).click()
     await create.click()
+    await accept(page, 'Turn Inbox triage on?', 'Turn on')
     await expect(page.getByText('invalid schedule: 09:00 is taken')).toBeVisible()
     await page.getByLabel('Time of day').fill('08:30')
     await create.click()
+    await accept(page, 'Turn Inbox triage on?', 'Turn on')
     await expect(page.getByRole('heading', { name: 'Inbox triage' })).toBeVisible()
     await expect(page).toHaveURL(new RegExp(`/-/automations/${world.autos[0]!.id}$`))
     await page.screenshot({ path: info.outputPath('automation-created.png') })
@@ -325,6 +330,7 @@ test.describe('Automations', () => {
     await page.getByLabel('Time of day').fill('08:30')
     await page.screenshot({ path: info.outputPath('automation-new-filled.png') })
     await create.click()
+    await accept(page, 'Turn post on socials on?', 'Turn on')
     await expect(page.getByRole('heading', { name: 'post on socials' })).toBeVisible()
     expect(posted(sent, '/v1/auto/automations')).toHaveLength(1)
     expect(posted(sent, '/v1/auto/automations')[0]!.body).toMatchObject({ name: 'post on socials', enabled: true, schedule: { kind: 'weekdays', at: '08:30' } })
@@ -354,6 +360,7 @@ test.describe('Automations', () => {
     await page.goto(`/-/automations/${ID(1)}`)
     await expect(page.getByText('Paid plans include automation runs. On the Free plan each run needs $1 of credit.')).toBeVisible()
     await page.getByRole('button', { name: 'Run now' }).click()
+    await accept(page, 'Run Morning briefing now?', 'Run now')
     await expect(page.getByText('Automations run on a paid plan; on Free each run needs $1 of credit, and this organization has none. Upgrade to run it.')).toBeVisible()
     await page.getByRole('button', { name: 'See plans' }).last().click()
     await expect(page).toHaveURL(/\/-\/plans$/)
@@ -439,6 +446,7 @@ test.describe('Automations', () => {
     await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('What needs my attention today.')
     await expect(page.getByText(/Weekdays at 08:00 · America\/Los_Angeles · next /)).toBeVisible()
     await page.getByRole('button', { name: 'Run now' }).click()
+    await accept(page, 'Run Morning briefing now?', 'Run now')
     const runs = page.getByLabel('Run history')
     await expect(runs).toContainText('Succeeded', { timeout: 15_000 })
     await expect(runs).toContainText('Three meetings today; the first at 9.')
@@ -471,11 +479,12 @@ test.describe('Automations', () => {
 
     // The switch on the editor saves as it moves.
     await page.getByRole('switch', { name: 'Weekly digest on' }).click()
+    await accept(page, 'Turn Weekly digest on?', 'Turn on')
     await expect(page.getByRole('switch', { name: 'Weekly digest on' })).toBeChecked()
     expect(patched(sent, ID(2)).at(-1)).toEqual({ enabled: true })
 
     await page.getByRole('button', { name: 'Delete' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
     await expect(page).toHaveURL(/\/-\/automations$/)
     expect(sent.filter((s) => s.method === 'DELETE' && s.path === `/v1/auto/automations/${ID(2)}`)).toHaveLength(1)
     expect(world.autos.map((a) => a.id)).not.toContain(ID(2))
@@ -489,6 +498,7 @@ test.describe('Automations', () => {
     const { sent } = await forge(page, { autos: AUTOS(), lasts: 1000 })
     await page.goto(`/-/automations/${ID(1)}`)
     await page.getByRole('button', { name: 'Run now' }).click()
+    await accept(page, 'Run Morning briefing now?', 'Run now')
     await expect(page.getByLabel('Run history')).toContainText('Running')
     await page.getByLabel('Instructions', { exact: true }).fill('What needs my attention today, and why.')
     // Two reads of the runs go by.
@@ -550,6 +560,8 @@ test.describe('Automations', () => {
     await expect(page.getByText('Unsaved changes')).toBeVisible()
     await expect(page.getByRole('switch', { name: 'On when saved' })).toBeChecked()
     await page.getByRole('button', { name: 'Save' }).click()
+    // Saved On, the draft starts running and spending by itself: asked first.
+    await accept(page, 'Turn trial on?', 'Turn on')
     await expect(page.getByRole('button', { name: 'Run now' })).toBeVisible()
     await expect(page).toHaveURL(new RegExp(`/-/automations/${ID(3)}$`))
     expect(patched(sent, ID(3))).toEqual([{ instructions: 'List what changed in our repos today.' }])

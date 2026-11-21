@@ -81,7 +81,7 @@ test('the run’s menu archives it at once, and deletes it only after a question
   // Delete asks first, names the run, and sits in the middle of the page; Cancel leaves everything as it was.
   await title.click()
   await p.getByRole('menuitem', { name: 'Delete' }).click()
-  const ask = p.locator('[data-slot="dialog-content"]')
+  const ask = p.getByRole('alertdialog')
   await expect(ask.getByText('Delete this run?')).toBeVisible()
   await expect(ask.getByText(/“universe: Add the widget” is deleted for good|“Add the widget” is deleted for good/)).toBeVisible()
   const box = (await ask.boundingBox())!

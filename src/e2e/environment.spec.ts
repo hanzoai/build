@@ -3,6 +3,7 @@
  * against a stubbed platform (stubs.ts).
  */
 import { expect, test } from './fixture.ts'
+import { accept } from './spend.ts'
 import { ORG, REPO, SESSION } from './signed.ts'
 import { setup as platform } from './stubs.ts'
 
@@ -34,6 +35,7 @@ test('Start agent opens a setup run titled by its first line', async ({ page }) 
   await page.goto('/')
   await page.getByRole('button', { name: 'Set up environment' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Start agent' }).click()
+  await accept(page, /Set up .+ with an agent\?/, 'Start setup')
   await expect(page).toHaveURL(new RegExp(`/${SESSION}$`))
   const run = sent.find((s) => s.method === 'POST' && s.path === '/v1/agent/coding')
   const body = run?.body as { mode?: string; repo?: string; prompt?: string }

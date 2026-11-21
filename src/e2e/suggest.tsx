@@ -46,6 +46,8 @@ function Page() {
       rows={s.rows}
       onAct={(act) => window.went.push(JSON.stringify(act))}
       onDismiss={s.dismiss}
+      state={s.state}
+      onTurn={s.turn}
     />
   )
   return (

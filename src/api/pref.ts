@@ -52,6 +52,12 @@ export interface Prefs {
   side?: Side
   /** The suggestions under the composer: when made, from what, the rows, and those dismissed (suggest.ts). */
   suggest?: Kept
+  /**
+   * Whether suggestions are made for this person, kept by the account so it follows them across devices and never
+   * reaches the next person on a shared browser. Unset is OFF: only a person who turned them on has their activity
+   * read and sent (suggestions.tsx `setSuggestions`).
+   */
+  suggestions?: 'on' | 'off'
   /** What the person calls their devices and shells, by device key (names.ts). */
   deviceNames?: Record<string, string>
 }
@@ -60,6 +66,7 @@ export interface Prefs {
 export type Patch = { [K in keyof Prefs]?: Prefs[K] | null }
 
 const THEMES: readonly Theme[] = ['system', 'light', 'dark']
+const SUGGESTIONS = ['on', 'off'] as const
 const TEXTS: readonly Text[] = ['small', 'medium', 'large']
 const MOTIONS: readonly Motion[] = ['system', 'reduced']
 const MODES = ['build', 'plan'] as const
@@ -121,6 +128,7 @@ export function prefs(raw: unknown): Prefs {
     code: code(p.code),
     side: side(p.side),
     suggest: kept(p.suggest),
+    suggestions: one(p.suggestions, SUGGESTIONS),
     deviceNames: deviceNames(p.deviceNames),
   })
 }

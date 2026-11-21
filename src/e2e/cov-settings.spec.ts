@@ -787,7 +787,7 @@ test('Environments says where each codebase stands, forgets one after a refusal,
 
   await page.getByRole('button', { name: 'Open universe' }).click()
   await page.getByRole('button', { name: 'Forget', exact: true }).click()
-  const ask = page.getByRole('dialog', { name: 'Forget universe’s environment?' })
+  const ask = page.getByRole('alertdialog', { name: 'Forget universe’s environment?' })
   await expect(ask.getByText('Forget universe’s environment?')).toBeVisible()
   p.fail('DELETE /v1/environment/universe', refusal('org admin required', 403))
   await ask.getByRole('button', { name: 'Forget' }).click()
@@ -865,7 +865,7 @@ test('Machines says what each is doing, brings a drained one back, says the owne
   // A claim key, shown once, is put away with Escape as well as with Done.
   await page.getByRole('button', { name: 'Actions for workshop' }).click()
   await page.getByRole('menuitem', { name: 'Claim key' }).click()
-  await page.getByRole('dialog', { name: /^Mint a claim key/ }).getByRole('button', { name: 'Mint key' }).click()
+  await page.getByRole('alertdialog', { name: /^Mint a claim key/ }).getByRole('button', { name: 'Mint key' }).click()
   await expect(page.getByLabel('Claim key', { exact: true })).toHaveText('tk_live_once')
   await page.keyboard.press('Escape')
   await expect(page.getByText('tk_live_once')).toHaveCount(0)
@@ -942,7 +942,7 @@ test('Register a machine: the fields hold only what is typed, every kind registe
   // The one registered here is the newer workshop, so it is listed first.
   await page.getByRole('button', { name: 'Actions for workshop' }).first().click()
   await page.getByRole('menuitem', { name: 'Remove' }).click()
-  await page.getByRole('dialog', { name: 'Remove workshop?' }).getByRole('button', { name: 'Remove' }).click()
+  await page.getByRole('alertdialog', { name: 'Remove workshop?' }).getByRole('button', { name: 'Remove' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'workshop is removed' })).toBeVisible()
   await expect(page.getByText('online · gpu · gpu-01', { exact: true })).toHaveCount(0)
   expect(p.writes().at(-1)).toEqual(['DELETE /v1/agent/targets/tgt_5', null])
@@ -1015,7 +1015,7 @@ test('API keys: a second secret beside the first after a refusal, both kept acro
   await expect(page.getByText('sk-live… · Reaches project:acme · Created Sep 27, 2026')).toBeVisible()
 
   await page.getByRole('button', { name: 'Revoke key 2' }).click()
-  const ask = page.getByRole('dialog', { name: 'Revoke key 2?' })
+  const ask = page.getByRole('alertdialog', { name: 'Revoke key 2?' })
   p.fail('DELETE /v1/account/keys/dave-secret-2', refusal('IAM is not answering', 502))
   await ask.getByRole('button', { name: 'Revoke' }).click()
   await expect(ask.getByText('IAM is not answering')).toBeVisible()
@@ -1055,7 +1055,7 @@ test('Billing: seats and no period end, an ending plan kept after a refusal, car
   await expect(page.locator('[data-slot="billing-plan"] [data-slot="plan-name"]')).toHaveText('Team')
   await expect(page.getByText('$72 a month for 3 seats.', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-  const ending = page.getByRole('dialog', { name: 'Cancel your plan?' })
+  const ending = page.getByRole('alertdialog', { name: 'Cancel your plan?' })
   await expect(ending.getByText('Team stays on until the end of this period, and nothing is charged after that. You can keep it any time before then.')).toBeVisible()
   await ending.getByRole('button', { name: 'Keep plan' }).click()
   await expect(ending).toHaveCount(0)
@@ -1467,7 +1467,7 @@ test('Plans moves back to Free at the period’s end, after a refusal and a seco
   await expect(page.getByLabel('Dev plan').getByText('One paid plan at a time: Max ends before Dev begins.')).toBeVisible()
   const free = page.getByLabel('Free plan', { exact: true })
   await free.getByRole('button', { name: 'Switch to Free' }).click()
-  const leave = page.getByRole('dialog', { name: 'Switch to the free plan?' })
+  const leave = page.getByRole('alertdialog', { name: 'Switch to the free plan?' })
   await expect(leave.getByText('Max stays on until Oct 27, 2026, and nothing is charged after that.')).toBeVisible()
   await leave.getByRole('button', { name: 'Keep Max' }).click()
   await expect(leave).toHaveCount(0)

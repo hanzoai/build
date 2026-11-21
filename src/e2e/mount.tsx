@@ -17,17 +17,29 @@ import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { Builder } from '../builder.tsx'
-import type { Host } from '../host.tsx'
+import type { Host, Spend } from '../host.tsx'
 import type { Mount } from './mount.ts'
 
 declare global {
   interface Window {
     mount: Mount
     went: string[]
+    asked: Spend[]
+    answer?: (yes: boolean) => void
   }
 }
 
 window.went = []
+window.asked = []
+
+/** The host's own spend question, answered the way the spec described it. */
+async function confirm(spend: Spend): Promise<boolean> {
+  window.asked.push(spend)
+  const how = window.mount.confirm
+  if (how === 'throw') throw new Error('The host could not ask')
+  if (how === 'hold') return new Promise<boolean>((resolve) => (window.answer = resolve))
+  return how === 'yes'
+}
 
 function Page() {
   const m = window.mount
@@ -49,6 +61,8 @@ function Page() {
     links: { github: '/-/sync', customize: '/-/customize', settings: '/-/settings', home: '/' },
     open: (href) => void window.went.push(href),
     signIn: m.signIn ? () => void window.went.push('sign in') : undefined,
+    cast: m.cast,
+    confirm: m.confirm ? confirm : undefined,
   }
   return (
     <div style={{ height: '100dvh', display: 'flex' }}>

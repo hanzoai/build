@@ -36,7 +36,7 @@ test('Billing shows the plan, the cards, the invoices, and cancels at the period
   await bill.getByRole('button', { name: 'Close' }).click()
 
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel plan' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel plan' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Your plan ends on Oct 27, 2026' })).toBeVisible()
   expect(find(sent, 'POST', '/v1/billing/subscriptions/sub_1/cancel')?.body).toEqual({ atPeriodEnd: true })
   await page.getByRole('button', { name: 'Keep plan' }).click()

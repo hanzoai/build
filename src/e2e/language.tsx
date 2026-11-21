@@ -80,7 +80,7 @@ function Page() {
         mode={{ value: mode, set: (m) => setMode(m as Mode), items: MODES.filter((m) => CHAT_MODES.includes(m.id)) }}
         voice={voice}
         talk={talk}
-        starters={<Suggestions rows={STARTERS} onAct={(act) => window.went.push(JSON.stringify(act))} onDismiss={() => {}} />}
+        starters={<Suggestions rows={STARTERS} onAct={(act) => window.went.push(JSON.stringify(act))} onDismiss={() => {}} state="on" onTurn={() => {}} />}
       />
     </YStack>
   )

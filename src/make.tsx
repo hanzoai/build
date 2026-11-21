@@ -24,6 +24,8 @@ import { APP, catalogue, KIND, KINDS, narrow, type Kind, type Template } from '.
 import { fork } from './api/projects.ts'
 import { useRead } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
+import { copying } from './question.ts'
+import { useSpend } from './spend.tsx'
 import { path } from './route.ts'
 
 /** A chip: one choice among a few, lit when chosen. */
@@ -87,6 +89,7 @@ export function Make({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [at, setAt] = useState(0)
   const [busy, setBusy] = useState('')
   const [note, setNote] = useState('')
+  const spend = useSpend()
   const search = useRef<HTMLInputElement | null>(null)
   const cells = useRef<(HTMLElement | null)[]>([])
 
@@ -101,6 +104,8 @@ export function Make({ open, onClose }: { open: boolean; onClose: () => void }) 
   const pick = async (x: Template) => {
     if (busy) return
     if (!host.person) return host.signIn?.()
+    // A site template's copy is built and published at once: asked first. An agent template only makes the agent.
+    if (APP[x.kind] === 'dev' && !(await spend.ask(copying(x.name, t)))) return
     setBusy(x.slug)
     setNote('')
     try {
@@ -146,6 +151,7 @@ export function Make({ open, onClose }: { open: boolean; onClose: () => void }) 
         gap="$3"
         {...(wide ? { width: '100%', maxW: 960, maxH: '88vh' } : ({ position: 'fixed', t: 0, r: 0, b: 0, l: 0, maxW: '100%', maxH: '100%', rounded: 0, borderWidth: 0 } as const))}
       >
+        {spend.dialog}
         <DialogTitle numberOfLines={1} paddingInlineEnd={40}>
           {t('Make something new')}
         </DialogTitle>

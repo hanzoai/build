@@ -262,41 +262,6 @@ export function Sheet({ title, open, onOpenChange, width = 560, full = false, ch
   )
 }
 
-/** Asks before a delete; says what goes with it. `what` is the thing's name, `says` comes already said. */
-export function Confirm({ what, says, open, onOpenChange, onYes }: { what: string; says: string; open: boolean; onOpenChange: (o: boolean) => void; onYes: () => Promise<void> }) {
-  const { t } = useI18n()
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('')
-  const yes = async () => {
-    setBusy(true)
-    setNote('')
-    try {
-      await onYes()
-      onOpenChange(false)
-    } catch (e) {
-      setNote(say(e, t))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Sheet title={t('Delete {name}?', { name: what })} open={open} onOpenChange={onOpenChange} width={420}>
-      <SizableText size="$2" color="$soft">
-        {says}
-      </SizableText>
-      <Line>{note}</Line>
-      <XStack gap="$2" justify="flex-end">
-        <Button size="sm" variant="ghost" onPress={() => onOpenChange(false)}>
-          {t('Cancel')}
-        </Button>
-        <Button size="sm" variant="destructive" disabled={busy} onPress={() => void yes()}>
-          {t('Delete')}
-        </Button>
-      </XStack>
-    </Sheet>
-  )
-}
-
 /** The quiet line for loading, a search that matched nothing, and signed-out. */
 export function Soft({ children, action }: { children: string; action?: ReactNode }) {
   return (

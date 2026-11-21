@@ -13,6 +13,8 @@ import { environment, environments, read as readEnvironment } from './environmen
 import * as sandbox from './sandbox.ts'
 import * as sessions from './sessions.ts'
 
+/** The person agreed to wake it. */
+const yes = async () => true
 const T: Target = { api: 'https://api.hanzo.ai', token: () => 'tok', org: 'hanzo' }
 
 interface Seen {
@@ -159,7 +161,7 @@ describe('a run’s changes', () => {
 describe('a run’s sandbox', () => {
   it('refuses a ticket answer with no address, even an empty one', async () => {
     answer(204)
-    await expect(sandbox.door(T, 'm_1', 'screen')).rejects.toMatchObject({ status: 502 })
+    await expect(sandbox.door(T, 'm_1', 'screen', yes)).rejects.toMatchObject({ status: 502 })
   })
 
   it('reads an empty answer as the path asked for, a file past the cap as too large, and junk names out', async () => {

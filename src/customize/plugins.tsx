@@ -23,7 +23,8 @@ import { authored, build, mounted, remove, type Mount, type Plugin } from '../ap
 import { useHost, useTarget } from '../host.tsx'
 import { useLoad } from './load.ts'
 import { say } from './say.ts'
-import { Choice, Confirm, day, Empty, Failed, Field, Grid, Mark, matches, MenuTrigger, Part, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
+import { Choice, day, Empty, Failed, Field, Grid, Mark, matches, MenuTrigger, Part, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
+import { Confirm } from '../ask.tsx'
 
 const INITIAL_MOUNTS = 6
 
@@ -87,11 +88,12 @@ export function Plugins({ view, q, adding, onAdding, onView, onCount }: Pane) {
       ) : null}
       {deleting ? (
         <Confirm
-          what={deleting.name}
+          title={t('Delete {name}?', { name: deleting.name })}
+          act={t('Delete')}
           says={t('The runtime can no longer load it.')}
           open
           onOpenChange={(o) => !o && setDeleting(null)}
-          onYes={async () => {
+          run={async () => {
             const gone = deleting
             await remove(target, gone.id)
             setDeleting(null)
@@ -364,11 +366,12 @@ function Source({ plugin, onClose, onDeleted }: { plugin: Plugin; onClose: () =>
         </Button>
       </YStack>
       <Confirm
-        what={plugin.name}
+        title={t('Delete {name}?', { name: plugin.name })}
+        act={t('Delete')}
         says={t('The runtime can no longer load it.')}
         open={asking}
         onOpenChange={setAsking}
-        onYes={async () => {
+        run={async () => {
           await remove(target, plugin.id)
           onDeleted()
         }}

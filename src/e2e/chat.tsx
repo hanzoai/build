@@ -66,7 +66,7 @@ function Page() {
     mode: { value: mode, set: (m) => setMode(m as Mode), items: MODES.filter((m) => CHAT_MODES.includes(m.id)) },
     voice,
     talk,
-    starters: messages.length ? undefined : <Suggestions rows={STARTERS} onAct={() => {}} onDismiss={() => {}} />,
+    starters: messages.length ? undefined : <Suggestions rows={STARTERS} onAct={() => {}} onDismiss={() => {}} state="on" onTurn={() => {}} />,
   }
   return (
     <YStack flex={1} height="100dvh" bg="$background" pb={12} gap="$2">

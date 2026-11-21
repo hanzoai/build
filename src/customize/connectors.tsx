@@ -29,7 +29,8 @@ import { Out } from '../out.tsx'
 import { route } from '../route.ts'
 import { useLoad } from './load.ts'
 import { say } from './say.ts'
-import { Add, Confirm, Empty, Failed, Featured, Field, FilterPills, Grid, Mark, matches, MenuTrigger, Part, RowsSkeleton, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
+import { Add, Empty, Failed, Featured, Field, FilterPills, Grid, Mark, matches, MenuTrigger, Part, RowsSkeleton, Sheet, Soft, Tile, TilesSkeleton, type Pane, useCount, Visitor } from './ui.tsx'
+import { Confirm } from '../ask.tsx'
 
 const PAGE = 48
 const BUILTIN_INITIAL = 6
@@ -123,11 +124,12 @@ export function Connectors({ view, q, adding, onAdding, onView, onCount }: Pane)
   ) : null
   const confirmRemove = removing ? (
     <Confirm
-      what={removing.name}
+      title={t('Delete {name}?', { name: removing.name })}
+      act={t('Delete')}
       says={t('Its tools leave your organization and every agent, and its sealed secret is destroyed.')}
       open
       onOpenChange={(o) => !o && setRemoving(null)}
-      onYes={async () => {
+      run={async () => {
         const gone = removing
         await remove(target, gone.id)
         setRemoving(null)
@@ -780,11 +782,12 @@ function Detail({ server, may, onClose, onDeleted }: { server: Server; may: bool
         </XStack>
       ) : null}
       <Confirm
-        what={server.name}
+        title={t('Delete {name}?', { name: server.name })}
+        act={t('Delete')}
         says={t('Its tools leave your organization and every agent, and its sealed secret is destroyed.')}
         open={asking}
         onOpenChange={setAsking}
-        onYes={async () => {
+        run={async () => {
           await remove(target, server.id)
           onDeleted()
         }}

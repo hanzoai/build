@@ -11,8 +11,13 @@
  *
  * `useSuggestions` reads the kept rows from the account (`suggest` in /v1/pref)
  * and, when they are due (suggest.ts `due`), reads the person's activity and
- * asks Hanzo's model for new ones. One document per page, read once per person
- * and org, shared by every composer on it.
+ * asks Hanzo's model for new ones, only for a person who turned them on.
+ * Whether they are on is the account's (`suggestions` in /v1/pref, set only by
+ * `setSuggestions`; unset is off), read here, so every composer that draws them
+ * obeys it: off, or signed out, nothing of the person's is read but that switch
+ * and nothing is sent, and the one line drawn offers to turn them on. On, the
+ * rows say a model made them and offer to turn them off. One document per page, read once per person and org,
+ * shared by every composer on it.
  *
  *   GET  /v1/pref                         the kept rows, and callName, work, instructions
  *   GET  /v1/agents/chat/conversations    their conversations
@@ -28,11 +33,11 @@
 import { SizableText, useMedia, XStack, YStack } from '@hanzo/gui'
 import { Bot, CalendarClock, FileText, Github, MessageSquare, X } from '@hanzogui/lucide-icons-2'
 import { useI18n } from '@hanzo/i18n/react'
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@hanzo/ui'
+import { Button, HoverCard, HoverCardContent, HoverCardTrigger } from '@hanzo/ui'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
 import { RING } from './pane.ts'
-import { automations, create, type Automation, type Source } from './api/auto.ts'
+import { automations } from './api/auto.ts'
 import { call, Refusal, unwrap, type Target } from './api/call.ts'
 import { conversations } from './api/conversations.ts'
 import { items } from './api/library.ts'
@@ -78,6 +83,15 @@ async function gather(t: Target, p: Prefs): Promise<{ inputs: Input[]; seed: See
 // One document per page: the kept rows of whoever `loaded` names.
 let doc: Kept | null = null
 let loaded: string | null = null
+/**
+ * The account's switch as last read: `none` until it is (and for a guest), `on` only when the person turned them on.
+ * Unset is off.
+ */
+export type Switch = 'none' | 'on' | 'off'
+let state: Switch = 'none'
+/** The run making rows now, and the save of what it made: the switch calls off the one and waits out the other. */
+let run: AbortController | null = null
+let saving: Promise<unknown> | null = null
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((f) => f())
 const subscribe = (f: () => void) => {
@@ -87,23 +101,40 @@ const subscribe = (f: () => void) => {
 
 /** Read the kept rows, and make new ones when they are due. Each await checks it still speaks for `id`. */
 async function refresh(t: Target, id: string): Promise<void> {
-  const p = await read(t)
-  if (loaded !== id) return
-  doc = p.suggest ?? null
-  emit()
-  if (!stale(doc, Date.now())) return
-  const got = await gather(t, p)
-  if (loaded !== id || !got) return
-  const fingerprint = sig(got.inputs, got.seed)
-  if (!due(doc, fingerprint, Date.now())) return
-  const ask = request(got.inputs, got.seed, skip(doc, got.inputs), new Date())
-  const rows = ask ? answer(await call<unknown>(t, 'POST', '/v1/chat/completions', ask), got.inputs) : []
-  if (loaded !== id) return
-  // Dismissals made while the model wrote are the latest document's.
-  const gone = doc?.dismissed ?? []
-  doc = { at: new Date().toISOString(), sig: fingerprint, rows: rows.filter((r) => !gone.includes(r.id)), dismissed: gone }
-  emit()
-  await save(t, { suggest: doc })
+  // One run at a time; a newer one, or the switch, calls this one off.
+  run?.abort()
+  const ctl = new AbortController()
+  run = ctl
+  // Still wanted: not called off, still this person, and still switched on. Asked after every wait.
+  const live = () => !ctl.signal.aborted && loaded === id && state === 'on'
+  try {
+    const p = await read(t)
+    if (ctl.signal.aborted || loaded !== id) return
+    // Off unless the person turned them on: none of their activity is read and nothing is sent.
+    state = p.suggestions === 'on' ? 'on' : 'off'
+    doc = state === 'on' ? (p.suggest ?? null) : null
+    emit()
+    if (!live() || !stale(doc, Date.now())) return
+    const got = await gather(t, p)
+    if (!live() || !got) return
+    const fingerprint = sig(got.inputs, got.seed)
+    if (!due(doc, fingerprint, Date.now())) return
+    const ask = request(got.inputs, got.seed, skip(doc, got.inputs), new Date())
+    const rows = ask ? answer(await call<unknown>(t, 'POST', '/v1/chat/completions', ask, { signal: ctl.signal }), got.inputs) : []
+    if (!live()) return
+    // Dismissals made while the model wrote are the latest document's.
+    const gone = doc?.dismissed ?? []
+    doc = { at: new Date().toISOString(), sig: fingerprint, rows: rows.filter((r) => !gone.includes(r.id)), dismissed: gone }
+    emit()
+    if (!live()) return
+    saving = save(t, { suggest: doc })
+    await saving
+  } catch (e) {
+    // Called off is not a failure.
+    if (!ctl.signal.aborted) throw e
+  } finally {
+    if (run === ctl) run = null
+  }
 }
 
 /** Whose rows: the platform, the org and the person. Signed out is nobody, and has none. */
@@ -119,6 +150,7 @@ function load(t: Target): Promise<void> {
   if (loaded === id) return Promise.resolve()
   loaded = id
   doc = null
+  state = 'none'
   emit()
   return id ? refresh(t, id) : Promise.resolve()
 }
@@ -128,6 +160,10 @@ export interface Suggested {
   rows: Suggestion[]
   /** Dismiss one, remembered by the account. */
   dismiss: (id: string) => void
+  /** The account's switch: `none` for a guest or until it is read; off unless the person turned them on. */
+  state: Switch
+  /** Turn suggestions on or off for the account (`setSuggestions`). */
+  turn: (on: boolean) => void
   /** Why the rows could not be read, made or kept, in the platform's words. */
   error: string | null
 }
@@ -144,18 +180,46 @@ export function useSuggestions(t: Target): Suggested {
     )
   }, [t])
   const now = useSyncExternalStore(subscribe, () => doc, () => doc)
+  const known = useSyncExternalStore(subscribe, () => state, () => state)
+  const shown: Switch = whose(t) ? known : 'none'
   // Filled to three with what Hanzo does, so a new account and a quiet one never see one lonely row.
-  const rows = useMemo(() => fill(now), [now])
+  const rows = useMemo(() => (shown === 'on' ? fill(now) : []), [shown, now])
   const dismiss = useCallback(
     (id: string) => {
-      if (!doc) return
+      if (!doc || state !== 'on') return
       doc = dismissed(doc, id)
       emit()
       if (t.token()) save(t, { suggest: doc }).then(() => setError(null), (e: unknown) => setError(said(e)))
     },
     [t],
   )
-  return useMemo(() => ({ rows, dismiss, error }), [rows, dismiss, error])
+  const turn = useCallback(
+    (on: boolean) => {
+      setSuggestions(t, on).then(() => setError(null), (e: unknown) => setError(said(e)))
+    },
+    [t],
+  )
+  return useMemo(() => ({ rows, dismiss, state: shown, turn, error }), [rows, dismiss, shown, turn, error])
+}
+
+/**
+ * THE one way to turn suggestions on or off: the account's `suggestions` preference, so the switch follows the
+ * person across devices and every `useSuggestions` on the page obeys at once. Off calls off a run in flight before
+ * it sends anything more, waits out a save it already sent so nothing is saved back after, and forgets the rows
+ * kept from their activity. On, they are read and made.
+ */
+export async function setSuggestions(t: Target, on: boolean): Promise<void> {
+  if (!t.token()) return
+  run?.abort()
+  run = null
+  state = on ? 'on' : 'off'
+  doc = null
+  emit()
+  await saving?.catch(() => undefined)
+  await save(t, on ? { suggestions: 'on' } : { suggestions: 'off', suggest: null })
+  if (!on) return
+  loaded = null
+  await load(t)
 }
 
 /** Where a row leaves its act for the product that does it. */
@@ -187,21 +251,6 @@ export function taken(kind: 'send' | 'task'): string {
   }
 }
 
-/** Make a `schedule` row's task: on, asking before it acts, and notifying its person. */
-export function book(t: Target, act: Extract<Act, { kind: 'schedule' }>, source: Source): Promise<Automation> {
-  return create(t, {
-    name: act.name || act.prompt.slice(0, 80),
-    instructions: act.prompt,
-    model: null,
-    schedule: { ...act.schedule, tz: Intl.DateTimeFormat().resolvedOptions().timeZone },
-    permissions: 'ask',
-    notify: true,
-    postTo: [],
-    enabled: true,
-    source,
-  })
-}
-
 const MARKS: Record<Icon, typeof Github> = {
   github: Github,
   agent: Bot,
@@ -218,19 +267,46 @@ export interface SuggestionsProps {
   /** A row was pressed: do what it says. */
   onAct: (act: Act, row: Suggestion) => void
   onDismiss: (id: string) => void
+  /** The account's switch (`Suggested.state`). Required: off draws the one line that offers to turn them on. */
+  state: Switch
+  /** Turn them on or off (`Suggested.turn`). Required: rows a model wrote always say so and can be turned off. */
+  onTurn: (on: boolean) => void
 }
 
 /** The rows, or nothing when there are none. */
-export function Suggestions({ rows, onAct, onDismiss }: SuggestionsProps) {
+export function Suggestions({ rows, onAct, onDismiss, state, onTurn }: SuggestionsProps) {
   const { t } = useI18n()
   // A phone has no hover: its × stays in sight.
   const touch = !useMedia().sm
+  if (state === 'off') {
+    return (
+      <XStack data-slot="suggestions-said" items="center" gap="$2" flexWrap="wrap" paddingInlineStart="$3" minH={PITCH}>
+        <SizableText size="$1" color="$soft">
+          {t('Hanzo’s model can suggest what to do next from your recent activity.')}
+        </SizableText>
+        <Button size="xs" variant="ghost" onPress={() => onTurn(true)}>
+          {t('Turn on suggestions')}
+        </Button>
+      </XStack>
+    )
+  }
   if (!rows.length) return null
   return (
-    <YStack role="list" aria-label={t('Suggestions')} data-slot="suggestions">
-      {rows.map((r) => (
-        <Row key={r.id} row={r} touch={touch} onAct={onAct} onDismiss={onDismiss} />
-      ))}
+    <YStack data-slot="suggestions">
+      <YStack role="list" aria-label={t('Suggestions')}>
+        {rows.map((r) => (
+          <Row key={r.id} row={r} touch={touch} onAct={onAct} onDismiss={onDismiss} />
+        ))}
+      </YStack>
+      {/* What makes them, said where they are, with the way to stop it. */}
+      <XStack data-slot="suggestions-said" items="center" gap="$2" flexWrap="wrap" paddingInlineStart="$3" minH={PITCH}>
+        <SizableText size="$1" color="$soft">
+          {t('Hanzo’s model reads your recent activity to suggest these.')}
+        </SizableText>
+        <Button size="xs" variant="ghost" onPress={() => onTurn(false)}>
+          {t('Turn off suggestions')}
+        </Button>
+      </XStack>
     </YStack>
   )
 }

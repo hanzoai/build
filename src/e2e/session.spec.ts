@@ -7,6 +7,7 @@
 import type { Page } from '@playwright/test'
 
 import { cramped, expect, test } from './fixture.ts'
+import { accept, decline } from './spend.ts'
 import { ORG, REPO, SESSION, type Sent } from './signed.ts'
 import { landing, NEXT, PLAN, session as platform } from './stubs.ts'
 
@@ -74,6 +75,10 @@ test('a paused sandbox run goes on in a new run from the work it kept', async ({
   await p.goto(`/${SESSION}`)
   await expect(p.getByText('Paused — its work so far is on its branch.')).toBeVisible()
   await p.getByRole('button', { name: 'Resume' }).click()
+  await decline(p, 'Resume this run?')
+  expect(posted(sent, '/v1/agent/coding')).toHaveLength(0)
+  await p.getByRole('button', { name: 'Resume' }).click()
+  await accept(p, 'Resume this run?', 'Resume')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   const body = posted(sent, '/v1/agent/coding')[0]?.body as Record<string, unknown>
   expect(body).toMatchObject({ after: SESSION, mode: 'build' })
@@ -99,6 +104,7 @@ test('a plan is approved into a build of it, in the sandbox the plan read', asyn
   await expect(plan.getByText('Read')).toBeVisible()
   await p.screenshot({ path: info.outputPath('plan.png') })
   await plan.getByRole('button', { name: 'Approve and build' }).click()
+  await accept(p, 'Build this plan?', 'Approve and build')
   await expect(p).toHaveURL(new RegExp(`/${NEXT}$`))
   const body = posted(sent, '/v1/agent/coding')[0]?.body as Record<string, unknown>
   expect(body).toMatchObject({ mode: 'build', after: SESSION, repo: `hanzoai/${REPO}` })
