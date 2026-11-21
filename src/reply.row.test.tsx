@@ -33,4 +33,11 @@ describe('the row under an answer', () => {
     expect(renderToStaticMarkup(h(Reply, { text: 'hi' }))).not.toContain('reply-redo')
     expect(renderToStaticMarkup(h(Reply, { text: 'hi', onRedo: () => {} }))).toContain('reply-redo')
   })
+
+  it('offers one rating control (a Good/Bad menu), not a second thumb pair', () => {
+    const html = renderToStaticMarkup(h(Reply, { text: 'hi' }))
+    expect(html.match(/data-slot="reply-rate"/g)).toHaveLength(1)
+    expect(html.match(/reply-rate-up/g)).toHaveLength(1)
+    expect(html.match(/reply-rate-down/g)).toHaveLength(1)
+  })
 })
