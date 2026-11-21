@@ -310,6 +310,16 @@ folder's `redesign/` live and shows it in Chrome; the agent, which has no networ
 reads the copy, answers with a critique and builds the new site there as static
 files, and the preview follows each file it saves. An ask that only holds a link is
 a normal run.
+Everywhere else (a browser page, the cloud workspace, a machine), a web page's
+address in the ask (page.ts, hanzo-inc/app issue 312) offers
+**Critique and redesign** (critique it, build a redesign, keep its dev server on
+localhost running for the Preview), and on send the page is read by the platform's
+guarded reader (`POST /v1/crawl`) and rides the ask as one more attached file, said
+to be data. A page that cannot be read (private or local, a sign-in, 404, a file,
+too slow, no text) is one sentence under the composer and no run starts. On This
+computer a localhost address is left to the agent, a page that cannot be read is
+said while the run goes on without it, and where the host redesigns a site itself
+(above) its offer is the one shown.
 
 **A run.** The transcript as it streams, drawn by what each part is: what the
 agent says as markdown, each command it runs as a card that opens onto its
@@ -320,7 +330,8 @@ from the branch it pushed — the same codebase, place and mode — and opens it
 paused sandbox run goes on the same way. A plan run ends with its plan and
 Approve and build. Rename it, share a project run's story publicly, and find any
 run by status in Find. Beside it, the side panel (`Panel`, the one Chat opens):
-Preview (what the sandbox serves, or where the run is published), Artifacts,
+Preview (what the sandbox serves, live as the run works, or where the run is
+published, each with **Open in browser** for the person's own browser), Artifacts,
 Files, Diff (Diff, Review, Commits) and Terminal (a shell in the working tree,
 reattached by the run's name, and the agent's log); `+` opens Desktop (the
 sandbox's screen), Environment and any page. Tabs are dragged to reorder (or

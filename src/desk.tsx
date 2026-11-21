@@ -598,9 +598,7 @@ function Browser({
         <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
           {host || say('port {port}', { port })}
         </SizableText>
-        <XStack render="button" aria-label={say('Open in a new tab')} onPress={() => void tab()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-          <ExternalLink size={14} />
-        </XStack>
+        <OpenOut label={say('Open in browser')} onPress={() => void tab()} />
       </XStack>
       {why ? (
         <YStack flex={1} items="center" justify="center" gap="$2" p="$6">
@@ -612,7 +610,7 @@ function Browser({
               {say('Retry')}
             </Button>
             <Button size="sm" variant="outline" onPress={() => void tab()}>
-              {say('Open in a new tab')}
+              {say('Open in browser')}
             </Button>
           </XStack>
         </YStack>
@@ -632,6 +630,34 @@ function Browser({
         </YStack>
       )}
     </YStack>
+  )
+}
+
+/**
+ * The Preview's way out to the person's own browser (Chrome, or whichever they use; Hanzo Desktop hands it to
+ * the system's browser): the live page at its own address, beside the work. Said in words, not an icon alone
+ * (hanzo-inc/app issue 312). With `onPress` it is a button; without, the face of the link around it.
+ */
+function OpenOut({ label, onPress }: { label: string; onPress?: () => void }) {
+  return (
+    <XStack
+      {...(onPress ? { render: 'button' as const, 'aria-label': label, onPress } : {})}
+      items="center"
+      gap="$1.5"
+      px="$2"
+      height={28}
+      rounded="$2"
+      borderWidth={1}
+      borderColor="var(--border-strong)"
+      hoverStyle={{ bg: '$hover' }}
+      focusVisibleStyle={RING}
+      data-slot="open-in-browser"
+    >
+      <ExternalLink size={13} />
+      <SizableText size="$1" color="$ink" numberOfLines={1}>
+        {label}
+      </SizableText>
+    </XStack>
   )
 }
 
@@ -687,10 +713,8 @@ function Site({
         </SizableText>
         <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label={t('Device')} labels="none" />
         {site ? (
-          <Out href={site} label={t('Open in a new tab')}>
-            <XStack p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-              <ExternalLink size={14} />
-            </XStack>
+          <Out href={site} label={t('Open in browser')}>
+            <OpenOut label={t('Open in browser')} />
           </Out>
         ) : null}
       </XStack>

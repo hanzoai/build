@@ -33,6 +33,7 @@ import { useLimits } from '@hanzo/ui/product/useLimits'
 import { useDictation, useTalk, useVoice } from '@hanzo/voice'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { told } from './api/call.ts'
 import { start, unhonoured, type Mode } from './api/coding.ts'
 import { say } from './api/talk.ts'
 import { asRepo, chosen, codebases, one, type ForgeRepo } from './api/codebases.ts'
@@ -66,6 +67,7 @@ import { book, hand, Suggestions, taken, useSuggestions } from './suggestions.ts
 import type { Act } from './suggest.ts'
 import { want } from './library.tsx'
 import { carrying, compose, pick, read as readFiles, type Attached } from './tools.tsx'
+import { asked as critiqued, attach as asFile, critique, local as onThisComputer, named as pagesIn, read as readPage, shown as shownPage } from './page.ts'
 import { useEar, useSpoken } from './voice.ts'
 
 /** One vocabulary for the mode, on New and in a workspace: English, marked (`phrase`), drawn through `t`. */
@@ -405,6 +407,36 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     [target, codebase, home],
   )
 
+  const hostOf = (u: string) => {
+    try {
+      return new URL(u).hostname
+    } catch {
+      return ''
+    }
+  }
+
+  /**
+   * The web pages an ask names, read and ready to ride it as files (page.ts). `only` narrows which addresses are
+   * read; the rest go to the run as words. Strict (a run on the platform): a page that could not be read is said
+   * and the answer is null, so no run starts on a page it could not read. Not strict (a run on this computer, which
+   * may be about anything): what was read rides the ask, and `missed` says what was not.
+   */
+  const pagesFor = async (said: string, only: (url: string) => boolean = () => true, strict = true): Promise<{ files: Attached[]; missed: string } | null> => {
+    const want = pagesIn(said).filter(only)
+    if (!want.length) return { files: [], missed: '' }
+    setNote(t('Reading {page}…', { page: want.map(shownPage).join(', ') }))
+    const read = await Promise.allSettled(want.map((u) => readPage(target, u)))
+    const files = read.flatMap((r) => (r.status === 'fulfilled' ? [asFile(r.value)] : []))
+    const failed = read.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+    const missed = failed ? told(failed.reason, t) : ''
+    if (missed && strict) {
+      setNote(missed)
+      return null
+    }
+    setNote('')
+    return { files, missed }
+  }
+
   // The composer sends only a draft with words in it, and not while a send is out.
   const send = async (said: string = draft) => {
     // A site's address, alone or asked to be redesigned, starts a redesign (redesign.tsx); any other ask is a run.
@@ -429,6 +461,9 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     setBusy(true)
     setNote('')
     try {
+      // A page the ask names is read first, and rides it: a run never starts on a page that could not be read.
+      const pages = await pagesFor(said)
+      if (!pages) return
       // What the plugins that are on add: words for the run, or an answer of their own.
       const prepped = carry.preparing ? await carry.prep({ text: said.trim(), files: [], thread: '' }, new AbortController().signal) : {}
       // An answer of a plugin's own (a deck) is the answer: no run is started for it.
@@ -444,7 +479,7 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
       // developerInstructions so the user prompt stays clean and cacheable.
       const developerInstructions = [carry.text, prepped.system ?? ''].filter(Boolean).join('\n\n')
       const sent = await say(target, {
-        input: compose(said.trim(), files),
+        input: compose(said.trim(), [...files, ...pages.files]),
         ...(developerInstructions ? { developerInstructions } : {}),
         // The name alone. The org rides the request, and a slash is not a repo name.
         // An empty base or place is not sent: the default branch, and the sandbox.
@@ -488,9 +523,13 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
     }
     local.use(folder.path)
     const ask = said.trim()
-    const prompt = [carry.text, compose(ask, files)].filter(Boolean).join('\n\n')
+    // A public page is read for the run while someone is signed in; an address on this computer (a localhost
+    // server) is the agent's own to open, and a signed-out run reads nothing from the platform.
     setBusy(true)
-    setNote('')
+    const pages = (signed ? await pagesFor(ask, (u) => !onThisComputer(hostOf(u)), false) : null) ?? { files: [], missed: '' }
+    const prompt = [carry.text, compose(ask, [...files, ...pages.files])].filter(Boolean).join('\n\n')
+    setBusy(true)
+    setNote(pages.missed ? t('{why} The run goes on without that page.', { why: pages.missed }) : '')
     setRan({ folder, ask, going: true, ok: true, output: '', process: '' })
     setFetched(null)
     try {
@@ -927,6 +966,19 @@ export function Landing({ onStarted }: { onStarted: (session: string) => void })
               ) : null}
               {redesign.view}
               {ran ? <RanHere ran={ran} setup={fetched} devMode={devMode} /> : null}
+              {/* On Hanzo Desktop's This computer the host redesigns a site itself (redesign.tsx), and its offer is the one shown. */}
+              {!redesign.can && pagesIn(draft).length && !critiqued(draft) && !busy ? (
+                <XStack px="$3" data-slot="web-page-offer">
+                  <Button size="sm" variant="outline" borderColor="var(--border-strong)" onPress={() => setDraft(critique(pagesIn(draft)[0]!))}>
+                    <XStack items="center" gap="$1.5">
+                      <Globe size={14} />
+                      <SizableText size="$2" color="$ink">
+                        {t('Critique and redesign {page}', { page: shownPage(pagesIn(draft)[0]!) })}
+                      </SizableText>
+                    </XStack>
+                  </Button>
+                </XStack>
+              ) : null}
               <Composer
                 column
                 value={draft}
