@@ -83,7 +83,7 @@ describe('what is offered', () => {
 
   it('signed out, only what runs in the page', async () => {
     const seen = wire(() => [200, {}])
-    expect((await probe(target(null))).map((p) => p.id)).toEqual(['sketch'])
+    expect((await probe(target(null))).map((p) => p.id)).toEqual(['research', 'sketch'])
     expect(seen).toEqual([])
   })
 

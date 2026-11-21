@@ -127,8 +127,8 @@ for (const width of [1440, 390]) {
         await p.keyboard.press('Enter')
         await expect(p.getByRole('button', { name: 'Branch: dev' })).toBeVisible()
 
-        // The chips go where they say; the commands are one chord away.
-        await expect(p.locator('[data-slot="composer-chip"]')).toHaveText(['Repos', 'Branches', 'Issues', 'Templates'])
+        // The composer pills stand alone without duplicate chips; the commands are one chord away.
+        await expect(p.locator('[data-slot="composer-chip"]')).toHaveCount(0)
         await ask.focus()
         await p.keyboard.press('Control+k')
         await expect(p.getByRole('listbox', { name: 'Commands' }).getByRole('option')).toHaveText([/Run/, /View issues/, /Browse templates/, /Open projects/, /Bring a repository from GitHub/, /Use a git URL/])

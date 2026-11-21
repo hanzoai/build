@@ -22,7 +22,7 @@ import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { call, query, unwrap, type Target } from './api/call.ts'
-import { active, authored, document, nameOf as skillOf } from './api/skills.ts'
+import { active, authored, brand as brandSkills, document, nameOf as skillOf } from './api/skills.ts'
 import { brand, brands } from './api/studio.ts'
 import { useRead } from './data.ts'
 import { said as designSaid } from './design.ts'
@@ -79,10 +79,11 @@ async function said(t: Target, skills: readonly string[], memory: boolean, mode:
     if (b?.name) parts.push(designSaid(b))
   }
   if (skills.length) {
-    const own = await authored(t).catch(() => [])
+    const own = t.token() ? await authored(t).catch(() => []) : []
     for (const n of skills) {
       const body = own.find((s) => s.name === n)?.content || (await document(t, n).catch(() => ''))
       if (body) parts.push(`Use the skill "${n}" where it applies:\n\n${body.slice(0, SKILL_MAX)}`)
+      else parts.push(`Use the "${n}" skill where it applies.`)
     }
   }
   if (memory) {
@@ -154,8 +155,79 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
   )
   const found = usePlugins(t)
   const signed = Boolean(t.token())
-  const list = useRead(signed ? () => active(t) : null, [], [t, signed])
-  const names = useMemo(() => list.value.map((s) => skillOf(s.name)).filter(Boolean), [list.value])
+  const list = useRead(
+    async () => {
+      const [act, own, cat] = await Promise.all([
+        signed ? active(t).catch(() => []) : Promise.resolve([]),
+        signed ? authored(t).catch(() => []) : Promise.resolve([]),
+        brandSkills(t).catch(() => ({ skills: [], products: [] })),
+      ])
+      const localSkills: string[] = []
+      try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('hanzo_enterprise_settings_v1:plugins') : null
+        if (raw) {
+          const parsed = JSON.parse(raw) as { skillsAndPlugins?: { status?: string; name?: string }[] }
+          if (Array.isArray(parsed?.skillsAndPlugins)) {
+            for (const item of parsed.skillsAndPlugins) {
+              if (item?.status === 'enabled' && typeof item?.name === 'string') {
+                localSkills.push(item.name)
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+      const standard = [
+        'code-review',
+        'simplify',
+        'security-review',
+        'bug-finder',
+        'test-writer',
+        'refactor',
+        'frontend-design',
+        'api-design',
+        'sql-optimizer',
+        'ui-port',
+        'app-port',
+        'hanzo-cloud',
+        'hanzo-base',
+        'hanzo-code',
+        'hanzo-dev',
+        'hanzo-cli',
+        'hanzo-commerce',
+        'hanzo-bot',
+        'hanzo-agent',
+        'hanzo-security-review',
+        'pdf-analysis',
+        'xlsx-modeling',
+        'pptx-deck-builder',
+        'docx-redline',
+        'scientific-research',
+        'mcp-builder',
+        'webapp-testing',
+      ]
+      const seen = new Set<string>()
+      const out: string[] = []
+      for (const n of [
+        ...act.map((s) => skillOf(s.name)),
+        ...own.map((s) => s.name),
+        ...localSkills,
+        ...standard,
+        ...(Array.isArray(cat?.skills) ? cat.skills.map((s) => s.name) : []),
+      ]) {
+        const clean = typeof n === 'string' ? n.trim() : ''
+        if (clean && !seen.has(clean)) {
+          seen.add(clean)
+          out.push(clean)
+        }
+      }
+      return out
+    },
+    [],
+    [t, signed],
+  )
+  const names = list.value
   const { skills, research, memory, design } = gear.gear
   const mode: Mode = modes.includes(gear.gear.mode) ? gear.gear.mode : 'auto'
 
@@ -208,9 +280,12 @@ export function useCarry(t: Target, key: string, customize: (tab: 'skills') => v
   const [text, setText] = useState('')
   const asked = skills.join('\n')
   useEffect(() => {
-    if (!signedIn) return setText(mode === 'plan' ? 'Plan mode: lay out the plan and stop until the person says go.' : '')
+    if (!signedIn && !skills.length) {
+      setText(mode === 'plan' ? 'Plan mode: lay out the plan and stop until the person says go.' : '')
+      return
+    }
     let live = true
-    void said(t, skills, memory, mode, design).then((x) => live && setText(x))
+    void said(t, skills, signedIn ? memory : false, mode, signedIn ? design : '').then((x) => live && setText(x))
     return () => {
       live = false
     }

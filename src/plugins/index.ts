@@ -52,7 +52,7 @@ const seen = new Map<string, Promise<Plugin[]>>()
 
 /** What runs for this person, in the menu's order. */
 export async function probe(t: Target): Promise<Plugin[]> {
-  if (!t.token()) return [sketch]
+  if (!t.token()) return [deep, sketch]
   const [built, studio] = await Promise.allSettled([projects(t), templates(t)])
   if (built.status === 'rejected' && studio.status === 'rejected') throw built.reason
   const runs = studio.status === 'fulfilled' ? studio.value : []

@@ -186,8 +186,11 @@ export interface Made {
   pages?: number
 }
 
-/** The largest thing one upload carries. */
+/** The largest thing an inline upload carries; larger files up to `MAX` reserve a signed PUT. */
 export const INLINE = 10 << 20
+
+/** The largest thing one upload carries (2 GiB). */
+export const MAX = 2 * 1024 * 1024 * 1024
 
 /** Bytes as base64, in chunks a call stack holds. */
 export function base64(bytes: Uint8Array): string {
@@ -197,14 +200,53 @@ export function base64(bytes: Uint8Array): string {
 }
 
 /** Keep a file in the Library. */
-export async function upload(t: Target, file: { name: string; type: string; bytes: Uint8Array }, made: Made): Promise<Item> {
-  if (!file.bytes.length) throw new Sentence(phrase('{name} is empty'), { name: file.name })
-  if (file.bytes.length > INLINE) throw new Sentence(phrase('{name} is larger than 10 MB'), { name: file.name })
+export async function upload(t: Target, file: { name: string; type: string; bytes?: Uint8Array; blob?: Blob }, made: Made): Promise<Item> {
+  const len = file.blob ? file.blob.size : (file.bytes?.length ?? 0)
+  if (!len) throw new Sentence(phrase('{name} is empty'), { name: file.name })
+  if (len > MAX) throw new Sentence(phrase('{name} is larger than 2 GB'), { name: file.name })
+  const mime = file.type || 'application/octet-stream'
+  if (len > INLINE) {
+    const reserved = obj(
+      await call<unknown>(t, 'POST', '/v1/library', {
+        name: file.name,
+        mime,
+        bytes: len,
+        ...made,
+      }),
+    )
+    const id = str(reserved.id)
+    const up = obj(reserved.upload)
+    const putUrl = signed(up.url)
+    if (!id) throw new Error(phrase('The item was kept and came back without an id'))
+    if (!putUrl) {
+      const x = item(reserved)
+      if (!x) throw new Error(phrase('The item was kept and came back without an id'))
+      return x
+    }
+    const headers: Record<string, string> = {}
+    if (Array.isArray(up.headers)) {
+      for (const h of up.headers) {
+        const ho = obj(h)
+        const hn = str(ho.name)
+        if (hn) headers[hn] = str(ho.value)
+      }
+    }
+    const res = await fetch(putUrl, {
+      method: 'PUT',
+      headers,
+      body: (file.blob ?? file.bytes) as BodyInit,
+    })
+    if (!res.ok) throw new Sentence(phrase('{name} was not kept'), { name: file.name })
+    const done = item(await call<unknown>(t, 'PATCH', `/v1/library/${seg(id)}`, { commit: true }))
+    if (!done) throw new Error(phrase('The item was kept and came back without an id'))
+    return done
+  }
+  const bytes = file.bytes ?? new Uint8Array(await file.blob!.arrayBuffer())
   const x = item(
     await call<unknown>(t, 'POST', '/v1/library', {
       name: file.name,
-      mime: file.type || 'application/octet-stream',
-      data: base64(file.bytes),
+      mime,
+      data: base64(bytes),
       ...made,
     }),
   )
@@ -216,6 +258,7 @@ export interface Change {
   name?: string
   shared?: boolean
   project?: string
+  commit?: boolean
 }
 
 export async function change(t: Target, id: string, c: Change): Promise<Item> {

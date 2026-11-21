@@ -12,7 +12,9 @@ vi.mock('@hanzo/gui', () => {
 vi.mock('@hanzo/ui', () => ({ Popover: () => null, PopoverContent: () => null, PopoverTrigger: () => null }))
 vi.mock('@hanzogui/lucide-icons-2', () => ({ FilePlus2: () => null, ListTodo: () => null }))
 
-const { kinds } = await import('./summary.tsx')
+vi.mock('@hanzo/i18n/react', () => ({ useI18n: () => ({ t: (s: string) => s }) }))
+
+const { kinds, Summary } = await import('./summary.tsx')
 
 const SECTIONS = [
   { id: 'outputs', title: 'Outputs', lead: { title: 'Create file or site', run: () => {} }, entries: [{ id: 'o1', title: 'index.html', open: () => {} }] },
@@ -33,5 +35,14 @@ describe('the summary', () => {
     expect(outputs).toContain('index.html')
     expect(outputs).not.toContain('Nothing yet')
     expect(sources).toContain('Nothing yet')
+  })
+
+  it('renders a docked inline pane with all sections when pane is true', () => {
+    const html = renderToStaticMarkup(createElement(Summary, { sections: SECTIONS, pane: true }))
+    expect(html).toContain('Outputs')
+    expect(html).toContain('Create file or site')
+    expect(html).toContain('index.html')
+    expect(html).toContain('Sources')
+    expect(html).toContain('Nothing yet')
   })
 })

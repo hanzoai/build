@@ -13,19 +13,21 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n, type Say } from '@hanzo/i18n/react'
-import { ExternalLink, Info, MoreHorizontal, RefreshCcw } from '@hanzogui/lucide-icons-2'
-import { Button, DropdownMenu, type DropdownMenuProps } from '@hanzo/ui'
+import { ChevronRight, ExternalLink, Folder, GitBranch, GitPullRequest, Globe, Info, Laptop, Maximize2, MoreHorizontal, RefreshCcw, Square, SquareTerminal, X } from '@hanzogui/lucide-icons-2'
+import { Button, DropdownMenu, Input, Switch, type DropdownMenuProps } from '@hanzo/ui'
 import { PreviewFrame, type PreviewHandle } from '@hanzo/ui/agents'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { read as readChanges, type Changes } from './api/changes.ts'
 import { park, ports as listening, preview, sandbox as look, wake, type Box, type Port } from './api/sandbox.ts'
 import type { Event } from './api/sessions.ts'
-import { failure, shell, type ShellLine } from './api/turn.ts'
+import { cards, failure, shell, steps, type ShellLine } from './api/turn.ts'
+import { useKept, useRead } from './data.ts'
 import { Door } from './door.tsx'
 import { Environment } from './environment.tsx'
 import { Artifacts, Files } from './files.tsx'
 import { Git } from './git.tsx'
-import { useTarget } from './host.tsx'
+import { useHost, useTarget } from './host.tsx'
 import { away, Out } from './out.tsx'
 import { Panel, type Kind } from './panel.tsx'
 import type { Deck, Tabs } from './tabs.ts'
@@ -68,6 +70,10 @@ export function Desk({
   side,
   sheet,
   onHide,
+  envColumn = false,
+  splitPanes = [],
+  onCloseSplitPane,
+  onExpandSplitPane,
 }: {
   id: string
   repo: string
@@ -95,6 +101,12 @@ export function Desk({
   side: Deck
   sheet: boolean
   onHide: () => void
+  /** Show the Environment inspection column beside the dock panes. */
+  envColumn?: boolean
+  /** Active split panes in the 2x2 multi-pane dock grid ('terminal' | 'preview' | 'diff' | 'files'). */
+  splitPanes?: string[]
+  onCloseSplitPane?: (paneId: string) => void
+  onExpandSplitPane?: (paneId: string) => void
 }) {
   const { t: say } = useI18n()
   const name = repo.split('/').filter(Boolean).pop() || repo
@@ -142,28 +154,122 @@ export function Desk({
     },
   ]
 
-  return (
-    <Panel
-      side={side}
-      kinds={kinds}
-      sheet={sheet}
-      onHide={onHide}
-      label={say('Run details')}
-      // An empty tab offers what this run made: its site and its pull request.
-      suggested={[...(site ? [{ title: name || site, url: site }] : []), ...(pr.href ? [{ title: say('Pull request {pr}', { pr: pr.label }), url: pr.href }] : [])]}
-      bar={sandbox ? <Held box={box} live={live} /> : null}
-      menu={
-        <DropdownMenu
-          trigger={
-            <XStack render="button" aria-label={say('Run actions')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
-              <MoreHorizontal size={16} />
-            </XStack>
-          }
-          items={[...menu, { key: 'details', label: say('Details'), icon: <Info size={16} />, onSelect: environ }]}
+  const panelNode =
+    splitPanes.length >= 2 && !sheet ? (
+      <YStack
+        flex={1}
+        minW={0}
+        minH={0}
+        display="grid"
+        gridTemplateColumns={splitPanes.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)'}
+        gridTemplateRows={splitPanes.length > 2 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)'}
+        bg="$background"
+      >
+        {splitPanes.map((pid, idx) => {
+          const k = kinds.find((x) => x.id === pid)
+          if (!k) return null
+          const headerTitle =
+            pid === 'diff'
+              ? `${base || 'main'} → ${branch || 'HEAD'}`
+              : pid === 'terminal'
+                ? `${say('Terminal')} ${name || 'workspace'}`
+                : pid === 'preview'
+                  ? say('New tab')
+                  : k.label
+          return (
+            <YStack
+              key={pid}
+              minW={0}
+              minH={0}
+              borderLeftWidth={idx % 2 === 1 ? 1 : 0}
+              borderTopWidth={idx >= 2 ? 1 : 0}
+              borderColor="$borderColor"
+              display="grid"
+              gridTemplateRows="auto minmax(0, 1fr)"
+            >
+              <XStack px="$2.5" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" minH={36}>
+                <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1}>
+                  {headerTitle}
+                </SizableText>
+                {onExpandSplitPane ? (
+                  <XStack
+                    render="button"
+                    aria-label={say('Expand {pane}', { pane: k.label })}
+                    onPress={() => onExpandSplitPane(pid)}
+                    p="$1"
+                    rounded="$2"
+                    hoverStyle={{ bg: '$hover' }}
+                  >
+                    <Maximize2 size={13} opacity={0.7} />
+                  </XStack>
+                ) : null}
+                {onCloseSplitPane ? (
+                  <XStack
+                    render="button"
+                    aria-label={say('Close {pane}', { pane: k.label })}
+                    onPress={() => onCloseSplitPane(pid)}
+                    p="$1"
+                    rounded="$2"
+                    hoverStyle={{ bg: '$hover' }}
+                  >
+                    <X size={14} opacity={0.7} />
+                  </XStack>
+                ) : null}
+              </XStack>
+              <YStack flex={1} minH={0} overflow={k.bleed ? 'hidden' : 'scroll'} {...(k.bleed ? null : { p: '$3' })}>
+                {k.render()}
+              </YStack>
+            </YStack>
+          )
+        })}
+      </YStack>
+    ) : (
+      <Panel
+        side={side}
+        kinds={kinds}
+        sheet={sheet}
+        onHide={onHide}
+        label={say('Run details')}
+        // An empty tab offers what this run made: its site and its pull request.
+        suggested={[...(site ? [{ title: name || site, url: site }] : []), ...(pr.href ? [{ title: say('Pull request {pr}', { pr: pr.label }), url: pr.href }] : [])]}
+        bar={sandbox ? <Held box={box} live={live} /> : null}
+        menu={
+          <DropdownMenu
+            trigger={
+              <XStack render="button" aria-label={say('Run actions')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+                <MoreHorizontal size={16} />
+              </XStack>
+            }
+            items={[...menu, { key: 'details', label: say('Details'), icon: <Info size={16} />, onSelect: environ }]}
+          />
+        }
+      />
+    )
+
+  if (envColumn && !sheet) {
+    return (
+      <XStack flex={1} minW={0} minH={0} width="100%" height="100%">
+        <EnvironmentInspection
+          id={id}
+          repo={repo}
+          name={name}
+          branch={branch}
+          environment={environment}
+          pr={pr}
+          title={title}
+          events={events}
+          live={live}
+          onOpenEnvironment={environ}
+          onOpenDiff={() => side.open({ kind: 'diff', title: say('Diff') })}
         />
-      }
-    />
-  )
+        <YStack flex={1} minW={0} minH={0} borderLeftWidth={1} borderColor="$borderColor">
+          {panelNode}
+        </YStack>
+      </XStack>
+    )
+  }
+
+  return panelNode
 }
 
 interface Watch {
@@ -356,8 +462,19 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
 
   const tab = () => away(preview(t, sandbox, port)).catch((e: Error) => setWhy(e.message))
 
-  if (!running) return <Site site={site} live={live} held={held} />
-  if (!port) return <Site site={site} live={live} held={held} />
+  const detect = () => {
+    if (!sandbox) return
+    void listening(t, sandbox).then(
+      (ps) => {
+        setOpen(ps)
+        setPort((p) => (ps.some((x) => x.port === p) ? p : (ps[0]?.port ?? 0)))
+      },
+      () => undefined,
+    )
+  }
+
+  if (!running) return <Site site={site} live={live} held={held} onDetect={detect} />
+  if (!port) return <Site site={site} live={live} held={held} onDetect={detect} />
   const host = open.find((p) => p.port === port)?.host ?? ''
   return (
     <YStack flex={1} minH={0}>
@@ -420,9 +537,10 @@ function Browser({ sandbox, held, site, live }: { sandbox: string; held: Box['st
  * Where the run published its work, framed, with its address, a reload and the
  * page in a tab of its own; or what keeps its sandbox from serving.
  */
-function Site({ site, live, held }: { site: string; live: boolean; held: Box['state'] | '' }) {
+function Site({ site, live, held, onDetect }: { site: string; live: boolean; held: Box['state'] | ''; onDetect?: () => void }) {
   const { t } = useI18n()
   const frame = useRef<PreviewHandle | null>(null)
+  const [urlInput, setUrlInput] = useState(site)
   return (
     <YStack flex={1} minH={0}>
       <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
@@ -432,6 +550,14 @@ function Site({ site, live, held }: { site: string; live: boolean; held: Box['st
         <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
           {site || t('Nothing is serving yet')}
         </SizableText>
+        <Input
+          unstyled
+          value={urlInput}
+          onChangeText={setUrlInput}
+          placeholder={t('Type a URL')}
+          aria-label={t('Type a URL')}
+          style={{ width: 120, fontSize: 12, outlineStyle: 'none', background: 'transparent' }}
+        />
         {site ? (
           <Out href={site} label={t('Open in a new tab')}>
             <XStack p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
@@ -446,20 +572,207 @@ function Site({ site, live, held }: { site: string; live: boolean; held: Box['st
         title={t('Where this run is published')}
         device="desktop"
         empty={
-          <YStack items="center" gap="$2" p="$6">
+          <YStack items="center" gap="$2.5" p="$6">
+            <Globe size={28} opacity={0.45} />
             <SizableText size="$3" color="$ink">
               {t('Nothing is serving yet')}
             </SizableText>
-            <SizableText size="$2" color="$soft" style={{ textAlign: 'center' }}>
+            <SizableText size="$2" color="$soft" style={{ textAlign: 'center', maxWidth: 280 }}>
               {held === 'parked'
                 ? `${t('The run’s sandbox is suspended.')} ${t('Resume it to see what it serves.')}`
                 : live
                   ? t('When the run starts a server in its sandbox, the page opens here.')
                   : `${t('Nothing listens in this run’s sandbox, and it published no site.')} ${t('Its work is on its branch.')}`}
             </SizableText>
+            {onDetect ? (
+              <XStack gap="$1" items="center" pt="$1" flexWrap="wrap" justify="center">
+                <SizableText size="$1" color="$soft">
+                  {t('Preview your app instead?')}
+                </SizableText>
+                <XStack render="button" onPress={onDetect} px="$1.5" py="$0.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+                  <SizableText size="$1" color="$ink" style={{ textDecorationLine: 'underline' }}>
+                    {t('Detect dev server')}
+                  </SizableText>
+                </XStack>
+              </XStack>
+            ) : null}
           </YStack>
         }
       />
+    </YStack>
+  )
+}
+
+function EnvironmentInspection({
+  id,
+  repo,
+  name,
+  branch,
+  environment,
+  pr,
+  title,
+  events,
+  live,
+  onOpenEnvironment,
+  onOpenDiff,
+}: {
+  id: string
+  repo: string
+  name: string
+  branch: string
+  environment: string
+  pr: { href: string; label: string }
+  title: string
+  events: Event[]
+  live: boolean
+  onOpenEnvironment: () => void
+  onOpenDiff: () => void
+}) {
+  const { t } = useI18n()
+  const host = useHost()
+  const target = useTarget()
+  const signed = Boolean(host.person)
+  const [remoteControl, setRemoteControl] = useKept('hanzo.build.remote.control', true)
+  const changes = useRead(signed ? () => readChanges(target, id) : null, null as Changes | null, [target, id, signed])
+  const allCards = cards(events, '', t)
+  const shellCards = allCards.filter((c): c is Extract<typeof c, { kind: 'shell' }> => c.kind === 'shell')
+  const runningTasks = shellCards.filter((c) => c.ran === 'running' && live)
+  const finishedCount = shellCards.filter((c) => c.ran !== 'running' || !live).length + steps(events).filter((s) => s.done).length
+  const totalChars = events.reduce((sum, e) => sum + JSON.stringify(e.payload ?? '').length, 0)
+  const estTokens = Math.max(1, Math.round(totalChars / 4))
+  const contextPct = Math.min(100, Math.max(1, Math.round((estTokens / 128_000) * 100)))
+
+  const added = changes.value?.files.reduce((n, f) => n + f.additions, 0) ?? 0
+  const removed = changes.value?.files.reduce((n, f) => n + f.deletions, 0) ?? 0
+
+  return (
+    <YStack width={264} shrink={0} minH={0} overflow="scroll" bg="$background" px="$3" py="$2.5" gap="$3">
+      <SizableText size="$2" color="$ink" fontWeight="600">
+        {t('Environment')}
+      </SizableText>
+
+      <YStack gap="$2">
+        <XStack items="center" gap="$2">
+          <Laptop size={14} opacity={0.7} />
+          <SizableText flex={1} size="$2" color="$ink" numberOfLines={1}>
+            {environment && environment !== 'sandbox' ? environment : t('This computer')}
+          </SizableText>
+          <XStack render="button" onPress={onOpenEnvironment} px="$1.5" py="$0.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+            <SizableText size="$1" color="$ink" style={{ textDecorationLine: 'underline' }}>
+              {t('Save')}
+            </SizableText>
+          </XStack>
+        </XStack>
+
+        <XStack items="center" gap="$2">
+          <Folder size={14} opacity={0.7} />
+          <SizableText size="$2" color="$ink" numberOfLines={1}>
+            {name || 'workspace'}
+          </SizableText>
+          <SizableText size="$1" color="$soft" numberOfLines={1}>
+            · ~/work
+          </SizableText>
+        </XStack>
+
+        {repo ? (
+          <XStack items="center" gap="$2">
+            <Folder size={14} opacity={0.7} />
+            <SizableText size="$2" color="$ink" numberOfLines={1}>
+              {repo}
+            </SizableText>
+          </XStack>
+        ) : null}
+
+        {branch ? (
+          <XStack items="center" gap="$2">
+            <GitBranch size={14} opacity={0.7} />
+            <SizableText size="$2" color="$ink" numberOfLines={1}>
+              {branch}
+            </SizableText>
+          </XStack>
+        ) : null}
+
+        <XStack items="center" gap="$2" pt="$1">
+          <SizableText flex={1} size="$2" color="$ink">
+            {t('Remote Control')}
+          </SizableText>
+          <Switch checked={remoteControl} onCheckedChange={setRemoteControl} size="sm" aria-label={t('Remote Control')} />
+        </XStack>
+      </YStack>
+
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
+        <XStack items="center" gap="$1.5">
+          <SizableText size="$2" color="$ink" fontWeight="500">
+            {t('Context')}
+          </SizableText>
+          <ChevronRight size={12} opacity={0.6} />
+          <SizableText flex={1} size="$1" color="$soft" text="end">
+            {`${contextPct}%`}
+          </SizableText>
+          <YStack width={28} height={6} rounded={99} bg="$borderColor" overflow="hidden">
+            <YStack width={`${contextPct}%`} height="100%" bg="$blue10" />
+          </YStack>
+        </XStack>
+      </YStack>
+
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
+        <XStack items="center" gap="$1.5">
+          <SizableText size="$2" color="$ink" fontWeight="500">
+            {t('Connectors')}
+          </SizableText>
+          <ChevronRight size={12} opacity={0.6} />
+          <SizableText flex={1} size="$1" color="$soft" text="end">
+            {t('Connected')}
+          </SizableText>
+        </XStack>
+      </YStack>
+
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$1.5">
+        <SizableText size="$2" color="$ink" fontWeight="500">
+          {t('Changes')}
+        </SizableText>
+        <XStack render="button" onPress={onOpenDiff} items="flex-start" gap="$2" py="$1" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+          <GitPullRequest size={14} color="$green10" />
+          <YStack flex={1} minW={0} gap="$0.5">
+            <SizableText size="$2" color="$ink" numberOfLines={1} text="start">
+              {title || branch || t('Working tree')}
+            </SizableText>
+            <XStack gap="$1.5" items="center">
+              {pr.label ? (
+                <SizableText size="$1" color="$soft">
+                  {pr.label}
+                </SizableText>
+              ) : null}
+              <SizableText size="$1" color="$green10">
+                {`+${added}`}
+              </SizableText>
+              <SizableText size="$1" color="$red10">
+                {`−${removed}`}
+              </SizableText>
+            </XStack>
+          </YStack>
+        </XStack>
+      </YStack>
+
+      <YStack borderTopWidth={1} borderColor="$borderColor" pt="$2.5" gap="$2">
+        <SizableText size="$2" color="$ink" fontWeight="500">
+          {t('Background tasks')}
+        </SizableText>
+        {runningTasks.map((task) => (
+          <XStack key={task.key} items="center" gap="$2" py="$1">
+            <SquareTerminal size={14} opacity={0.7} />
+            <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1}>
+              {task.command}
+            </SizableText>
+            <Square size={10} fill="currentColor" />
+          </XStack>
+        ))}
+        <XStack items="center" gap="$2" py="$0.5">
+          <SizableText size="$1" color="$soft">
+            {t('{n} finished', { n: finishedCount })}
+          </SizableText>
+        </XStack>
+      </YStack>
     </YStack>
   )
 }

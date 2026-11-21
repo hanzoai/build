@@ -109,17 +109,40 @@ function glyph(kind: ItemKind, n = 18): ReactNode {
   }
 }
 
+/** Known same-origin agent and bot stills shelved by Dev, used if the signed store URL is unreachable. */
+const AGENT_STILLS = new Set(['antje.jpg', 'creative.png', 'des.png', 'dev.png', 'einstein.png', 'feynman.png', 'leo.png', 'maya.png', 'nora.png', 'vi.png', 'zach.jpg'])
+const BOT_STILLS = new Set(['chief.png', 'expense-manager.png', 'inbox-manager.png', 'offsite-crew.png', 'sales-outbound.png', 'talent-scout.png'])
+
+function localStill(x: Item): string {
+  const name = x.name.trim().toLowerCase()
+  if (AGENT_STILLS.has(name)) return `/agents/${name}`
+  if (BOT_STILLS.has(name)) return `/bots/${name}`
+  return ''
+}
+
 /** The still a tile shows: the item's preview, or an image's own bytes. */
-const still = (x: Item): string => x.preview || (x.kind === 'image' && x.mime !== 'image/svg+xml' ? x.url : '')
+const still = (x: Item): string => x.preview || (x.kind === 'image' && x.mime !== 'image/svg+xml' ? x.url : '') || localStill(x)
 
 /** One square: the still, or the kind's mark on a quiet ground. */
 export function Thumb({ x, size: n }: { x: Item; size?: number }) {
+  const [fallback, setFallback] = useState(false)
   const [broken, setBroken] = useState(false)
-  const src = still(x)
+  const primary = still(x)
+  const backup = localStill(x)
+  const src = fallback && backup ? backup : primary
   return (
     <YStack width={n ?? '100%'} height={n} style={n ? undefined : { aspectRatio: '1 / 1' }} rounded="$3" overflow="hidden" bg="$raised" items="center" justify="center" shrink={0} aria-hidden>
       {src && !broken ? (
-        <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          onError={() => {
+            if (!fallback && backup && backup !== primary) setFallback(true)
+            else setBroken(true)
+          }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
       ) : (
         <YStack opacity={0.7}>{glyph(x.kind, n ? Math.max(14, Math.round(n / 2.6)) : 28)}</YStack>
       )}
@@ -475,9 +498,23 @@ export function Preview({ id, rows }: { id: string; rows?: (x: Item) => MenuItem
 
 /** The thing itself, drawn the way its kind is read. */
 function Shown({ x }: { x: Item }) {
+  const [fallback, setFallback] = useState(false)
   const box = { width: '100%', maxHeight: '60vh', borderRadius: 12, display: 'block' } as const
+  const backup = localStill(x)
+  const imgSrc = fallback && backup ? backup : x.url || backup
+  if (!x.url && !backup) return <Thumb x={x} />
+  if (x.kind === 'image' && x.mime !== 'image/svg+xml')
+    return (
+      <img
+        src={imgSrc}
+        alt={x.name}
+        onError={() => {
+          if (!fallback && backup && backup !== x.url) setFallback(true)
+        }}
+        style={{ ...box, objectFit: 'contain' }}
+      />
+    )
   if (!x.url) return <Thumb x={x} />
-  if (x.kind === 'image' && x.mime !== 'image/svg+xml') return <img src={x.url} alt={x.name} style={{ ...box, objectFit: 'contain' }} />
   if (x.kind === 'video') return <video src={x.url} poster={x.preview || undefined} controls preload="metadata" style={box} aria-label={x.name} />
   if (x.kind === 'audio') return <audio src={x.url} controls preload="metadata" style={{ width: '100%' }} aria-label={x.name} />
   if (x.mime === 'application/pdf') return <iframe src={x.url} title={x.name} style={{ ...box, height: '60vh', border: 0 }} />
@@ -627,8 +664,9 @@ export function Library() {
   const wide = useMedia().md
   // The kind is the address's (-/artifacts/<kind>), so the sidebar, a link and Back all name it.
   const at = route(host.path)
-  const kind: ItemKind | '' = at.kind === 'screen' && at.of ? (at.of as ItemKind) : ''
-  const setKind = (k: ItemKind | '') => host.go(path({ kind: 'screen', screen: 'artifacts', ...(k ? { of: k } : {}) }))
+  const sitesOnly = at.kind === 'screen' && at.of === 'sites'
+  const kind: ItemKind | '' = at.kind === 'screen' && at.of && at.of !== 'sites' ? (at.of as ItemKind) : ''
+  const setKind = (k: ItemKind | 'sites' | '') => host.go(path({ kind: 'screen', screen: 'artifacts', ...(k ? { of: k } : {}) }))
   const [source, setSource] = useState<Source | ''>('')
   const [scope, setScope] = useState<Scope>('all')
   const [typed, setTyped] = useState('')
@@ -644,7 +682,7 @@ export function Library() {
     return () => clearTimeout(id)
   }, [typed])
 
-  const load = useMemo(() => (signed ? (cursor: string, signal: AbortSignal) => list(target, { kind, source, scope, q, limit: PAGE, cursor }, { signal }) : null), [signed, target, kind, source, scope, q])
+  const load = useMemo(() => (signed && !sitesOnly ? (cursor: string, signal: AbortSignal) => list(target, { kind, source, scope, q, limit: PAGE, cursor }, { signal }) : null), [signed, sitesOnly, target, kind, source, scope, q])
   const pages = usePages(load, `${kind}|${source}|${scope}|${q}|${target.org}`)
   const end = useEnd(pages.more)
   const reload = pages.reload
@@ -698,54 +736,61 @@ export function Library() {
         <YStack width="100%" maxW={1120} mx="auto" gap="$4">
           <XStack items="center" gap="$3">
             <SizableText render="h1" size="$7" fontWeight="600" color="$ink" flex={1}>
-              {KINDS.find((k) => k.id === kind)?.id ? t(KINDS.find((k) => k.id === kind)!.label) : t('Library')}
+              {sitesOnly ? t('Sites') : KINDS.find((k) => k.id === kind)?.id ? t(KINDS.find((k) => k.id === kind)!.label) : t('Library')}
             </SizableText>
-            <XStack role="radiogroup" aria-label={t('View')} gap="$1">
-              <ViewMark label={t('Grid')} on={view === 'grid'} onPress={() => setView('grid')}>
-                <LayoutGrid size={16} />
-              </ViewMark>
-              <ViewMark label={t('List')} on={view === 'list'} onPress={() => setView('list')}>
-                <List size={16} />
-              </ViewMark>
-            </XStack>
+            {sitesOnly ? null : (
+              <XStack role="radiogroup" aria-label={t('View')} gap="$1">
+                <ViewMark label={t('Grid')} on={view === 'grid'} onPress={() => setView('grid')}>
+                  <LayoutGrid size={16} />
+                </ViewMark>
+                <ViewMark label={t('List')} on={view === 'list'} onPress={() => setView('list')}>
+                  <List size={16} />
+                </ViewMark>
+              </XStack>
+            )}
           </XStack>
 
-          <XStack items="center" gap="$2" maxW={480}>
-            <Search size={16} opacity={0.6} />
-            <YStack flex={1} minW={0}>
-              <Input value={typed} onChangeText={setTyped} placeholder={t('Search your library')} aria-label={t('Search your library')} disabled={!signed} />
-            </YStack>
-          </XStack>
+          {sitesOnly ? null : (
+            <XStack items="center" gap="$2" maxW={480}>
+              <Search size={16} opacity={0.6} />
+              <YStack flex={1} minW={0}>
+                <Input value={typed} onChangeText={setTyped} placeholder={t('Search your library')} aria-label={t('Search your library')} disabled={!signed} />
+              </YStack>
+            </XStack>
+          )}
 
           <YStack gap="$2">
             {/* A host whose sidebar lists the kinds draws them there. */}
             {host.sections ? null : (
               <XStack role="radiogroup" aria-label={t('Kind')} gap="$2" overflowX="auto" pb="$1" $platform-web={{ scrollbarWidth: 'none' }}>
                 {KINDS.map((k) => (
-                  <Chip key={k.id || 'all'} label={t(k.label)} on={kind === k.id} onPress={() => setKind(k.id)} />
+                  <Chip key={k.id || 'all'} label={t(k.label)} on={!sitesOnly && kind === k.id} onPress={() => setKind(k.id)} />
                 ))}
+                <Chip key="sites" label={t('Sites')} on={sitesOnly} onPress={() => setKind('sites')} />
               </XStack>
             )}
-            <XStack gap="$2" flexWrap="wrap" rowGap="$2">
-              <ChipSelect
-                name={t('From')}
-                label={from.find((f) => f.id === source)!.label}
-                chosen={from.find((f) => f.id === source)}
-                items={from}
-                onChange={(f) => setSource(f.id)}
-                placement="bottom-start"
-                width={200}
-              />
-              <ChipSelect
-                name={t('Whose')}
-                label={whose.find((w) => w.id === scope)!.label}
-                chosen={whose.find((w) => w.id === scope)}
-                items={whose}
-                onChange={(w) => setScope(w.id)}
-                placement="bottom-start"
-                width={220}
-              />
-            </XStack>
+            {sitesOnly ? null : (
+              <XStack gap="$2" flexWrap="wrap" rowGap="$2">
+                <ChipSelect
+                  name={t('From')}
+                  label={from.find((f) => f.id === source)!.label}
+                  chosen={from.find((f) => f.id === source)}
+                  items={from}
+                  onChange={(f) => setSource(f.id)}
+                  placement="bottom-start"
+                  width={200}
+                />
+                <ChipSelect
+                  name={t('Whose')}
+                  label={whose.find((w) => w.id === scope)!.label}
+                  chosen={whose.find((w) => w.id === scope)}
+                  items={whose}
+                  onChange={(w) => setScope(w.id)}
+                  placement="bottom-start"
+                  width={220}
+                />
+              </XStack>
+            )}
           </YStack>
 
           {acts.note ? (
@@ -754,7 +799,9 @@ export function Library() {
             </SizableText>
           ) : null}
 
-          {!signed ? (
+          {sitesOnly ? (
+            <Sites />
+          ) : !signed ? (
             <Said says={t('Sign in to see your library.')}>
               <Button size="sm" onPress={() => host.signIn?.()}>
                 {t('Sign in')}
@@ -772,6 +819,12 @@ export function Library() {
             <Said says={narrowed ? t('Nothing matches.') : t('Nothing here yet. What you make in Chat, Dev and Studio lands here.')} />
           ) : (
             <YStack gap="$5">
+              {/* The org's deployed sites are Dev's builds: shown on All while nothing narrows them away. */}
+              {!q && !kind && (source === '' || source === 'dev') && scope !== 'shared' ? (
+                <YStack pb="$4" borderBottomWidth={1} borderColor="$borderColor">
+                  <Sites />
+                </YStack>
+              ) : null}
               {groups.map((g) => (
                 <YStack key={g.label} gap="$3" role="group" aria-label={t(g.label)}>
                   <SizableText size="$2" color="$soft" fontWeight="500">
@@ -804,8 +857,7 @@ export function Library() {
               ) : null}
             </YStack>
           )}
-          {/* The org's deployed sites are Dev's builds: under the items, while nothing narrows them away. */}
-          {signed && !q && !kind && (source === '' || source === 'dev') && scope !== 'shared' ? (
+          {!sitesOnly && signed && !pages.rows.length && !pages.loading && !q && !kind && (source === '' || source === 'dev') && scope !== 'shared' ? (
             <YStack pt="$6" borderTopWidth={1} borderColor="$borderColor">
               <Sites />
             </YStack>

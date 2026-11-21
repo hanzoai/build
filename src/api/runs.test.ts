@@ -212,7 +212,8 @@ describe('coding', () => {
 
   it('tries a failed run again with the same ask, where and how it ran', () => {
     const failed: Earlier = { ...earlier, title: 'new project: talk to me', repo: 'aworring98/talk-to-me', base: 'main', mode: 'plan' }
-    expect(retry(failed, '')).toEqual({ repo: 'aworring98/talk-to-me', project: undefined, targetId: undefined, after: 'sess_1', prompt: 'talk to me', mode: 'plan' })
+    expect(retry(failed, '')).toEqual({ repo: 'aworring98/talk-to-me', project: undefined, targetId: undefined, base: 'main', prompt: 'talk to me', mode: 'plan' })
+    expect(retry({ ...failed, pushed: true }, '')).toEqual({ repo: 'aworring98/talk-to-me', project: undefined, targetId: undefined, after: 'sess_1', prompt: 'talk to me', mode: 'plan' })
     expect(retry(failed, ' talk to me, and say hello ').prompt).toBe('talk to me, and say hello')
     expect(retry({ ...failed, environment: 'tgt_1' }, '')).toMatchObject({ base: 'main', targetId: 'tgt_1', prompt: 'talk to me', mode: 'plan' })
   })

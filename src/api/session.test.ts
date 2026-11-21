@@ -76,6 +76,49 @@ describe('sessions', () => {
     expect(sessions.story(T, 'hanzo', 'shop')).toBe('https://api.hanzo.ai/v1/agent/builds/hanzo/shop')
     expect(sessions.story(T, 'hanzo', '')).toBe('')
   })
+
+  it('keeps the opening user ask when a long run’s recent tail starts past seq 1', async () => {
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        seen.push(url)
+        if (url.endsWith('/events?limit=2')) {
+          return new Response(
+            JSON.stringify({
+              events: [
+                { id: 'e1', sessionId: 'sess_1', seq: 1, kind: 'message', payload: { role: 'user', text: 'check this pr -\nhttps://github.com/ClickHouse/ClickHouse/pull/115724' } },
+                { id: 'e2', sessionId: 'sess_1', seq: 2, kind: 'status', payload: { status: 'started', branch: 'agent/x' } },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        return new Response(
+          JSON.stringify({
+            id: 'sess_1',
+            title: 'ClickHouse: check this pr -',
+            status: 'error',
+            events: 280,
+            recentEvents: [{ id: 'e280', sessionId: 'sess_1', seq: 280, kind: 'status', payload: { status: 'error', error: 'stopped' } }],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+    const d = await sessions.get(T, 'sess_1')
+    expect(seen).toEqual([
+      'https://api.hanzo.ai/v1/agent/sessions/sess_1',
+      'https://api.hanzo.ai/v1/agent/sessions/sess_1/events?limit=2',
+    ])
+    expect(d.recent.map((e) => e.seq)).toEqual([1, 2, 280])
+    const drawn = cards(d.recent, 'build')
+    expect(drawn[0]).toMatchObject({
+      kind: 'said',
+      who: 'person',
+      text: 'check this pr -\nhttps://github.com/ClickHouse/ClickHouse/pull/115724',
+    })
+  })
 })
 
 const EARLIER: Earlier = {
