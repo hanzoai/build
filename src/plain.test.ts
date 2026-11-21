@@ -72,6 +72,11 @@ describe('result first: the process folds into one plain line (hanzo-inc/app iss
     expect(ranOf([shell('a', 'x'), shell('b', 'y', 'running')])).toBe('running')
     expect(ranOf([shell('a', 'x'), shell('b', 'y', 'running')], (r) => (r === 'running' ? 'cancelled' : r))).toBe('cancelled')
     expect(ranOf([shell('a', 'x'), said('s', 'hi')])).toBe('done')
+    // A finished run whose sandbox is kept reads as done, not cut off.
+    const kept: Card = { kind: 'step', key: 'k', name: 'Keep the sandbox', detail: 'sandbox m_1 is kept', output: '', ran: 'running' }
+    const ended = (r: 'running' | 'done' | 'error' | 'cancelled') => (r === 'running' ? 'cancelled' : r)
+    expect(ranOf([step('c', 'Check'), kept], ended)).toBe('done')
+    expect(ranOf([kept], ended)).toBe('done')
   })
 
   it('marks the lines that say a run got going as process, and its end as not', () => {
