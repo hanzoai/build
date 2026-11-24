@@ -141,7 +141,18 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
     }
   }
 
-  const why = cfg.error ? told(cfg.error, t) : !cfg.loading && !ready(p) ? t('This deployment takes no cards yet.') : ''
+  const nonSquareConfigured = Boolean(p && p.provider && p.provider !== 'square')
+  const why = cfg.error
+    ? told(cfg.error, t)
+    : !cfg.loading && !ready(p)
+      ? nonSquareConfigured
+        ? t('Cards for your region are added securely on the payment page.')
+        : t('This deployment takes no cards yet.')
+      : ''
+  const payCardsHref =
+    typeof window !== 'undefined'
+      ? `https://hanzo.ai/pay/cards?returnUrl=${encodeURIComponent(window.location.href)}`
+      : 'https://hanzo.ai/pay/cards'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -229,9 +240,15 @@ export function AddCard({ open, onOpenChange, onSaved }: { open: boolean; onOpen
             <Button size="sm" variant="ghost" onPress={() => onOpenChange(false)}>
               {t('Cancel')}
             </Button>
-            <Button size="sm" disabled={!mounted || working} onPress={() => void add()}>
-              {t('Save card')}
-            </Button>
+            {nonSquareConfigured ? (
+              <Button size="sm" onPress={() => window.location.assign(payCardsHref)}>
+                {t('Add card on hanzo.ai/pay')}
+              </Button>
+            ) : (
+              <Button size="sm" disabled={!mounted || working} onPress={() => void add()}>
+                {t('Save card')}
+              </Button>
+            )}
           </XStack>
         </YStack>
       </DialogContent>
