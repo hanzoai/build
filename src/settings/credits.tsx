@@ -185,7 +185,7 @@ export function Credits({ target, admin, add, onCard, cardsVersion = 0 }: { targ
         }
       >
         <Card>
-          <Row first title={t('Prepaid balance')} detail={t('Bought with a card')} trailing={<Figure read={left} />} />
+          <Row first title={t('Prepaid balance')} detail={t('Available for all models and usage')} trailing={<Figure read={left} />} />
           <Row title={t('Granted credit')} detail={t('Given by Hanzo; some models take only prepaid')} trailing={<Figure read={granted} />} />
           <Row
             title={t('Spent this month')}
