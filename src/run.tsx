@@ -95,7 +95,8 @@ import { PanelToggle } from './panel.tsx'
 import { schedule } from './scheduled.tsx'
 import { SideProvider, useSplit } from './side.tsx'
 import { PAGE, useDeck, useKey, usePanel } from './tabs.ts'
-import { carrying, compose, pick, type Attached } from './tools.tsx'
+import { carrying, compose, pick, read as readFiles, type Attached } from './tools.tsx'
+import { useCarry } from './carry.tsx'
 import { Talk } from './talk.tsx'
 import { Transcript, type QueuedMessage, type TranscriptView } from './transcript.tsx'
 
@@ -133,7 +134,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const [files, setFiles] = useState<Attached[]>([])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
-  const [notify, setNotify] = useState(false)
+  const [notify, setNotify] = useState<'device' | 'in-app' | null>(null)
   // The side panel: open or shut as Dev was left, its tabs as they were arranged.
   const wide = useMedia().md
   const [desk, setDesk] = usePanel('dev', true, wide)
@@ -161,6 +162,21 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
   const mind = useMind(t, (limits as { plan?: string } | null)?.plan, host.topUp)
   const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
+  const tools = useCarry(t, id, (tab) => host.go(path({ kind: 'customize', tab })), {
+    draft,
+    setDraft,
+    attach: async (attachments) => {
+      const text = attachments.filter((file) => !file.type.startsWith('image/'))
+      const result = await readFiles(files, text, say)
+      setFiles(result.files)
+      setNote(result.note || (text.length !== attachments.length ? say('Attach text files in Dev. Images are supported in Chat.') : ''))
+    },
+    go: (href) => href.startsWith('http') ? host.open(href) : host.go(href),
+  })
+  const plugins = {
+    ...tools.plugins,
+    rows: tools.plugins.rows.filter((row) => row.id !== 'sketch'),
+  }
   const listen = useMemo(() => speaker(t), [t])
 
   const mode = record?.mode ?? ''
@@ -233,26 +249,37 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   // Only a run still working is on a step.
   const current = running ? plan.find((x) => !x.done) : undefined
 
-  // Asked for while it ran, said once when it stops. `notify` is only ever set
-  // where Notification exists; the permission can be taken back since.
+  // Complete the reminder in this view, using the device only when it permits it.
   useEffect(() => {
     if (!notify || running) return
-    if (Notification.permission === 'granted') new Notification(record?.title || say('Run finished'), { body: say('This run has finished.') })
-    setNotify(false)
-  }, [notify, running, record?.title])
+    setNotify(null)
+    const title = record?.title || say('Run finished')
+    const body = say('This run has finished.')
+    setNote(body)
+    if (notify !== 'device' || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    void (async () => {
+      try {
+        const worker = await navigator.serviceWorker?.getRegistration()
+        if (worker) await worker.showNotification(title, { body })
+        else new Notification(title, { body })
+      } catch {
+        // The result is already shown in the run.
+      }
+    })()
+  }, [notify, running, record?.title, say])
 
   const ask = async () => {
-    if (typeof Notification === 'undefined') {
-      setNote(say('This browser cannot send a notification.'))
-      return
+    let allowed = false
+    try {
+      if (typeof Notification !== 'undefined') {
+        const current = Notification.permission
+        allowed = (current === 'default' ? await Notification.requestPermission() : current) === 'granted'
+      }
+    } catch {
+      // Browser permission can be unavailable even when the API exists.
     }
-    const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
-    if (perm !== 'granted') {
-      setNote(say('Notifications stay off until this browser allows them.'))
-      return
-    }
-    setNotify(true)
-    setNote('')
+    setNotify(allowed ? 'device' : 'in-app')
+    setNote(allowed ? '' : say('We’ll show the result here. For a device alert, allow notifications for this site in your browser or device settings.'))
   }
 
   /** Something that answers a sentence for the note, or throws the reason. One at a time. */
@@ -357,7 +384,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
 
   // The composer sends words, with any files fenced after them, and only while it is enabled.
   const send = () => {
-    const words = compose(draft.trim(), files)
+    const words = compose([tools.text, draft.trim()].filter(Boolean).join('\n\n'), files)
     if (steering) {
       void act(async () => {
         const said = await tell(words)
@@ -464,7 +491,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   }
 
   const enqueue = () => {
-    const words = compose(draft.trim(), files)
+    const words = compose([tools.text, draft.trim()].filter(Boolean).join('\n\n'), files)
     if (!words) return
     setQueued((prev) => [...prev, { id: `q-${Date.now()}-${prev.length}`, text: words }])
     setDraft('')
@@ -1140,8 +1167,8 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     ...(busy || waiting ? (['pause', 'resume', 'stop'] as const) : []),
                   ]}
                 />
-                <Button size="sm" disabled={notify} onPress={() => void ask()}>
-                  {notify ? say('You will be notified') : say('Notify me')}
+                <Button size="sm" disabled={Boolean(notify)} onPress={() => void ask()}>
+                  {notify === 'device' ? say('You will be notified') : notify === 'in-app' ? say('Watching here') : say('Notify me')}
                 </Button>
               </XStack>
             ) : null}
@@ -1163,8 +1190,17 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                 }
               },
             }}
-            plus={{ upload: () => pick(files, setFiles, setNote, say) }}
-            carried={carrying(files, setFiles)}
+            plus={{
+              upload: () => pick(files, setFiles, setNote, say),
+              research: { on: tools.gear.gear.research, set: (on) => tools.gear.set({ research: on }) },
+              skills: tools.skills,
+              design: tools.design,
+              plugins,
+              memory: { on: tools.gear.gear.memory, set: (on) => tools.gear.set({ memory: on }) },
+            }}
+            slash={tools.skills}
+            at={plugins}
+            carried={[...tools.on, ...carrying(files, setFiles)]}
             // What a new run from here is made with; words that steer this run use neither.
             mind={signed && !steering ? mind : null}
             effort={signed && !steering ? pacing(mind) : null}
@@ -1192,6 +1228,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           <SideProvider value={split.side}>{desk_(false)}</SideProvider>
         </YStack>
       ) : null}
+      {tools.dialog}
       <Confirm
         open={deleting}
         onOpenChange={setDeleting}

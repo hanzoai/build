@@ -13,7 +13,7 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n, type Say } from '@hanzo/i18n/react'
-import { ExternalLink, Folder, GitBranch, GitPullRequest, Globe, Info, Laptop, Maximize2, MoreHorizontal, RefreshCcw, Square, SquareTerminal, X } from '@hanzogui/lucide-icons-2'
+import { Check, Circle, ExternalLink, Folder, GitBranch, GitPullRequest, Globe, Info, Laptop, Maximize2, MoreHorizontal, RefreshCcw, Square, SquareTerminal, X } from '@hanzogui/lucide-icons-2'
 import { Button, DropdownMenu, Switch, type DropdownMenuProps } from '@hanzo/ui'
 import { Console, DEVICES, PreviewFrame, Views, type FrameEvent, type Line, type PreviewHandle } from '@hanzo/ui/agents'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -127,7 +127,7 @@ export function Desk({
       id: 'preview',
       label: say('Preview'),
       bleed: true,
-      render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} repo={repo} onEnvironment={environ} />,
+      render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} repo={repo} events={events} onEnvironment={environ} />,
     },
     {
       id: 'artifacts',
@@ -451,6 +451,7 @@ function Browser({
   site,
   live,
   repo,
+  events,
   onEnvironment,
 }: {
   sandbox: string
@@ -458,6 +459,7 @@ function Browser({
   site: string
   live: boolean
   repo: string
+  events: Event[]
   onEnvironment: () => void
 }) {
   const { t: say } = useI18n()
@@ -589,7 +591,7 @@ function Browser({
   const nothing = (
     <>
       {dialog}
-      <Site site={site} live={live} held={held} serving={serving} onStart={startable ? () => void start() : undefined} onEnvironment={repo ? onEnvironment : undefined} />
+      <Site site={site} live={live} held={held} serving={serving} events={events} onStart={startable ? () => void start() : undefined} onEnvironment={repo ? onEnvironment : undefined} />
     </>
   )
   if (!running) return nothing
@@ -720,17 +722,20 @@ function Site({
   live,
   held,
   serving,
+  events,
   onStart,
   onEnvironment,
 }: {
   site: string
   live: boolean
+  events: Event[]
   held: Box['state'] | ''
   serving?: Serving | null
   onStart?: () => void
   onEnvironment?: () => void
 }) {
   const { t } = useI18n()
+  const progress = live ? steps(events) : []
   const frame = useRef<PreviewHandle | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [dock, setDock] = useKept('hanzo.build.dock', 36)
@@ -781,6 +786,17 @@ function Site({
                   ? t('When the run starts a server in its sandbox, the page opens here.')
                   : `${t('Nothing listens in this run’s sandbox, and it published no site.')} ${t('A server the run started stopped when the run ended.')}`}
             </SizableText>
+            {progress.length ? (
+              <YStack render="ol" aria-label={t('Live run steps')} gap="$2" m={0} p={0} width="100%" maxW={340}>
+                {progress.map((step) => (
+                  <XStack render="li" key={step.name} borderWidth={1} borderColor="$borderColor" bg="$sunken" rounded="$3" p="$2.5" gap="$2" items="center">
+                    {step.done ? <Check size={15} aria-hidden /> : <Circle size={15} aria-hidden />}
+                    <SizableText size="$2" flex={1}>{step.name}</SizableText>
+                    <SizableText size="$1" color="$soft">{step.done ? t('Finished') : t('Running')}</SizableText>
+                  </XStack>
+                ))}
+              </YStack>
+            ) : null}
             {serving ? (
               <YStack items="center" gap="$2" width="100%">
                 <SizableText size="$2" color="$ink" role="status" style={{ textAlign: 'center', maxWidth: 320 }}>

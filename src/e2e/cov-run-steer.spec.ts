@@ -295,8 +295,8 @@ test.describe('notify me', () => {
     await rig(p, { record: running() })
     await p.goto(`/${SESSION}`)
     await p.getByRole('button', { name: 'Notify me' }).click()
-    await expect(status(p).getByText('Notifications stay off until this browser allows them.')).toBeVisible()
-    await expect(p.getByRole('button', { name: 'Notify me' })).toBeEnabled()
+    await expect(status(p).getByText(/We’ll show the result here/)).toBeVisible()
+    await expect(p.getByRole('button', { name: 'Watching here' })).toBeDisabled()
   })
 
   test('says when the browser has no notifications at all', async ({ page: p }) => {
@@ -304,8 +304,23 @@ test.describe('notify me', () => {
     await rig(p, { record: running() })
     await p.goto(`/${SESSION}`)
     await p.getByRole('button', { name: 'Notify me' }).click()
-    await expect(status(p).getByText('This browser cannot send a notification.')).toBeVisible()
+    await expect(status(p).getByText(/We’ll show the result here/)).toBeVisible()
   })
+})
+
+test('the follow-up composer opens its tools and selects a skill with slash', async ({ page: p }) => {
+  await rig(p, { record: running() })
+  await p.goto(`/${SESSION}`)
+  const input = box(p, 'Steer this run')
+  await p.getByRole('button', { name: 'Add files, agents, skills and more' }).click()
+  await expect(p.getByText('Add photos & files', { exact: true })).toBeVisible()
+  await expect(p.getByText('Skills', { exact: true })).toBeVisible()
+  await p.keyboard.press('Escape')
+  await input.fill('/code-review')
+  await expect(p.getByText('code-review', { exact: true }).first()).toBeVisible()
+  await input.press('Enter')
+  await expect(input).toHaveValue('')
+  await expect(p.getByText('code-review', { exact: true })).toBeVisible()
 })
 
 test('a run is renamed once however often Enter is pressed, and shows its new name', async ({ page: p }) => {

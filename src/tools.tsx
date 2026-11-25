@@ -24,7 +24,7 @@ export function compose(prompt: string, files: Attached[]): string {
 }
 
 /** Read `list` into `have`, within the caps; answers the new list and what was refused, in the language of `t`. */
-export async function read(have: Attached[], list: FileList, t: Say = english): Promise<{ files: Attached[]; note: string }> {
+export async function read(have: Attached[], list: ArrayLike<File>, t: Say = english): Promise<{ files: Attached[]; note: string }> {
   const files = [...have]
   let total = files.reduce((n, f) => n + f.text.length, 0)
   let note = ''
