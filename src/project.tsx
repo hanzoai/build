@@ -282,7 +282,8 @@ export function Project({ at }: { at: Where }) {
   const run = useRun(target, current)
   const end = outcome(run.events)
   const pr = pull(run.record?.pr ?? '', run.record?.repo ?? '')
-  const running = LIVE.has(run.status || end.status)
+  const runState = end.status && !LIVE.has(end.status) && LIVE.has(run.status) ? end.status : run.status || end.status
+  const running = LIVE.has(runState)
 
   const [view, setView] = useKept<ViewId>(`hanzo.build.view.${slug}`, 'preview')
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
@@ -683,8 +684,11 @@ export function Project({ at }: { at: Where }) {
         <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label={t('Device')} labels="none" />
         {src ? (
           <Out href={src} label={t('Open in a new tab')}>
-            <XStack p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
-              <ExternalLink size={16} />
+            <XStack items="center" gap="$1.5" px="$2" py="$1" rounded="$3" hoverStyle={{ bg: '$hover' }}>
+              <SizableText size="$1" color="$soft" $max-md={{ display: 'none' }}>
+                {t('Preview')}
+              </SizableText>
+              <ExternalLink size={15} />
             </XStack>
           </Out>
         ) : null}
@@ -891,7 +895,7 @@ export function Project({ at }: { at: Where }) {
               variant="primary"
               aria-label={t('Publish')}
               disabled={!clone || !slug}
-              onPress={() => setPublish({ repo: clone, title, ref, name: slug, project: slug })}
+              onPress={() => setPublish({ repo: clone, title, ref, name: slug, project: slug, preview: project?.live || undefined })}
             >
               <Upload size={14} />
               {/* A glyph alone on a phone, where the bar's middle needs the room. */}

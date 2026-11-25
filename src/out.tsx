@@ -12,7 +12,7 @@ export function Out({ href, label, children }: { href: string; label?: string; c
       target="_blank"
       rel="noopener noreferrer"
       aria-label={label}
-      style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+      style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}
     >
       {children}
     </a>

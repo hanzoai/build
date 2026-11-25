@@ -321,7 +321,7 @@ function Projects() {
                   onChangeText={setQ}
                   placeholder={t('Find a project…')}
                   aria-label={t('Find a project')}
-                  startAdornment={<Search size={14} color="$soft" />}
+                  startAdornment={<Search size={14} color="$soft" aria-hidden />}
                   endAdornment={
                     q ? (
                       <XStack
@@ -354,8 +354,8 @@ function Projects() {
             ) : (
               <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
                 <XStack px="$3" py="$2" gap="$3" items="center" bg="$panel">
-                  <XStack flex={1} render="button" aria-label={t('Sort by name')} items="center" gap="$1" onPress={() => setSort('name')}>
-                    <SizableText size="$1" color="$soft">
+                  <XStack flex={1} minW={0} render="button" aria-label={t('Sort by name')} items="center" gap="$1" onPress={() => setSort('name')}>
+                    <SizableText size="$1" color="$soft" numberOfLines={1}>
                       {t('Name')}
                     </SizableText>
                     {sort === 'name' ? <ChevronDown size={12} /> : null}
@@ -363,8 +363,8 @@ function Projects() {
                   <SizableText size="$1" color="$soft" width={120} $max-md={{ display: 'none' }}>
                     {t('Branch')}
                   </SizableText>
-                  <XStack render="button" aria-label={t('Sort by last updated')} items="center" justify="flex-end" gap="$1" width={120} onPress={() => setSort('updated')}>
-                    <SizableText size="$1" color="$soft">
+                  <XStack render="button" aria-label={t('Sort by last updated')} items="center" justify="flex-end" gap="$1" width={120} shrink={0} $max-md={{ width: 84 }} onPress={() => setSort('updated')}>
+                    <SizableText size="$1" color="$soft" numberOfLines={1}>
                       {t('Updated')}
                     </SizableText>
                     {sort === 'updated' ? <ChevronDown size={12} /> : null}
@@ -393,17 +393,19 @@ function Projects() {
                           minH={44}
                           focusVisibleStyle={RING_INSET}
                         >
-                          <FolderGit2 size={15} color="$soft" />
+                          <XStack shrink={0}>
+                            <FolderGit2 size={15} color="$soft" aria-hidden />
+                          </XStack>
                           <YStack flex={1} minW={0}>
                             {/* `org/name` is an address: it keeps its own order in a right-to-left page. */}
-                            <XStack minW={0} items="baseline" self="flex-start" {...{ 'data-i18n-ltr': '' }}>
+                            <XStack minW={0} maxW="100%" overflow="hidden" items="baseline" self="flex-start" {...{ 'data-i18n-ltr': '' }}>
                               {/* The org gives way first: a long one (a wallet's is 27 characters) must not run under the Updated column. */}
                               {c.org ? (
                                 <SizableText size="$2" color="$soft" numberOfLines={1} shrink={100} minW={0}>
                                   {`${c.org}/`}
                                 </SizableText>
                               ) : null}
-                              <SizableText size="$2" color="$ink" fontWeight="500" numberOfLines={1} shrink={1}>
+                              <SizableText size="$2" color="$ink" fontWeight="500" numberOfLines={1} shrink={1} minW={0}>
                                 {c.name}
                               </SizableText>
                             </XStack>
@@ -419,7 +421,7 @@ function Projects() {
                               {c.branch}
                             </SizableText>
                           </XStack>
-                          <SizableText size="$1" color="$soft" width={120} shrink={0} text="end">
+                          <SizableText size="$1" color="$soft" width={120} shrink={0} $max-md={{ width: 84 }} text="end" numberOfLines={1}>
                             {syncing.has(c.name) ? t('Syncing…') : ago(c.updated)}
                           </SizableText>
                         </XStack>

@@ -56,4 +56,28 @@ describe('a run as it reads (hanzo-inc/app issues 317 and 321)', () => {
     expect(html).toContain('cd ~ &amp;&amp; npm run build')
     expect(html).toContain('Started on agent/16a6bce87b3e')
   })
+
+  it('draws an Add funds button on insufficient-balance Error steps, and omits it on other errors (#363/#364)', () => {
+    const balanceCards: Card[] = [
+      { kind: 'said', key: 'a', who: 'person', text: 'Make a page' },
+      { kind: 'note', key: 'n', text: 'Your balance is out of credit. Add credit, then try again.' },
+      { kind: 'step', key: 'e', name: 'Error', detail: '', output: 'metering: insufficient balance', ran: 'error' },
+    ]
+    const withFunds = renderToStaticMarkup(h(Transcript, { cards: balanceCards, live: false, empty: null, devMode: false, onAddFunds: () => {} } as never))
+    expect(withFunds).toContain('Add funds')
+
+    const vendor402Cards: Card[] = [
+      { kind: 'said', key: 'a', who: 'person', text: 'Make a page' },
+      { kind: 'note', key: 'n', text: 'Your balance is out of credit. Add credit, then try again.', funds: true },
+    ]
+    const withVendorFunds = renderToStaticMarkup(h(Transcript, { cards: vendor402Cards, live: false, empty: null, devMode: false, onAddFunds: () => {} } as never))
+    expect(withVendorFunds.match(/Add funds/g)).toHaveLength(1)
+
+    const buildErrorCards: Card[] = [
+      { kind: 'said', key: 'a', who: 'person', text: 'Make a page' },
+      { kind: 'step', key: 'e', name: 'Error', detail: '', output: 'TypeError: undefined is not a function', ran: 'error' },
+    ]
+    const withoutFunds = renderToStaticMarkup(h(Transcript, { cards: buildErrorCards, live: false, empty: null, devMode: false, onAddFunds: () => {} } as never))
+    expect(withoutFunds).not.toContain('Add funds')
+  })
 })

@@ -25,7 +25,7 @@ import { Code, GAP, MEASURE, Message, Step, Thread } from '@hanzo/ui/chat'
 import { useState, type ReactNode } from 'react'
 
 import { counted, edited, explored } from './api/cli.ts'
-import type { Card, Ran } from './api/turn.ts'
+import { needsFunds, type Card, type Ran } from './api/turn.ts'
 import { useDevMode } from './dev-mode.ts'
 import { doing, fold, plainPath, ranOf, worked, type Work } from './plain.ts'
 import { Prose } from './prose.tsx'
@@ -88,6 +88,7 @@ export function Transcript({
   onSendQueued,
   onRun,
   onAnswer,
+  onAddFunds,
   devMode,
 }: {
   cards: Card[]
@@ -118,6 +119,8 @@ export function Transcript({
   onRun?: (session: string) => void
   /** Answer a question the run asked with one of its options. Absent, a question has no buttons. */
   onAnswer?: (question: string, label: string) => void
+  /** Recovery action when a run stops because the account is out of credit (#363/#364). */
+  onAddFunds?: () => void
   /**
    * Draw every command, read, edit and step as its own card. Off, each run of
    * them folds into one plain line that opens onto them (plain.ts), so the
@@ -240,9 +243,16 @@ export function Transcript({
           <Step key={`${c.key}:${view}`} name={t(c.name)} detail={c.detail} status={state(c.ran)} defaultOpen={c.name === 'Error' || expandVerbose} aria-label={`${t(c.name)} ${c.detail}`.trim()}>
             {c.name === 'Error' ? (
               // The reason is read whole, wrapped, never scrolled sideways.
-              <SizableText size="$2" color="$ink" style={{ ...mono, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                {c.output}
-              </SizableText>
+              <YStack gap="$2" items="flex-start">
+                <SizableText size="$2" color="$ink" style={{ ...mono, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  {c.output}
+                </SizableText>
+                {onAddFunds && needsFunds(c.output) ? (
+                  <Button size="sm" variant="primary" onPress={onAddFunds}>
+                    {t('Add funds')}
+                  </Button>
+                ) : null}
+              </YStack>
             ) : c.output.trim() ? (
               <Code language="output" value={c.output}>
                 {tail(c.output.replace(/\n+$/, ''))}
@@ -268,6 +278,18 @@ export function Transcript({
                 </SizableText>
               </XStack>
             </XStack>
+          )
+        }
+        if (c.funds && onAddFunds) {
+          return (
+            <YStack key={c.key} gap="$2" items="flex-start" role="note">
+              <SizableText size="$1" color="$soft">
+                {noteText}
+              </SizableText>
+              <Button size="sm" variant="primary" onPress={onAddFunds}>
+                {t('Add funds')}
+              </Button>
+            </YStack>
           )
         }
         return (

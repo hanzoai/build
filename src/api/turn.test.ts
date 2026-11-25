@@ -274,6 +274,47 @@ describe('cards', () => {
     ])
   })
 
+  it('surfaces log errors in failure(), outcome(), settled(), and cards() even without runId (#363/#364)', async () => {
+    const mod = (await import('./turn.ts')) as typeof import('./turn.ts') & { needsFunds?: (e: string) => boolean }
+    const refused = ev(2, 'log', { error: 'metering: insufficient balance' })
+    const seq = [ev(1, 'message', { role: 'user', text: 'Make a page' }), refused]
+    expect(bare(cards(seq))).toEqual([
+      { kind: 'said', who: 'person', text: 'Make a page' },
+      { kind: 'note', text: 'Your balance is out of credit. Add credit, then try again.' },
+      { kind: 'step', name: 'Error', detail: '', output: 'metering: insufficient balance', ran: 'error' },
+    ])
+    expect(mod.failure(seq)).toBe('metering: insufficient balance')
+    expect(mod.outcome(seq).status).toBe('error')
+    expect(mod.settled(seq).settled).toBe(true)
+    expect(mod.needsFunds?.('metering: insufficient balance')).toBe(true)
+    expect(mod.needsFunds?.('402 Payment Required')).toBe(true)
+    expect(mod.needsFunds?.('This plan free sandboxes are used')).toBe(true)
+    expect(mod.needsFunds?.('SyntaxError: unexpected token')).toBe(false)
+
+    // Multi-turn Talk: a new turn after Turn 1's log error clears stale error outcome/failure/settled.
+    const turn2 = [...seq, ev(3, 'message', { role: 'user', text: 'Try again now' }), ev(4, 'progress', { text: 'Thinking' })]
+    expect(mod.outcome(turn2).status).toBe('')
+    expect(mod.failure(turn2)).toBe('')
+    expect(mod.settled(turn2).settled).toBe(false)
+
+    // Raw app/command JSON log lines must not trigger false run errors.
+    const rawLogs = [
+      ev(1, 'log', { level: 'error', error: 'fixture connection refused' }),
+      ev(2, 'log', { message: 'retrying', status: '' }),
+      ev(3, 'log', { text: 'stdout', error: 'warn' }),
+      ev(4, 'log', { error: '   ' }),
+    ]
+    expect(cards(rawLogs)).toEqual([])
+    expect(mod.outcome(rawLogs).status).toBe('')
+    expect(mod.failure(rawLogs)).toBe('')
+
+    // Vendor JSON 402 error hides raw Error step, so the note card carries `funds: true`.
+    const vendor402 = [ev(1, 'log', { error: '402 Payment Required: {"error":"insufficient balance"}' })]
+    expect(bare(cards(vendor402))).toEqual([
+      { kind: 'note', text: 'Your balance is out of credit. Add credit, then try again.', funds: true },
+    ])
+  })
+
   it('never draws a log line: raw output is the Terminal’s', () => {
     expect(cards([ev(1, 'log', 'codex\nhi\n'), ev(2, 'log', { text: 'there\n' }), ev(3, 'log', {})])).toEqual([])
   })
