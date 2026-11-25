@@ -851,6 +851,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               <XStack
                 render="button"
                 aria-label={say('Toggle environment column')}
+                {...({ title: say('Toggle environment column') } as object)}
                 aria-pressed={envColumn}
                 onPress={() => {
                   if (!desk) setDesk(true)
@@ -870,6 +871,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               <XStack
                 render="button"
                 aria-label={say(devMode ? 'Toggle terminal pane' : 'Toggle activity pane')}
+                {...({ title: say(devMode ? 'Toggle terminal pane' : 'Toggle activity pane') } as object)}
                 aria-pressed={splitPanes.includes('terminal')}
                 onPress={() => toggleDockPane('terminal', say(devMode ? 'Terminal' : 'Activity'))}
                 minW={32}
@@ -886,6 +888,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               <XStack
                 render="button"
                 aria-label={say('Toggle diff pane')}
+                {...({ title: say('Toggle diff pane') } as object)}
                 aria-pressed={splitPanes.includes('diff')}
                 onClick={() => toggleDockPane('diff', say('Diff'))}
                 minW={32}
@@ -902,6 +905,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               <XStack
                 render="button"
                 aria-label={say('Toggle browser pane')}
+                {...({ title: say('Toggle browser pane') } as object)}
                 aria-pressed={splitPanes.includes('preview')}
                 onClick={() => toggleDockPane('preview', say('Preview'))}
                 minW={32}
@@ -918,6 +922,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               <XStack
                 render="button"
                 aria-label={say('Toggle files pane')}
+                {...({ title: say('Toggle files pane') } as object)}
                 aria-pressed={splitPanes.includes('files')}
                 onClick={() => toggleDockPane('files', say('Files'))}
                 minW={32}
@@ -933,7 +938,14 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               </XStack>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <XStack render="button" aria-label={say('More workspace options')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+                  <XStack
+                    render="button"
+                    aria-label={say('More workspace options')}
+                    {...({ title: say('More workspace options') } as object)}
+                    p="$1.5"
+                    rounded="$2"
+                    hoverStyle={{ bg: '$hover' }}
+                  >
                     <MoreHorizontal size={15} opacity={0.7} />
                   </XStack>
                 </DropdownMenuTrigger>

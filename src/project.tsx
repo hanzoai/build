@@ -676,7 +676,15 @@ export function Project({ at }: { at: Where }) {
     <YStack data-slot="preview" flex={1} minH={0} minW={0} gap="$2" display={view === 'preview' ? 'flex' : 'none'}>
       {/* The framed page's own controls, beside it: reload, the page, the width, and the page in a tab of its own. */}
       <XStack data-slot="preview-bar" items="center" gap="$1.5" minW={0} shrink={0} $max-md={{ px: '$2' }}>
-        <XStack render="button" aria-label={t('Reload the preview')} onPress={() => frame.current?.reload()} p="$1.5" rounded="$3" hoverStyle={{ bg: '$hover' }}>
+        <XStack
+          render="button"
+          aria-label={t('Reload the preview')}
+          {...({ title: t('Reload the preview') } as object)}
+          onPress={() => frame.current?.reload()}
+          p="$1.5"
+          rounded="$3"
+          hoverStyle={{ bg: '$hover' }}
+        >
           <RefreshCcw size={16} />
         </XStack>
         <PageSelect pages={pages} value={page} onChange={setPage} shrink={1} />
@@ -745,6 +753,7 @@ export function Project({ at }: { at: Where }) {
               render="button"
               aria-pressed={editing}
               aria-label={editing ? t('Stop picking elements') : t('Pick an element to edit')}
+              {...({ title: editing ? t('Stop picking elements') : t('Pick an element to edit') } as object)}
               onPress={() => {
                 const next = !editing
                 setEditing(next)
@@ -854,17 +863,34 @@ export function Project({ at }: { at: Where }) {
           // Shrinks with the bar, so the project's name truncates rather than
           // running under Publish on a phone.
           <XStack items="center" gap="$2" minW={0} shrink={1}>
-            <XStack render="button" aria-label={t('All runs')} onPress={() => host.go('')} p="$1" shrink={0}>
+            <XStack
+              render="button"
+              aria-label={t('All runs')}
+              {...({ title: t('All runs') } as object)}
+              onPress={() => host.go('')}
+              p="$1"
+              shrink={0}
+            >
               <HanzoMark size={20} />
             </XStack>
             <ProjectChip name={title} onPress={() => setSwitcher(true)} />
-            <XStack render="button" aria-label={t('History')} onPress={() => setHistory(true)} p="$1.5" rounded="$3" shrink={0} hoverStyle={{ bg: '$hover' }}>
+            <XStack
+              render="button"
+              aria-label={t('History')}
+              {...({ title: t('History') } as object)}
+              onPress={() => setHistory(true)}
+              p="$1.5"
+              rounded="$3"
+              shrink={0}
+              hoverStyle={{ bg: '$hover' }}
+            >
               <Clock size={16} />
             </XStack>
             {/* The chat folds away beside the work; on a phone the views switch to it instead. */}
             <XStack
               render="button"
               aria-label={shut ? t('Show the chat') : t('Hide the chat')}
+              {...({ title: shut ? t('Show the chat') : t('Hide the chat') } as object)}
               aria-pressed={!shut}
               onClick={() => (cramped ? setAsked(!asked) : setCollapsed(!collapsed))}
               minW={32}

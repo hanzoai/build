@@ -491,6 +491,7 @@ function Actions({
         <XStack
           render="button"
           aria-label={t('Page actions')}
+          {...({ title: t('Page actions') } as object)}
           width={PILL}
           height={PILL}
           {...quiet()}
@@ -564,6 +565,7 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
           <XStack
             render="button"
             aria-label={t('Back')}
+            {...({ title: t('Back') } as object)}
             aria-disabled={!back || undefined}
             onPress={back ? onBack : undefined}
             width={28}
@@ -575,6 +577,7 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
           <XStack
             render="button"
             aria-label={t('Forward')}
+            {...({ title: t('Forward') } as object)}
             aria-disabled={!ahead || undefined}
             onPress={ahead ? onForward : undefined}
             width={28}
@@ -586,6 +589,7 @@ export function Page({ tab, onGo, onBack, onForward, onTitle, onPin, suggested =
           <XStack
             render="button"
             aria-label={t('Reload this tab')}
+            {...({ title: t('Reload this tab') } as object)}
             onPress={() => again((n) => n + 1)}
             width={28}
             height={28}
@@ -898,6 +902,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
     <XStack
       render="button"
       aria-label={say('Open a tab')}
+      {...({ title: say('Open a tab') } as object)}
       width={28}
       height={28}
       {...quiet()}
@@ -948,6 +953,7 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
         <XStack
           render="button"
           aria-label={say('Open this tab in a new window')}
+          {...({ title: say('Open this tab in a new window') } as object)}
           aria-disabled={!poppable || undefined}
           onPress={poppable ? () => popOut(tab) : undefined}
           width={28}

@@ -224,6 +224,7 @@ export function Desk({
                   <XStack
                     render="button"
                     aria-label={say('Expand {pane}', { pane: k.label })}
+                    {...({ title: say('Expand {pane}', { pane: k.label }) } as object)}
                     onClick={() => onExpandSplitPane(pid)}
                     minW={30}
                     minH={30}
@@ -240,6 +241,7 @@ export function Desk({
                   <XStack
                     render="button"
                     aria-label={say('Close {pane}', { pane: k.label })}
+                    {...({ title: say('Close {pane}', { pane: k.label }) } as object)}
                     onClick={() => onCloseSplitPane(pid)}
                     minW={30}
                     minH={30}
@@ -597,13 +599,31 @@ function Browser({
     <YStack flex={1} minH={0}>
       {dialog}
       <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
-        <XStack render="button" aria-label={say('Reload the page')} onPress={() => setAttempt((a) => a + 1)} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+        <XStack
+          render="button"
+          aria-label={say('Reload the page')}
+          {...({ title: say('Reload the page') } as object)}
+          onPress={() => setAttempt((a) => a + 1)}
+          p="$1.5"
+          rounded="$2"
+          hoverStyle={{ bg: '$hover' }}
+        >
           <RefreshCcw size={14} />
         </XStack>
         {open.length > 1 ? (
           <XStack gap="$1">
             {open.map((p) => (
-              <XStack key={p.port} render="button" aria-label={say('Port {port}', { port: p.port })} onPress={() => setPort(p.port)} px="$2" py="$1" rounded="$2" bg={p.port === port ? '$hover' : 'transparent'}>
+              <XStack
+                key={p.port}
+                render="button"
+                aria-label={say('Port {port}', { port: p.port })}
+                {...({ title: say('Port {port}', { port: p.port }) } as object)}
+                onPress={() => setPort(p.port)}
+                px="$2"
+                py="$1"
+                rounded="$2"
+                bg={p.port === port ? '$hover' : 'transparent'}
+              >
                 <SizableText size="$1" color={p.port === port ? '$ink' : '$soft'}>
                   {String(p.port)}
                 </SizableText>
@@ -721,7 +741,15 @@ function Site({
   return (
     <YStack flex={1} minH={0}>
       <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
-        <XStack render="button" aria-label={t('Reload the page')} onPress={() => frame.current?.reload()} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+        <XStack
+          render="button"
+          aria-label={t('Reload the page')}
+          {...({ title: t('Reload the page') } as object)}
+          onPress={() => frame.current?.reload()}
+          p="$1.5"
+          rounded="$2"
+          hoverStyle={{ bg: '$hover' }}
+        >
           <RefreshCcw size={14} />
         </XStack>
         <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
