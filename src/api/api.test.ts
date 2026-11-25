@@ -462,8 +462,18 @@ describe('places, projects, git, platform', () => {
       ref: 'deploy/hanzo/site/bld_1',
       review: 'https://github.com/hanzoai/universe/compare/main...deploy',
       live: false,
+      hosts: [],
       notice: REVIEW,
     })
+  })
+
+  it('parses safe https live hosts from app.hosts and ignores unsafe schemes (#365)', async () => {
+    answer(202, {
+      app: { name: 'site', hosts: ['my-site.hanzo.app', 'https://custom.example.com', 'javascript:alert(1)', 'http://insecure.example', '..bad.com', '-bad.com'] },
+      declaration: { mode: 'branch', ref: 'main', live: true },
+    })
+    const out = await platform.declare(T, { repo: 'r', ref: 'main', name: 'site', project: 'site', mode: 'branch' })
+    expect(out.hosts).toEqual(['https://my-site.hanzo.app', 'https://custom.example.com'])
   })
 
   it('never shows a review link that is not https', async () => {

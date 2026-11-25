@@ -134,15 +134,39 @@ export function vendor(error: string): boolean {
 /** An error as the run page may show it: its own words, or the plain line when they are a vendor's. */
 export const scrub = (error: string, t: Say = english): string => (vendor(error) ? plain(error, t) : error)
 
+const OURS_RE = /providers_exhausted|every provider refused|temporarily unavailable/i
+const FREE_SANDBOXES_RE = /free sandboxes .*are used/i
+const FUNDS_RE = /\b402 Payment Required|insufficient (credit|balance)|top up/i
+
+/** Whether an error message indicates insufficient balance / credit / free-sandbox exhaustion (#363/#364). */
+export function needsFunds(error: string): boolean {
+  if (!error) return false
+  if (FREE_SANDBOXES_RE.test(error)) return true
+  return !OURS_RE.test(error) && FUNDS_RE.test(error)
+}
+
+/** Extract an error reason from a `log` event payload, or null for ordinary/raw log lines (#363/#364). */
+function logError(b: Record<string, unknown> | null): string | null {
+  if (!b) return null
+  const err = str(b.error).trim()
+  if (str(b.runId)) {
+    return str(b.status) === 'error' || err ? err : null
+  }
+  // Without runId, exclude raw command/app log shapes so stdout/stderr JSON lines cannot fake a run failure.
+  if ('stdout' in b || 'stderr' in b || 'text' in b || 'command' in b || 'level' in b || 'msg' in b) return null
+  if (str(b.status) === 'error' || err) return err
+  return null
+}
+
 /**
  * A run's error as one plain line with what to do, never the log it came from:
  * that goes in the Error step beside it (cards), unless it is a vendor's.
  */
 export function plain(error: string, t: Say = english): string {
   if (!error) return t('The run hit an error')
-  const ours = /providers_exhausted|every provider refused|temporarily unavailable/i.test(error)
-  if (/free sandboxes .*are used/i.test(error)) return t('This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.')
-  if (!ours && /\b402 Payment Required|insufficient (credit|balance)|top up/i.test(error)) return t('Your balance is out of credit. Add credit, then try again.')
+  const ours = OURS_RE.test(error)
+  if (FREE_SANDBOXES_RE.test(error)) return t('This plan’s free sandboxes are used for now. Add credit to keep building, or try again later.')
+  if (needsFunds(error)) return t('Your balance is out of credit. Add credit, then try again.')
   if (ours || /\b(429 Too Many Requests|503 Service Unavailable)|stream disconnected|retries exhausted|rate limit/i.test(error))
     return t('The model did not answer. Try again in a moment, or pick another model.')
   return t('The run stopped with an error. Try again, or follow up with what to change.')
@@ -170,6 +194,10 @@ export function said(e: Pick<Event, 'kind' | 'payload'>, mode = '', t: Say = eng
         : t('Done — changed {n} files', { n: names.length })
   }
   if (str(body.type) === 'error') return scrub(str(body.error), t) || t('The run hit an error')
+  if (e.kind === 'log') {
+    const err = logError(body)
+    if (err !== null) return scrub(err, t) || t('The run hit an error')
+  }
   return str(body.step) || str(body.name)
 }
 
@@ -262,27 +290,56 @@ export interface Outcome {
  * What the run narrated about how it ended, latest winning. Status text only:
  * the branch and the pull request are read from the run's record (`pull`).
  */
+/** Whether an event starts or progresses a turn after an earlier turn's error (#363/#364). */
+function resumesTurn(kind: string, b: Record<string, unknown> | null): boolean {
+  if (kind === 'progress' || kind === 'spawn') return true
+  if (kind === 'message') return true
+  if (kind === 'tool-call') return true
+  if (kind === 'event' && b) {
+    const t = str(b.type)
+    return t !== 'error' && t !== 'turn.failed'
+  }
+  return false
+}
+
 export function outcome(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): Outcome {
   const out: Outcome = { status: '', problem: '', published: 0 }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
-    if (e.kind !== 'status') continue
-    const b = decode(e.payload)
-    if (!b || typeof b === 'string') continue
-    out.status = str(b.status) || out.status
-    out.problem = str(b.prError) || out.problem
-    if (str(b.live)) out.published = e.seq
+    const decoded = decode(e.payload)
+    const b = decoded && typeof decoded === 'object' ? decoded : null
+    if (e.kind === 'log') {
+      if (logError(b) !== null) out.status = 'error'
+      continue
+    }
+    if (e.kind === 'status') {
+      if (!b) continue
+      out.status = str(b.status) || out.status
+      out.problem = str(b.prError) || out.problem
+      if (str(b.live)) out.published = e.seq
+      continue
+    }
+    if (out.status === 'error' && resumesTurn(e.kind, b)) out.status = ''
   }
   return out
 }
 
-/** Why the run failed, as its last status says it, or '' when that status is not a failure. */
+/** Why the run failed, as its last status or error log says it, or '' when that status is not a failure. */
 export function failure(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], t: Say = english): string {
   let out = ''
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
-    if (e.kind !== 'status') continue
-    const b = decode(e.payload)
-    if (!b || typeof b === 'string' || !str(b.status)) continue
-    out = str(b.status) === 'error' ? scrub(str(b.error), t) || t('The run hit an error') : ''
+    const decoded = decode(e.payload)
+    const b = decoded && typeof decoded === 'object' ? decoded : null
+    if (e.kind === 'log') {
+      const err = logError(b)
+      if (err !== null) out = scrub(err, t) || t('The run hit an error')
+      continue
+    }
+    if (e.kind === 'status') {
+      if (!b || !str(b.status)) continue
+      out = str(b.status) === 'error' ? scrub(str(b.error), t) || t('The run hit an error') : ''
+      continue
+    }
+    if (out && resumesTurn(e.kind, b)) out = ''
   }
   return out
 }
@@ -343,7 +400,7 @@ export type Card =
   | { kind: 'step'; key: string; name: string; detail: string; output: string; ran: Ran }
   | { kind: 'todo'; key: string; items: { text: string; done: boolean }[] }
   /** `step`: a line about the run getting going (started, sent to a machine), the process rather than its end. */
-  | { kind: 'note'; key: string; text: string; step?: true }
+  | { kind: 'note'; key: string; text: string; step?: true; funds?: true }
   | { kind: 'plan'; key: string; text: string }
   | { kind: 'run'; key: string; session: string }
   | { kind: 'ask'; key: string; question: string; text: string; options: string[]; answer: string }
@@ -469,9 +526,11 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
   const failed = (message: string) => {
     if (failures.has(message)) return
     failures.add(message)
-    out.push({ kind: 'note', key: mint(), text: plain(message, t) })
+    const rawStep = Boolean(message && !vendor(message))
+    const noteFunds = !rawStep && needsFunds(message)
+    out.push({ kind: 'note', key: mint(), text: plain(message, t), ...(noteFunds ? { funds: true as const } : {}) })
     // The reason, read whole, when it is the run's own; a vendor's words stay off the page.
-    if (message && !vendor(message)) out.push({ kind: 'step', key: mint(), name: phrase('Error'), detail: '', output: message, ran: 'error' })
+    if (rawStep) out.push({ kind: 'step', key: mint(), name: phrase('Error'), detail: '', output: message, ran: 'error' })
   }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     seq = e.seq
@@ -584,9 +643,10 @@ export function cards(events: Pick<Event, 'kind' | 'payload' | 'seq'>[], mode = 
         break
       }
       case 'log': {
-        // A conversation's turn that failed says why on its record of the run. A turn the platform refuses
-        // before it starts (no balance) carries the reason and no status, and is a failure all the same.
-        if (b && str(b.runId) && (str(b.status) === 'error' || str(b.error))) failed(str(b.error))
+        // A conversation's turn or coding run that failed says why on its record of the run.
+        // A turn the platform refuses before it starts (no balance) carries the reason and no status.
+        const err = logError(b)
+        if (err !== null) failed(err)
         break
       }
     }
@@ -690,13 +750,26 @@ export interface Settled {
 export function settled(events: Pick<Event, 'kind' | 'payload' | 'seq'>[]): Settled {
   const out: Settled = { settled: false, pushed: false }
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
-    if (e.kind !== 'status') continue
-    const b = decode(e.payload)
-    if (!b || typeof b === 'string') continue
+    const decoded = decode(e.payload)
+    const b = decoded && typeof decoded === 'object' ? decoded : null
+    if (e.kind === 'log') {
+      if (logError(b) !== null) {
+        out.settled = true
+        out.pushed = false
+      }
+      continue
+    }
+    if (e.kind !== 'status') {
+      if (out.settled && resumesTurn(e.kind, b)) out.settled = false
+      continue
+    }
+    if (!b) continue
     const s = str(b.status)
     if (s === 'done' || s === 'error' || s === 'stopped' || s === 'paused') {
       out.settled = true
       out.pushed = b.changed === true
+    } else if (s) {
+      out.settled = false
     }
   }
   return out

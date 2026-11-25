@@ -83,6 +83,7 @@ import { Desk, SEED } from './desk.tsx'
 import { useDevMode } from './dev-mode.ts'
 import { KeepAwake, useKeepAwake } from './awake.tsx'
 import { useHost, useTarget, type Ask as Question } from './host.tsx'
+import { path } from './route.ts'
 import { useSpend } from './spend.tsx'
 import { level, pacing, useMind } from './mind.ts'
 import { Out } from './out.tsx'
@@ -174,7 +175,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const plan = useMemo(() => steps(events), [events])
   const kept = useMemo(() => settled(events), [events])
   const next = useMemo(() => followed(events), [events])
-  const state = status || end.status
+  const state = end.status && !LIVE.has(end.status) && LIVE.has(status) ? end.status : status || end.status
   // Where the run's work is published: its project's own address, read again when
   // the run says it went live, never an address an event names.
   const built = useProjects(t, signed && Boolean(record?.project))
@@ -1013,6 +1014,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           onAnswer={signed ? (q, label) => void act(async () => (await reply(t, id, q, label, true), '')) : undefined}
           approving={busy}
           onVerdict={(v) => verdict(t, id, record?.project ?? '', v)}
+          onAddFunds={() => (host.topUp ? host.topUp() : host.go(path({ kind: 'settings', section: 'billing' })))}
           empty={
             signed ? (
               <SizableText size="$2" color="$soft">

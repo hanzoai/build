@@ -471,7 +471,7 @@ describe('platform', () => {
     const seen = answer(202, { app: { name: 'site' }, declaration: { mode: 'commit', ref: 'main', live: true } })
     const out = await platform.declare(T, { repo: 'https://github.com/acme/site.git', ref: 'main', name: 'site', project: 'shop', mode: 'commit', tag: 'bld_1' })
     expect(seen[0].body).toEqual({ repo: 'https://github.com/acme/site.git', ref: 'main', name: 'site', partOf: 'shop', mode: 'commit', tag: 'bld_1' })
-    expect(out).toEqual({ build: null, mode: 'commit', ref: 'main', review: '', live: true, notice: '' })
+    expect(out).toEqual({ build: null, mode: 'commit', ref: 'main', review: '', live: true, hosts: [], notice: '' })
   })
 
   it('reads a repository in the org’s own workspace as its project’s site: live, with the notice and no review', async () => {
@@ -488,13 +488,14 @@ describe('platform', () => {
       ref: 'main',
       review: '',
       live: true,
+      hosts: [],
       notice,
     })
   })
 
   it('reads an empty answer as a declaration of nothing, and a notice that is not a sentence as none', async () => {
     answer(202, undefined)
-    expect(await platform.declare(T, { repo: 'r', ref: 'main', name: 'a', project: 'a', mode: 'branch' })).toEqual({ build: null, mode: '', ref: '', review: '', live: false, notice: '' })
+    expect(await platform.declare(T, { repo: 'r', ref: 'main', name: 'a', project: 'a', mode: 'branch' })).toEqual({ build: null, mode: '', ref: '', review: '', live: false, hosts: [], notice: '' })
     answer(202, { declaration: { live: 'yes' }, notice: 7 })
     expect(await platform.declare(T, { repo: 'r', ref: 'main', name: 'a', project: 'a', mode: 'branch' })).toMatchObject({ live: false, notice: '' })
   })

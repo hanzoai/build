@@ -41,6 +41,8 @@ export interface Declared {
   review: string
   /** Whether anything can deploy from this write. */
   live: boolean
+  /** Verified https live host URLs declared on the app, if returned by the platform (#365). */
+  hosts: string[]
   /** What the platform says of this write in a sentence, or ''. */
   notice: string
 }
@@ -89,12 +91,22 @@ export async function declare(t: Target, d: Declare): Promise<Declared> {
   const raw = obj(await call<unknown>(t, 'POST', '/v1/platform/apps', body(d)))
   const b = raw.build ? obj(raw.build) : null
   const dec = obj(raw.declaration)
+  const app = obj(raw.app)
+  const hosts = (Array.isArray(app.hosts) ? app.hosts : [])
+    .map((h) => {
+      const s = str(h).trim()
+      if (!s) return ''
+      if (s.includes('://')) return https(s)
+      return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i.test(s) ? `https://${s}` : ''
+    })
+    .filter(Boolean)
   return {
     build: b ? { id: str(b.id), job: str(b.job), image: str(b.image), status: str(b.status) } : null,
     mode: str(dec.mode),
     ref: str(dec.ref),
     review: https(str(dec.review)),
     live: dec.live === true,
+    hosts,
     notice: str(raw.notice),
   }
 }

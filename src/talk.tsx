@@ -25,13 +25,14 @@ import { Refusal } from './api/call.ts'
 import { limits as readLimits } from './api/models.ts'
 import { log, message, stop, type Event } from './api/sessions.ts'
 import { answer, now, say as talk } from './api/talk.ts'
-import { cards, merge } from './api/turn.ts'
+import { cards, merge, outcome } from './api/turn.ts'
 import { verdict } from './api/verdict.ts'
 import { useRead, type RunState } from './data.ts'
 import { useHost, useTarget } from './host.tsx'
 import { level, useMind } from './mind.ts'
 import { pane } from './pane.ts'
 import { speaker } from './reply.tsx'
+import { path } from './route.ts'
 import { carrying, compose, pick, type Attached } from './tools.tsx'
 import { Transcript } from './transcript.tsx'
 
@@ -53,7 +54,9 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
   const mind = useMind(t, (limits as { plan?: string } | null)?.plan, host.topUp)
   const listen = useMemo(() => speaker(t), [t])
   const shown = useMemo(() => cards(events, '', say), [events, say])
-  const working = status === 'running'
+  const terminalError = useMemo(() => outcome(events).status === 'error', [events])
+  const working = status === 'running' && !terminalError
+  const addFunds = () => (host.topUp ? host.topUp() : host.go(path({ kind: 'settings', section: 'billing' })))
   const doing = useMemo(() => now(events), [events])
   // The conversation's mode, as it keeps it until the person picks another: what
   // they pick is sent with what they say next, and kept for every turn after.
@@ -115,6 +118,7 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
         onVerdict={(v) => verdict(t, id, '', v)}
         onRun={(session) => host.go(session)}
         onAnswer={(question, label) => void act(async () => (await answer(t, id, question, label, true), ''))}
+        onAddFunds={addFunds}
       />
       <YStack pb="$3" pt="$2" gap="$2">
         <YStack {...measure} gap="$2">
