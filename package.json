@@ -1,12 +1,15 @@
 {
   "name": "@hanzo/build",
-  "version": "0.2.151",
+  "version": "0.3.0",
   "type": "module",
   "license": "Apache-2.0 OR MIT",
-  "description": "Hanzo Build — say what you want, watch it built, deployed and running. The builder as a component, mounted by the Hanzo app at hanzo.ai.",
+  "description": "Compatibility shim — @hanzo/build has been merged into @hanzo/dev. Import from @hanzo/dev directly.",
   "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": ">=22.18"
+  },
+  "dependencies": {
+    "@hanzo/dev": "^4.1.0"
   },
   "scripts": {
     "dev": "vite",

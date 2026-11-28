@@ -1,5 +1,7 @@
 # Hanzo Build
 
+> **Merged into `@hanzo/dev`:** Starting with `@hanzo/dev@4.1.0` and `@hanzo/build@0.3.0`, `@hanzo/build` has been consolidated into [`@hanzo/dev`](https://github.com/hanzoai/dev) (`packages/dev`). This package is now a thin compatibility shim that re-exports from `@hanzo/dev/builder` and `@hanzo/dev/{plan,route,mind,handoff,dev-mode,names}`. New code should import from `@hanzo/dev` directly.
+
 [![Open in Hanzo](https://hanzo.app/badges/open-in-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/build&ref=main&action=open) [![Edit with Hanzo](https://hanzo.app/badges/edit-with-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/build&ref=main&action=edit) [![Deploy with Hanzo](https://hanzo.app/badges/deploy-with-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/build&ref=main&action=deploy)
 
 Say what you want. Hanzo writes it, runs it, and puts it on a live URL — with
