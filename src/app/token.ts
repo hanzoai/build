@@ -14,7 +14,26 @@
  * exception.
  */
 
-import { administers as admins, claims as read } from '../claims.ts'
+function read(token: string | null): Record<string, unknown> | null {
+  if (!token) return null
+  try {
+    const part = token.split('.')[1]
+    if (!part) return null
+    return JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+const ADMIN = ['owner', 'admin']
+function admins(token: string | null, targetOrg: string | null): boolean {
+  if (!targetOrg) return false
+  const set = read(token)?.orgs
+  return (Array.isArray(set) ? set : []).some((r) => {
+    const m = r as { org?: unknown; role?: unknown } | null
+    return m?.org === targetOrg && ADMIN.includes(m.role as string)
+  })
+}
 
 /** The SDK's own keys, `hanzo_iam_`-prefixed. The far side of a boundary. */
 const PREFIX = 'hanzo_iam_'

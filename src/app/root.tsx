@@ -12,13 +12,10 @@
 
 import { IamProvider, useIam } from '@hanzo/iam/react'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router'
 
-import { logo as mark } from '../api/members.ts'
-import { Builder } from '../builder.tsx'
-import type { Host, Person } from '../host.tsx'
-import { hold } from '../landing.tsx'
+import { Builder, type Host, type Person } from '@hanzo/dev/builder'
 import { enter, form } from './enter.ts'
 import { follow } from './stay.ts'
 import { administers, bearer, org, orgs, own, selectOrg, subject, watch } from './token.ts'
@@ -35,12 +32,6 @@ export function Mount() {
     if (!isLoading) own(subject())
   }, [isLoading, isAuthenticated])
 
-  // Another tab's sign-out or sign-in is this tab's too (token.ts `watch`). A
-  // reload settles the page on what the store now holds: someone else is drawn
-  // as themselves, and a tab left with nobody leaves for hanzo.id's sign-in
-  // form (enter.ts `form`). Followed from the first render, while the SDK is
-  // still settling on the token it read then, and again after this tab's own
-  // sign-in.
   useEffect(
     () =>
       watch(subject(), (now) => {
@@ -50,41 +41,14 @@ export function Mount() {
     [isAuthenticated],
   )
 
-  // Words carried on arrival are New's draft, and leave the address: a reload
-  // or a shared link must not carry them again.
-  useEffect(() => {
-    const q = new URLSearchParams(where.search)
-    const asked = q.get('q')?.trim()
-    if (!asked) return
-    hold({ draft: asked, files: [] })
-    q.delete('q')
-    const rest = q.toString()
-    navigate(`${where.pathname}${rest ? `?${rest}` : ''}${where.hash}`, { replace: true })
-  }, [where, navigate])
-
-  // Nobody is signed in: leave for hanzo.id, once IAM has said so.
   const out = !isLoading && !isAuthenticated
   useEffect(() => {
     if (out) enter(door)
-    // `door` is a new object each render; the answer is what decides.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [out])
 
   const scoped = org()
-  // The scoped org's own logo, read from IAM's record of it; none until it answers.
-  const [logo, setLogo] = useState('')
-  useEffect(() => {
-    setLogo('')
-    if (!scoped || !isAuthenticated) return
-    let live = true
-    mark({ api: api(import.meta.env), token: bearer, org: scoped }, scoped).then(
-      (l) => live && setLogo(l),
-      () => {},
-    )
-    return () => {
-      live = false
-    }
-  }, [scoped, isAuthenticated])
+  const logo = ''
   const person: Person | null = useMemo(() => {
     if (!isAuthenticated || !user) return null
     const u = user as { displayName?: string; name?: string; email?: string; avatar?: string }
