@@ -28,7 +28,7 @@ const host = (path = ''): Host => ({
 describe('the builder’s places, once for every rail', () => {
   it('lists every place, grouped in the order a customer asks, and nothing behind a More', () => {
     expect(nav(host(), () => {}).map((g) => [g.label, g.links.map((l) => l.label)])).toEqual([
-      ['Work', ['New run', 'Projects', 'Issues', 'Templates']],
+      ['Work', ['New session', 'Projects', 'Issues', 'Templates']],
       ['Make', ['Library', 'Scheduled tasks']],
       ['Run', ['Machines', 'Environments']],
       ['Setup', ['Customize', 'Docs']],
@@ -36,10 +36,10 @@ describe('the builder’s places, once for every rail', () => {
   })
 
   it('says each place in the caller’s language, and English with no caller', () => {
-    const FR: Record<string, string> = { Work: 'Travail', 'New run': 'Nouvelle exécution', Projects: 'Projets', Docs: 'Docs', Agents: 'Agents', Skills: 'Compétences', Upload: 'Importer', 'Make something new': 'Créer quelque chose' }
+    const FR: Record<string, string> = { Work: 'Travail', 'New session': 'Nouvelle session', Projects: 'Projets', Docs: 'Docs', Agents: 'Agents', Skills: 'Compétences', Upload: 'Importer', 'Make something new': 'Créer quelque chose' }
     const t = ((source: string) => FR[source] ?? source) as Parameters<typeof nav>[2]
     const work = nav(host(), () => {}, t)[0]!
-    expect([work.label, work.links.map((l) => l.label)]).toEqual(['Travail', ['Nouvelle exécution', 'Projets', 'Issues', 'Templates']])
+    expect([work.label, work.links.map((l) => l.label)]).toEqual(['Travail', ['Nouvelle session', 'Projets', 'Issues', 'Templates']])
     expect(own(host(), () => {}, t)[0]!.label).toBe('Travail')
     expect(tabs(host(), () => {}, t)[0]!.links.map((l) => l.label)).toEqual(['Agents', 'Bots', 'Compétences', 'Connectors', 'Plugins'])
     expect(library(host(), () => {}, t)[0]!.links.map((l) => l.label)).toEqual(['Créer quelque chose', 'Importer'])
@@ -100,7 +100,7 @@ describe('the builder’s places, once for every rail', () => {
 
 describe('a host’s sidebar for Dev, Settings and Customize', () => {
   it('lists Dev’s own places alone where the rail holds the rest', () => {
-    expect(own(host(), () => {}).flatMap((g) => g.links.map((l) => l.label))).toEqual(['New run', 'Projects', 'Issues', 'Templates'])
+    expect(own(host(), () => {}).flatMap((g) => g.links.map((l) => l.label))).toEqual(['New session', 'Projects', 'Issues', 'Templates'])
   })
 
   it('lists Settings’ sections, labelling a part only where its first row does not already say it', () => {

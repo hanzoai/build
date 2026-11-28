@@ -139,7 +139,7 @@ export function href(r: Route): string {
 export function parse(address: string): Route {
   const p = address.split(/[?#]/)[0]!.replace(/^\/+|\/+$/g, '')
   const [head, one, two, ...rest] = p.split('/')
-  if (head === 'run') return one && !two && SESSION.test(one) ? { kind: 'run', id: one } : { kind: 'new' }
+  if (head === 'run' || head === 'session' || head === 'sessions') return one && !two && SESSION.test(one) ? { kind: 'run', id: one } : { kind: 'new' }
   if (head === 'projects' && one) {
     if (rest.length) return { kind: 'new' }
     if (two) return NAME.test(one) && NAME.test(two) ? { kind: 'repo', org: one, name: two } : { kind: 'new' }

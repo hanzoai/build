@@ -319,13 +319,13 @@ export function Artifacts({
       action: stored ? <Download size={14} /> : a.kind === 'preview' ? <ExternalLink size={14} /> : undefined,
     })
   }
-  if (site) items.push({ key: 'site', icon: <Globe size={16} />, title: site.replace(/^https:\/\//, ''), note: t('Where this run is published'), href: site })
+  if (site) items.push({ key: 'site', icon: <Globe size={16} />, title: site.replace(/^https:\/\//, ''), note: t('Where this session is published'), href: site })
   if (pr.href) items.push({ key: 'pr', icon: <GitPullRequest size={16} />, title: t('Pull request {pr}', { pr: pr.label }), note: t('Opened on the forge'), href: pr.href })
-  if (branch) items.push({ key: 'branch', icon: <GitBranch size={16} />, title: branch, note: repo ? t('The branch this run pushes to in {repo}', { repo }) : t('The branch this run pushes to') })
-  if (mode === 'setup') items.push({ key: 'environment', icon: <Settings2 size={16} />, title: t('Environment proposal'), note: t('The install and start scripts this run found'), onPress: onEnvironment })
-  if (project) items.push({ key: 'project', icon: <Layers size={16} />, title: project, note: t('The project this run builds'), onPress: () => host.go(project) })
+  if (branch) items.push({ key: 'branch', icon: <GitBranch size={16} />, title: branch, note: repo ? t('The branch this session pushes to in {repo}', { repo }) : t('The branch this session pushes to') })
+  if (mode === 'setup') items.push({ key: 'environment', icon: <Settings2 size={16} />, title: t('Environment proposal'), note: t('The install and start scripts this session found'), onPress: onEnvironment })
+  if (project) items.push({ key: 'project', icon: <Layers size={16} />, title: project, note: t('The project this session builds'), onPress: () => host.go(project) })
 
-  if (!items.length) return <Soft>{left.error?.message || (left.loading ? t('Reading what this run left…') : t('This run has produced no artifacts yet.'))}</Soft>
+  if (!items.length) return <Soft>{left.error?.message || (left.loading ? t('Reading what this session left…') : t('This session has produced no artifacts yet.'))}</Soft>
   return (
     <YStack gap="$2">
       {dialog}

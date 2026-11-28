@@ -48,7 +48,7 @@ export function nav(host: Host, go: (path: string) => void, t: Say = english): G
       id: 'work',
       label: t('Work'),
       links: [
-        { id: NEW, label: t('New run'), icon: <MARKS.dev.make size={16} />, onPress: to(''), active: r.kind === 'new' },
+        { id: NEW, label: t('New session'), icon: <MARKS.dev.make size={16} />, onPress: to(''), active: r.kind === 'new' },
         // A project is a repository: its list, linking one from GitHub, and one's workspace.
         {
           id: 'projects',

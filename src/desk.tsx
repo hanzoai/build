@@ -13,12 +13,13 @@
  */
 import { SizableText, XStack, YStack } from '@hanzo/gui'
 import { useI18n, type Say } from '@hanzo/i18n/react'
-import { Check, Circle, ExternalLink, Folder, GitBranch, GitPullRequest, Globe, Info, Laptop, Maximize2, MoreHorizontal, RefreshCcw, Square, SquareTerminal, X } from '@hanzogui/lucide-icons-2'
+import { Check, Circle, ExternalLink, Folder, GitBranch, GitPullRequest, Globe, Info, Laptop, Maximize2, MoreHorizontal, Play, RefreshCcw, Square, SquareTerminal, Upload, X } from '@hanzogui/lucide-icons-2'
 import { Button, DropdownMenu, Switch, type DropdownMenuProps } from '@hanzo/ui'
 import { Console, DEVICES, PreviewFrame, Views, type FrameEvent, type Line, type PreviewHandle } from '@hanzo/ui/agents'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { RING } from './pane.ts'
+import { cacheBustUrl, hasUnpublishedEdits, previewRevision, resolvePreviewSource } from './preview-url.ts'
 import { read as readChanges, type Changes } from './api/changes.ts'
 import { read as readEnvironment } from './api/environment.ts'
 import { park, ports as listening, preview, sandbox as look, serve, served, stay, wake, type Box, type Port } from './api/sandbox.ts'
@@ -78,6 +79,9 @@ export function Desk({
   splitPanes = [],
   onCloseSplitPane,
   onExpandSplitPane,
+  sessionStatus = '',
+  onPublish,
+  topRightInset,
 }: {
   id: string
   repo: string
@@ -111,6 +115,12 @@ export function Desk({
   splitPanes?: string[]
   onCloseSplitPane?: (paneId: string) => void
   onExpandSplitPane?: (paneId: string) => void
+  /** Current session lifecycle status, used to trigger Preview refresh on completion. */
+  sessionStatus?: string
+  /** 1-click Publish handler surfaced from the Preview toolbar. */
+  onPublish?: () => void
+  /** Reserve space for the host shell's top-right corner buttons. */
+  topRightInset?: boolean
 }) {
   const { t: say } = useI18n()
   const [devMode] = useDevMode()
@@ -121,13 +131,28 @@ export function Desk({
   // Nothing is said of the sandbox until it has been read.
   const held = box.value?.state ?? ''
   const environ = () => side.open({ kind: 'environment', title: say('Environment') })
+  const unpublished = useMemo(() => hasUnpublishedEdits(events, published), [events, published])
 
   const kinds: Kind[] = [
     {
       id: 'preview',
       label: say('Preview'),
       bleed: true,
-      render: () => <Browser key={published} sandbox={sandbox} held={held} site={site} live={live} repo={repo} events={events} onEnvironment={environ} />,
+      render: () => (
+        <Browser
+          sandbox={sandbox}
+          held={held}
+          site={site}
+          live={live}
+          repo={repo}
+          events={events}
+          published={published}
+          sessionStatus={sessionStatus}
+          hasChanges={unpublished}
+          onPublish={onPublish}
+          onEnvironment={environ}
+        />
+      ),
     },
     {
       id: 'artifacts',
@@ -163,9 +188,9 @@ export function Desk({
         <YStack gap="$2">
           <Environment repo={name} busy={live && mode === 'setup'} />
           <SizableText size="$2" color="$ink" pt="$4">
-            {say('This run')}
+            {say('This session')}
           </SizableText>
-          <Fact label={say('Run')} value={id} />
+          <Fact label={say('Session')} value={id} />
           <Fact label={say('Repository')} value={name || '—'} />
           <Fact label={say('Branch')} value={branch || '—'} />
           <Fact label={say('Base')} value={base || '—'} />
@@ -216,7 +241,16 @@ export function Desk({
               display="grid"
               gridTemplateRows="auto minmax(0, 1fr)"
             >
-              <XStack px="$2.5" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" minH={36}>
+              <XStack
+                px="$2.5"
+                py="$1.5"
+                gap="$1.5"
+                items="center"
+                borderBottomWidth={1}
+                borderColor="$borderColor"
+                minH={36}
+                style={idx === 1 && (topRightInset ?? !sheet) ? { paddingInlineEnd: 'calc(10px + var(--hanzo-shell-top-right-inset, 0px))' } : undefined}
+              >
                 <SizableText flex={1} minW={0} size="$2" color="$ink" numberOfLines={1}>
                   {headerTitle}
                 </SizableText>
@@ -267,15 +301,16 @@ export function Desk({
         side={side}
         kinds={kinds}
         sheet={sheet}
+        topRightInset={topRightInset}
         onHide={onHide}
-        label={say('Run details')}
-        // An empty tab offers what this run made: its site and its pull request.
+        label={say('Session details')}
+        // An empty tab offers what this session made: its site and its pull request.
         suggested={[...(site ? [{ title: name || site, url: site }] : []), ...(pr.href ? [{ title: say('Pull request {pr}', { pr: pr.label }), url: pr.href }] : [])]}
         bar={sandbox ? <Held box={box} live={live} devMode={devMode} /> : null}
         menu={
           <DropdownMenu
             trigger={
-              <XStack render="button" aria-label={say('Run actions')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
+              <XStack render="button" aria-label={say('Session actions')} p="$1.5" rounded="$2" hoverStyle={{ bg: '$hover' }}>
                 <MoreHorizontal size={16} />
               </XStack>
             }
@@ -452,6 +487,10 @@ function Browser({
   live,
   repo,
   events,
+  published,
+  sessionStatus,
+  hasChanges,
+  onPublish,
   onEnvironment,
 }: {
   sandbox: string
@@ -460,6 +499,10 @@ function Browser({
   live: boolean
   repo: string
   events: Event[]
+  published: number
+  sessionStatus: string
+  hasChanges: boolean
+  onPublish?: () => void
   onEnvironment: () => void
 }) {
   const { t: say } = useI18n()
@@ -469,18 +512,35 @@ function Browser({
   const [src, setSrc] = useState('')
   const [why, setWhy] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const [rev, setRev] = useState(0)
+  const [preferLive, setPreferLive] = useState(false)
   const [serving, setServing] = useState<Serving | null>(null)
   const reopened = useRef<number[]>([])
   const frame = useRef<HTMLIFrameElement>(null)
   // A suspended sandbox is woken only by a press (Open in a new tab, Start dev server) and only on a yes.
   const { wake, dialog } = useWake()
   const running = Boolean(sandbox) && held === 'running'
-  // A server the run started ended with the run, so once it has, the person can
+  // A server the session started ended with the session, so once it has, the person can
   // start one again here, in the sandbox kept for its previews — a suspended one
-  // is resumed for it. While the run works, its server is the agent's to start.
+  // is resumed for it. While the session works, its server is the agent's to start.
   const startable = Boolean(sandbox) && !live && (held === 'running' || held === 'parked')
 
+  // Track turn completions, file edits, pushes, and publishes so Preview refreshes automatically.
+  const revision = useMemo(() => previewRevision(events, sessionStatus, published), [events, sessionStatus, published])
+  const lastRevision = useRef(revision)
+  const wasLive = useRef(live)
+  useEffect(() => {
+    const completed = wasLive.current && !live
+    wasLive.current = live
+    if (lastRevision.current !== revision || completed) {
+      lastRevision.current = revision
+      setRev((n) => n + 1)
+      if (port) setAttempt((a) => a + 1)
+    }
+  }, [revision, live, port])
+
   // What listens, read again while the sandbox runs: a dev server appears once it listens.
+  // Also re-polls immediately whenever `rev` advances (e.g. a turn finished or edits landed).
   useEffect(() => {
     if (!running) {
       setOpen([])
@@ -503,7 +563,7 @@ function Browser({
       gone = true
       clearInterval(every)
     }
-  }, [t, sandbox, running])
+  }, [t, sandbox, running, rev])
 
   // One address per port and attempt: its ticket is spent when the page opens it.
   useEffect(() => {
@@ -551,6 +611,7 @@ function Browser({
    * because what listens is read every few seconds anyway.
    */
   const start = async () => {
+    setPreferLive(false)
     setServing({ command: '', up: true, log: '', why: '' })
     try {
       const named = repo ? await readEnvironment(t, repo).then((e) => e.start, () => '') : ''
@@ -588,32 +649,65 @@ function Browser({
     }
   }, [t, sandbox, coming, say])
 
-  const nothing = (
-    <>
-      {dialog}
-      <Site site={site} live={live} held={held} serving={serving} events={events} onStart={startable ? () => void start() : undefined} onEnvironment={repo ? onEnvironment : undefined} />
-    </>
-  )
-  if (!running) return nothing
-  if (!port) return nothing
+  const hasSandboxPreview = running && Boolean(port)
+  const resolved = resolvePreviewSource({
+    sandboxUrl: hasSandboxPreview ? src || `https://sandbox.local:${port}` : '',
+    liveUrl: site,
+    preferLive,
+  })
+  const showingSandbox = hasSandboxPreview && resolved.kind === 'sandbox'
+
+  if (!showingSandbox) {
+    return (
+      <>
+        {dialog}
+        <Site
+          site={site}
+          rev={rev}
+          onReload={() => setRev((n) => n + 1)}
+          live={live}
+          held={held}
+          serving={serving}
+          events={events}
+          hasChanges={hasChanges}
+          hasSandboxPreview={hasSandboxPreview}
+          onUseSandbox={hasSandboxPreview ? () => setPreferLive(false) : undefined}
+          onStart={startable ? () => void start() : undefined}
+          onPublish={onPublish}
+          onEnvironment={repo ? onEnvironment : undefined}
+        />
+      </>
+    )
+  }
   const host = open.find((p) => p.port === port)?.host ?? ''
+  const framedSrc = src ? cacheBustUrl(src, rev) : ''
   return (
     <YStack flex={1} minH={0}>
       {dialog}
-      <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
+      <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" minW={0}>
         <XStack
           render="button"
           aria-label={say('Reload the page')}
           {...({ title: say('Reload the page') } as object)}
-          onPress={() => setAttempt((a) => a + 1)}
+          onPress={() => {
+            setRev((n) => n + 1)
+            setAttempt((a) => a + 1)
+          }}
           p="$1.5"
           rounded="$2"
+          shrink={0}
           hoverStyle={{ bg: '$hover' }}
         >
           <RefreshCcw size={14} />
         </XStack>
+        <XStack data-slot="preview-mode" data-kind="sandbox" items="center" gap="$1" px="$2" py="$0.5" rounded={999} bg="$edge" borderWidth={1} borderColor="$borderColor" shrink={0}>
+          <YStack width={6} height={6} rounded={99} bg="var(--state-online)" shrink={0} />
+          <SizableText size="$1" color="$ink" numberOfLines={1}>
+            {say('Sandbox preview')}
+          </SizableText>
+        </XStack>
         {open.length > 1 ? (
-          <XStack gap="$1">
+          <XStack gap="$1" shrink={0}>
             {open.map((p) => (
               <XStack
                 key={p.port}
@@ -636,6 +730,32 @@ function Browser({
         <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
           {host || say('port {port}', { port })}
         </SizableText>
+        {site ? (
+          <XStack
+            render="button"
+            aria-label={say('Live site')}
+            onPress={() => setPreferLive(true)}
+            px="$2"
+            height={28}
+            items="center"
+            rounded="$2"
+            shrink={0}
+            hoverStyle={{ bg: '$hover' }}
+            focusVisibleStyle={RING}
+          >
+            <SizableText size="$1" color="$soft" numberOfLines={1}>
+              {say('Live site')}
+            </SizableText>
+          </XStack>
+        ) : null}
+        {onPublish ? (
+          <Button size="sm" variant="primary" onPress={onPublish} shrink={0}>
+            <Upload size={13} />
+            <SizableText size="$1" color="inherit">
+              {say('Publish')}
+            </SizableText>
+          </Button>
+        ) : null}
         <OpenOut label={say('Open in browser')} onPress={() => void tab()} />
       </XStack>
       {why ? (
@@ -652,11 +772,12 @@ function Browser({
             </Button>
           </XStack>
         </YStack>
-      ) : src ? (
+      ) : framedSrc ? (
         <iframe
+          key={`${port}-${attempt}`}
           ref={frame}
-          src={src}
-          title={say('What the run serves on port {port}', { port })}
+          src={framedSrc}
+          title={say('What the session serves on port {port}', { port })}
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           style={{ border: 0, width: '100%', height: '100%', display: 'block', background: '#fff' }}
         />
@@ -719,19 +840,31 @@ const WATCHING = 3_000
  */
 function Site({
   site,
+  rev,
+  onReload,
   live,
   held,
   serving,
   events,
+  hasChanges,
+  hasSandboxPreview,
+  onUseSandbox,
   onStart,
+  onPublish,
   onEnvironment,
 }: {
   site: string
+  rev: number
+  onReload: () => void
   live: boolean
   events: Event[]
   held: Box['state'] | ''
   serving?: Serving | null
+  hasChanges: boolean
+  hasSandboxPreview: boolean
+  onUseSandbox?: () => void
   onStart?: () => void
+  onPublish?: () => void
   onEnvironment?: () => void
 }) {
   const { t } = useI18n()
@@ -743,23 +876,70 @@ function Site({
   const onBridge = (e: FrameEvent) => {
     if (e.type === 'preview:console') setLines((was) => [...was.slice(-400), { id: `p${was.length}-${Date.now()}`, level: e.level, text: e.text, source: 'page' }])
   }
+  const framedSite = site ? cacheBustUrl(site, rev) : ''
   return (
     <YStack flex={1} minH={0}>
-      <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor">
+      <XStack px="$2" py="$1.5" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" minW={0}>
         <XStack
           render="button"
           aria-label={t('Reload the page')}
           {...({ title: t('Reload the page') } as object)}
-          onPress={() => frame.current?.reload()}
+          onPress={() => {
+            onReload()
+            frame.current?.reload()
+          }}
           p="$1.5"
           rounded="$2"
+          shrink={0}
           hoverStyle={{ bg: '$hover' }}
         >
           <RefreshCcw size={14} />
         </XStack>
+        {site ? (
+          <XStack data-slot="preview-mode" data-kind="live" items="center" gap="$1" px="$2" py="$0.5" rounded={999} bg="$edge" borderWidth={1} borderColor="$borderColor" shrink={0}>
+            <Globe size={11} opacity={0.75} />
+            <SizableText size="$1" color="$ink" numberOfLines={1}>
+              {t('Live site')}
+            </SizableText>
+          </XStack>
+        ) : null}
         <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} style={mono}>
           {site || t('Nothing is serving yet')}
         </SizableText>
+        {onUseSandbox ? (
+          <Button size="sm" variant="outline" onPress={onUseSandbox} shrink={0}>
+            {t('Sandbox preview')}
+          </Button>
+        ) : onStart && site ? (
+          <XStack
+            render="button"
+            aria-label={t('Start sandbox preview')}
+            onPress={onStart}
+            items="center"
+            gap="$1"
+            px="$2"
+            height={28}
+            rounded="$2"
+            borderWidth={1}
+            borderColor="var(--border-strong)"
+            shrink={0}
+            hoverStyle={{ bg: '$hover' }}
+            focusVisibleStyle={RING}
+          >
+            <Play size={12} />
+            <SizableText size="$1" color="$ink" numberOfLines={1}>
+              {serving?.up ? t('Starting…') : t('Sandbox preview')}
+            </SizableText>
+          </XStack>
+        ) : null}
+        {onPublish ? (
+          <Button size="sm" variant="primary" onPress={onPublish} shrink={0}>
+            <Upload size={13} />
+            <SizableText size="$1" color="inherit">
+              {t('Publish')}
+            </SizableText>
+          </Button>
+        ) : null}
         <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label={t('Device')} labels="none" />
         {site ? (
           <Out href={site} label={t('Open in browser')}>
@@ -767,10 +947,27 @@ function Site({
           </Out>
         ) : null}
       </XStack>
+      {site && hasChanges && !live && !hasSandboxPreview ? (
+        <XStack data-slot="preview-stale-banner" px="$2.5" py="$1.5" gap="$2" items="center" bg="$sunken" borderBottomWidth={1} borderColor="$borderColor" flexWrap="wrap">
+          <SizableText size="$1" color="$soft" flex={1} minW={140}>
+            {t('Showing the deployed live site — edits in this session are not published yet.')}
+          </SizableText>
+          {onStart ? (
+            <Button size="sm" variant="outline" onPress={onStart}>
+              {t('Start preview')}
+            </Button>
+          ) : null}
+          {onPublish ? (
+            <Button size="sm" variant="primary" onPress={onPublish}>
+              {t('Publish changes')}
+            </Button>
+          ) : null}
+        </XStack>
+      ) : null}
       <PreviewFrame
         ref={frame}
-        src={site}
-        title={t('Where this run is published')}
+        src={framedSite}
+        title={t('Where this session is published')}
         device={device}
         onBridge={onBridge}
         empty={
@@ -781,13 +978,13 @@ function Site({
             </SizableText>
             <SizableText size="$2" color="$soft" style={{ textAlign: 'center', maxWidth: 280 }}>
               {held === 'parked'
-                ? `${t('The run’s sandbox is suspended.')} ${t('Resume it to see what it serves.')}`
+                ? `${t('This session’s sandbox is suspended.')} ${t('Resume it to see what it serves.')}`
                 : live
-                  ? t('When the run starts a server in its sandbox, the page opens here.')
-                  : `${t('Nothing listens in this run’s sandbox, and it published no site.')} ${t('A server the run started stopped when the run ended.')}`}
+                  ? t('When the session starts a server in its sandbox, the page opens here.')
+                  : `${t('Nothing listens in this session’s sandbox, and it published no site.')} ${t('A server the session started stopped when the session ended.')}`}
             </SizableText>
             {progress.length ? (
-              <YStack render="ol" aria-label={t('Live run steps')} gap="$2" m={0} p={0} width="100%" maxW={340}>
+              <YStack render="ol" aria-label={t('Live session steps')} gap="$2" m={0} p={0} width="100%" maxW={340}>
                 {progress.map((step) => (
                   <XStack render="li" key={step.name} borderWidth={1} borderColor="$borderColor" bg="$sunken" rounded="$3" p="$2.5" gap="$2" items="center">
                     {step.done ? <Check size={15} aria-hidden /> : <Circle size={15} aria-hidden />}
@@ -1138,7 +1335,7 @@ function Log({
         {idle ? (
           <YStack flex={1} items="center" justify="center" gap="$3" py="$8">
             <SizableText size="$2" color="$soft" text="center">
-              {refused || (failed ? t('This run stopped before its first command: {reason}', { reason: failed }) : t('This run finished without writing a command.'))}
+              {refused || (failed ? t('This session stopped before its first command: {reason}', { reason: failed }) : t('This session finished without writing a command.'))}
             </SizableText>
             {refused ? (
               <Button size="sm" variant="outline" onPress={onRetry}>

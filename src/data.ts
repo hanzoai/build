@@ -15,6 +15,7 @@ import { projects, type Project } from './api/projects.ts'
 import { get, list, watch, type Detail, type Event, type Session } from './api/sessions.ts'
 import { TALK } from './api/talk.ts'
 import { merge } from './api/turn.ts'
+import { groupSessions, syncThreadsFromSessions, threadRoot, useThreadLinks } from './thread.ts'
 
 export interface Read<T> {
   value: T
@@ -139,15 +140,17 @@ const recentRuns = new Map<string, Session[]>()
 export function useRecents(t: Target, signed: boolean): Read<Session[]> {
   const scope = signed ? `${t.api}\n${t.org ?? ''}` : null
   const warm = scope !== null ? recentRuns.get(scope) : undefined
+  const threadLinks = useThreadLinks()
   const read = useRead(
     signed
       ? async () => {
           const [runs, talked] = await Promise.all([list(t, { kind: 'coding', limit: 50 }), list(t, { channel: TALK, limit: 50 })])
           const seen = new Set<string>()
-          const next = [...runs, ...talked]
+          const unique = [...runs, ...talked]
             .filter((s) => !seen.has(s.id) && Boolean(seen.add(s.id)))
             .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-            .slice(0, 50)
+          const links = syncThreadsFromSessions(unique)
+          const next = groupSessions(unique, links).slice(0, 50)
           if (scope !== null) recentRuns.set(scope, next)
           return next
         }
@@ -164,6 +167,7 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
   }, [read.loading])
   const [rows, setRows] = useState<Session[]>(() => warm ?? read.value)
   useEffect(() => setRows(read.value), [read.value])
+  const grouped = useMemo(() => groupSessions(rows, threadLinks), [rows, threadLinks])
   const last = useRef(0)
   // useRead's reload is the same function every render, so it never reopens the feed.
   const again = read.reload
@@ -184,14 +188,35 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
       {
         session: (s) =>
           setRows((prev) => {
-            const i = prev.findIndex((r) => r.id === s.id)
+            const rootId = threadRoot(s.id)
+            const i = prev.findIndex(
+              (r) =>
+                r.id === s.id ||
+                r.id === rootId ||
+                (s.kind === 'coding' &&
+                  r.kind === 'coding' &&
+                  Boolean(s.branch) &&
+                  s.branch.startsWith('agent/') &&
+                  r.branch === s.branch &&
+                  r.repo.toLowerCase() === s.repo.toLowerCase()),
+            )
             if (i === -1) {
-              // A run this list has not seen: re-read rather than guess its kind.
+              // A session this list has not seen: re-read rather than guess its kind.
               if (!s.kind || s.kind === 'coding') reload()
               return prev
             }
             const next = prev.slice()
-            next[i] = { ...prev[i], ...s, title: s.title || prev[i].title }
+            const existing = prev[i]!
+            next[i] = {
+              ...existing,
+              status: s.status || existing.status,
+              title: existing.id === s.id ? s.title || existing.title : existing.title || s.title,
+              branch: s.branch || existing.branch,
+              pr: s.pr || existing.pr,
+              sandbox: s.sandbox || existing.sandbox,
+              updatedAt: s.updatedAt || s.createdAt || existing.updatedAt,
+              endedAt: s.endedAt,
+            }
             return next
           }),
         open: (n) => {
@@ -204,7 +229,7 @@ export function useRecents(t: Target, signed: boolean): Read<Session[]> {
     })
     return () => ctl.abort()
   }, [t, signed, again])
-  return { ...read, value: rows, loading: read.loading && !settled }
+  return { ...read, value: grouped, loading: read.loading && !settled }
 }
 
 export function usePlaces(t: Target, signed: boolean): Read<Place[]> {

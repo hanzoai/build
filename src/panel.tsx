@@ -738,19 +738,18 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
       items="center"
       gap="$1"
       pl="$2.5"
-      pr="$1"
-      minH={30}
-      // As wide as a title wants up to a browser tab's width, sharing the strip
-      // as a browser's tabs do when there are many.
-      flexBasis={236}
-      shrink={1}
-      minW={56}
-      maxW={236}
+      pr={on || tab.pinned ? '$1' : '$2.5'}
+      minH={32}
+      $max-md={{ minH: 40 }}
+      // Keep every tab label legible at narrow viewports; the tablist scrolls horizontally instead of crushing tabs.
+      shrink={0}
+      maxW={220}
       rounded={8}
       borderWidth={1}
       borderColor={on ? '$borderColor' : 'transparent'}
       bg={on ? '$edge' : 'transparent'}
       hoverStyle={{ bg: on ? '$edge' : '$hover' }}
+      style={{ flexShrink: 0 }}
       {...({
         // A middle press shuts any tab, as a browser's does; the chosen one also has its cross.
         onAuxClick: (e: React.MouseEvent) => {
@@ -803,11 +802,12 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
             side.shut(tab.id)
           }
         }}
-        flex={1}
+        shrink={0}
         minW={0}
         minH={28}
+        $max-md={{ minH: 38 }}
         items="center"
-        gap="$2"
+        gap="$1.5"
         cursor="pointer"
         focusVisibleStyle={RING_INSET}
       >
@@ -816,7 +816,7 @@ function Strip({ tab, on, side, index, label, icon, ...rest }: { tab: Tab; on: b
             {icon}
           </XStack>
         ) : null}
-        <SizableText fontSize={13} color={on ? '$ink' : '$soft'} numberOfLines={1}>
+        <SizableText fontSize={13} color={on ? '$ink' : '$soft'} numberOfLines={1} $platform-web={{ whiteSpace: 'nowrap' }}>
           {label}
         </SizableText>
       </XStack>
@@ -877,10 +877,12 @@ export interface PanelProps extends Acts {
   label?: string
   /** What an empty tab offers. */
   suggested?: readonly Suggestion[]
+  /** Reserve trailing space for the host shell's top-right corner buttons (`--hanzo-shell-top-right-inset`). */
+  topRightInset?: boolean
 }
 
 /** The panel: the strip, and the chosen tab. */
-export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, suggested, ...acts }: PanelProps) {
+export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, suggested, topRightInset = !sheet, ...acts }: PanelProps) {
   const { t: say } = useI18n()
   const tab = side.tabs.find((t) => t.id === side.at) ?? null
   // The column it stands in; a phone's sheet is the whole window already.
@@ -914,7 +916,18 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
 
   const body = (
     <YStack role="complementary" aria-label={label ?? say('Side panel')} data-slot="side" flex={1} minW={0} minH={0} overflow="hidden" rounded="inherit">
-      <XStack data-slot="side-strip" height={STRIP} px="$2" gap="$1.5" items="center" borderBottomWidth={1} borderColor="$borderColor" shrink={0}>
+      <XStack
+        data-slot="side-strip"
+        height={STRIP}
+        px="$2"
+        gap="$1.5"
+        items="center"
+        borderBottomWidth={1}
+        borderColor="$borderColor"
+        shrink={0}
+        minW={0}
+        style={topRightInset ? { paddingInlineEnd: 'calc(8px + var(--hanzo-shell-top-right-inset, 0px))' } : undefined}
+      >
         {column?.hidden && !column.full ? (
           <XStack
             render="button"
@@ -927,12 +940,22 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
           >
             <PanelLeftOpen size={16} />
             <SizableText fontSize={13} color="$ink">
-              {column.main === 'run' ? say('Show run') : column.main === 'chat' ? say('Show chat') : say('Show {main}', { main: column.main })}
+              {column.main === 'run' ? say('Show session') : column.main === 'chat' ? say('Show chat') : say('Show {main}', { main: column.main })}
             </SizableText>
           </XStack>
         ) : null}
         {/* The strip scrolls sideways in a narrow panel; `+`, the menu, pop-out and hide stay put. */}
-        <XStack role="tablist" aria-label={say('Tabs')} shrink={1} minW={0} gap="$1" items="center" overflowX="auto" overflowY="hidden" $platform-web={{ scrollbarWidth: 'none' }}>
+        <XStack
+          role="tablist"
+          aria-label={say('Tabs')}
+          flex={1}
+          minW={0}
+          gap="$1"
+          items="center"
+          overflowX="auto"
+          overflowY="hidden"
+          $platform-web={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+        >
           {side.tabs.map((t, i) => (
             <Leaf key={t.id} tab={t} on={t.id === side.at} side={side} index={i} label={title(t)} icon={mark(t)} />
           ))}
@@ -948,7 +971,6 @@ export function Panel({ side, kinds, onHide, sheet = false, bar, menu, label, su
         ) : (
           plus
         )}
-        <XStack flex={1} />
         {menu}
         <XStack
           render="button"
