@@ -44,6 +44,7 @@ import {
   Pencil,
   Share,
   SlidersHorizontal,
+  Square,
   SquareTerminal,
 } from '@hanzogui/lucide-icons-2'
 import {
@@ -73,8 +74,8 @@ import { Confirm } from './ask.tsx'
 import { copy as toClipboard } from './clipboard.ts'
 import { approve, followUp, headline, retry, start, steer, type Ask, type Earlier } from './api/coding.ts'
 import { limits as readLimits } from './api/models.ts'
-import { list, message, pause, publish, remove, rename, resume, stop, story, took } from './api/sessions.ts'
-import { answer, cards, followed, outcome, pull, settled, steps } from './api/turn.ts'
+import { get, list, message, pause, publish, remove, rename, resume, stop, story, took, type Event } from './api/sessions.ts'
+import { answer, cards, followed, outcome, pull, settled, steps, type Card } from './api/turn.ts'
 import { answer as reply, say as talk, talks } from './api/talk.ts'
 import { verdict } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun, type RunState } from './data.ts'
@@ -83,6 +84,7 @@ import { Desk, SEED } from './desk.tsx'
 import { useDevMode } from './dev-mode.ts'
 import { KeepAwake, useKeepAwake } from './awake.tsx'
 import { useHost, useTarget, type Ask as Question } from './host.tsx'
+import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
 import { useSpend } from './spend.tsx'
 import { level, pacing, useMind } from './mind.ts'
@@ -95,34 +97,59 @@ import { PanelToggle } from './panel.tsx'
 import { schedule } from './scheduled.tsx'
 import { SideProvider, useSplit } from './side.tsx'
 import { PAGE, useDeck, useKey, usePanel } from './tabs.ts'
+import {
+  cleanErrorText,
+  isAlreadyRunningError,
+  isSessionActive,
+  isSessionLive,
+  linkThread,
+  resolveSessionState,
+  threadChain,
+  useThreadLinks,
+} from './thread.ts'
 import { carrying, compose, pick, read as readFiles, type Attached } from './tools.tsx'
 import { useCarry } from './carry.tsx'
 import { Talk } from './talk.tsx'
 import { Transcript, type QueuedMessage, type TranscriptView } from './transcript.tsx'
 
-const LIVE = new Set(['running', 'paused', ''])
-
-/** A run's status as the line under its title says it; one the service adds later is drawn as it comes. */
+/** A session's status as the line under its title says it; one the service adds later is drawn as it comes. */
 const STATUS: Record<string, string> = {
   running: phrase('running'),
+  started: phrase('running'),
+  starting: phrase('starting'),
+  queued: phrase('queued'),
+  routed: phrase('running'),
+  resumed: phrase('running'),
   paused: phrase('paused'),
   done: phrase('done'),
+  completed: phrase('done'),
   error: phrase('error'),
   stopped: phrase('stopped'),
 }
 
 type MenuItems = NonNullable<DropdownMenuProps['items']>
 
-/** One session's page: a conversation (talk.tsx) or one run, as its record says. */
+/** Snapshot of an earlier turn inside a multi-turn single-thread session. */
+interface TurnSnapshot {
+  events: Event[]
+  title: string
+  repo: string
+  mode: string
+}
+
+/** One session's page: a conversation (talk.tsx) or one unified coding session thread, as its record says. */
 export function Run({ id }: { id: string }) {
   const host = useHost()
   const t = useTarget()
-  // Signed out, there is nothing to read: the gateway answers a bare run with a refusal.
-  const state = useRun(t, host.person ? id : null)
-  return talks(state.record) ? <Talk id={id} state={state} /> : <Job id={id} state={state} />
+  const links = useThreadLinks()
+  const chain = useMemo(() => threadChain(id, links), [id, links])
+  const activeId = chain[chain.length - 1] ?? id
+  // Signed out, there is nothing to read: the gateway answers a bare session with a refusal.
+  const state = useRun(t, host.person ? activeId : null)
+  return talks(state.record) ? <Talk id={activeId} state={state} /> : <Job id={id} activeId={activeId} chain={chain} state={state} />
 }
 
-function Job({ id, state: read }: { id: string; state: RunState }) {
+function Job({ id, activeId, chain, state: read }: { id: string; activeId: string; chain: string[]; state: RunState }) {
   const { t: say } = useI18n()
   const host = useHost()
   const t = useTarget()
@@ -142,10 +169,17 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   useKey(() => setDesk(!desk))
   // The side panel's column: the person's width, the run hidden behind it, full screen (side.tsx).
   const split = useSplit(desk && wide, 'run', () => setDesk(false))
-  // Stop was pressed here: the run keeps its work after it answers, and says so with its status.
+  // Stop was pressed here: the session keeps its work after it answers, and says so with its status.
   const [stopping, setStopping] = useState(false)
-  // The working sandbox run words were said to here: its follow-up opens once it starts.
+  // The working sandbox turn words were said to here: its follow-up continues in this thread once it starts.
   const [steered, setSteered] = useState('')
+  // Earlier turns in this single-thread session, keyed by session id.
+  const [historyTurns, setHistoryTurns] = useState<Record<string, TurnSnapshot>>({})
+  // Optimistic user prompt shown while a steer/follow-up turn spins up.
+  const [pendingPrompt, setPendingPrompt] = useState<{ text: string; afterId: string } | null>(null)
+  // 1-click Publish dialog opened from Preview.
+  const [publishSource, setPublishSource] = useState<Source | null>(null)
+  const [publishRev, setPublishRev] = useState(0)
   const [naming, setNaming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [name, setName] = useState('')
@@ -158,11 +192,11 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const [queued, setQueued] = useState<QueuedMessage[]>([])
   const [keepAwake, setKeepAwake] = useKeepAwake()
   const [nowMs, setNowMs] = useState(() => Date.now())
-  // The model and effort a run started here uses: the one choice Chat and New share.
+  // The model and effort a session started here uses: the one choice Chat and New share.
   const { limits } = useLimits(signed ? (signal) => readLimits(t, signal) : null, t)
   const mind = useMind(t, (limits as { plan?: string } | null)?.plan, host.topUp)
   const voice = useVoice({ speech: useEar(t), language: useSpoken(), ...useDictation(draft, setDraft) })
-  const tools = useCarry(t, id, (tab) => host.go(path({ kind: 'customize', tab })), {
+  const tools = useCarry(t, activeId, (tab) => host.go(path({ kind: 'customize', tab })), {
     draft,
     setDraft,
     attach: async (attachments) => {
@@ -179,27 +213,80 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   }
   const listen = useMemo(() => speaker(t), [t])
 
+  // Load any earlier turns in this thread chain that are not yet cached in memory.
+  const earlierIds = useMemo(() => chain.slice(0, -1), [chain])
+  useEffect(() => {
+    if (!signed || earlierIds.length === 0) return
+    const missing = earlierIds.filter((eid) => !historyTurns[eid])
+    if (missing.length === 0) return
+    let cancelled = false
+    void Promise.all(
+      missing.map(async (eid) => {
+        try {
+          const d = await get(t, eid, { limit: 500 })
+          return [eid, { events: d.recent, title: d.title, repo: d.repo, mode: d.mode }] as const
+        } catch {
+          return null
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return
+      const patch: Record<string, TurnSnapshot> = {}
+      for (const entry of entries) if (entry) patch[entry[0]] = entry[1]
+      if (Object.keys(patch).length) setHistoryTurns((prev) => ({ ...prev, ...patch }))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [signed, t, earlierIds, historyTurns])
+
+  // Clear the optimistic prompt once the new follow-up turn starts narrating its own cards.
+  useEffect(() => {
+    if (pendingPrompt && activeId !== pendingPrompt.afterId && events.length > 0) {
+      setPendingPrompt(null)
+    }
+  }, [pendingPrompt, activeId, events.length])
+
   const mode = record?.mode ?? ''
-  // A run that narrated no ask of its own opens with the one its title records, once it has said anything.
-  const shown = useMemo(() => {
-    const drawn = cards(events, mode, say)
-    const ask = record ? headline(record.title, record.repo) : ''
-    const opens = drawn[0]?.kind === 'said' && drawn[0].who === 'person'
-    return ask && drawn.length && !opens ? [{ kind: 'said' as const, key: 'ask', who: 'person' as const, text: ask }, ...drawn] : drawn
-  }, [events, mode, record, say])
+  // Build unified single-thread cards chronologically across earlier turns + current active turn.
+  const shown = useMemo((): Card[] => {
+    const buildTurn = (turnId: string, evs: Event[], turnMode: string, turnTitle: string, turnRepo: string): Card[] => {
+      const drawn = cards(evs, turnMode, say)
+      const ask = headline(turnTitle, turnRepo)
+      const opens = drawn[0]?.kind === 'said' && drawn[0].who === 'person'
+      const withAsk = ask && drawn.length && !opens ? [{ kind: 'said' as const, key: 'ask', who: 'person' as const, text: ask }, ...drawn] : drawn
+      return turnId === activeId && earlierIds.length === 0
+        ? withAsk
+        : withAsk.map((c) => ({ ...c, key: `${turnId}:${c.key}` }))
+    }
+    const merged: Card[] = []
+    for (const eid of earlierIds) {
+      const snap = historyTurns[eid]
+      if (!snap) continue
+      merged.push(...buildTurn(eid, snap.events, snap.mode, snap.title, snap.repo))
+    }
+    merged.push(...buildTurn(activeId, events, mode, record?.title ?? '', record?.repo ?? ''))
+    if (pendingPrompt && (activeId === pendingPrompt.afterId || events.length === 0)) {
+      const alreadyShown = merged.some((c) => c.kind === 'said' && c.who === 'person' && c.text.trim() === pendingPrompt.text.trim())
+      if (!alreadyShown) {
+        merged.push({ kind: 'said', key: `pending:${pendingPrompt.afterId}`, who: 'person', text: pendingPrompt.text })
+      }
+    }
+    return merged
+  }, [earlierIds, historyTurns, activeId, events, mode, record, say, pendingPrompt])
   const end = outcome(events)
   const plan = useMemo(() => steps(events), [events])
   const kept = useMemo(() => settled(events), [events])
   const next = useMemo(() => followed(events), [events])
-  const state = end.status && !LIVE.has(end.status) && LIVE.has(status) ? end.status : status || end.status
-  // Where the run's work is published: its project's own address, read again when
-  // the run says it went live, never an address an event names.
+  const state = resolveSessionState(status, end.status)
+  // Where the session's work is published: its project's own address, read again when
+  // the session says it went live, never an address an event names.
   const built = useProjects(t, signed && Boolean(record?.project))
   const rebuilt = built.reload
   useEffect(() => {
     if (end.published) rebuilt()
   }, [end.published, rebuilt])
-  // What a run publishes opens in the panel: the Preview, chosen and shown.
+  // What a session publishes opens in the panel: the Preview, chosen and shown.
   useEffect(() => {
     if (!end.published) return
     side.open({ kind: 'preview', title: say('Preview') })
@@ -207,30 +294,33 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     // On each publish, not on each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [end.published])
-  const site = built.value.find((p) => p.slug === record?.project)?.live ?? ''
+  const proj = built.value.find((p) => p.slug === record?.project)
+  const site = proj?.live ?? ''
   const pr = pull(record?.pr ?? '', record?.repo ?? '')
-  const live = LIVE.has(state)
+  const live = isSessionLive(state)
   const running = signed && live && !detail.error
+  const active = running && isSessionActive(state)
   const paused = running && state === 'paused'
   const finished = signed && !live && !detail.error && Boolean(record)
-  // A sandbox run is held by the coding service, which pauses it with its work
+  // A sandbox session is held by the coding service, which pauses it with its work
   // kept and has no resume of its own; a machine drains its commands itself.
   const held = (record?.environment || 'sandbox') === 'sandbox'
-  // Words go to the run while it works, unless it is a paused sandbox run, which a new run carries on.
+  // Words go to the session while it works, unless it is a paused sandbox session, which a follow-up turn carries on.
   const steering = running && !(paused && held)
-  // A follow-up clones what the run kept, so it waits until the run has said where that is.
+  // A follow-up clones what the session kept, so it waits until the session has said where that is.
   const waiting = (paused && held && !kept.settled) || (finished && stopping && !kept.settled)
-  const title = record?.title || (detail.loading ? '' : say('Untitled run'))
-  // A setup run explores and installs before it answers, which takes minutes.
+  const rootTitle = earlierIds.length ? historyTurns[earlierIds[0]!]?.title : ''
+  const title = rootTitle || record?.title || (detail.loading ? '' : say('Untitled session'))
+  // A setup session explores and installs before it answers, which takes minutes.
   const setup = mode === 'setup'
   const [seen, setSeen] = useKept('hanzo.build.setup.seen', false)
-  // How long setup runs have taken here: the ones this person can see, finished.
+  // How long setup sessions have taken here: the ones this person can see, finished.
   const past = useRead(setup && running ? () => list(t, { kind: 'coding', status: 'done', limit: 500 }) : null, [], [t, setup, running])
   const span = took(past.value, 'setup')
   const earlier: Earlier | null = record
     ? {
-        id,
-        title,
+        id: activeId,
+        title: record.title || title,
         repo: record.repo,
         base: record.base,
         environment: record.environment,
@@ -239,22 +329,36 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
         pushed: kept.pushed,
       }
     : null
-  const planned = mode === 'plan' && finished && state === 'done' ? answer(events) : ''
-  // A failed run is tried again with the person's words as it recorded them.
+  const planned = mode === 'plan' && finished && (state === 'done' || state === 'completed') ? answer(events) : ''
+  // A failed session is tried again with the person's words as it recorded them.
   const failed = finished && state === 'error'
   const asked = shown.find((c) => c.kind === 'said' && c.who === 'person')
   const again = asked && asked.kind === 'said' ? asked.text : ''
   // What the recorded read left out once initial pagination and live replay are merged.
   const hidden = Math.max(0, (detail.value?.events ?? 0) - events.length)
-  // Only a run still working is on a step.
+  // Only a session still working is on a step.
   const current = running ? plan.find((x) => !x.done) : undefined
+
+  // Snapshot the active turn before appending a follow-up to the thread chain.
+  const snapshotCurrent = () => {
+    if (!activeId) return
+    setHistoryTurns((prev) => ({
+      ...prev,
+      [activeId]: {
+        events,
+        title: record?.title ?? '',
+        repo: record?.repo ?? '',
+        mode,
+      },
+    }))
+  }
 
   // Complete the reminder in this view, using the device only when it permits it.
   useEffect(() => {
     if (!notify || running) return
     setNotify(null)
-    const title = record?.title || say('Run finished')
-    const body = say('This run has finished.')
+    const title = record?.title || say('Session finished')
+    const body = say('This session has finished.')
     setNote(body)
     if (notify !== 'device' || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
     void (async () => {
@@ -263,7 +367,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
         if (worker) await worker.showNotification(title, { body })
         else new Notification(title, { body })
       } catch {
-        // The result is already shown in the run.
+        // The result is already shown in the session.
       }
     })()
   }, [notify, running, record?.title, say])
@@ -290,23 +394,23 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     try {
       setNote(await work())
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(cleanErrorText((e as Error).message))
     } finally {
       setBusy(false)
     }
   }
 
   /**
-   * A new run's ask with the model and effort the composer shows, Enso named as
-   * itself: a run that names none takes the person's saved coding default
+   * A new turn's ask with the model and effort the composer shows, Enso named as
+   * itself: a turn that names none takes the person's saved coding default
    * (apps/coding start.go), which is not what the composer shows.
    */
   const tuned = (a: Ask): Ask => ({ ...a, model: mind.model, effort: level(mind.effort) })
 
-  // A setup run's work IS its environment: the panel opens on it.
+  // A setup session's work IS its environment: the panel opens on it.
   useEffect(() => {
     if (mode === 'setup') side.open({ kind: 'environment', title: say('Environment') })
-    // Once the run says what it is.
+    // Once the session says what it is.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
@@ -317,18 +421,35 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   }
 
   /**
-   * A new run from this one's work, opened. A paused run it carries on is let go
-   * first: the new run works in the same sandbox, where nothing else may be at work.
+   * Words for the session while it works. A machine drains them between steps; a
+   * sandbox session stops with its work kept and continues in a follow-up turn
+   * inside this same thread (api/coding.ts `steer`).
    */
-  const carry = async (said: string, how: 'follow' | 'approve' | 'retry' = 'follow'): Promise<string> => {
-    if (!earlier) throw new Error(say('This run is still being read'))
-    if (paused) await stop(t, id, 'Continued in a follow-up run').catch(() => undefined)
-    // A run a conversation started is carried on by the conversation (talk.ts): the
+  const tell = async (words: string): Promise<string> => {
+    if (held) {
+      await steer(t, activeId, words)
+      setSteered(activeId)
+      setPendingPrompt({ text: words, afterId: activeId })
+      return say('Redirecting session — keeping current work and continuing here')
+    }
+    await message(t, activeId, words)
+    return say('Sent — recorded on this session')
+  }
+
+  /**
+   * Continue this session in the SAME thread (or branch out when `fork` is true).
+   * If the backend reports the active turn is still running, seamlessly steer it
+   * instead of failing with an "already running" error.
+   */
+  const carry = async (said: string, how: 'follow' | 'approve' | 'retry' = 'follow', fork = false): Promise<string> => {
+    if (!earlier) throw new Error(say('This session is still being read'))
+    if (paused) await stop(t, activeId, 'Continued in this session').catch(() => undefined)
+    // A session a conversation started is carried on by the conversation (talk.ts): the
     // words go there, in its session, and so does the reader.
-    if (record?.parent) {
-      const words = how === 'approve' ? `Carry out this plan:\n\n${said.trim()}` : said.trim() || 'Continue where the run left off.'
+    if (record?.parent && !fork) {
+      const words = how === 'approve' ? `Carry out this plan:\n\n${said.trim()}` : said.trim() || 'Continue where the session left off.'
       // Approving the plan is going ahead: the conversation leaves Plan for Auto, so
-      // the run it starts builds.
+      // the turn it starts builds.
       await talk(t, { session: record.parent, input: words, model: mind.model, effort: level(mind.effort), ...(how === 'approve' ? { mode: 'auto' as const } : {}) })
       setDraft('')
       setFiles([])
@@ -336,55 +457,65 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
       return ''
     }
     const ask = how === 'approve' ? approve(earlier, said) : how === 'retry' ? retry(earlier, said) : followUp(earlier, said)
-    const run = await start(t, tuned(ask))
+    let run: Awaited<ReturnType<typeof start>>
+    try {
+      run = await start(t, tuned(ask))
+    } catch (e) {
+      // Race condition: backend says the turn is still running — steer smoothly in place instead of throwing.
+      if (!fork && isAlreadyRunningError(e) && said.trim()) {
+        const msg = await tell(said.trim())
+        setDraft('')
+        setFiles([])
+        return msg
+      }
+      throw e
+    }
     setDraft('')
     setFiles([])
-    host.go(run.session)
+    setStopping(false)
+    if (fork) {
+      host.go(run.session)
+      return ''
+    }
+    snapshotCurrent()
+    if (said.trim()) setPendingPrompt({ text: said.trim(), afterId: activeId })
+    linkThread(activeId, run.session)
     return ''
   }
 
   /**
-   * A press that starts a new run with no words typed (Try again, Approve and build, Resume on a sandbox run, Fork) asks
+   * A press that starts a turn with no words typed (Try again, Approve and build, Resume on a sandbox session, Fork) asks
    * first, before anything says it is starting; words the person typed and sent are their own ask. A no starts
    * nothing and says nothing.
    */
   const ahead = async (said: string, how: 'approve' | 'retry' | 'resume' | 'fork') => {
     if (busy) return
     const asked: Record<typeof how, Omit<Question, 'kind' | 'uses'>> = {
-      retry: { title: say('Try this run again?'), what: say('This starts a new run of the same ask.'), yes: say('Try again') },
-      approve: { title: say('Build this plan?'), what: say('This starts a run that carries out the plan.'), yes: say('Approve and build') },
-      resume: { title: say('Resume this run?'), what: say('This starts a follow-up run that carries on from its branch.'), yes: say('Resume') },
-      fork: { title: say('Fork this run?'), what: say('This starts a new run from this one’s work, with the same ask.'), yes: say('Fork') },
+      retry: { title: say('Try this session again?'), what: say('This starts a new turn with the same ask.'), yes: say('Try again') },
+      approve: { title: say('Build this plan?'), what: say('This starts a build turn that carries out the plan.'), yes: say('Approve and build') },
+      resume: { title: say('Resume this session?'), what: say('This continues the session from its branch.'), yes: say('Resume') },
+      fork: { title: say('Fork this session?'), what: say('This starts a separate session from this one’s work, with the same ask.'), yes: say('Fork') },
     }
     if (!(await spend.ask({ kind: 'run', uses: held ? 'computer' : 'credits', ...asked[how] }))) return
-    await act(() => carry(said, how === 'resume' || how === 'fork' ? 'follow' : how))
+    await act(() => carry(said, how === 'resume' || how === 'fork' ? 'follow' : how, how === 'fork'))
   }
 
-  /**
-   * Words for the run while it works. A machine drains them between steps; a
-   * sandbox run reads nothing after it starts, so the platform stops it with its
-   * work kept and a follow-up takes the words on (api/coding.ts `steer`).
-   */
-  const tell = async (words: string): Promise<string> => {
-    if (held) {
-      await steer(t, id, words)
-      setSteered(id)
-      return say('Sent — the run stops with its work kept, and a follow-up takes it from here')
-    }
-    await message(t, id, words)
-    return say('Sent — recorded on this run')
-  }
-
-  // The follow-up the words said here started: it is where the run goes on.
+  // When a steered turn hands off (`followed` status event with `next`), continue inside the same thread.
   useEffect(() => {
-    if (steered === id && next) host.go(next)
+    if (!next || next === activeId) return
+    if (steered === activeId || !chain.includes(next)) {
+      snapshotCurrent()
+      linkThread(activeId, next)
+      if (steered === activeId) setSteered('')
+    }
     // On the follow-up's arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steered, id, next])
+  }, [steered, activeId, next])
 
   // The composer sends words, with any files fenced after them, and only while it is enabled.
   const send = () => {
     const words = compose([tools.text, draft.trim()].filter(Boolean).join('\n\n'), files)
+    if (!words) return
     if (steering) {
       void act(async () => {
         const said = await tell(words)
@@ -401,22 +532,22 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     switch (c) {
       case 'stop':
         void act(async () => {
-          await stop(t, id)
+          await stop(t, activeId)
           setStopping(true)
-          return say('Stop requested — the run keeps its work on its branch')
+          return say('Stop requested — the session keeps its work on its branch')
         })
         return
       case 'pause':
         void act(async () => {
-          await pause(t, id)
-          return held ? say('Pause requested — the run keeps its work on its branch and waits') : say('Pause asked — the machine pauses when it reads it')
+          await pause(t, activeId)
+          return held ? say('Pause requested — the session keeps its work on its branch and waits') : say('Pause asked — the machine pauses when it reads it')
         })
         return
       case 'resume':
         if (held) void ahead('', 'resume')
         else
           void act(async () => {
-            await resume(t, id)
+            await resume(t, activeId)
             return say('Resume asked — the machine goes on when it reads it')
           })
         return
@@ -430,12 +561,12 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
 
   const share = (on: boolean) =>
     act(async () => {
-      await publish(t, id, on)
+      await publish(t, activeId, on)
       detail.reload()
-      return on ? say('Shared — anyone with the link can read this run’s story') : say('No longer shared')
+      return on ? say('Shared — anyone with the link can read this session’s story') : say('No longer shared')
     })
 
-  // What the title's menu does to the run.
+  // What the title's menu does to the session.
   const manage: MenuItems = [
     ...(signed && record
       ? [
@@ -450,7 +581,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
           },
         ]
       : []),
-    { key: 'copy', label: copied === 'id' ? say('Copied') : say('Copy run id'), icon: <Copy size={16} />, description: id, onSelect: () => void copy('id', id) },
+    { key: 'copy', label: copied === 'id' ? say('Copied') : say('Copy session id'), icon: <Copy size={16} />, description: activeId, onSelect: () => void copy('id', activeId) },
     // What this run was asked, as a task that runs again on a schedule: the ask it opened with.
     ...(signed && record
       ? [
@@ -548,7 +679,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
 
   const save = () =>
     void act(async () => {
-      await rename(t, id, name)
+      await rename(t, activeId, name)
       setNaming(false)
       detail.reload()
       return say('Renamed')
@@ -558,23 +689,40 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     ? say('Sign in to follow up')
     : waiting
       ? paused
-        ? say('Pausing — the run is keeping its work…')
-        : say('Stopping — the run is keeping its work…')
+        ? say('Pausing — the session is keeping its work…')
+        : say('Stopping — the session is keeping its work…')
       : paused && held
-        ? say('Continue this run with a follow up')
+        ? say('Continue this session with a follow up')
         : running
           ? setup
             ? say('Add a follow up for the setup agent')
-            : say('Add a follow up')
+            : say('Steer or redirect this session…')
           : finished
             ? record?.parent
               ? say('Follow up — continues the conversation')
-              : say('Follow up — continues in a new run')
-            : say('Reading this run…')
+              : say('Follow up — continues in this session')
+            : say('Reading this session…')
 
-  const desk_ = (sheet: boolean) => (
+  const openPublish =
+    proj?.repo || record?.repo
+      ? () => {
+          const clone = proj?.repo || (record?.repo ? `https://github.com/${record.repo}.git` : '')
+          if (!clone) return
+          const slug = proj?.slug || record?.project || record?.repo.split('/').pop() || 'app'
+          setPublishSource({
+            repo: clone,
+            title: proj?.name || record?.repo || title,
+            ref: record?.branch || proj?.branch || record?.base || 'main',
+            name: slug,
+            project: slug,
+            preview: site || undefined,
+          })
+        }
+      : undefined
+
+  const desk_ = (sheet: boolean, inset = !sheet) => (
     <Desk
-      id={id}
+      id={activeId}
       repo={record?.repo ?? ''}
       branch={record?.branch ?? ''}
       base={record?.base ?? ''}
@@ -585,15 +733,18 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
       project={record?.project ?? ''}
       sandbox={record?.sandbox ?? ''}
       site={site}
-      published={end.published}
+      published={end.published + publishRev}
+      sessionStatus={state}
       events={events}
       live={running}
       menu={[...manage, ...sharing]}
-      refused={signed ? refused || (detail.error ? say(detail.error.message) : '') : say('Sign in to follow this run.')}
+      refused={signed ? refused || (detail.error ? say(detail.error.message) : '') : say('Sign in to follow this session.')}
       retry={signed ? say('Retry') : say('Sign in')}
       onRetry={signed ? detail.reload : () => host.signIn?.()}
       side={side}
       sheet={sheet}
+      topRightInset={inset}
+      onPublish={openPublish}
       onHide={() => setDesk(false)}
       envColumn={envColumn}
       splitPanes={splitPanes}
@@ -608,7 +759,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
   const triggerButton = (
     <XStack
       render="button"
-      aria-label={say('Manage this run')}
+      aria-label={say('Manage this session')}
       items="center"
       gap="$1.5"
       maxW="100%"
@@ -617,6 +768,7 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
       mx="$-1.5"
       py="$0.5"
       minH={32}
+      $max-md={{ minH: 40 }}
       rounded="$2"
       hoverStyle={{ bg: '$hover' }}
       focusVisibleStyle={RING}
@@ -628,10 +780,34 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
     </XStack>
   )
 
+  const mobileWorkspaceOpen = !wide && desk
+
   return (
-    <XStack data-slot="run-split" display="grid" gridTemplateColumns="minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
-      <YStack data-slot="run" ref={split.main} {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
-        <XStack px="$4" pt="$3" pb="$2" gap="$1.5" items="center" minH={44}>
+    <XStack data-slot="run-split" display="grid" gridTemplateColumns={wide && desk ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)'} width="100%" height="100%" minH={0} minW={0} overflow="hidden">
+      <YStack
+        data-slot="run"
+        ref={split.main}
+        {...pane}
+        display="grid"
+        gridTemplateRows={!wide ? (mobileWorkspaceOpen ? 'auto auto minmax(0, 1fr)' : 'auto auto minmax(0, 1fr) auto') : 'auto minmax(0, 1fr) auto'}
+        width="100%"
+        height="100%"
+        minH={0}
+        minW={0}
+        overflow="hidden"
+      >
+        <XStack
+          data-slot="run-header"
+          px="$4"
+          $max-md={{ px: '$3' }}
+          pt="$3"
+          pb="$2"
+          gap="$1.5"
+          items="center"
+          minH={44}
+          minW={0}
+          style={!desk || !wide ? { paddingInlineEnd: 'calc(16px + var(--hanzo-shell-top-right-inset, 0px))' } : undefined}
+        >
           {spend.dialog}
           <YStack flex={1} minW={0} items="flex-start">
             <XStack items="center" gap="$1" maxW="100%" minW={0}>
@@ -794,9 +970,9 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
 
                     <DropdownMenuSeparator />
 
-                    <DropdownMenuItem onSelect={() => void copy('id', id)}>
+                    <DropdownMenuItem onSelect={() => void copy('id', activeId)}>
                       <SizableText size="$2" color="$ink" flex={1}>
-                        {copied === 'id' ? say('Copied') : say('Copy run id')}
+                        {copied === 'id' ? say('Copied') : say('Copy session id')}
                       </SizableText>
                     </DropdownMenuItem>
 
@@ -816,9 +992,9 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
                     <DropdownMenuItem
                       aria-label={say('Archive')}
                       onSelect={() => {
-                        // Kept out of every list of runs (the sidebar's too, `runmeta.ts`) and still readable under Archived.
-                        mark(id, { archived: true })
-                        if (running) void stop(t, id, 'Archived').catch(() => undefined)
+                        // Kept out of every list of sessions (the sidebar's too, `runmeta.ts`) and still readable under Archived.
+                        for (const sid of chain) mark(sid, { archived: true })
+                        if (running) void stop(t, activeId, 'Archived').catch(() => undefined)
                         host.go('')
                       }}
                     >
@@ -1011,211 +1187,298 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
               </DropdownMenu>
             </XStack>
           ) : null}
-          <PanelToggle open={desk} onToggle={() => setDesk(!desk)} />
+          {wide ? <PanelToggle open={desk} onToggle={() => setDesk(!desk)} /> : null}
         </XStack>
 
-        <Transcript
-          cards={shown}
-          devMode={devMode}
-          view={transcriptView}
-          queued={queued}
-          onSendQueued={sendQueued}
-          onOpen={look}
-          onDiff={() => {
-            side.open({ kind: 'diff', title: say('Diff') })
-            setDesk(true)
-          }}
-          listen={signed ? listen : undefined}
-          end={
-            failed ? (
-              <Failure onRetry={busy ? undefined : () => void ahead(again, 'retry')}>
-                {end.problem
-                  ? say('This run stopped before it finished.')
-                  : // Only a run that pushed has work on its branch (turn.ts settled): one that failed before it
-                    // changed anything left no branch, and Try again starts over from where it began.
-                    kept.pushed
-                    ? `${say('This run stopped with an error.')} ${say('Its work so far is on its branch.')}`
-                    : `${say('This run stopped with an error.')} ${say('It saved nothing to its branch, so Try again starts over.')}`}
-              </Failure>
-            ) : null
-          }
-          // A paused run's agent was stopped where it stood; what it was running is cut off.
-          live={running && !paused}
-          header={
-            hidden ? (
-              <SizableText size="$1" color="$soft">
-                {`${hidden === 1 ? say('{n} earlier turn is not shown.', { n: hidden }) : say('{n} earlier turns are not shown.', { n: hidden })} ${say('The run’s Git tab has everything it pushed.')}`}
-              </SizableText>
-            ) : null
-          }
-          onApprove={planned && earlier ? (p) => void ahead(p, 'approve') : undefined}
-          // What dev asks its person while it works (its ask tool), answered here.
-          onAnswer={signed ? (q, label) => void act(async () => (await reply(t, id, q, label, true), '')) : undefined}
-          approving={busy}
-          onVerdict={(v) => verdict(t, id, record?.project ?? '', v)}
-          onAddFunds={() => (host.topUp ? host.topUp() : host.go(path({ kind: 'settings', section: 'billing' })))}
-          empty={
-            signed ? (
-              <SizableText size="$2" color="$soft">
-                {detail.error
-                  ? say(detail.error.message)
-                  : detail.loading
-                    ? say('Reading this run…')
-                    : running
-                      ? setup
-                        ? say('Setting up environment')
-                        : say('Starting…')
-                      : say('Waiting for the run’s first step…')}
-              </SizableText>
-            ) : (
-              <YStack gap="$3" items="flex-start">
-                <SizableText size="$2" color="$soft">
-                  {say('Sign in to follow this run.')}
+        {!wide ? (
+          <XStack
+            data-slot="mobile-pane-switcher"
+            role="tablist"
+            aria-label={say('View')}
+            px="$3"
+            pb="$2"
+            gap="$1.5"
+            items="center"
+            shrink={0}
+            minW={0}
+          >
+            <XStack flex={1} minW={0} p={3} gap={3} rounded="$3" bg="$hover">
+              <XStack
+                render="button"
+                role="tab"
+                aria-selected={!desk}
+                onPress={() => setDesk(false)}
+                flex={1}
+                minH={40}
+                items="center"
+                justify="center"
+                rounded="$2"
+                bg={!desk ? '$raised' : 'transparent'}
+                focusVisibleStyle={RING}
+              >
+                <SizableText size="$2" fontWeight={!desk ? '600' : '400'} color={!desk ? '$ink' : '$soft'}>
+                  {say('Session')}
                 </SizableText>
-                <Button size="sm" onPress={() => host.signIn?.()}>
-                  {say('Sign in')}
-                </Button>
-              </YStack>
-            )
-          }
-        />
+              </XStack>
+              <XStack
+                render="button"
+                role="tab"
+                aria-selected={desk}
+                onPress={() => setDesk(true)}
+                flex={1}
+                minH={40}
+                items="center"
+                justify="center"
+                rounded="$2"
+                bg={desk ? '$raised' : 'transparent'}
+                focusVisibleStyle={RING}
+              >
+                <SizableText size="$2" fontWeight={desk ? '600' : '400'} color={desk ? '$ink' : '$soft'}>
+                  {say('Workspace')}
+                </SizableText>
+              </XStack>
+            </XStack>
+          </XStack>
+        ) : null}
 
-        <YStack pb="$3" pt="$2" gap="$2">
-          {/* At the text's width, like the composer under it. */}
-          <YStack {...measure} gap="$2">
-            {end.problem ? (
-              <SizableText size="$1" color="$soft">
-                {say('The branch is pushed, and the pull request could not be opened.')}
-              </SizableText>
-            ) : null}
-            {note || (signed && refused) ? (
-              <SizableText size="$1" color="$soft" role="status">
-                {note || refused}
-              </SizableText>
-            ) : null}
-            {plan.length && devMode ? (
-              // One line until it is opened, so the steps never crowd the transcript. Off Developer mode the
-              // transcript's own Working line says where the run is, in words, and opens onto the same steps.
-              <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
-                <XStack
-                  render="button"
-                  aria-label={say('Steps · {n}', { n: plan.length })}
-                  aria-expanded={unfolded}
-                  onClick={() => setUnfolded(!unfolded)}
-                  width="100%"
-                  px="$3"
-                  py="$1.5"
-                  minH={36}
-                  gap="$2"
-                  items="center"
-                  hoverStyle={{ bg: '$hover' }}
-                  focusVisibleStyle={RING_INSET}
-                >
-                  {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <SizableText size="$2" color="$ink">
-                    {say('Steps · {n}', { n: plan.length })}
-                  </SizableText>
-                  {current && !unfolded ? (
-                    <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} text="end">
-                      {current.name}
-                    </SizableText>
-                  ) : null}
-                </XStack>
-                {unfolded
-                  ? plan.map((s) => {
-                      const on = s === current
-                      return (
-                        <XStack key={s.name} items="center" gap="$2" px="$3" py="$1.5" borderTopWidth={1} borderColor="$borderColor">
-                          <SizableText size="$2" color={s.done || on ? '$ink' : '$soft'}>
-                            {s.done ? '✓' : on ? '●' : '○'}
-                          </SizableText>
-                          <SizableText size="$2" color={s.done ? '$soft' : '$ink'} numberOfLines={1}>
-                            {s.name}
-                          </SizableText>
-                        </XStack>
-                      )
-                    })
-                  : null}
-              </YStack>
-            ) : null}
-            {setup && running && !seen ? <Onboarding onDone={() => setSeen(true)} /> : null}
-            {running && !paused ? (
-              <XStack items="center" gap="$2" px="$1">
-                <YStack width={6} height={6} rounded={99} bg="var(--state-online)" shrink={0} />
-                <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
-                  {devMode ? `${elapsedLabel} · ${tokenLabel} · ${say('Thinking')}` : `${elapsedLabel} · ${say('Working…')}`}
-                </SizableText>
-              </XStack>
-            ) : null}
-            {running ? (
-              <XStack items="center" gap="$2" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" flexWrap="wrap" rowGap="$1">
-                <SizableText size="$2" color="$ink" flex={1} minW={160}>
-                  {paused
-                    ? kept.pushed
-                      ? say('Paused — its work so far is on its branch.')
-                      : say('Paused.')
-                    : setup
-                      ? span
-                        ? say('Environment setup takes ~{minutes} minutes.', { minutes: span[0] === span[1] ? span[0] : `${span[0]}–${span[1]}` })
-                        : say('Environment setup takes several minutes.')
-                      : say('This run is still working.')}
-                </SizableText>
-                <Steer
-                  onCommand={command}
-                  withhold={[
-                    ...(paused ? (['pause'] as const) : (['resume'] as const)),
-                    ...(busy || waiting ? (['pause', 'resume', 'stop'] as const) : []),
-                  ]}
-                />
-                <Button size="sm" disabled={Boolean(notify)} onPress={() => void ask()}>
-                  {notify === 'device' ? say('You will be notified') : notify === 'in-app' ? say('Watching here') : say('Notify me')}
-                </Button>
-              </XStack>
-            ) : null}
+        {mobileWorkspaceOpen ? (
+          <YStack data-slot="mobile-workspace" flex={1} minH={0} minW={0} overflow="hidden" borderTopWidth={1} borderColor="$borderColor">
+            {desk_(false, false)}
           </YStack>
-          <Composer
-            column
-            value={draft}
-            onChange={setDraft}
-            onSend={send}
-            ready={Boolean(draft.trim())}
-            disabled={!signed || busy || waiting || !(running || finished)}
-            placeholder={placeholder}
-            label={steering ? say('Steer this run') : say('Follow up on this run')}
-            field={{
-              onKeyDown: (e: { key?: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault?: () => void }) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && steering && draft.trim()) {
-                  e.preventDefault?.()
-                  enqueue()
-                }
-              },
-            }}
-            plus={{
-              upload: () => pick(files, setFiles, setNote, say),
-              research: { on: tools.gear.gear.research, set: (on) => tools.gear.set({ research: on }) },
-              skills: tools.skills,
-              design: tools.design,
-              plugins,
-              memory: { on: tools.gear.gear.memory, set: (on) => tools.gear.set({ memory: on }) },
-            }}
-            slash={tools.skills}
-            at={plugins}
-            carried={[...tools.on, ...carrying(files, setFiles)]}
-            // What a new run from here is made with; words that steer this run use neither.
-            mind={signed && !steering ? mind : null}
-            effort={signed && !steering ? pacing(mind) : null}
-            limits={limits}
-            voice={voice}
-          />
-        </YStack>
+        ) : (
+          <>
+            <Transcript
+              cards={shown}
+              devMode={devMode}
+              view={transcriptView}
+              queued={queued}
+              onSendQueued={sendQueued}
+              onOpen={look}
+              onDiff={() => {
+                side.open({ kind: 'diff', title: say('Diff') })
+                setDesk(true)
+              }}
+              listen={signed ? listen : undefined}
+              end={
+                failed ? (
+                  <Failure onRetry={busy ? undefined : () => void ahead(again, 'retry')}>
+                    {end.problem
+                      ? say('This session stopped before it finished.')
+                      : // Only a session that pushed has work on its branch (turn.ts settled): one that failed before it
+                        // changed anything left no branch, and Try again starts over from where it began.
+                        kept.pushed
+                        ? `${say('This session stopped with an error.')} ${say('Its work so far is on its branch.')}`
+                        : `${say('This session stopped with an error.')} ${say('It saved nothing to its branch, so Try again starts over.')}`}
+                  </Failure>
+                ) : null
+              }
+              // A paused session's agent was stopped where it stood; what it was running is cut off.
+              live={running && !paused}
+              header={
+                hidden ? (
+                  <SizableText size="$1" color="$soft">
+                    {`${hidden === 1 ? say('{n} earlier turn is not shown.', { n: hidden }) : say('{n} earlier turns are not shown.', { n: hidden })} ${say('The session’s Git tab has everything it pushed.')}`}
+                  </SizableText>
+                ) : null
+              }
+              onApprove={planned && earlier ? (p) => void ahead(p, 'approve') : undefined}
+              // What dev asks its person while it works (its ask tool), answered here.
+              onAnswer={signed ? (q, label) => void act(async () => (await reply(t, activeId, q, label, true), '')) : undefined}
+              approving={busy}
+              onVerdict={(v) => verdict(t, activeId, record?.project ?? '', v)}
+              onAddFunds={() => (host.topUp ? host.topUp() : host.go(path({ kind: 'settings', section: 'billing' })))}
+              empty={
+                signed ? (
+                  <SizableText size="$2" color="$soft">
+                    {detail.error
+                      ? say(detail.error.message)
+                      : detail.loading
+                        ? say('Reading this session…')
+                        : running
+                          ? setup
+                            ? say('Setting up environment')
+                            : say('Starting…')
+                          : say('Waiting for the session’s first step…')}
+                  </SizableText>
+                ) : (
+                  <YStack gap="$3" items="flex-start">
+                    <SizableText size="$2" color="$soft">
+                      {say('Sign in to follow this session.')}
+                    </SizableText>
+                    <Button size="sm" onPress={() => host.signIn?.()}>
+                      {say('Sign in')}
+                    </Button>
+                  </YStack>
+                )
+              }
+            />
+
+            <YStack pb="$3" pt="$2" gap="$2">
+              {/* At the text's width, like the composer under it. */}
+              <YStack {...measure} gap="$2">
+                {end.problem ? (
+                  <SizableText size="$1" color="$soft">
+                    {say('The branch is pushed, and the pull request could not be opened.')}
+                  </SizableText>
+                ) : null}
+                {note || (signed && refused) ? (
+                  <SizableText size="$1" color="$soft" role="status">
+                    {cleanErrorText(note || refused)}
+                  </SizableText>
+                ) : null}
+                {plan.length && devMode ? (
+                  // One line until it is opened, so the steps never crowd the transcript. Off Developer mode the
+                  // transcript's own Working line says where the session is, in words, and opens onto the same steps.
+                  <YStack borderWidth={1} borderColor="$borderColor" rounded="$3" overflow="hidden">
+                    <XStack
+                      render="button"
+                      aria-label={say('Steps · {n}', { n: plan.length })}
+                      aria-expanded={unfolded}
+                      onClick={() => setUnfolded(!unfolded)}
+                      width="100%"
+                      px="$3"
+                      py="$1.5"
+                      minH={36}
+                      gap="$2"
+                      items="center"
+                      hoverStyle={{ bg: '$hover' }}
+                      focusVisibleStyle={RING_INSET}
+                    >
+                      {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <SizableText size="$2" color="$ink">
+                        {say('Steps · {n}', { n: plan.length })}
+                      </SizableText>
+                      {current && !unfolded ? (
+                        <SizableText flex={1} minW={0} size="$1" color="$soft" numberOfLines={1} text="end">
+                          {current.name}
+                        </SizableText>
+                      ) : null}
+                    </XStack>
+                    {unfolded
+                      ? plan.map((s) => {
+                          const on = s === current
+                          return (
+                            <XStack key={s.name} items="center" gap="$2" px="$3" py="$1.5" borderTopWidth={1} borderColor="$borderColor">
+                              <SizableText size="$2" color={s.done || on ? '$ink' : '$soft'}>
+                                {s.done ? '✓' : on ? '●' : '○'}
+                              </SizableText>
+                              <SizableText size="$2" color={s.done ? '$soft' : '$ink'} numberOfLines={1}>
+                                {s.name}
+                              </SizableText>
+                            </XStack>
+                          )
+                        })
+                      : null}
+                  </YStack>
+                ) : null}
+                {setup && running && !seen ? <Onboarding onDone={() => setSeen(true)} /> : null}
+                {running && !paused ? (
+                  <XStack items="center" gap="$2" px="$1">
+                    <YStack width={6} height={6} rounded={99} bg="var(--state-online)" shrink={0} />
+                    <SizableText size="$1" color="$soft" fontVariant={['tabular-nums']}>
+                      {devMode ? `${elapsedLabel} · ${tokenLabel} · ${say('Thinking')}` : `${elapsedLabel} · ${say('Working…')}`}
+                    </SizableText>
+                  </XStack>
+                ) : null}
+                {running ? (
+                  <XStack items="center" gap="$2" px="$3" py="$2" rounded="$10" borderWidth={1} borderColor="$borderColor" flexWrap="wrap" rowGap="$1">
+                    <SizableText size="$2" color="$ink" flex={1} minW={160}>
+                      {paused
+                        ? kept.pushed
+                          ? say('Paused — its work so far is on its branch.')
+                          : say('Paused.')
+                        : setup
+                          ? span
+                            ? say('Environment setup takes ~{minutes} minutes.', { minutes: span[0] === span[1] ? span[0] : `${span[0]}–${span[1]}` })
+                            : say('Environment setup takes several minutes.')
+                          : say('This session is still working.')}
+                    </SizableText>
+                    <Steer
+                      onCommand={command}
+                      withhold={[
+                        ...(paused ? (['pause'] as const) : (['resume'] as const)),
+                        ...(busy || waiting ? (['pause', 'resume', 'stop'] as const) : []),
+                      ]}
+                    />
+                    <Button size="sm" disabled={Boolean(notify)} onPress={() => void ask()}>
+                      {notify === 'device' ? say('You will be notified') : notify === 'in-app' ? say('Watching here') : say('Notify me')}
+                    </Button>
+                  </XStack>
+                ) : null}
+              </YStack>
+              <Composer
+                column
+                value={draft}
+                onChange={setDraft}
+                onSend={send}
+                onStop={active && !waiting ? () => command('stop') : undefined}
+                busy={active && !waiting && !draft.trim()}
+                ready={Boolean(draft.trim())}
+                disabled={!signed || busy || waiting || !(running || finished)}
+                placeholder={placeholder}
+                label={steering ? say('Steer this session') : say('Follow up on this session')}
+                field={{
+                  onKeyDown: (e: { key?: string; ctrlKey?: boolean; metaKey?: boolean; preventDefault?: () => void }) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && steering && draft.trim()) {
+                      e.preventDefault?.()
+                      enqueue()
+                    }
+                  },
+                }}
+                plus={{
+                  upload: () => pick(files, setFiles, setNote, say),
+                  research: { on: tools.gear.gear.research, set: (on) => tools.gear.set({ research: on }) },
+                  skills: tools.skills,
+                  design: tools.design,
+                  plugins,
+                  memory: { on: tools.gear.gear.memory, set: (on) => tools.gear.set({ memory: on }) },
+                }}
+                slash={tools.skills}
+                at={plugins}
+                carried={[...tools.on, ...carrying(files, setFiles)]}
+                // What a new turn from here is made with; words that steer this session use neither.
+                mind={signed && !steering ? mind : null}
+                effort={signed && !steering ? pacing(mind) : null}
+                limits={limits}
+                voice={voice}
+              >
+                {active && !waiting && draft.trim() ? (
+                  <XStack
+                    render="button"
+                    data-slot="composer-stop"
+                    aria-label={say('Stop session')}
+                    {...({ title: say('Stop session') } as object)}
+                    onPress={() => command('stop')}
+                    items="center"
+                    gap="$1.5"
+                    px="$2.5"
+                    height={30}
+                    $max-md={{ minH: 40 }}
+                    rounded={999}
+                    borderWidth={1}
+                    borderColor="var(--border-strong)"
+                    bg="$panel"
+                    cursor="pointer"
+                    hoverStyle={{ bg: '$hover' }}
+                    focusVisibleStyle={RING}
+                  >
+                    <Square size={10} fill="currentColor" />
+                    <SizableText size="$1" fontWeight="500" color="$ink">
+                      {say('Stop')}
+                    </SizableText>
+                  </XStack>
+                ) : null}
+              </Composer>
+            </YStack>
+          </>
+        )}
       </YStack>
-      {desk && !wide ? desk_(true) : null}
       {desk && wide ? (
         <YStack
           data-slot="desk"
           ref={split.aside}
           {...pane}
-          // A pane of its own beside the run's, the gutter between them (useSplit reads it as the inline-start margin).
+          // A pane of its own beside the session's, the gutter between them (useSplit reads it as the inline-start margin).
           marginInlineStart={gap}
           position="relative"
           shrink={0}
@@ -1225,33 +1488,43 @@ function Job({ id, state: read }: { id: string; state: RunState }) {
             // In the gutter between the two panes, measured inside the pane's edge.
             <Gutter {...split.grip} label={say('Resize the side panel')} inset={pane.borderWidth} />
           ) : null}
-          <SideProvider value={split.side}>{desk_(false)}</SideProvider>
+          <SideProvider value={split.side}>{desk_(false, true)}</SideProvider>
         </YStack>
       ) : null}
       {tools.dialog}
+      <Publish
+        source={publishSource}
+        onClose={() => setPublishSource(null)}
+        onLive={() => {
+          rebuilt()
+          setPublishRev((n) => n + 1)
+        }}
+      />
       <Confirm
         open={deleting}
         onOpenChange={setDeleting}
-        title={say('Delete this run?')}
+        title={say('Delete this session?')}
         says={say('“{title}” is deleted for good, with every link it was shared by. To keep it out of the list instead, archive it.', {
-          title: headline(record?.title ?? '', record?.repo ?? '') || say('this run'),
+          title: headline(record?.title ?? '', record?.repo ?? '') || say('this session'),
         })}
         act={say('Delete')}
         run={async () => {
-          if (running) await stop(t, id, 'Deleted').catch(() => undefined)
-          await remove(t, id)
-          mark(id, { deleted: true })
+          if (running) await stop(t, activeId, 'Deleted').catch(() => undefined)
+          for (const sid of chain) {
+            await remove(t, sid).catch(() => undefined)
+            mark(sid, { deleted: true })
+          }
           host.go('')
         }}
       />
       <Dialog open={naming} onOpenChange={setNaming}>
         <DialogContent maxW={480}>
-          <DialogTitle>{say('Rename this run')}</DialogTitle>
+          <DialogTitle>{say('Rename this session')}</DialogTitle>
           <Input
             autoFocus
             value={name}
             onChangeText={setName}
-            aria-label={say('The run’s name')}
+            aria-label={say('The session’s name')}
             maxLength={512}
             onKeyDown={(e: { key?: string }) => {
               if (e.key === 'Enter') save()

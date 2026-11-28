@@ -76,17 +76,17 @@ function Shell() {
   }
 
   const rows: RailSession[] = useMemo(() => {
-    const list = recents.value.map((s) => ({ id: s.id, title: s.title || say('Untitled run'), status: dot(s) }))
+    const list = recents.value.map((s) => ({ id: s.id, title: s.title || say('Untitled session'), status: dot(s) }))
     if (order === 'running') list.sort((a, b) => Number(b.status === 'running') - Number(a.status === 'running'))
     return list
   }, [recents.value, order, say])
 
   // The top left, as on claude.ai: the builder's name, which leads to New, and under
-  // it the search that finds a run. The organization is the account's, so it is
+  // it the search that finds a session. The organization is the account's, so it is
   // switched from the account menu at the foot. Beside the rail from md up, beside
   // the drawer's button below it — one place at a time.
   const name = <Name onPress={() => go('')} />
-  // Every place in view, none behind a More; the rail's own New starts a run.
+  // Every place in view, none behind a More; the rail's own New starts a session.
   const links = nav(host, go, say)
     .flatMap((g) => g.links)
     .filter((l) => l.id !== NEW)
@@ -96,6 +96,8 @@ function Shell() {
       <YStack position="relative" shrink={0}>
       <SessionRail
         onNew={() => go('')}
+        newLabel={say('New session')}
+        searchLabel={say('Search sessions')}
         fresh={r.kind === 'new'}
         links={links}
         recents={rows}
@@ -105,7 +107,7 @@ function Shell() {
         sortLabel={order === 'newest' ? say('Show running first') : say('Show newest first')}
         empty={
           <SizableText size="$1" color="$soft" px="$2">
-            {!host.person ? say('Sign in to see your runs.') : recents.error ? say(recents.error.message) : recents.loading ? say('Reading…') : say('No runs yet.')}
+            {!host.person ? say('Sign in to see your sessions.') : recents.error ? say(recents.error.message) : recents.loading ? say('Reading…') : say('No sessions yet.')}
           </SizableText>
         }
         notice={
@@ -131,14 +133,14 @@ function Shell() {
         pt={collapsed ? undefined : 92}
         open={drawer}
         onOpenChange={setDrawer}
-        label={say('Runs')}
+        label={say('Sessions')}
       />
       {collapsed ? null : (
         <YStack position="absolute" t={10} l={8} r={8} z={2} gap="$2.5" $max-md={{ display: 'none' }}>
           <XStack px="$2.5">{name}</XStack>
           <XStack
             render="button"
-            aria-label={say('Search runs')}
+            aria-label={say('Search sessions')}
             onPress={() => setFinding(true)}
             items="center"
             gap="$2"
@@ -162,13 +164,13 @@ function Shell() {
       <YStack flex={1} minW={0} minH={0} position="relative">
         {/* Below md the rail is a drawer; this is the one control that opens it. */}
         {/* Its own row, in flow: laid over the pane it covered the heading's mark. */}
-        <XStack height={44} px="$2" gap="$2" items="center" shrink={0} $md={{ display: 'none' }}>
-          <Button variant="ghost" size="icon-sm" onPress={() => setDrawer(true)} aria-label={say('Open runs')}>
+        <XStack height={48} px="$2" gap="$2" items="center" shrink={0} $md={{ display: 'none' }}>
+          <Button variant="ghost" size="icon-sm" minW={40} minH={40} onPress={() => setDrawer(true)} aria-label={say('Open sessions')}>
             <Menu size={18} />
           </Button>
           {name}
           <XStack flex={1} />
-          <Button variant="ghost" size="icon-sm" onPress={() => setFinding(true)} aria-label={say('Search runs')}>
+          <Button variant="ghost" size="icon-sm" minW={40} minH={40} onPress={() => setFinding(true)} aria-label={say('Search sessions')}>
             <Search size={18} />
           </Button>
         </XStack>

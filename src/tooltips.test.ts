@@ -51,7 +51,7 @@ describe('workspace and preview toolbar hover tooltips (cli#52)', () => {
     for (const label of [
       "title: t('Reload the preview')",
       "title: editing ? t('Stop picking elements') : t('Pick an element to edit')",
-      "title: t('All runs')",
+      "title: t('All sessions')",
       "title: t('History')",
       "title: shut ? t('Show the chat') : t('Hide the chat')",
     ]) {

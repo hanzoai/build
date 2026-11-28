@@ -54,6 +54,7 @@ import {
   RefreshCcw,
   Search,
   Share2,
+  Square,
   Upload,
 } from '@hanzogui/lucide-icons-2'
 import {
@@ -89,18 +90,20 @@ import { copy as toClipboard } from './clipboard.ts'
 import { RING } from './pane.ts'
 import { read as pushed, type Pull } from './api/changes.ts'
 import { codebases, one, type Codebase } from './api/codebases.ts'
-import { start, type Mode } from './api/coding.ts'
+import { start, steer as steerCoding, type Mode } from './api/coding.ts'
 import { blob, tree } from './api/git.ts'
 import { limits as readLimits } from './api/models.ts'
 import { declare } from './api/platform.ts'
 import { address, deployments, name as repoName, ours, templates, type Project as Row } from './api/projects.ts'
+import { ports as listening, preview as sandboxPreview, stay } from './api/sandbox.ts'
 import { list, message, stop, type Session } from './api/sessions.ts'
-import { decode, outcome, pull, said, scrub, who } from './api/turn.ts'
+import { decode, followed, outcome, pull, said, scrub, who } from './api/turn.ts'
 import { verdict as record } from './api/verdict.ts'
 import { useKept, useProjects, useRead, useRun } from './data.ts'
 import { Merge } from './git.tsx'
 import { Gutter } from './gutter.tsx'
 import { useHost, useTarget } from './host.tsx'
+import { cacheBustUrl, previewRevision, resolvePreviewSource } from './preview-url.ts'
 import { republish } from './question.ts'
 import { useSpend } from './spend.tsx'
 import { MODES } from './gear.ts'
@@ -109,11 +112,10 @@ import { Out } from './out.tsx'
 import { useEar, useSpoken } from './voice.ts'
 import { Publish, type Source } from './publish.tsx'
 import { path } from './route.ts'
+import { cleanErrorText, isAlreadyRunningError, isSessionActive, isSessionLive, linkThread, resolveSessionState } from './thread.ts'
 import { carrying, compose, pick, type Attached } from './tools.tsx'
 
 type ViewId = 'preview' | 'files' | 'code' | 'layers'
-
-const LIVE = new Set(['running', 'paused'])
 
 /** How often a project being published is read again, ms. */
 const AGAIN = 5000
@@ -159,12 +161,12 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
     <YStack gap="$2">
       <Message role="user">
         <SizableText size="$2" color="$ink">
-          {run.title || t('Untitled run')}
+          {run.title || t('Untitled session')}
         </SizableText>
       </Message>
       <Message
         role="assistant"
-        busy={LIVE.has(run.status)}
+        busy={isSessionActive(run.status)}
         actions={
           <XStack items="center" gap="$2">
             <Feedback
@@ -202,7 +204,13 @@ function Turn({ run, open, onOpen, project }: { run: Session; open: boolean; onO
         }
       >
         <SizableText size="$2" color="$ink">
-          {run.status === 'done' ? t('Done.') : run.status === 'error' ? t('This run hit an error.') : run.status === 'stopped' ? t('Stopped.') : t('Working…')}
+          {run.status === 'done' || run.status === 'completed'
+            ? t('Done.')
+            : run.status === 'error'
+              ? t('This session hit an error.')
+              : run.status === 'stopped'
+                ? t('Stopped.')
+                : t('Working…')}
         </SizableText>
       </Message>
     </YStack>
@@ -281,9 +289,21 @@ export function Project({ at }: { at: Where }) {
   const current = chosen ?? runs.value[0]?.id ?? null
   const run = useRun(target, current)
   const end = outcome(run.events)
+  const nextSession = useMemo(() => followed(run.events), [run.events])
   const pr = pull(run.record?.pr ?? '', run.record?.repo ?? '')
-  const runState = end.status && !LIVE.has(end.status) && LIVE.has(run.status) ? end.status : run.status || end.status
-  const running = LIVE.has(runState)
+  const runState = resolveSessionState(run.status, end.status)
+  const running = Boolean(current) && isSessionLive(runState)
+  const active = Boolean(current) && isSessionActive(runState)
+  const sandboxId = run.record?.sandbox ?? ''
+
+  // Follow a steered turn seamlessly into its continuation session.
+  useEffect(() => {
+    if (!current || !nextSession || nextSession === current) return
+    linkThread(current, nextSession)
+    setChosen(nextSession)
+    runs.reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, nextSession])
 
   const [view, setView] = useKept<ViewId>(`hanzo.build.view.${slug}`, 'preview')
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
@@ -327,31 +347,72 @@ export function Project({ at }: { at: Where }) {
     return needle ? repos.value.filter((c) => `${c.org}/${c.name}`.toLowerCase().includes(needle)) : repos.value
   }, [repos.value, switchQ])
   const frame = useRef<PreviewHandle | null>(null)
+  const [previewRev, setPreviewRev] = useState(0)
+  const [preferLive, setPreferLive] = useState(false)
+  const [sandboxPort, setSandboxPort] = useState(0)
+  const [sandboxUrl, setSandboxUrl] = useState('')
 
-  // What was published may be new files at the same address: the project is read
-  // for its address, and the frame loads again.
+  // What was published or edited may be new files at the same address: re-read the
+  // project, re-poll sandbox ports, and cache-bust reload the preview frame.
   const fresh = () => {
     again()
+    setPreviewRev((n) => n + 1)
     frame.current?.reload()
   }
 
-  // The open run's final status says when it published what it pushed. That is
-  // narration, which any member can write, so it is the cue to read the project
-  // and never the address framed; one already there when the run was first read
-  // is not news.
-  const heard = useRef<{ run: string | null; at: number }>({ run: null, at: 0 })
+  // Poll the active session's sandbox for a live dev-server port so Preview prefers
+  // live edits in the sandbox over the pre-edit deployed site.
   useEffect(() => {
-    if (!run.record) return
-    if (heard.current.run !== current) {
-      heard.current = { run: current, at: end.published }
+    if (!signed || !sandboxId) {
+      setSandboxPort(0)
+      setSandboxUrl('')
       return
     }
-    if (end.published <= heard.current.at) return
-    heard.current.at = end.published
-    fresh()
-    // `fresh` reads what it needs when it runs.
+    let gone = false
+    const poll = () =>
+      listening(target, sandboxId).then(
+        (ps) => {
+          if (gone) return
+          setSandboxPort((p) => (ps.some((x) => x.port === p) ? p : (ps[0]?.port ?? 0)))
+        },
+        () => undefined,
+      )
+    void poll()
+    const every = setInterval(poll, 5000)
+    return () => {
+      gone = true
+      clearInterval(every)
+    }
+  }, [target, signed, sandboxId, previewRev])
+
+  useEffect(() => {
+    setSandboxUrl('')
+    if (!signed || !sandboxId || !sandboxPort) return
+    let gone = false
+    sandboxPreview(target, sandboxId, sandboxPort, stay).then(
+      (u) => !gone && setSandboxUrl(u),
+      () => undefined,
+    )
+    return () => {
+      gone = true
+    }
+  }, [target, signed, sandboxId, sandboxPort, previewRev])
+
+  // Auto-refresh Preview whenever a turn finishes, edits/pushes land, or a publish completes.
+  const revKey = useMemo(() => previewRevision(run.events, runState, end.published), [run.events, runState, end.published])
+  const lastRev = useRef<{ run: string | null; key: string; wasActive: boolean }>({ run: null, key: '', wasActive: false })
+  useEffect(() => {
+    if (!run.record) return
+    if (lastRev.current.run !== current) {
+      lastRev.current = { run: current, key: revKey, wasActive: active }
+      return
+    }
+    const finishedTurn = lastRev.current.wasActive && !active
+    const advanced = lastRev.current.key !== revKey
+    lastRev.current = { run: current, key: revKey, wasActive: active }
+    if (advanced || finishedTurn) fresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, run.record, end.published])
+  }, [current, run.record, revKey, active])
 
   // Where the open run's pull request stands on the forge: Merge is offered while it is open.
   const proposal = useRead<{ run: string; pull: Pull | null } | null>(
@@ -400,13 +461,22 @@ export function Project({ at }: { at: Where }) {
     [root.value, t],
   )
 
-  // A project taken from a starter, not published and not being, shows the
-  // starter's own live page, which is what the copy is until its first publish.
+  // Prefer the live sandbox preview when available; fall back to deployed live site or starter demo.
   const forked = project && !project.live && !building && !failed ? project.forked : ''
   const starters = useRead(forked ? () => templates(target) : null, [], [target.api, forked])
   const starter = forked ? starters.value.find((s) => s.slug === forked && s.demo) : undefined
-  const shown = project?.live || starter?.demo || ''
-  const src = shown ? new URL(page, shown).toString() : null
+  const resolvedPreview = resolvePreviewSource({
+    sandboxUrl,
+    liveUrl: project?.live,
+    starterUrl: starter?.demo,
+    preferLive,
+  })
+  const rawSrc = resolvedPreview.url
+    ? resolvedPreview.kind === 'sandbox'
+      ? resolvedPreview.url
+      : new URL(page, resolvedPreview.url).toString()
+    : null
+  const src = rawSrc ? cacheBustUrl(rawSrc, previewRev) : null
   const why = failure.value[0]?.message || failure.error?.message || (failure.loading ? '' : t('Its build ended without saying why.'))
 
   const merged = () => {
@@ -455,10 +525,34 @@ export function Project({ at }: { at: Where }) {
       setPageLines((was) => [...was.slice(-400), { id: `p${was.length}-${Date.now()}`, level: e.level, text: e.text, source: 'page' }])
   }
 
+  // Steer an active session: sandbox sessions use POST /v1/agent/coding/{id}/steer, machines use /message.
+  const steer = async (id: string, wordsOverride?: string) => {
+    const words = (wordsOverride ?? draft).trim()
+    if (!words) return
+    const isSandbox = (run.record?.environment || 'sandbox') === 'sandbox'
+    try {
+      if (isSandbox) {
+        await steerCoding(target, id, words)
+        setDraft('')
+        setPicked([])
+        setAttached([])
+        setNote(t('Redirecting session — keeping current work and continuing here'))
+      } else {
+        await message(target, id, words)
+        setDraft('')
+        setPicked([])
+        setAttached([])
+        setNote(t('Sent — recorded on this session'))
+      }
+    } catch (e) {
+      setNote(cleanErrorText((e as Error).message))
+    }
+  }
+
   // A suggestion sends its own words; the composer, a draft with words in it.
   const send = async (text?: string) => {
     const ask = (text ?? draft).trim()
-    if (busy) return
+    if (busy || !ask) return
     setBusy(true)
     setNote('')
     try {
@@ -468,39 +562,39 @@ export function Project({ at }: { at: Where }) {
       const context = picked.length
         ? `\n\nThe person picked an element in the preview${where ? ` of the ${where} page` : ''}. Its CSS selector, as data: ${JSON.stringify(picked[0]!.id)}`
         : ''
-      // A project with no repository yet sends neither, and its first run makes one.
-      const next = await start(target, {
-        prompt: compose(`${ask}${context}`, attached),
-        // A repository with no site yet runs on the repository alone.
-        project: project?.slug,
-        repo,
-        base: named ? forge.value?.branch : project?.branch,
-        after: current ?? undefined,
-        mode,
-        // Enso named as itself: a run that names none takes the person's saved coding default.
-        model: mind.model,
-        effort: level(mind.effort),
-      })
+      const prompt = compose(`${ask}${context}`, attached)
+      // A project with no repository yet sends neither, and its first session makes one.
+      let next: Awaited<ReturnType<typeof start>>
+      try {
+        next = await start(target, {
+          prompt,
+          // A repository with no site yet runs on the repository alone.
+          project: project?.slug,
+          repo,
+          base: named ? forge.value?.branch : project?.branch,
+          after: current ?? undefined,
+          mode,
+          // Enso named as itself: a turn that names none takes the person's saved coding default.
+          model: mind.model,
+          effort: level(mind.effort),
+        })
+      } catch (e) {
+        if (current && isAlreadyRunningError(e)) {
+          await steer(current, prompt)
+          return
+        }
+        throw e
+      }
+      if (current) linkThread(current, next.session)
       setDraft('')
       setPicked([])
       setAttached([])
       setChosen(next.session)
       runs.reload()
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(cleanErrorText((e as Error).message))
     } finally {
       setBusy(false)
-    }
-  }
-
-  // Only a run that is working is steered, and the composer sends only a draft with words in it.
-  const steer = async (id: string) => {
-    try {
-      await message(target, id, draft)
-      setDraft('')
-      setNote(t('Sent — the run reads it before its next step'))
-    } catch (e) {
-      setNote((e as Error).message)
     }
   }
 
@@ -576,7 +670,7 @@ export function Project({ at }: { at: Where }) {
           runs.loading ? (
             <YStack gap="$3" aria-busy={true}>
               <SizableText size="$2" color="$soft">
-                {t('Reading this project’s runs…')}
+                {t('Reading this project’s sessions…')}
               </SizableText>
               <Skeleton layout="block" width="84%" height={14} rounded="$2" />
               <Skeleton layout="block" width="66%" height={14} rounded="$2" />
@@ -644,16 +738,16 @@ export function Project({ at }: { at: Where }) {
           onChange={setDraft}
           onSend={() => void (current && running ? steer(current) : send())}
           onStop={
-            current
+            current && active
               ? () =>
                   void stop(target, current).then(
-                    () => setNote(t('Stop requested — the run keeps its work on its branch')),
-                    (e: unknown) => setNote((e as Error).message),
+                    () => setNote(t('Stop requested — the session keeps its work on its branch')),
+                    (e: unknown) => setNote(cleanErrorText((e as Error).message)),
                   )
               : undefined
           }
-          busy={busy || (running && !draft.trim())}
-          placeholder={running ? t('Steer this run') : t('Ask Hanzo for edits')}
+          busy={busy || (active && !draft.trim())}
+          placeholder={running ? t('Steer or redirect this session…') : t('Ask Hanzo for edits')}
           label={t('Ask Hanzo for edits')}
           plus={{ upload: () => pick(attached, setAttached, setNote, t) }}
           carried={carrying(attached, setAttached)}
@@ -661,7 +755,39 @@ export function Project({ at }: { at: Where }) {
           mind={running ? null : mind}
           effort={running ? null : pacing(mind)}
           voice={voice}
-        />
+        >
+          {current && active && draft.trim() ? (
+            <XStack
+              render="button"
+              data-slot="composer-stop"
+              aria-label={t('Stop session')}
+              {...({ title: t('Stop session') } as object)}
+              onPress={() =>
+                void stop(target, current).then(
+                  () => setNote(t('Stop requested — the session keeps its work on its branch')),
+                  (e: unknown) => setNote(cleanErrorText((e as Error).message)),
+                )
+              }
+              items="center"
+              gap="$1.5"
+              px="$2.5"
+              height={30}
+              $max-md={{ minH: 40 }}
+              rounded={999}
+              borderWidth={1}
+              borderColor="var(--border-strong)"
+              bg="$panel"
+              cursor="pointer"
+              hoverStyle={{ bg: '$hover' }}
+              focusVisibleStyle={RING}
+            >
+              <Square size={10} fill="currentColor" />
+              <SizableText size="$1" fontWeight="500" color="$ink">
+                {t('Stop')}
+              </SizableText>
+            </XStack>
+          ) : null}
+        </Composer>
       </YStack>
       {/* In the gutter between the chat and the work. */}
       {wide && !shut ? (
@@ -674,24 +800,49 @@ export function Project({ at }: { at: Where }) {
   // is the page as it was left.
   const preview = (
     <YStack data-slot="preview" flex={1} minH={0} minW={0} gap="$2" display={view === 'preview' ? 'flex' : 'none'}>
-      {/* The framed page's own controls, beside it: reload, the page, the width, and the page in a tab of its own. */}
+      {/* The framed page's own controls, beside it: reload, preview source pill, the page, the width, and the page in a tab of its own. */}
       <XStack data-slot="preview-bar" items="center" gap="$1.5" minW={0} shrink={0} $max-md={{ px: '$2' }}>
         <XStack
           render="button"
           aria-label={t('Reload the preview')}
           {...({ title: t('Reload the preview') } as object)}
-          onPress={() => frame.current?.reload()}
+          onPress={fresh}
           p="$1.5"
+          $max-md={{ minW: 40, minH: 40, items: 'center', justify: 'center' }}
           rounded="$3"
+          shrink={0}
           hoverStyle={{ bg: '$hover' }}
         >
           <RefreshCcw size={16} />
         </XStack>
+        {resolvedPreview.kind === 'sandbox' || resolvedPreview.kind === 'live' ? (
+          <XStack
+            render={sandboxUrl && project?.live ? 'button' : undefined}
+            onPress={sandboxUrl && project?.live ? () => setPreferLive((v) => !v) : undefined}
+            data-slot="preview-mode"
+            data-kind={resolvedPreview.kind}
+            items="center"
+            gap="$1"
+            px="$2"
+            py="$0.5"
+            rounded={999}
+            bg="$edge"
+            borderWidth={1}
+            borderColor="$borderColor"
+            shrink={0}
+            hoverStyle={sandboxUrl && project?.live ? { bg: '$hover' } : undefined}
+          >
+            {resolvedPreview.kind === 'sandbox' ? <YStack width={6} height={6} rounded={99} bg="var(--state-online)" shrink={0} /> : <Globe size={11} opacity={0.75} />}
+            <SizableText size="$1" color="$ink" numberOfLines={1}>
+              {resolvedPreview.kind === 'sandbox' ? t('Sandbox preview') : t('Live site')}
+            </SizableText>
+          </XStack>
+        ) : null}
         <PageSelect pages={pages} value={page} onChange={setPage} shrink={1} />
         <XStack flex={1} />
         <Views views={DEVICES} value={device} onChange={(d) => setDevice(d as 'desktop' | 'mobile')} label={t('Device')} labels="none" />
-        {src ? (
-          <Out href={src} label={t('Open in a new tab')}>
+        {rawSrc ? (
+          <Out href={rawSrc} label={t('Open in a new tab')}>
             <XStack items="center" gap="$1.5" px="$2" py="$1" rounded="$3" hoverStyle={{ bg: '$hover' }}>
               <SizableText size="$1" color="$soft" $max-md={{ display: 'none' }}>
                 {t('Preview')}
@@ -851,7 +1002,7 @@ export function Project({ at }: { at: Where }) {
   // So below md they take a row of their own under the bar, in whichever pane
   // shows (one pane at a time there, so one row).
   const row = wide ? null : (
-    <XStack data-slot="views-row" justify="center" px="$3" pb="$2" shrink={0}>
+    <XStack data-slot="views-row" justify="center" px="$3" pb="$2" shrink={0} minW={0} overflowX="auto" $platform-web={{ scrollbarWidth: 'none' }}>
       {views}
     </XStack>
   )
@@ -865,10 +1016,11 @@ export function Project({ at }: { at: Where }) {
           <XStack items="center" gap="$2" minW={0} shrink={1}>
             <XStack
               render="button"
-              aria-label={t('All runs')}
-              {...({ title: t('All runs') } as object)}
+              aria-label={t('All sessions')}
+              {...({ title: t('All sessions') } as object)}
               onPress={() => host.go('')}
               p="$1"
+              $max-md={{ minW: 40, minH: 40, items: 'center', justify: 'center' }}
               shrink={0}
             >
               <HanzoMark size={20} />
@@ -880,6 +1032,7 @@ export function Project({ at }: { at: Where }) {
               {...({ title: t('History') } as object)}
               onPress={() => setHistory(true)}
               p="$1.5"
+              $max-md={{ minW: 40, minH: 40, items: 'center', justify: 'center' }}
               rounded="$3"
               shrink={0}
               hoverStyle={{ bg: '$hover' }}
@@ -909,9 +1062,15 @@ export function Project({ at }: { at: Where }) {
         }
         middle={wide ? views : undefined}
         end={
-          <XStack items="center" gap="$2">
+          <XStack
+            data-slot="project-header-actions"
+            items="center"
+            gap="$2"
+            shrink={0}
+            style={{ paddingInlineEnd: 'var(--hanzo-shell-top-right-inset, 0px)' }}
+          >
             {/* Share gives way on a phone, where Publish is the one that matters. */}
-            <XStack display="none" $md={{ display: 'flex' }}>
+            <XStack display="none" $md={{ display: 'flex' }} shrink={0}>
               <Button variant="outline" size="sm" onPress={() => void share()}>
                 <Share2 size={14} /> {t('Share')}
               </Button>
@@ -922,6 +1081,7 @@ export function Project({ at }: { at: Where }) {
               aria-label={t('Publish')}
               disabled={!clone || !slug}
               onPress={() => setPublish({ repo: clone, title, ref, name: slug, project: slug, preview: project?.live || undefined })}
+              shrink={0}
             >
               <Upload size={14} />
               {/* A glyph alone on a phone, where the bar's middle needs the room. */}
@@ -959,11 +1119,11 @@ export function Project({ at }: { at: Where }) {
 
       <Dialog open={history} onOpenChange={setHistory}>
         <DialogContent maxW={480}>
-          <DialogTitle>{t('Runs on {title}', { title })}</DialogTitle>
+          <DialogTitle>{t('Sessions on {title}', { title })}</DialogTitle>
           <YStack gap="$1">
             {runs.value.length === 0 ? (
               <SizableText size="$2" color="$soft">
-                {t('No runs yet.')}
+                {t('No sessions yet.')}
               </SizableText>
             ) : (
               runs.value.map((r) => {
@@ -987,7 +1147,7 @@ export function Project({ at }: { at: Where }) {
                     focusVisibleStyle={RING}
                   >
                     <SizableText size="$2" color="$ink" fontWeight={active ? '500' : '400'} numberOfLines={1} flex={1}>
-                      {r.title || t('Untitled run')}
+                      {r.title || t('Untitled session')}
                     </SizableText>
                     <SizableText size="$1" color="$soft" shrink={0}>
                       {r.status}

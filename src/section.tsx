@@ -87,9 +87,9 @@ export function DevSection({
         </SidebarSection>
       ))}
       {children}
-      <SidebarSection label={label ?? t('Runs')}>
+      <SidebarSection label={label ?? t('Sessions')}>
         {!host.person ? (
-          <Note>{t('Sign in to see your runs.')}</Note>
+          <Note>{t('Sign in to see your sessions.')}</Note>
         ) : sessions.value.length ? (
           sessions.value.map((s) => (
             <SidebarItem
@@ -98,7 +98,7 @@ export function DevSection({
               active={r.kind === 'run' && r.id === s.id}
               onPress={then(() => host.go(s.id))}
             >
-              {s.title || t('Untitled run')}
+              {s.title || t('Untitled session')}
             </SidebarItem>
           ))
         ) : (
@@ -107,7 +107,7 @@ export function DevSection({
               ? t(sessions.error.message)
               : sessions.loading
                 ? t('Reading…')
-                : `${t('No runs yet.')} ${t('Say what to build and it lands here.')}`}
+                : `${t('No sessions yet.')} ${t('Say what to build and it lands here.')}`}
           </Note>
         )}
       </SidebarSection>

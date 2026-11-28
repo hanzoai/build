@@ -239,7 +239,7 @@ export function Sites({ q = '', onMatch }: { q?: string; onMatch?: (n: number) =
             </SizableText>
             {needle ? null : (
               <Button size="sm" variant="primary" onPress={() => host.go('')}>
-                {say('New run')}
+                {say('New session')}
               </Button>
             )}
           </YStack>

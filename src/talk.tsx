@@ -33,6 +33,7 @@ import { level, useMind } from './mind.ts'
 import { pane } from './pane.ts'
 import { speaker } from './reply.tsx'
 import { path } from './route.ts'
+import { cleanErrorText } from './thread.ts'
 import { carrying, compose, pick, type Attached } from './tools.tsx'
 import { Transcript } from './transcript.tsx'
 
@@ -71,7 +72,7 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
     try {
       setNote(await work())
     } catch (e) {
-      setNote((e as Error).message)
+      setNote(cleanErrorText((e as Error).message))
     } finally {
       setBusy(false)
     }
@@ -105,7 +106,14 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
 
   return (
     <YStack data-slot="talk" {...pane} display="grid" gridTemplateRows="auto minmax(0, 1fr) auto" width="100%" height="100%" minH={0} minW={0}>
-      <XStack px="$4" pt="$3" pb="$2" items="center" minH={44}>
+      <XStack
+        px="$4"
+        pt="$3"
+        pb="$2"
+        items="center"
+        minH={44}
+        style={{ paddingInlineEnd: 'calc(16px + var(--hanzo-shell-top-right-inset, 0px))' }}
+      >
         <SizableText size="$4" color="$ink" numberOfLines={1}>
           {record?.title || say('New conversation')}
         </SizableText>
@@ -146,6 +154,8 @@ export function Talk({ id, state }: { id: string; state: RunState }) {
           value={draft}
           onChange={setDraft}
           onSend={send}
+          onStop={working ? () => void act(async () => (await stop(t, id), say('Stopped'))) : undefined}
+          busy={working && !draft.trim()}
           ready={Boolean(draft.trim())}
           disabled={!signed || busy || !record}
           placeholder={!signed ? say('Sign in to reply') : working ? say('Add to what it is doing') : say('Reply')}

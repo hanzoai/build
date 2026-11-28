@@ -86,7 +86,7 @@ export function Find({
   const hits = useMemo((): Hit[] => {
     const n = q.trim().toLowerCase()
     const all: Hit[] = rows
-      ? rows.map((s) => ({ id: s.id, title: s.title || say('Untitled run'), line: [s.repo, s.status].filter(Boolean).join(' · ') }))
+      ? rows.map((s) => ({ id: s.id, title: s.title || say('Untitled session'), line: [s.repo, s.status].filter(Boolean).join(' · ') }))
       : status
         ? []
         : recents.map((r) => ({ id: r.id, title: r.title, line: '' }))
@@ -96,13 +96,13 @@ export function Find({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxW={520}>
-        <DialogTitle>{say('Find a run')}</DialogTitle>
+        <DialogTitle>{say('Find a session')}</DialogTitle>
         <Input
           autoFocus
           value={q}
           onChangeText={setQ}
-          placeholder={say('Search runs…')}
-          aria-label={say('Search runs')}
+          placeholder={say('Search sessions…')}
+          aria-label={say('Search sessions')}
           onKeyDown={(e: { key?: string }) => {
             if (e.key === 'Enter' && hits[0]) onOpen(hits[0].id)
           }}
@@ -157,7 +157,7 @@ export function Find({
             ))}
             {!loading && !error && hits.length === 0 ? (
               <SizableText size="$2" color="$soft" px="$2">
-                {rows && next ? say('No run read so far matches.') : say('No run matches.')}
+                {rows && next ? say('No session read so far matches.') : say('No session matches.')}
               </SizableText>
             ) : null}
           </YStack>
@@ -169,12 +169,12 @@ export function Find({
         ) : null}
         {loading ? (
           <SizableText size="$1" color="$soft" role="status">
-            {say('Reading runs…')}
+            {say('Reading sessions…')}
           </SizableText>
         ) : next ? (
           <XStack>
             <Button size="sm" variant="outline" onPress={() => void read(next)}>
-              {say('Older runs')}
+              {say('Older sessions')}
             </Button>
           </XStack>
         ) : null}

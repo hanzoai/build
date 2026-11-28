@@ -57,6 +57,20 @@ export type { Done, Folder, Local } from './local.ts'
 export type { Live, Saved, Site } from './site.ts'
 export type { Session, Status } from './api/sessions.ts'
 export { mark as markRun, marks as runMarks, useMarks as useRunMarks, type RunMark, type RunMarks } from './runmeta.ts'
+export {
+  cleanErrorText,
+  groupSessions,
+  isAlreadyRunningError,
+  isSessionActive,
+  isSessionLive,
+  linkThread,
+  resolveSessionState,
+  threadChain,
+  threadRoot,
+  useThreadLinks,
+  type ThreadLinks,
+} from './thread.ts'
+export { cacheBustUrl, hasUnpublishedEdits, previewRevision, resolvePreviewSource, type PreviewInputs, type PreviewKind, type PreviewSource } from './preview-url.ts'
 export { talks } from './api/talk.ts'
 export { detect, type Detected } from './api/skills.ts'
 export { Roles } from './customize/roles.tsx'
